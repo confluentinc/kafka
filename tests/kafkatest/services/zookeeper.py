@@ -15,7 +15,10 @@
 
 
 from ducktape.services.service import Service
+from ducktape.utils.util import wait_until
 
+from concurrent import futures
+import json
 import time
 
 
@@ -33,6 +36,17 @@ class ZookeeperService(Service):
         """
         super(ZookeeperService, self).__init__(context, num_nodes)
 
+    def start(self):
+        super(ZookeeperService, self).start()
+        if not wait_until(lambda: self.all_alive(), timeout_sec=20, backoff_sec=.5):
+            raise RuntimeError("Timed out waiting for Zookeeper cluster to start.")
+
+    def all_alive(self):
+        for node in self.nodes:
+            if not self.alive(node):
+                return False
+        return True
+
     def start_node(self, node):
         idx = self.idx(node)
         self.logger.info("Starting ZK node %d on %s", idx, node.account.hostname)
@@ -45,11 +59,19 @@ class ZookeeperService(Service):
         self.logger.info(config_file)
         node.account.create_file("/mnt/zookeeper.properties", config_file)
 
-        node.account.ssh(
-            "/opt/kafka/bin/zookeeper-server-start.sh /mnt/zookeeper.properties 1>> %(path)s 2>> %(path)s &"
-            % self.logs["zk_log"])
+        cmd = "/opt/kafka/bin/zookeeper-server-start.sh /mnt/zookeeper.properties 1>> %(path)s 2>> %(path)s &" % \
+              self.logs["zk_log"]
 
-        time.sleep(5)  # give it some time to start
+        with futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(lambda: node.account.ssh(cmd))
+
+    def alive(self, node):
+        try:
+            # Try opening tcp connection and immediately closing by sending EOF
+            node.account.ssh("echo EOF | nc %s %d" % (node.account.hostname, 2181), allow_fail=False)
+            return True
+        except:
+            return False
 
     def stop_node(self, node):
         idx = self.idx(node)
@@ -62,3 +84,22 @@ class ZookeeperService(Service):
 
     def connect_setting(self):
         return ','.join([node.account.hostname + ':2181' for node in self.nodes])
+
+    def get_data(self, path):
+        """
+        Get data from zookeeper on the given path. This method assumes the data is in JSON format.
+
+        :param path Zookeeper path to query for data
+        """
+        cmd = "/opt/kafka/bin/kafka-run-class.sh kafka.tools.ZooKeeperMainWrapper -server %s get %s" % \
+              (self.connect_setting(), path)
+        data = None
+        node = self.nodes[0]
+        for line in node.account.ssh_capture(cmd):
+            try:
+                data = json.loads(line)
+                break
+            except ValueError:
+                pass
+
+        return data

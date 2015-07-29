@@ -14,10 +14,13 @@
 # limitations under the License.
 
 from ducktape.services.service import Service
+from ducktape.utils.util import wait_until
 
+from kafkatest.process_signal import *
+
+from concurrent import futures
 import json
 import re
-import signal
 import time
 
 
@@ -27,8 +30,11 @@ class KafkaService(Service):
         "kafka_log": {
             "path": "/mnt/kafka.log",
             "collect_default": True},
+        "kafka_operational_logs": {
+            "path": "/mnt/kafka-operational-logs",
+            "collect_default": True},
         "kafka_data": {
-            "path": "/mnt/kafka-logs",
+            "path": "/mnt/kafka-data-logs",
             "collect_default": False}
     }
 
@@ -45,8 +51,12 @@ class KafkaService(Service):
     def start(self):
         super(KafkaService, self).start()
 
+        if not wait_until(lambda: self.all_alive(), timeout_sec=20, backoff_sec=.5):
+            raise RuntimeError("Timed out waiting for Kafka cluster to start.")
+
         # Create topics if necessary
         if self.topics is not None:
+
             for topic, topic_cfg in self.topics.items():
                 if topic_cfg is None:
                     topic_cfg = {}
@@ -54,49 +64,83 @@ class KafkaService(Service):
                 topic_cfg["topic"] = topic
                 self.create_topic(topic_cfg)
 
+    def stop_node(self, node):
+        pids = self.pids(node)
+
+        for pid in pids:
+            node.account.signal(pid, SIGTERM, allow_fail=False)
+
+        if wait_until(lambda: self.dead(node), timeout_sec=5, backoff_sec=.5):
+            return
+
+        # SIGTERM didn't succeed - try the more aggressive SIGKILL
+        for pid in pids:
+            node.account.signal(pid, SIGKILL, allow_fail=False)
+
+        if not wait_until(lambda: self.dead(node), timeout_sec=5, backoff_sec=.5):
+            raise RuntimeError("Failed to kill Kafka process on " + str(node.account))
+
+    def clean_node(self, node):
+        node.account.ssh(
+            "rm -rf /mnt/*",
+            allow_fail=False)
+
+    def all_alive(self):
+        """Are all nodes in this cluster alive and communicating?"""
+        for node in self.nodes:
+            if not self.alive(node):
+                return False
+        return True
+
+    def alive(self, node):
+        """Is the kafka process on this node awake and ready to communicate?"""
+        try:
+            # Try opening tcp connection and immediately closing by sending EOF
+            node.account.ssh("echo EOF | nc %s %d" % (node.account.hostname, 9092), allow_fail=False)
+            return True
+        except:
+            return False
+
+    def dead(self, node):
+        """Test of 'deadness' of a node. This is often not the same as 'not alive'."""
+        return len(self.pids(node)) == 0
+
     def start_node(self, node):
+        assert self.dead(node), "Called start_node on a node which has a Kafka process that is not dead: " + \
+                                str(node.account)
+
         props_file = self.render('kafka.properties', node=node, broker_id=self.idx(node))
-        self.logger.info("kafka.properties:")
-        self.logger.info(props_file)
+        self.logger.debug("kafka.properties:")
+        self.logger.debug(props_file)
         node.account.create_file("/mnt/kafka.properties", props_file)
 
-        cmd = "/opt/kafka/bin/kafka-server-start.sh /mnt/kafka.properties 1>> /mnt/kafka.log 2>> /mnt/kafka.log & echo $! > /mnt/kafka.pid"
-        self.logger.debug("Attempting to start KafkaService on %s with command: %s" % (str(node.account), cmd))
-        node.account.ssh(cmd)
-        time.sleep(5)
-        if len(self.pids(node)) == 0:
-            raise Exception("No process ids recorded on node %s" % str(node))
+        cmd = "export LOG_DIR=/mnt/kafka-operational-logs/; "
+        cmd += "/opt/kafka/bin/kafka-server-start.sh /mnt/kafka.properties 1>> /mnt/kafka.log 2>> /mnt/kafka.log &"
+        self.logger.debug("Attempting to start KafkaService on %s" % str(node.account))
+
+        with futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(lambda: node.account.ssh(cmd))
 
     def pids(self, node):
         """Return process ids associated with running processes on the given node."""
         try:
-            return [pid for pid in node.account.ssh_capture("cat /mnt/kafka.pid", callback=int)]
+            cmd = "ps ax | grep java | grep -i 'kafka\.properties' | grep -v grep | awk '{print $1}'"
+            pids = [pid for pid in node.account.ssh_capture(cmd, allow_fail=True, callback=lambda x: int(x.strip()))]
+            return pids
         except:
             return []
 
-    def signal_node(self, node, sig=signal.SIGTERM):
+    def signal_node(self, node, sig=SIGTERM):
         pids = self.pids(node)
         for pid in pids:
             node.account.signal(pid, sig)
 
-    def signal_leader(self, topic, partition=0, sig=signal.SIGTERM):
+    def signal_leader(self, topic, partition=0, sig=SIGTERM):
         leader = self.leader(topic, partition)
         self.signal_node(leader, sig)
 
-    def stop_node(self, node, clean_shutdown=True):
-        pids = self.pids(node)
-        sig = signal.SIGTERM if clean_shutdown else signal.SIGKILL
-
-        for pid in pids:
-            node.account.signal(pid, sig, allow_fail=False)
-
-        node.account.ssh("rm -f /mnt/kafka.pid", allow_fail=False)
-
-    def clean_node(self, node):
-        node.account.ssh("rm -rf /mnt/kafka-logs /mnt/kafka.properties /mnt/kafka.log /mnt/kafka.pid", allow_fail=False)
-
     def create_topic(self, topic_cfg):
-        node = self.nodes[0] # any node is fine here
+        node = self.nodes[0]  # any node is fine here
         self.logger.info("Creating topic %s with settings %s", topic_cfg["topic"], topic_cfg)
 
         cmd = "/opt/kafka/bin/kafka-topics.sh --zookeeper %(zk_connect)s --create "\
@@ -111,11 +155,12 @@ class KafkaService(Service):
             for config_name, config_value in topic_cfg["configs"].items():
                 cmd += " --config %s=%s" % (config_name, str(config_value))
 
-        self.logger.info("Running topic creation command...\n%s" % cmd)
+        self.logger.info("Running topic creation command...\n")
         node.account.ssh(cmd)
 
         time.sleep(1)
         self.logger.info("Checking to see if topic was properly created...\n%s" % cmd)
+
         for line in self.describe_topic(topic_cfg["topic"]).split("\n"):
             self.logger.info(line)
 
@@ -129,8 +174,7 @@ class KafkaService(Service):
         return output
 
     def verify_reassign_partitions(self, reassignment):
-        """Run the reassign partitions admin tool in "verify" mode
-        """
+        """Run the reassign partitions admin tool in "verify" mode."""
         node = self.nodes[0]
         json_file = "/tmp/" + str(time.time()) + "_reassign.json"
 
@@ -158,12 +202,10 @@ class KafkaService(Service):
 
         if re.match(".*is in progress.*", output) is not None:
             return False
-
         return True
 
     def execute_reassign_partitions(self, reassignment):
-        """Run the reassign partitions admin tool in "verify" mode
-        """
+        """Run the reassign partitions admin tool in "verify" mode."""
         node = self.nodes[0]
         json_file = "/tmp/" + str(time.time()) + "_reassign.json"
 
@@ -181,7 +223,7 @@ class KafkaService(Service):
         cmd += " && sleep 1 && rm -f %s" % json_file
 
         # send command
-        self.logger.info("Executing parition reassignment...")
+        self.logger.info("Executing partition reassignment...")
         self.logger.debug(cmd)
         output = ""
         for line in node.account.ssh_capture(cmd):
@@ -190,38 +232,67 @@ class KafkaService(Service):
         self.logger.debug("Verify partition reassignment:")
         self.logger.debug(output)
 
-    def restart_node(self, node, wait_sec=0, clean_shutdown=True):
-        """Restart the given node, waiting wait_sec in between stopping and starting up again."""
-        self.stop_node(node, clean_shutdown)
-        time.sleep(wait_sec)
-        self.start_node(node)
+    def bounce_node(self, node, sig=SIGTERM, condition=None, condition_timeout_sec=5, condition_backoff_sec=.5):
+        """Helper method for the very common test task of bouncing a kafka node.
+
+        :param node A node in the service
+        :param sig Process control signal. Preferably of the form "SIGSTOP" rather than 17, since the integer corresponding
+                to a given signal is os-dependant.
+        :param condition Wait for this condition to be true before restarting
+        :param condition_timeout_sec Max time to wait for wake condition to become true
+        :param condition_backoff_sec
+        """
+        assert sig in {SIGKILL, SIGSTOP, SIGTERM}
+        self.signal_node(node, sig)
+
+        if condition:
+            # Wait until some condition is true before bringing the node back up
+            if not wait_until(condition, timeout_sec=condition_timeout_sec, backoff_sec=condition_backoff_sec):
+                raise RuntimeError("Timed out waiting for " + str(condition))
+
+        if sig == SIGSTOP:
+            self.signal_node(node, "SIGCONT")
+        else:
+            self.start_node(node)
+
+        if not wait_until(lambda: self.alive(node), timeout_sec=condition_timeout_sec, backoff_sec=condition_backoff_sec):
+            raise RuntimeError("Timed out waiting for %s to restart." % str(node.account))
 
     def leader(self, topic, partition=0):
         """ Get the leader replica for the given topic and partition.
+
+        Return None if there is currently no leader.
         """
-        cmd = "/opt/kafka/bin/kafka-run-class.sh kafka.tools.ZooKeeperMainWrapper -server %s " \
-              % self.zk.connect_setting()
-        cmd += "get /brokers/topics/%s/partitions/%d/state" % (topic, partition)
-        self.logger.debug(cmd)
+        topic_partition_data = self.zk.get_data("/brokers/topics/%s/partitions/%d/state" % (topic, partition))
+        if topic_partition_data is None:
+            return None
 
-        node = self.nodes[0]
-        self.logger.debug("Querying zookeeper to find leader replica for topic %s: \n%s" % (cmd, topic))
-        partition_state = None
-        for line in node.account.ssh_capture(cmd):
-            match = re.match("^({.+})$", line)
-            if match is not None:
-                partition_state = match.groups()[0]
-                break
+        leader_idx = int(topic_partition_data["leader"])
+        if leader_idx < 0:
+            return None
 
-        if partition_state is None:
-            raise Exception("Error finding partition state for topic %s and partition %d." % (topic, partition))
-
-        partition_state = json.loads(partition_state)
-        self.logger.info(partition_state)
-
-        leader_idx = int(partition_state["leader"])
-        self.logger.info("Leader for topic %s and partition %d is now: %d" % (topic, partition, leader_idx))
         return self.get_node(leader_idx)
+
+    def controller(self):
+        """
+        Get the current controller
+
+        This may return None if the "/controller" path is empty
+        """
+        controller_data = self.zk.get_data("/controller")
+        if controller_data is None:
+            # raise Exception("Error finding controller.")
+            return None
+
+        controller_idx = int(controller_data["brokerid"])
+        if controller_idx < 0:
+            return None
+
+        controller_node = self.get_node(controller_idx)
+
+        if controller_node is None:
+            raise Exception("Found no node corresponding to the id: %d" % controller_idx)
+        return controller_node
 
     def bootstrap_servers(self):
         return ','.join([node.account.hostname + ":9092" for node in self.nodes])

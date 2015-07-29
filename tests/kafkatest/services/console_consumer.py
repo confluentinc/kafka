@@ -91,6 +91,7 @@ class ConsoleConsumer(BackgroundThreadService):
         """
         super(ConsoleConsumer, self).__init__(context, num_nodes)
         self.kafka = kafka
+        self.topic = topic
         self.args = {
             'topic': topic,
         }
@@ -132,7 +133,6 @@ class ConsoleConsumer(BackgroundThreadService):
             msg = line.strip()
             msg = self.message_validator(msg)
             if msg is not None:
-                self.logger.debug("consumed a message: " + str(msg))
                 self.messages_consumed[idx].append(msg)
 
     def start_node(self, node):

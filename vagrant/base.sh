@@ -22,6 +22,14 @@ if [ -z `which javac` ]; then
     apt-get install -y software-properties-common python-software-properties
     add-apt-repository -y ppa:webupd8team/java
     apt-get -y update
+    
+    # Need this so that iptables can be used (e.g. for creating network partitions)
+    # Can't use grep here because of exit status; vagrant provisioning will halt if exit status is non-zero
+    s=`awk '/ip_tables/{ print $0 }'`
+    if [ "x$s" == "x"  ]; then
+        echo "INSERTING MODULE"
+        echo "ip_tables" >> /etc/modules
+    fi
 
     # Try to share cache. See Vagrantfile for details
     mkdir -p /var/cache/oracle-jdk7-installer
@@ -38,9 +46,11 @@ if [ -z `which javac` ]; then
 fi
 
 chmod a+rw /opt
-if [ ! -e /opt/kafka ]; then
-    ln -s /vagrant /opt/kafka
+if [ -h /opt/kafka ]; then
+    rm /opt/kafka
 fi
+
+ln -s /vagrant /opt/kafka
 
 # For EC2 nodes, we want to use /mnt, which should have the local disk. On local
 # VMs, we can just create it if it doesn't exist and use it like we'd use
