@@ -21,11 +21,11 @@ import org.apache.kafka.streaming.processor.Processor;
 import org.apache.kafka.streaming.processor.ProcessorContext;
 import org.apache.kafka.streaming.kstream.ValueJoiner;
 import org.apache.kafka.streaming.kstream.Window;
-import org.apache.kafka.streaming.processor.ProcessorFactory;
+import org.apache.kafka.streaming.processor.ProcessorDef;
 
 import java.util.Iterator;
 
-class KStreamJoin<K, V, V1, V2> implements ProcessorFactory {
+class KStreamJoin<K, V, V1, V2> implements ProcessorDef {
 
     private static abstract class Finder<K, T> {
         abstract Iterator<T> find(K key, long timestamp);
@@ -37,7 +37,7 @@ class KStreamJoin<K, V, V1, V2> implements ProcessorFactory {
     private final boolean prior;
 
     private Processor processorForOtherStream = null;
-    public final ProcessorFactory processorFactoryForOtherStream = new ProcessorFactory() {
+    public final ProcessorDef processorDefForOtherStream = new ProcessorDef() {
         @Override
         public Processor build() {
             return processorForOtherStream;

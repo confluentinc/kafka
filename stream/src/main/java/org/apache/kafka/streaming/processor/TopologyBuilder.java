@@ -47,9 +47,9 @@ public class TopologyBuilder {
     private class ProcessorNodeFactory implements NodeFactory {
         public final String[] parents;
         private final String name;
-        private final ProcessorFactory factory;
+        private final ProcessorDef factory;
 
-        public ProcessorNodeFactory(String name, String[] parents, ProcessorFactory factory) {
+        public ProcessorNodeFactory(String name, String[] parents, ProcessorDef factory) {
             this.name = name;
             this.parents = parents.clone();
             this.factory = factory;
@@ -134,7 +134,7 @@ public class TopologyBuilder {
         nodeFactories.add(new SinkNodeFactory(name, parentNames, topic, keySerializer, valSerializer));
     }
 
-    public final void addProcessor(String name, ProcessorFactory factory, String... parentNames) {
+    public final void addProcessor(String name, ProcessorDef factory, String... parentNames) {
         if (nodeNames.contains(name))
             throw new IllegalArgumentException("Processor " + name + " is already added.");
 
@@ -186,7 +186,7 @@ public class TopologyBuilder {
                         processorMap.get(parent).addChild(node);
                     }
                 } else {
-                    throw new IllegalStateException("unknown factory class: " + factory.getClass().getName());
+                    throw new IllegalStateException("unknown node factory class: " + factory.getClass().getName());
                 }
             }
         } catch (Exception e) {
