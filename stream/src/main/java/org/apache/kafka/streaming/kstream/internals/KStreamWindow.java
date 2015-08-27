@@ -19,11 +19,11 @@ package org.apache.kafka.streaming.kstream.internals;
 
 import org.apache.kafka.streaming.kstream.Window;
 import org.apache.kafka.streaming.processor.Processor;
-import org.apache.kafka.streaming.processor.ProcessorFactory;
+import org.apache.kafka.streaming.processor.ProcessorDef;
 import org.apache.kafka.streaming.processor.ProcessorContext;
 import org.apache.kafka.streaming.kstream.WindowDef;
 
-public class KStreamWindow<K, V> implements ProcessorFactory {
+public class KStreamWindow<K, V> implements ProcessorDef {
 
     private final WindowDef<K, V> windowDef;
 
