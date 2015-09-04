@@ -38,6 +38,12 @@ public class ProcessorTopology {
         this.sinkByTopics = sinkByTopics;
     }
 
+    public ProcessorTopology(ProcessorTopology other) {
+        this.processorNodes = other.processorNodes;
+        this.sourceByTopics = other.sourceByTopics;
+        this.sinkByTopics = other.sinkByTopics;
+    }
+
     public Set<String> sourceTopics() {
         return sourceByTopics.keySet();
     }

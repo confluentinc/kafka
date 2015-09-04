@@ -78,7 +78,8 @@ public class StreamTaskTest {
 
     private final MockConsumer<byte[], byte[]> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
     private final MockProducer<byte[], byte[]> producer = new MockProducer<>(false, bytesSerializer, bytesSerializer);
-    private final StreamTask task = new StreamTask(0, consumer, producer, partitions, topology, config);
+    private final MockConsumer<byte[], byte[]> restoreStateConsumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+    private final StreamTask task = new StreamTask(0, consumer, producer, restoreStateConsumer, partitions, topology, config);
 
     @Before
     public void setup() {
