@@ -57,6 +57,7 @@ public class PunctuationQueue {
                 ProcessorNode scheduled = sched.node();
                 task.node(scheduled);
                 scheduled.processor().punctuate(streamTime);
+                task.node(null);
                 pq.add(sched.next());
 
                 top = pq.peek();
