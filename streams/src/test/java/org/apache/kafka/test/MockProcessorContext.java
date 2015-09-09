@@ -28,7 +28,6 @@ import org.apache.kafka.streams.processor.internals.ProcessorNode;
 
 import java.io.File;
 import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +37,7 @@ public class MockProcessorContext implements ProcessorContext {
     private Serializer serializer;
     private Deserializer deserializer;
     private ProcessorNode node;
-    private final Deque<ProcessorNode> nodeStack = new ArrayDeque<ProcessorNode>();
+    private final ArrayDeque<ProcessorNode> nodeStack = new ArrayDeque<ProcessorNode>();
 
     private Map<String, StateStore> storeMap = new HashMap<>();
 
