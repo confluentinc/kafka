@@ -66,6 +66,11 @@ public class MeteredKeyValueStore<K, V> implements KeyValueStore<K, V> {
 
         this.time = time;
         this.group = group;
+        this.topic = name;
+        this.metrics = context.metrics();
+        this.partition = context.id();
+        this.context = context;
+
         this.putTime = createSensor(name, "put");
         this.getTime = createSensor(name, "get");
         this.deleteTime = createSensor(name, "delete");
@@ -74,12 +79,6 @@ public class MeteredKeyValueStore<K, V> implements KeyValueStore<K, V> {
         this.rangeTime = createSensor(name, "range");
         this.flushTime = createSensor(name, "flush");
         this.restoreTime = createSensor(name, "restore");
-        this.metrics = context.metrics();
-
-        this.topic = name;
-        this.partition = context.id();
-
-        this.context = context;
 
         this.dirty = new HashSet<K>();
         this.maxDirty = 100;        // TODO: this needs to be configurable
