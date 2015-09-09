@@ -86,13 +86,13 @@ public class KafkaStreaming {
         if (state == CREATED) {
             for (StreamThread thread : threads)
                 thread.start();
+
+            state = RUNNING;
+
+            log.info("Started Kafka Stream process");
         } else {
             throw new IllegalStateException("This process was already started.");
         }
-
-        state = RUNNING;
-
-        log.info("Started Kafka Stream process");
     }
 
     /**
@@ -114,12 +114,12 @@ public class KafkaStreaming {
                     Thread.interrupted();
                 }
             }
+
+            state = STOPPED;
+
+            log.info("Stopped Kafka Stream process");
         } else {
             throw new IllegalStateException("This process has not started yet.");
         }
-
-        state = STOPPED;
-
-        log.info("Stopped Kafka Stream process");
     }
 }
