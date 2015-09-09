@@ -18,11 +18,9 @@
 package org.apache.kafka.streaming.processor.internals;
 
 import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
-import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streaming.StreamingConfig;
@@ -67,6 +65,7 @@ public class ProcessorContextImpl implements ProcessorContext {
                                 StreamTask task,
                                 StreamingConfig config,
                                 RecordCollector collector,
+                                Consumer<byte[], byte[]> restoreStateConsumer,
                                 Metrics metrics) throws IOException {
         this.id = id;
         this.task = task;
@@ -80,13 +79,7 @@ public class ProcessorContextImpl implements ProcessorContext {
 
         File stateFile = new File(config.getString(StreamingConfig.STATE_DIR_CONFIG), Integer.toString(id));
 
-        Consumer restoreConsumer = new KafkaConsumer<>(
-            config.getConsumerConfigs(),
-            null /* no callback for restore consumer */,
-            new ByteArrayDeserializer(),
-            new ByteArrayDeserializer());
-
-        this.stateMgr = new ProcessorStateManager(id, stateFile, restoreConsumer);
+        this.stateMgr = new ProcessorStateManager(id, stateFile, restoreStateConsumer);
 
         this.initialized = false;
     }

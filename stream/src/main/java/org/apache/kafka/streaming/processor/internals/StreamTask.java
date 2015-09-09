@@ -67,6 +67,7 @@ public class StreamTask {
      * @param id                    the ID of this task
      * @param consumer              the instance of {@link Consumer}
      * @param producer              the instance of {@link Producer}
+     * @param stateConsumer         the instance of {@link Consumer} used when restoring state
      * @param partitions            the collection of assigned {@link TopicPartition}
      * @param topology              the instance of {@link ProcessorTopology}
      * @param config                the {@link StreamingConfig} specified by the user
@@ -75,6 +76,7 @@ public class StreamTask {
     public StreamTask(int id,
                       Consumer<byte[], byte[]> consumer,
                       Producer<byte[], byte[]> producer,
+                      Consumer<byte[], byte[]> restoreStateConsumer,
                       Collection<TopicPartition> partitions,
                       ProcessorTopology topology,
                       StreamingConfig config) {
@@ -106,7 +108,7 @@ public class StreamTask {
 
         // initialize the topology with its own context
         try {
-            this.processorContext = new ProcessorContextImpl(id, this, config, recordCollector, new Metrics());
+            this.processorContext = new ProcessorContextImpl(id, this, config, recordCollector, restoreStateConsumer, new Metrics());
         } catch (IOException e) {
             throw new KafkaException("Error while creating the state manager in processor context.");
         }

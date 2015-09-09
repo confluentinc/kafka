@@ -21,7 +21,6 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceCallback;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.streaming.StreamingConfig;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.KafkaException;
@@ -38,6 +37,7 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.streaming.StreamingConfig;
 import org.apache.kafka.streaming.processor.TopologyBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,6 +60,7 @@ public class StreamThread extends Thread {
     private final TopologyBuilder builder;
     private final Producer<byte[], byte[]> producer;
     private final Consumer<byte[], byte[]> consumer;
+    private final Consumer<byte[], byte[]> restoreStateConsumer;
     private final Map<Integer, StreamTask> tasks;
     private final Time time;
 
@@ -104,6 +105,12 @@ public class StreamThread extends Thread {
             rebalanceCallback,
             new ByteArrayDeserializer(),
             new ByteArrayDeserializer());
+
+        this.restoreStateConsumer = new KafkaConsumer<>(config.getConsumerConfigs(),
+            null /* no callback for restore consumer */,
+            new ByteArrayDeserializer(),
+            new ByteArrayDeserializer());
+
 
         // initialize the task list
         this.tasks = new HashMap<>();
@@ -295,7 +302,7 @@ public class StreamThread extends Thread {
 
                 // create the task
                 try {
-                    task = new StreamTask(id, consumer, producer, partitionsForTask, builder.build(), config);
+                    task = new StreamTask(id, consumer, producer, restoreStateConsumer, partitionsForTask, builder.build(), config);
                 } catch (Exception e) {
                     log.error("Failed to create a task #" + id + " in thread [" + this.getName() + "]: ", e);
                     throw e;
