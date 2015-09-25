@@ -41,6 +41,7 @@ import java.util.Set;
 public class MeteredKeyValueStore<K, V> implements KeyValueStore<K, V> {
 
     protected final KeyValueStore<K, V> inner;
+    protected final Serdes<K, V> serialization;
 
     private final Time time;
     private final String group;
@@ -61,8 +62,10 @@ public class MeteredKeyValueStore<K, V> implements KeyValueStore<K, V> {
     private final ProcessorContext context;
 
     // always wrap the logged store with the metered store
-    public MeteredKeyValueStore(final String name, final KeyValueStore<K, V> inner, ProcessorContext context, String group, Time time) {
+    public MeteredKeyValueStore(final String name, final KeyValueStore<K, V> inner, ProcessorContext context,
+                                Serdes<K, V> serialization, String group, Time time) {
         this.inner = inner;
+        this.serialization = serialization;
 
         this.time = time;
         this.group = group;
@@ -87,8 +90,8 @@ public class MeteredKeyValueStore<K, V> implements KeyValueStore<K, V> {
         // register and possibly restore the state from the logs
         long startNs = time.nanoseconds();
         try {
-            final Deserializer<K> keyDeserializer = (Deserializer<K>) context.keyDeserializer();
-            final Deserializer<V> valDeserializer = (Deserializer<V>) context.valueDeserializer();
+            final Deserializer<K> keyDeserializer = serialization.keyDeserializer();
+            final Deserializer<V> valDeserializer = serialization.valueDeserializer();
 
             context.register(this, new RestoreFunc() {
                 @Override
@@ -216,10 +219,10 @@ public class MeteredKeyValueStore<K, V> implements KeyValueStore<K, V> {
 
     private void logChange() {
         RecordCollector collector = ((ProcessorContextImpl) context).recordCollector();
-        Serializer<K> keySerializer = (Serializer<K>) context.keySerializer();
-        Serializer<V> valueSerializer = (Serializer<V>) context.valueSerializer();
-
         if (collector != null) {
+            Serializer<K> keySerializer = serialization.keySerializer();
+            Serializer<V> valueSerializer = serialization.valueSerializer();
+
             for (K k : this.dirty) {
                 V v = this.inner.get(k);
                 collector.send(new ProducerRecord<>(this.topic, this.partition, k, v), keySerializer, valueSerializer);
