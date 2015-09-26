@@ -30,6 +30,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class RecordCollector {
+    
+    public static interface Supplier {
+        public RecordCollector recordCollector();
+    }
 
     private static final Logger log = LoggerFactory.getLogger(RecordCollector.class);
 
