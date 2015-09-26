@@ -200,6 +200,16 @@ public class ProcessorTopologyTestDriver {
     }
 
     /**
+     * Possibly trigger registered punctuation functions if current time has reached the next defined timestamp for each of the
+     * processors.
+     *
+     * @param timestamp the current timestamp
+     */
+    public void maybePunctuate(long timestamp) {
+        task.maybePunctuate(timestamp);
+    }
+
+    /**
      * Read the next record from the given topic. These records were output by the topology during the previous calls to
      * {@link #process(String, byte[], byte[])}.
      * 
