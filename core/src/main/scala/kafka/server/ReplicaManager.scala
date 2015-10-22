@@ -130,7 +130,7 @@ class ReplicaManager(val config: KafkaConfig,
       }
     }
   )
-  newGauge(
+  val partitionCount = newGauge(
     "PartitionCount",
     new Gauge[Int] {
       def value = allPartitions.size
