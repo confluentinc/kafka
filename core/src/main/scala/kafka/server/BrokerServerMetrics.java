@@ -17,9 +17,9 @@
 
 package kafka.server;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.kafka.common.utils.AppInfoParser;
 
 /**
  * This class collects metrics from a broker
@@ -47,11 +47,14 @@ public class BrokerServerMetrics implements Runnable {
 
         while(true) {
             try {
-                log.info("BrokerID={}:WrittenBytes={}", server.config().brokerId(), BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().count());
-                log.info("BrokerID={}:ReadBytes={}", server.config().brokerId(), BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().count());
-                log.info("BrokerID={}:BytesInRate={}", server.config().brokerId(), BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().meanRate());
-                log.info("BrokerID={}:BytesOutRate={}", server.config().brokerId(), BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().meanRate());
-                log.info("BrokerID={}:NumPartitions={}", server.config().brokerId(), server.replicaManager().partitionCount().value());
+                int brokerId = server.config().brokerId();
+                String version = AppInfoParser.getVersion();
+                log.info("BrokerID={}:Version={}", brokerId,version);
+                log.info("BrokerID={}:WrittenBytes={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().count());
+                log.info("BrokerID={}:ReadBytes={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().count());
+                log.info("BrokerID={}:BytesInRate={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().meanRate());
+                log.info("BrokerID={}:BytesOutRate={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().meanRate());
+                log.info("BrokerID={}:NumPartitions={}", brokerId, server.replicaManager().partitionCount().value());
                 Thread.sleep(reportInterval);
             } catch (Exception e) {
                 log.debug("BrokerID={}:Exiting from BrokerServerMetrics thread", server.config().brokerId());

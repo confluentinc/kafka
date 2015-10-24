@@ -36,44 +36,9 @@ import kafka.server.KafkaServer;
  */
 public class BrokerStart  {
 
-    /**
-     *
-     * @param args Arguments, usually a config file
-     * @return Properties object
-     */
-    private static Properties getPropsFromArgs(String[] args) {
-        Properties props = null;
-        OptionParser optionParser = new OptionParser();
-        OptionSpec overrideOpt = optionParser.accepts("override", "Optional property that should override values set in server.properties file")
-                .withRequiredArg()
-                .ofType(String.class);
-
-        if (args.length == 0) {
-            CommandLineUtils.printUsageAndDie(optionParser,
-                    "USAGE: java [options] %s server.properties [--override property=value]*".format(KafkaServer.class.getSimpleName()));
-        }
-        try {
-            props = Utils.loadProps(args[0]);
-
-            if (args.length > 1) {
-                OptionSet options = optionParser.parse(Arrays.copyOfRange(args, 1, args.length));
-
-                if (options.nonOptionArguments().size() > 0) {
-                    CommandLineUtils.printUsageAndDie(optionParser,
-                            "Found non argument parameters: " + options.nonOptionArguments().toArray().toString());
-                }
-
-                props.putAll(CommandLineUtils.parseKeyValueArgs(scala.collection.JavaConversions.asScalaIterable(options.valuesOf(overrideOpt))));
-            }
-        } catch (java.io.IOException e) {
-            return null;
-        }
-        return props;
-    }
-
     public static void main(String[] args) throws Exception {
         try {
-            Properties serverProps = getPropsFromArgs(args);
+            Properties serverProps = Kafka$.MODULE$.getPropsFromArgs(args);
             KafkaConfig serverConfig = KafkaConfig.fromProps(serverProps);
             KafkaMetricsReporter$.MODULE$.startReporters(new VerifiableProperties(serverProps));
             final BrokerServerStartable brokerServerStartable = new BrokerServerStartable(serverConfig);
