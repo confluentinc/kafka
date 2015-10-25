@@ -33,10 +33,14 @@ public class BrokerServerStartable  {
     /* Thread that collects metrics */
     private final Thread metricThread;
 
+    /* Runnable stats thread */
+    private final BrokerServerMetrics brokerServerMetrics;
+
     public BrokerServerStartable(KafkaConfig serverConfig) {
         final Option<String> none = Option.empty();
         server = new KafkaServer(serverConfig, SystemTime$.MODULE$, none);
-        metricThread = Utils.daemonThread("BrokerServerMetrics", new BrokerServerMetrics(server));
+        brokerServerMetrics = new BrokerServerMetrics(server);
+        metricThread = Utils.daemonThread("BrokerServerMetrics", brokerServerMetrics);
     }
 
     public void startup() {
@@ -54,6 +58,8 @@ public class BrokerServerStartable  {
 
     public void shutdown() {
         try {
+            /* do a final dumping of stats */
+            brokerServerMetrics.logStats();
             server.shutdown();
             metricThread.interrupt();
             metricThread.join();

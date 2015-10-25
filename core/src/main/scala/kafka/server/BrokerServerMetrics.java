@@ -33,11 +33,24 @@ public class BrokerServerMetrics implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(BrokerServerMetrics.class);
 
     /* reporting interval in ms */
-    private static final long reportInterval = 10*1000;
+    private static final long reportInterval = 60*1000;
 
     /* simple constructor */
     public BrokerServerMetrics(KafkaServer server) {
         this.server = server;
+    }
+
+
+    /* simple printer of stats */
+    public void logStats() {
+        int brokerId = server.config().brokerId();
+        String version = AppInfoParser.getVersion();
+        log.info("BrokerID={}:Version={}", brokerId,version);
+        log.info("BrokerID={}:WrittenBytes={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().count());
+        log.info("BrokerID={}:ReadBytes={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().count());
+        log.info("BrokerID={}:BytesInRate={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().meanRate());
+        log.info("BrokerID={}:BytesOutRate={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().meanRate());
+        log.info("BrokerID={}:NumPartitions={}", brokerId, server.replicaManager().partitionCount().value());
     }
 
     /**
@@ -47,16 +60,10 @@ public class BrokerServerMetrics implements Runnable {
 
         while(true) {
             try {
-                int brokerId = server.config().brokerId();
-                String version = AppInfoParser.getVersion();
-                log.info("BrokerID={}:Version={}", brokerId,version);
-                log.info("BrokerID={}:WrittenBytes={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().count());
-                log.info("BrokerID={}:ReadBytes={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().count());
-                log.info("BrokerID={}:BytesInRate={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesInRate().meanRate());
-                log.info("BrokerID={}:BytesOutRate={}", brokerId, BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate().meanRate());
-                log.info("BrokerID={}:NumPartitions={}", brokerId, server.replicaManager().partitionCount().value());
+                logStats();
                 Thread.sleep(reportInterval);
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 log.debug("BrokerID={}:Exiting from BrokerServerMetrics thread", server.config().brokerId());
                 break;
             }
