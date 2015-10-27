@@ -17,18 +17,11 @@
 
 package kafka;
 
-import java.util.Arrays;
 import java.util.Properties;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
 import kafka.metrics.KafkaMetricsReporter$;
 import kafka.server.BrokerServerStartable;
 import kafka.server.KafkaConfig;
-import kafka.utils.CommandLineUtils;
 import kafka.utils.VerifiableProperties;
-import org.apache.kafka.common.utils.Utils;
-import kafka.server.KafkaServer;
 
 /**
  * Main class that starts a Kafka broker and any associated threads
@@ -38,7 +31,7 @@ public class BrokerStart  {
 
     public static void main(String[] args) throws Exception {
         try {
-            Properties serverProps = Kafka$.MODULE$.getPropsFromArgs(args);
+            Properties serverProps = Kafka.getPropsFromArgs(args);
             KafkaConfig serverConfig = KafkaConfig.fromProps(serverProps);
             KafkaMetricsReporter$.MODULE$.startReporters(new VerifiableProperties(serverProps));
             final BrokerServerStartable brokerServerStartable = new BrokerServerStartable(serverConfig);
