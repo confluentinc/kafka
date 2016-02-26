@@ -36,6 +36,7 @@ def powermock_easymock='org.powermock:powermock-api-easymock:1.6.2'
 def jackson_version = '2.5.4'
 def jetty_version = '9.2.12.v20150709'
 def jersey_version = '2.22.1'
+def rocksDBJni='org.rocksdb:rocksdbjni:4.1.0'
 
 allprojects {
   apply plugin: 'idea'
@@ -543,6 +544,64 @@ project(':tools') {
         configFile = new File(rootDir, "checkstyle/checkstyle.xml")
     }
     test.dependsOn('checkstyleMain', 'checkstyleTest')
+}
+
+project(':streams') {
+    archivesBaseName = "kafka-streams"
+
+    dependencies {
+        compile project(':clients')
+        compile project(':connect:json')  // this dependency should be removed after we unify data API
+        compile "$slf4jlog4j"
+        compile "$rocksDBJni"
+        compile 'com.101tec:zkclient:0.7' // this dependency should be removed after KIP-4
+        compile 'com.fasterxml.jackson.core:jackson-databind:2.6.3' // this dependency should be removed after KIP-4
+
+        testCompile project(':clients').sourceSets.test.output
+        testCompile "$junit"
+    }
+
+    javadoc {
+        include "**/org/apache/kafka/streams/*"
+    }
+
+    tasks.create(name: "copyDependantLibs", type: Copy) {
+        from (configurations.testRuntime) {
+            include('slf4j-log4j12*')
+        }
+        from (configurations.runtime) {
+            exclude('kafka-clients*')
+        }
+        into "$buildDir/dependant-libs"
+    }
+
+    jar {
+        dependsOn 'copyDependantLibs'
+    }
+}
+
+project(':streams:examples') {
+  archivesBaseName = "kafka-streams-examples"
+
+  dependencies {
+    compile project(':streams')
+    compile project(':connect:json')  // this dependency should be removed after we unify data API
+  }
+
+  javadoc {
+    enabled = false
+  }
+
+  tasks.create(name: "copyDependantLibs", type: Copy) {
+    from (configurations.runtime) {
+      exclude('kafka-streams*')
+    }
+    into "$buildDir/dependant-libs"
+  }
+
+  jar {
+    dependsOn 'copyDependantLibs'
+  }
 }
 
 project(':log4j-appender') {

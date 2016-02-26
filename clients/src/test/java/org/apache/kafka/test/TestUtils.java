@@ -19,6 +19,7 @@ package org.apache.kafka.test;
 import static java.util.Arrays.asList;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -82,4 +83,13 @@ public class TestUtils {
         return b.toString();
     }
 
+    /**
+     * Creates an empty file in the default temporary-file directory, using `kafka` as the prefix and `tmp` as the
+     * suffix to generate its name.
+     */
+    public static File tempFile() throws IOException {
+        File file = File.createTempFile("kafka", ".tmp");
+        file.deleteOnExit();
+        return file;
+    }
 }

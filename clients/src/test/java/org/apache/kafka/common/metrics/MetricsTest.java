@@ -170,6 +170,7 @@ public class MetricsTest {
 
     @Test
     public void testRemoveSensor() {
+        int size = metrics.metrics().size();
         Sensor parent1 = metrics.sensor("test.parent1");
         parent1.add(new MetricName("test.parent1.count", "grp1"), new Count());
         Sensor parent2 = metrics.sensor("test.parent2");
@@ -211,7 +212,7 @@ public class MetricsTest {
         assertNull(metrics.childrenSensors().get(sensor));
         assertNull(metrics.metrics().get(new MetricName("test.parent2.count", "grp1")));
 
-        assertEquals(0, metrics.metrics().size());
+        assertEquals(size, metrics.metrics().size());
     }
 
     @Test
@@ -266,6 +267,7 @@ public class MetricsTest {
 
     @Test
     public void testRemoveMetric() {
+        int size = metrics.metrics().size();
         metrics.addMetric(new MetricName("test1", "grp1"), new Count());
         metrics.addMetric(new MetricName("test2", "grp1"), new Count());
 
@@ -276,7 +278,7 @@ public class MetricsTest {
         assertNotNull(metrics.removeMetric(new MetricName("test2", "grp1")));
         assertNull(metrics.metrics().get(new MetricName("test2", "grp1")));
 
-        assertEquals(0, metrics.metrics().size());
+        assertEquals(size, metrics.metrics().size());
     }
 
     @Test
