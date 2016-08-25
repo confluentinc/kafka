@@ -46,6 +46,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -73,8 +74,8 @@ public class Worker {
     private final OffsetBackingStore offsetBackingStore;
     private final Map<String, Object> producerProps;
 
-    private HashMap<String, WorkerConnector> connectors = new HashMap<>();
-    private HashMap<ConnectorTaskId, WorkerTask> tasks = new HashMap<>();
+    private Map<String, WorkerConnector> connectors = new ConcurrentHashMap<>();
+    private Map<ConnectorTaskId, WorkerTask> tasks = new ConcurrentHashMap<>();
     private SourceTaskOffsetCommitter sourceTaskOffsetCommitter;
 
     public Worker(String workerId,
@@ -174,7 +175,9 @@ public class Worker {
         workerConnector.initialize(connConfig);
         workerConnector.transitionTo(initialState);
 
-        connectors.put(connName, workerConnector);
+        WorkerConnector existing = connectors.put(connName, workerConnector);
+        if (existing != null)
+            throw new ConnectException("Connector with name " + connName + " already exists");
         log.info("Finished creating connector {}", connName);
     }
 
@@ -274,12 +277,11 @@ public class Worker {
     public void stopConnector(String connName) {
         log.info("Stopping connector {}", connName);
 
-        WorkerConnector connector = connectors.get(connName);
+        WorkerConnector connector = connectors.remove(connName);
         if (connector == null)
             throw new ConnectException("Connector " + connName + " not found in this worker.");
 
         connector.shutdown();
-        connectors.remove(connName);
 
         log.info("Stopped connector {}", connName);
     }
@@ -340,13 +342,19 @@ public class Worker {
         // Start the task before adding modifying any state, any exceptions are caught higher up the
         // call chain and there's no cleanup to do here
         workerTask.initialize(taskConfig);
+        WorkerTask existing = tasks.put(id, workerTask);
+        if (existing != null) {
+            String msg = "Task already exists in this worker; the herder should not have requested "
+                    + "that this : " + id;
+            log.error(msg);
+            throw new ConnectException(msg);
+        }
         executor.submit(workerTask);
 
         if (task instanceof SourceTask) {
             WorkerSourceTask workerSourceTask = (WorkerSourceTask) workerTask;
             sourceTaskOffsetCommitter.schedule(id, workerSourceTask);
         }
-        tasks.put(id, workerTask);
     }
 
     private WorkerTask buildWorkerTask(ConnectorTaskId id,
