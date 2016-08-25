@@ -267,9 +267,7 @@ public class DistributedHerderTest {
         worker.stopConnector(CONN1);
         PowerMock.expectLastCall();
         EasyMock.expect(worker.taskIds()).andReturn(Collections.singleton(TASK1));
-        worker.stopTasks(Collections.singleton(TASK1));
-        PowerMock.expectLastCall();
-        worker.awaitStopTasks(Collections.singleton(TASK1));
+        worker.stopAndAwaitTask(TASK1);
         PowerMock.expectLastCall();
         member.stop();
         PowerMock.expectLastCall();
@@ -1182,9 +1180,7 @@ public class DistributedHerderTest {
         }
 
         if (revokedTasks != null && !revokedTasks.isEmpty()) {
-            worker.stopTasks(revokedTasks);
-            PowerMock.expectLastCall();
-            worker.awaitStopTasks(revokedTasks);
+            worker.stopAndAwaitTask(EasyMock.anyObject(ConnectorTaskId.class));
             PowerMock.expectLastCall();
         }
 

@@ -27,11 +27,13 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.NotFoundException;
 import org.apache.kafka.connect.runtime.AbstractHerder;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
+import org.apache.kafka.connect.runtime.ConnectorStatus;
 import org.apache.kafka.connect.runtime.HerderConnectorContext;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.SourceConnectorConfig;
 import org.apache.kafka.connect.runtime.TargetState;
 import org.apache.kafka.connect.runtime.TaskConfig;
+import org.apache.kafka.connect.runtime.TaskStatus;
 import org.apache.kafka.connect.runtime.Worker;
 import org.apache.kafka.connect.runtime.rest.RestServer;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorInfo;
@@ -93,6 +95,12 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(DistributedHerder.class);
 
     private static final long RECONFIGURE_CONNECTOR_TASKS_BACKOFF_MS = 250;
+    private static final int BULK_THREAD_POOL_SIZE = 8;
+
+    private enum State {
+        START,
+        STOP
+    };
 
     private final Time time;
 
@@ -100,6 +108,7 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
     private final int workerUnsyncBackoffMs;
 
     private final ExecutorService forwardRequestExecutor;
+    private final ExecutorService bulkExecutor;
     private final WorkerGroupMember member;
     private final AtomicBoolean stopping;
     private final CountDownLatch stopLatch = new CountDownLatch(1);
@@ -149,6 +158,7 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
         this.workerUnsyncBackoffMs = config.getInt(DistributedConfig.WORKER_UNSYNC_BACKOFF_MS_CONFIG);
         this.member = member != null ? member : new WorkerGroupMember(config, restUrl, this.configBackingStore, new RebalanceListener(), time);
         this.forwardRequestExecutor = Executors.newSingleThreadExecutor();
+        this.bulkExecutor = Executors.newFixedThreadPool(BULK_THREAD_POOL_SIZE);
 
         stopping = new AtomicBoolean(false);
         configState = ClusterConfigState.EMPTY;
@@ -332,17 +342,14 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
         synchronized (this) {
             // Clean up any connectors and tasks that are still running.
             log.info("Stopping connectors and tasks that are still assigned to this worker.");
-            for (String connName : new HashSet<>(worker.connectorNames())) {
-                try {
-                    worker.stopConnector(connName);
-                } catch (Throwable t) {
-                    log.error("Failed to shut down connector " + connName, t);
-                }
+            List<Callable<Void>> callables = new ArrayList<>();
+            for (String connectorName : new ArrayList<>(worker.connectorNames())) {
+                callables.add(getConnectorCallable(connectorName, ConnectorStatus.State.DESTROYED));
             }
-
-            Set<ConnectorTaskId> tasks = new HashSet<>(worker.taskIds());
-            worker.stopTasks(tasks);
-            worker.awaitStopTasks(tasks);
+            for (ConnectorTaskId taskId : new ArrayList<>(worker.taskIds())) {
+                callables.add(getTaskCallable(taskId, ConnectorStatus.State.DESTROYED));
+            }
+            bulkRun(callables, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
 
             member.stop();
 
@@ -372,9 +379,12 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
         }
 
         forwardRequestExecutor.shutdown();
+        bulkExecutor.shutdown();
         try {
             if (!forwardRequestExecutor.awaitTermination(10000, TimeUnit.MILLISECONDS))
                 forwardRequestExecutor.shutdownNow();
+            if (!bulkExecutor.awaitTermination(1000, TimeUnit.MILLISECONDS))
+                bulkExecutor.shutdownNow();
         } catch (InterruptedException e) {
             // ignore
         }
@@ -747,25 +757,26 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
         Utils.sleep(ms);
     }
 
+    private void bulkRun(Collection<Callable<Void>> bulk, long timeout, TimeUnit unit) {
+        try {
+            bulkExecutor.invokeAll(bulk, timeout, unit);
+        } catch (InterruptedException e) {
+            // ignore
+        }
+    }
+
     private void startWork() {
         // Start assigned connectors and tasks
         log.info("Starting connectors and tasks using config offset {}", assignment.offset());
+        List<Callable<Void>> callables = new ArrayList<>();
         for (String connectorName : assignment.connectors()) {
-            try {
-                startConnector(connectorName);
-            } catch (ConfigException e) {
-                log.error("Couldn't instantiate connector " + connectorName + " because it has an invalid connector " +
-                        "configuration. This connector will not execute until reconfigured.", e);
-            }
+            callables.add(getConnectorCallable(connectorName, ConnectorStatus.State.UNASSIGNED));
         }
+
         for (ConnectorTaskId taskId : assignment.tasks()) {
-            try {
-                startTask(taskId);
-            } catch (ConfigException e) {
-                log.error("Couldn't instantiate task " + taskId + " because it has an invalid task " +
-                        "configuration. This task will not execute until reconfigured.", e);
-            }
+            callables.add(getTaskCallable(taskId, TaskStatus.State.UNASSIGNED));
         }
+        bulkRun(callables, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
         log.info("Finished starting connectors and tasks");
     }
 
@@ -775,6 +786,30 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
         TaskConfig taskConfig = new TaskConfig(configState.taskConfig(taskId));
         ConnectorConfig connConfig = new ConnectorConfig(configState.connectorConfig(taskId.connector()));
         worker.startTask(taskId, taskConfig, connConfig, this, initialState);
+    }
+
+    private Callable<Void> getTaskCallable(final ConnectorTaskId taskId, final TaskStatus.State action) {
+        return new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                switch (action) {
+                    case UNASSIGNED:
+                        try {
+                            startTask(taskId);
+                        } catch (ConfigException e) {
+                            log.error("Couldn't instantiate task " + taskId + " because it has an invalid task " +
+                                    "configuration. This task will not execute until reconfigured.", e);
+                        }
+                        break;
+                    case DESTROYED:
+                        worker.stopAndAwaitTask(taskId);
+                        break;
+                    default:
+                        log.error("No action defined for state: {}. Execution of callable on task {} has no effect", action, taskId);
+                }
+                return null;
+            }
+        };
     }
 
     // Helper for starting a connector with the given name, which will extract & parse the config, generate connector
@@ -793,6 +828,34 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
         // just restoring an existing connector.
         if (initialState == TargetState.STARTED)
             reconfigureConnectorTasksWithRetry(connName);
+    }
+
+    private Callable<Void> getConnectorCallable(final String connectorName, final ConnectorStatus.State action) {
+        return new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                switch (action) {
+                    case UNASSIGNED:
+                        try {
+                            startConnector(connectorName);
+                        } catch (ConfigException e) {
+                            log.error("Couldn't instantiate connector " + connectorName + " because it has an invalid connector " +
+                                    "configuration. This connector will not execute until reconfigured.", e);
+                        }
+                        break;
+                    case DESTROYED:
+                        try {
+                            worker.stopConnector(connectorName);
+                        } catch (Throwable t) {
+                            log.error("Failed to shut down connector " + connectorName, t);
+                        }
+                        break;
+                    default:
+                        log.error("No action defined for state: {}. Execution of callable on connector {} has no effect", action, connectorName);
+                }
+                return null;
+            }
+        };
     }
 
     private void reconfigureConnectorTasksWithRetry(final String connName) {
@@ -1047,23 +1110,27 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
             // it is still important to have a leader that can write configs, offsets, etc.
 
             if (rebalanceResolved) {
-                // TODO: Parallelize this. We should be able to request all connectors and tasks to stop, then wait on all of
-                // them to finish
                 // TODO: Technically we don't have to stop connectors at all until we know they've really been removed from
                 // this worker. Instead, we can let them continue to run but buffer any update requests (which should be
                 // rare anyway). This would avoid a steady stream of start/stop, which probably also includes lots of
                 // unnecessary repeated connections to the source/sink system.
-                for (String connectorName : connectors)
-                    worker.stopConnector(connectorName);
+                List<Callable<Void>> callables = new ArrayList<>();
+                for (final String connectorName : connectors) {
+                    callables.add(getConnectorCallable(connectorName, ConnectorStatus.State.DESTROYED));
+                }
 
                 // TODO: We need to at least commit task offsets, but if we could commit offsets & pause them instead of
                 // stopping them then state could continue to be reused when the task remains on this worker. For example,
                 // this would avoid having to close a connection and then reopen it when the task is assigned back to this
                 // worker again.
                 if (!tasks.isEmpty()) {
-                    worker.stopTasks(tasks); // trigger stop() for all tasks
-                    worker.awaitStopTasks(tasks); // await stopping tasks
+                    for (final ConnectorTaskId taskId : tasks) {
+                        callables.add(getTaskCallable(taskId, TaskStatus.State.DESTROYED));
+                    }
                 }
+
+                // The actual timeout for graceful task stop is applied in worker's stopAndAwaitTask method.
+                bulkRun(callables, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
 
                 // Ensure that all status updates have been pushed to the storage system before rebalancing.
                 // Otherwise, we may inadvertently overwrite the state with a stale value after the rebalance
