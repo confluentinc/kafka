@@ -18,6 +18,7 @@
 package kafka.log
 
 import kafka.api.KAFKA_0_10_0_IV0
+import kafka.idempotence.IdMapping
 import kafka.utils._
 import kafka.common._
 import kafka.metrics.KafkaMetricsGroup
@@ -117,6 +118,9 @@ class Log(@volatile var dir: File,
     /* Calculate the offset of the next message */
     nextOffsetMetadata = new LogOffsetMetadata(activeSegment.nextOffset(), activeSegment.baseOffset,
       activeSegment.size.toInt)
+
+  /* Construct and load id map */
+//  private val idMap = buildAndRecoverIdMap(logEndOffset)
 
     info("Completed load of log %s with %d log segments and log end offset %d in %d ms"
       .format(name, segments.size(), logEndOffset, time.milliseconds - startMs))
@@ -311,6 +315,44 @@ class Log(@volatile var dir: File,
         unflushed.foreach(deleteSegment)
       }
     }
+  }
+
+  /**
+    * Creates an instance of id map for this log and updates the mapping
+    * in the case it is missing some messages. Note that the id mapping
+    * starts from a snapshot that is taken strictly before the log end
+    * offset. Consequently, we need to process the tail of the log to update
+    * the mapping.
+    *
+    * @param lastOffset
+    *
+    * @return An instance of IdMapping
+    */
+  private def buildAndRecoverIdMap(lastOffset: Long): IdMapping = {
+//    val newIdMap = new IdMapping(topicAndPartition, config, dir, logStartOffset, lastOffset)
+//    // Iterate over the messages between idMap.lastSnapshotOffset
+//    // and the last offset of the active segment
+//    val msgs = read(idMap.mapEndOffset, 0, Some(logEndOffset))
+//    msgs.logBuffer.asScala.foreach(mao => {
+//      mao.firstOffset
+//    })
+//    newIdMap
+    null
+  }
+
+  /**
+    * Called from the log cleaner manager to clean up the id map
+    * after a compaction round.
+    *
+    * The current contract is that we expire all ids that do not
+    * have a latest offset greater or equal to the first dity
+    * offset. The first dirty offset should be the value of the
+    * newStartOffset parameter for this call.
+    *
+    * @param newStartOffset New start offset to clean up the map
+    */
+  private[log] def updateIdMap(newStartOffset: Long): Unit = {
+//    idMap.maybeClean(newStartOffset)
   }
 
   /**
@@ -688,7 +730,9 @@ class Log(@volatile var dir: File,
     */
   def deleteOldSegments(): Int = {
     if (!config.delete) return 0
-    deleteRetenionMsBreachedSegments() + deleteRetentionSizeBreachedSegments()
+    val numDeleted = deleteRetenionMsBreachedSegments() + deleteRetentionSizeBreachedSegments()
+//    idMap.maybeClean(logStartOffset)
+    numDeleted
   }
 
   private def deleteRetenionMsBreachedSegments() : Int = {
@@ -888,6 +932,7 @@ class Log(@volatile var dir: File,
         updateLogEndOffset(targetOffset)
         this.recoveryPoint = math.min(targetOffset, this.recoveryPoint)
       }
+      buildAndRecoverIdMap(targetOffset)
     }
   }
 
@@ -912,6 +957,7 @@ class Log(@volatile var dir: File,
                                 preallocate = config.preallocate))
       updateLogEndOffset(newOffset)
       this.recoveryPoint = math.min(newOffset, this.recoveryPoint)
+      buildAndRecoverIdMap(newOffset)
     }
   }
 
