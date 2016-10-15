@@ -24,7 +24,9 @@ public final class ClientRequest {
     private final RequestSend request;
     private final RequestCompletionHandler callback;
     private final boolean isInitiatedByNetworkClient;
+    private final int requestTimeoutMs;
     private long sendTimeMs;
+
 
     /**
      * @param createdTimeMs The unix timestamp in milliseconds for the time at which this request was created.
@@ -32,9 +34,12 @@ public final class ClientRequest {
      * @param request The request
      * @param callback A callback to execute when the response has been received (or null if no callback is necessary)
      */
-    public ClientRequest(long createdTimeMs, boolean expectResponse, RequestSend request,
-                         RequestCompletionHandler callback) {
-        this(createdTimeMs, expectResponse, request, callback, false);
+    public ClientRequest(long createdTimeMs,
+                         boolean expectResponse,
+                         RequestSend request,
+                         RequestCompletionHandler callback,
+                         int requestTimeoutMs) {
+        this(createdTimeMs, expectResponse, request, callback, false, requestTimeoutMs);
     }
 
     /**
@@ -45,13 +50,18 @@ public final class ClientRequest {
      * @param isInitiatedByNetworkClient Is request initiated by network client, if yes, its
      *                                   response will be consumed by network client
      */
-    public ClientRequest(long createdTimeMs, boolean expectResponse, RequestSend request,
-                         RequestCompletionHandler callback, boolean isInitiatedByNetworkClient) {
+    public ClientRequest(long createdTimeMs,
+                         boolean expectResponse,
+                         RequestSend request,
+                         RequestCompletionHandler callback,
+                         boolean isInitiatedByNetworkClient,
+                         int requestTimeoutMs) {
         this.createdTimeMs = createdTimeMs;
         this.callback = callback;
         this.request = request;
         this.expectResponse = expectResponse;
         this.isInitiatedByNetworkClient = isInitiatedByNetworkClient;
+        this.requestTimeoutMs = requestTimeoutMs;
     }
 
     @Override
@@ -95,5 +105,9 @@ public final class ClientRequest {
 
     public void setSendTimeMs(long sendTimeMs) {
         this.sendTimeMs = sendTimeMs;
+    }
+
+    public int requestTimeoutMs() {
+        return requestTimeoutMs;
     }
 }

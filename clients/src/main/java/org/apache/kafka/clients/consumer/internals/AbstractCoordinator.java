@@ -388,7 +388,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 metadata());
 
         log.debug("Sending JoinGroup ({}) to coordinator {}", request, this.coordinator);
-        return client.send(coordinator, ApiKeys.JOIN_GROUP, request)
+        return client.send(coordinator, ApiKeys.JOIN_GROUP, request, rebalanceTimeoutMs)
                 .compose(new JoinGroupResponseHandler());
     }
 

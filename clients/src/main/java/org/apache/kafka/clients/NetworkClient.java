@@ -75,7 +75,7 @@ public class NetworkClient implements KafkaClient {
     private int correlation;
 
     /* max time in ms for the producer to wait for acknowledgement from server*/
-    private final int requestTimeoutMs;
+    private final int minRequestTimeoutMs;
 
     private final Time time;
 
@@ -86,10 +86,10 @@ public class NetworkClient implements KafkaClient {
                          long reconnectBackoffMs,
                          int socketSendBuffer,
                          int socketReceiveBuffer,
-                         int requestTimeoutMs,
+                         int minRequestTimeoutMs,
                          Time time) {
         this(null, metadata, selector, clientId, maxInFlightRequestsPerConnection,
-                reconnectBackoffMs, socketSendBuffer, socketReceiveBuffer, requestTimeoutMs, time);
+                reconnectBackoffMs, socketSendBuffer, socketReceiveBuffer, minRequestTimeoutMs, time);
     }
 
     public NetworkClient(Selectable selector,
@@ -99,10 +99,10 @@ public class NetworkClient implements KafkaClient {
                          long reconnectBackoffMs,
                          int socketSendBuffer,
                          int socketReceiveBuffer,
-                         int requestTimeoutMs,
+                         int minRequestTimeoutMs,
                          Time time) {
         this(metadataUpdater, null, selector, clientId, maxInFlightRequestsPerConnection, reconnectBackoffMs,
-                socketSendBuffer, socketReceiveBuffer, requestTimeoutMs, time);
+                socketSendBuffer, socketReceiveBuffer, minRequestTimeoutMs, time);
     }
 
     private NetworkClient(MetadataUpdater metadataUpdater,
@@ -113,7 +113,7 @@ public class NetworkClient implements KafkaClient {
                           long reconnectBackoffMs,
                           int socketSendBuffer,
                           int socketReceiveBuffer,
-                          int requestTimeoutMs,
+                          int minRequestTimeoutMs,
                           Time time) {
 
         /* It would be better if we could pass `DefaultMetadataUpdater` from the public constructor, but it's not
@@ -135,7 +135,7 @@ public class NetworkClient implements KafkaClient {
         this.socketReceiveBuffer = socketReceiveBuffer;
         this.correlation = 0;
         this.randOffset = new Random();
-        this.requestTimeoutMs = requestTimeoutMs;
+        this.minRequestTimeoutMs = minRequestTimeoutMs;
         this.time = time;
     }
 
@@ -232,6 +232,10 @@ public class NetworkClient implements KafkaClient {
      */
     @Override
     public void send(ClientRequest request, long now) {
+        if (request.requestTimeoutMs() < minRequestTimeoutMs)
+            throw new IllegalArgumentException("Request timeout " + request.requestTimeoutMs() +
+                    " is smaller than minimum permitted timeout " + minRequestTimeoutMs);
+
         String nodeId = request.request().destination();
         if (!canSendRequest(nodeId))
             throw new IllegalStateException("Attempt to send a request to node " + nodeId + " which is not ready.");
@@ -257,7 +261,7 @@ public class NetworkClient implements KafkaClient {
     public List<ClientResponse> poll(long timeout, long now) {
         long metadataTimeout = metadataUpdater.maybeUpdate(now);
         try {
-            this.selector.poll(Utils.min(timeout, metadataTimeout, requestTimeoutMs));
+            this.selector.poll(Utils.min(timeout, metadataTimeout, minRequestTimeoutMs));
         } catch (IOException e) {
             log.error("Unexpected error during I/O", e);
         }
@@ -406,7 +410,7 @@ public class NetworkClient implements KafkaClient {
      * @param now The current time
      */
     private void handleTimedOutRequests(List<ClientResponse> responses, long now) {
-        List<String> nodeIds = this.inFlightRequests.getNodesWithTimedOutRequests(now, this.requestTimeoutMs);
+        List<String> nodeIds = this.inFlightRequests.getNodesWithTimedOutRequests(now);
         for (String nodeId : nodeIds) {
             // close connection to the node
             this.selector.close(nodeId);
@@ -614,7 +618,7 @@ public class NetworkClient implements KafkaClient {
          */
         private ClientRequest request(long now, String node, MetadataRequest metadata) {
             RequestSend send = new RequestSend(node, nextRequestHeader(ApiKeys.METADATA), metadata.toStruct());
-            return new ClientRequest(now, true, send, null, true);
+            return new ClientRequest(now, true, send, null, true, minRequestTimeoutMs);
         }
 
         /**

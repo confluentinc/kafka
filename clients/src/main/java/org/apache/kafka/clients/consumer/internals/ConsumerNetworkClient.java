@@ -55,7 +55,7 @@ public class ConsumerNetworkClient implements Closeable {
     private final Metadata metadata;
     private final Time time;
     private final long retryBackoffMs;
-    private final long unsentExpiryMs;
+    private final int requestTimeoutMs;
     private int wakeupDisabledCount = 0;
 
     // when requests complete, they are transferred to this queue prior to invocation. The purpose
@@ -69,13 +69,13 @@ public class ConsumerNetworkClient implements Closeable {
     public ConsumerNetworkClient(KafkaClient client,
                                  Metadata metadata,
                                  Time time,
-                                 long retryBackoffMs,
-                                 long requestTimeoutMs) {
+                                 int retryBackoffMs,
+                                 int requestTimeoutMs) {
         this.client = client;
         this.metadata = metadata;
         this.time = time;
         this.retryBackoffMs = retryBackoffMs;
-        this.unsentExpiryMs = requestTimeoutMs;
+        this.requestTimeoutMs = requestTimeoutMs;
     }
 
     /**
@@ -93,18 +93,26 @@ public class ConsumerNetworkClient implements Closeable {
     public RequestFuture<ClientResponse> send(Node node,
                                               ApiKeys api,
                                               AbstractRequest request) {
-        return send(node, api, ProtoUtils.latestVersion(api.id), request);
+        return send(node, api, ProtoUtils.latestVersion(api.id), request, requestTimeoutMs);
+    }
+
+    public RequestFuture<ClientResponse> send(Node node,
+                                              ApiKeys api,
+                                              AbstractRequest request,
+                                              int requestTimeoutMs) {
+        return send(node, api, ProtoUtils.latestVersion(api.id), request, requestTimeoutMs);
     }
 
     private RequestFuture<ClientResponse> send(Node node,
-                                              ApiKeys api,
-                                              short version,
-                                              AbstractRequest request) {
+                                               ApiKeys api,
+                                               short version,
+                                               AbstractRequest request,
+                                               int requestTimeoutMs) {
         long now = time.milliseconds();
         RequestFutureCompletionHandler completionHandler = new RequestFutureCompletionHandler();
         RequestHeader header = client.nextRequestHeader(api, version);
         RequestSend send = new RequestSend(node.idString(), header, request.toStruct());
-        put(node, new ClientRequest(now, true, send, completionHandler));
+        put(node, new ClientRequest(now, true, send, completionHandler, requestTimeoutMs));
 
         // wakeup the client in case it is blocking in poll so that we can send the queued request
         client.wakeup();
@@ -348,9 +356,9 @@ public class ConsumerNetworkClient implements Closeable {
             Iterator<ClientRequest> requestIterator = requestEntry.getValue().iterator();
             while (requestIterator.hasNext()) {
                 ClientRequest request = requestIterator.next();
-                if (request.createdTimeMs() < now - unsentExpiryMs) {
+                if (request.createdTimeMs() < now - requestTimeoutMs) {
                     RequestFutureCompletionHandler handler = (RequestFutureCompletionHandler) request.callback();
-                    handler.onFailure(new TimeoutException("Failed to send request after " + unsentExpiryMs + " ms."));
+                    handler.onFailure(new TimeoutException("Failed to send request after " + requestTimeoutMs + " ms."));
                     requestIterator.remove();
                 } else
                     break;

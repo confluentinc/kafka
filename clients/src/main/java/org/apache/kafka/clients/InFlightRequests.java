@@ -129,16 +129,15 @@ final class InFlightRequests {
      * Returns a list of nodes with pending inflight request, that need to be timed out
      *
      * @param now current time in milliseconds
-     * @param requestTimeout max time to wait for the request to be completed
      * @return list of nodes
      */
-    public List<String> getNodesWithTimedOutRequests(long now, int requestTimeout) {
-        List<String> nodeIds = new LinkedList<String>();
+    public List<String> getNodesWithTimedOutRequests(long now) {
+        List<String> nodeIds = new LinkedList<>();
         for (String nodeId : requests.keySet()) {
             if (inFlightRequestCount(nodeId) > 0) {
                 ClientRequest request = requests.get(nodeId).peekLast();
                 long timeSinceSend = now - request.sendTimeMs();
-                if (timeSinceSend > requestTimeout) {
+                if (timeSinceSend > request.requestTimeoutMs()) {
                     nodeIds.add(nodeId);
                 }
             }

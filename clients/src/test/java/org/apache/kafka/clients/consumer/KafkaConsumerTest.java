@@ -1229,8 +1229,8 @@ public class KafkaConsumerTest {
         String clientId = "mock-consumer";
         String groupId = "mock-group";
         String metricGroupPrefix = "consumer";
-        long retryBackoffMs = 100;
-        long requestTimeoutMs = 30000;
+        int retryBackoffMs = 100;
+        int requestTimeoutMs = 30000;
         boolean excludeInternalTopics = true;
         int minBytes = 1;
         int maxBytes = Integer.MAX_VALUE;

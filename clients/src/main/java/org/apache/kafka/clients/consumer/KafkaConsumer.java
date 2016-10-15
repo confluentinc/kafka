@@ -512,8 +512,8 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     private final Metrics metrics;
     private final SubscriptionState subscriptions;
     private final Metadata metadata;
-    private final long retryBackoffMs;
-    private final long requestTimeoutMs;
+    private final int retryBackoffMs;
+    private final int requestTimeoutMs;
     private volatile boolean closed = false;
 
     // currentThread holds the threadId of the current thread accessing KafkaConsumer
@@ -612,7 +612,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     MetricsReporter.class);
             reporters.add(new JmxReporter(JMX_PREFIX));
             this.metrics = new Metrics(metricConfig, reporters, time);
-            this.retryBackoffMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
+            this.retryBackoffMs = config.getInt(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
 
             // load interceptors and make sure they get clientId
             Map<String, Object> userProvidedConfigs = config.originals();
@@ -716,8 +716,8 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                   Metrics metrics,
                   SubscriptionState subscriptions,
                   Metadata metadata,
-                  long retryBackoffMs,
-                  long requestTimeoutMs) {
+                  int retryBackoffMs,
+                  int requestTimeoutMs) {
         this.clientId = clientId;
         this.coordinator = coordinator;
         this.keyDeserializer = keyDeserializer;

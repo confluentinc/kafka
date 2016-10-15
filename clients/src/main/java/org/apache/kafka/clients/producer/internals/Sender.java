@@ -373,7 +373,7 @@ public class Sender implements Runnable {
             }
         };
 
-        return new ClientRequest(now, acks != 0, send, callback);
+        return new ClientRequest(now, acks != 0, send, callback, requestTimeout);
     }
 
     /**

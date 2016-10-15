@@ -139,7 +139,7 @@ public class ConsumerNetworkClientTest {
 
     @Test
     public void sendExpiry() throws InterruptedException {
-        long unsentExpiryMs = 10;
+        int requestTimeoutMs = 10;
         final AtomicBoolean isReady = new AtomicBoolean();
         final AtomicBoolean disconnected = new AtomicBoolean();
         client = new MockClient(time) {
@@ -156,13 +156,13 @@ public class ConsumerNetworkClientTest {
             }
         };
         // Queue first send, sleep long enough for this to expire and then queue second send
-        consumerClient = new ConsumerNetworkClient(client, metadata, time, 100, unsentExpiryMs);
+        consumerClient = new ConsumerNetworkClient(client, metadata, time, 100, requestTimeoutMs);
         RequestFuture<ClientResponse> future1 = consumerClient.send(node, ApiKeys.METADATA, heartbeatRequest());
         assertEquals(1, consumerClient.pendingRequestCount());
         assertEquals(1, consumerClient.pendingRequestCount(node));
         assertFalse(future1.isDone());
 
-        time.sleep(unsentExpiryMs + 1);
+        time.sleep(requestTimeoutMs + 1);
         RequestFuture<ClientResponse> future2 = consumerClient.send(node, ApiKeys.METADATA, heartbeatRequest());
         assertEquals(2, consumerClient.pendingRequestCount());
         assertEquals(2, consumerClient.pendingRequestCount(node));
