@@ -68,7 +68,7 @@ class LogManagerTest {
     val log = logManager.createLog(new TopicPartition(name, 0), logConfig)
     val logFile = new File(logDir, name + "-0")
     assertTrue(logFile.exists)
-    log.append(TestUtils.singletonRecords("test".getBytes()))
+    log.append(TestUtils.records("test".getBytes()))
   }
 
   /**
@@ -90,7 +90,7 @@ class LogManagerTest {
     val log = logManager.createLog(new TopicPartition(name, 0), logConfig)
     var offset = 0L
     for(_ <- 0 until 200) {
-      val set = TestUtils.singletonRecords("test".getBytes())
+      val set = TestUtils.records("test".getBytes())
       val info = log.append(set)
       offset = info.lastOffset
     }
@@ -111,7 +111,7 @@ class LogManagerTest {
       case _: OffsetOutOfRangeException => // This is good.
     }
     // log should still be appendable
-    log.append(TestUtils.singletonRecords("test".getBytes()))
+    log.append(TestUtils.records("test".getBytes()))
   }
 
   /**
@@ -119,7 +119,7 @@ class LogManagerTest {
    */
   @Test
   def testCleanupSegmentsToMaintainSize() {
-    val setSize = TestUtils.singletonRecords("test".getBytes()).sizeInBytes
+    val setSize = TestUtils.records("test".getBytes()).sizeInBytes
     logManager.shutdown()
     val logProps = new Properties()
     logProps.put(LogConfig.SegmentBytesProp, 10 * setSize: java.lang.Integer)
@@ -136,7 +136,7 @@ class LogManagerTest {
     // add a bunch of messages that should be larger than the retentionSize
     val numMessages = 200
     for (_ <- 0 until numMessages) {
-      val set = TestUtils.singletonRecords("test".getBytes())
+      val set = TestUtils.records("test".getBytes())
       val info = log.append(set)
       offset = info.firstOffset
     }
@@ -156,7 +156,7 @@ class LogManagerTest {
       case _: OffsetOutOfRangeException => // This is good.
     }
     // log should still be appendable
-    log.append(TestUtils.singletonRecords("test".getBytes()))
+    log.append(TestUtils.records("test".getBytes()))
   }
 
   /**
@@ -170,7 +170,7 @@ class LogManagerTest {
     val log = logManager.createLog(new TopicPartition(name, 0), LogConfig.fromProps(logConfig.originals, logProps))
     var offset = 0L
     for (_ <- 0 until 200) {
-      val set = TestUtils.singletonRecords("test".getBytes(), key="test".getBytes())
+      val set = TestUtils.records("test".getBytes(), key="test".getBytes())
       val info = log.append(set)
       offset = info.lastOffset
     }
@@ -199,7 +199,7 @@ class LogManagerTest {
     val log = logManager.createLog(new TopicPartition(name, 0), config)
     val lastFlush = log.lastFlushTime
     for (_ <- 0 until 200) {
-      val set = TestUtils.singletonRecords("test".getBytes())
+      val set = TestUtils.records("test".getBytes())
       log.append(set)
     }
     time.sleep(logManager.InitialTaskDelayMs)
@@ -281,7 +281,7 @@ class LogManagerTest {
     val logs = topicPartitions.map(this.logManager.createLog(_, logConfig))
     logs.foreach(log => {
       for (_ <- 0 until 50)
-        log.append(TestUtils.singletonRecords("test".getBytes()))
+        log.append(TestUtils.records("test".getBytes()))
 
       log.flush()
     })

@@ -404,13 +404,15 @@ class GroupMetadataManagerTest {
     assertTrue(recordsCapture.hasCaptured)
 
     val records = recordsCapture.getValue.records.asScala.toList
+    recordsCapture.getValue.shallowIterator().asScala.foreach { entry =>
+      assertEquals(Record.MAGIC_VALUE_V1, entry.magic)
+      assertEquals(TimestampType.CREATE_TIME, entry.timestampType)
+    }
     assertEquals(1, records.size)
 
     val metadataTombstone = records.head
     assertTrue(metadataTombstone.hasKey)
     assertTrue(metadataTombstone.hasNullValue)
-    assertEquals(Record.MAGIC_VALUE_V1, metadataTombstone.magic)
-    assertEquals(TimestampType.CREATE_TIME, metadataTombstone.timestampType)
     assertTrue(metadataTombstone.timestamp > 0)
 
     val groupKey = GroupMetadataManager.readMessageKey(metadataTombstone.key).asInstanceOf[GroupMetadataKey]
@@ -450,13 +452,15 @@ class GroupMetadataManagerTest {
     assertTrue(recordsCapture.hasCaptured)
 
     val records = recordsCapture.getValue.records.asScala.toList
+    recordsCapture.getValue.shallowIterator().asScala.foreach { entry =>
+      assertEquals(Record.MAGIC_VALUE_V1, entry.magic)
+      assertEquals(TimestampType.LOG_APPEND_TIME, entry.timestampType)
+    }
     assertEquals(1, records.size)
 
     val metadataTombstone = records.head
     assertTrue(metadataTombstone.hasKey)
     assertTrue(metadataTombstone.hasNullValue)
-    assertEquals(Record.MAGIC_VALUE_V1, metadataTombstone.magic)
-    assertEquals(TimestampType.LOG_APPEND_TIME, metadataTombstone.timestampType)
     assertTrue(metadataTombstone.timestamp > 0)
 
     val groupKey = GroupMetadataManager.readMessageKey(metadataTombstone.key).asInstanceOf[GroupMetadataKey]

@@ -106,9 +106,9 @@ class LogCleanerLagIntegrationTest(compressionCodecName: String) extends Logging
   private def readFromLog(log: Log): Iterable[(Int, Int)] = {
     import JavaConverters._
 
-    for (segment <- log.logSegments; logEntry <- segment.log.deepEntries.asScala) yield {
-      val key = TestUtils.readString(logEntry.record.key).toInt
-      val value = TestUtils.readString(logEntry.record.value).toInt
+    for (segment <- log.logSegments; logEntry <- segment.log.records.asScala) yield {
+      val key = TestUtils.readString(logEntry.key).toInt
+      val value = TestUtils.readString(logEntry.value).toInt
       key -> value
     }
   }
@@ -116,7 +116,7 @@ class LogCleanerLagIntegrationTest(compressionCodecName: String) extends Logging
   private def writeDups(numKeys: Int, numDups: Int, log: Log, codec: CompressionType, timestamp: Long): Seq[(Int, Int)] = {
     for (_ <- 0 until numDups; key <- 0 until numKeys) yield {
       val count = counter
-      log.append(TestUtils.singletonRecords(value = counter.toString.getBytes, codec = codec, key = key.toString.getBytes, timestamp = timestamp), assignOffsets = true)
+      log.append(TestUtils.records(value = counter.toString.getBytes, codec = codec, key = key.toString.getBytes, timestamp = timestamp), assignOffsets = true)
       counter += 1
       (key, count)
     }

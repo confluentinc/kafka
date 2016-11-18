@@ -803,4 +803,11 @@ public class Utils {
         return Crc32.crc32(buffer.array(), buffer.arrayOffset() + start, size);
     }
 
+    public static <T> List<T> toList(Iterator<T> iterator) {
+        List<T> res = new ArrayList<>();
+        while (iterator.hasNext())
+            res.add(iterator.next());
+        return res;
+    }
+
 }

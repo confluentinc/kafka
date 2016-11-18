@@ -55,7 +55,7 @@ class LogCleanerIntegrationTest(compressionCodec: String) {
   @Test
   def cleanerTest() {
     val largeMessageKey = 20
-    val (largeMessageValue, largeMessageSet) = createLargeSingleMessageSet(largeMessageKey, Record.MAGIC_VALUE_V1)
+    val (largeMessageValue, largeMessageSet) = createLargeSingleMessageSet(largeMessageKey, Record.CURRENT_MAGIC_VALUE)
     val maxMessageSize = largeMessageSet.sizeInBytes
 
     cleaner = makeCleaner(parts = 3, maxMessageSize = maxMessageSize)
@@ -138,7 +138,7 @@ class LogCleanerIntegrationTest(compressionCodec: String) {
       new String(random.alphanumeric.take(length).toArray)
     }
     val value = messageValue(128)
-    val messageSet = TestUtils.singletonRecords(value = value.getBytes, codec = codec, key = key.toString.getBytes,
+    val messageSet = TestUtils.records(value = value.getBytes, codec = codec, key = key.toString.getBytes,
       magicValue = messageFormatVersion)
     (value, messageSet)
   }
@@ -251,18 +251,18 @@ class LogCleanerIntegrationTest(compressionCodec: String) {
 
   private def readFromLog(log: Log): Iterable[(Int, String, Long)] = {
     import JavaConverters._
-    for (segment <- log.logSegments; deepLogEntry <- segment.log.deepEntries.asScala) yield {
-      val key = TestUtils.readString(deepLogEntry.record.key).toInt
-      val value = TestUtils.readString(deepLogEntry.record.value)
+    for (segment <- log.logSegments; deepLogEntry <- segment.log.records.asScala) yield {
+      val key = TestUtils.readString(deepLogEntry.key).toInt
+      val value = TestUtils.readString(deepLogEntry.value)
       (key, value, deepLogEntry.offset)
     }
   }
 
   private def writeDups(numKeys: Int, numDups: Int, log: Log, codec: CompressionType,
-                        startKey: Int = 0, magicValue: Byte = Record.CURRENT_MAGIC_VALUE): Seq[(Int, String, Long)] = {
+                        startKey: Int = 0, magicValue: Byte = Record.MAGIC_VALUE_V1): Seq[(Int, String, Long)] = {
     for(_ <- 0 until numDups; key <- startKey until (startKey + numKeys)) yield {
       val value = counter.toString
-      val appendInfo = log.append(TestUtils.singletonRecords(value = value.toString.getBytes, codec = codec,
+      val appendInfo = log.append(TestUtils.records(value = value.toString.getBytes, codec = codec,
         key = key.toString.getBytes, magicValue = magicValue), assignOffsets = true)
       counter += 1
       (key, value, appendInfo.firstOffset)
@@ -270,7 +270,7 @@ class LogCleanerIntegrationTest(compressionCodec: String) {
   }
 
   private def writeDupsSingleMessageSet(numKeys: Int, numDups: Int, log: Log, codec: CompressionType,
-                                        startKey: Int = 0, magicValue: Byte = Record.CURRENT_MAGIC_VALUE): Seq[(Int, String, Long)] = {
+                                        startKey: Int = 0, magicValue: Byte = Record.MAGIC_VALUE_V1): Seq[(Int, String, Long)] = {
     val kvs = for (_ <- 0 until numDups; key <- startKey until (startKey + numKeys)) yield {
       val payload = counter.toString
       counter += 1

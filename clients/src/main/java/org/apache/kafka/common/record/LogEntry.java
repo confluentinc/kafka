@@ -16,6 +16,8 @@
  */
 package org.apache.kafka.common.record;
 
+import org.apache.kafka.common.utils.AbstractIterator;
+
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -27,7 +29,7 @@ import static org.apache.kafka.common.record.Records.LOG_OVERHEAD;
 /**
  * An offset and record pair
  */
-public abstract class LogEntry implements Iterable<LogEntry> {
+public abstract class LogEntry implements Iterable<LogRecord> {
 
     /**
      * Get the offset of this entry. Note that if this entry contains a compressed
@@ -41,6 +43,26 @@ public abstract class LogEntry implements Iterable<LogEntry> {
      * @return the shallow record
      */
     public abstract Record record();
+
+    public boolean isValid() {
+        return record().isValid();
+    }
+
+    public void ensureValid() {
+        record().ensureValid();
+    }
+
+    public long checksum() {
+        return record().checksum();
+    }
+
+    public long timestamp() {
+        return record().timestamp();
+    }
+
+    public TimestampType timestampType() {
+        return record().timestampType();
+    }
 
     /**
      * Get the first offset of the records contained in this entry. Note that this
@@ -56,6 +78,10 @@ public abstract class LogEntry implements Iterable<LogEntry> {
      * Get the offset following this entry (i.e. the last offset contained in this entry plus one).
      * @return the next consecutive offset following this entry
      */
+    public long lastOffset() {
+        return offset();
+    }
+
     public long nextOffset() {
         return offset() + 1;
     }
@@ -66,6 +92,22 @@ public abstract class LogEntry implements Iterable<LogEntry> {
      */
     public byte magic() {
         return record().magic();
+    }
+
+    public long pid() {
+        return 0L;
+    }
+
+    public short epoch() {
+        return 0;
+    }
+
+    public int firstSequence() {
+        return 0;
+    }
+
+    public CompressionType compressionType() {
+        return record().compressionType();
     }
 
     @Override
@@ -86,7 +128,7 @@ public abstract class LogEntry implements Iterable<LogEntry> {
      * @return true if so, false otherwise
      */
     public boolean isCompressed() {
-        return record().compressionType() != CompressionType.NONE;
+        return compressionType() != CompressionType.NONE;
     }
 
     /**
@@ -105,7 +147,19 @@ public abstract class LogEntry implements Iterable<LogEntry> {
      * @return An iterator over the entries contained within this log entry
      */
     @Override
-    public Iterator<LogEntry> iterator() {
+    public Iterator<LogRecord> iterator() {
+        final Iterator<LogEntry> iterator = deepEntries();
+        return new AbstractIterator<LogRecord>() {
+            @Override
+            protected LogRecord makeNext() {
+                if (iterator.hasNext())
+                    return new LogRecordShim(iterator.next());
+                return allDone();
+            }
+        };
+    }
+
+    public Iterator<LogEntry> deepEntries() {
         if (isCompressed())
             return new RecordsIterator.DeepRecordsIterator(this, false, Integer.MAX_VALUE);
         return Collections.singletonList(this).iterator();
@@ -166,6 +220,138 @@ public abstract class LogEntry implements Iterable<LogEntry> {
 
     public static LogEntry create(long offset, Record record) {
         return new SimpleLogEntry(offset, record);
+    }
+
+
+    public static class LogRecordShim implements LogRecord {
+        private final LogEntry deepEntry;
+
+        public LogRecordShim(LogEntry deepEntry) {
+            this.deepEntry = deepEntry;
+        }
+
+        public LogEntry entry() {
+            return deepEntry;
+        }
+
+        @Override
+        public long offset() {
+            return deepEntry.offset();
+        }
+
+        @Override
+        public long sequence() {
+            return 0L;
+        }
+
+        @Override
+        public long nextOffset() {
+            return offset() + 1;
+        }
+
+        @Override
+        public int sizeInBytes() {
+            return deepEntry.sizeInBytes();
+        }
+
+        @Override
+        public byte attributes() {
+            return deepEntry.record().attributes();
+        }
+
+        @Override
+        public long timestamp() {
+            return deepEntry.record().timestamp();
+        }
+
+        @Override
+        public long checksum() {
+            return deepEntry.record().checksum();
+        }
+
+        @Override
+        public boolean isValid() {
+            return deepEntry.record().isValid();
+        }
+
+        @Override
+        public void ensureValid() {
+            deepEntry.record().ensureValid();
+        }
+
+        @Override
+        public int keySize() {
+            return deepEntry.record().keySize();
+        }
+
+        @Override
+        public boolean hasKey() {
+            return deepEntry.record().hasKey();
+        }
+
+        @Override
+        public ByteBuffer key() {
+            return deepEntry.record().key();
+        }
+
+        @Override
+        public int valueSize() {
+            return deepEntry.record().valueSize();
+        }
+
+        @Override
+        public boolean hasNullValue() {
+            return deepEntry.record().hasNullValue();
+        }
+
+        @Override
+        public ByteBuffer value() {
+            return deepEntry.record().value();
+        }
+
+        @Override
+        public String toString() {
+            return "LogRecordShim{" +
+                    "deepEntry=" + deepEntry +
+                    '}';
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            LogRecordShim that = (LogRecordShim) o;
+
+            return deepEntry != null ? deepEntry.equals(that.deepEntry) : that.deepEntry == null;
+        }
+
+        @Override
+        public int hashCode() {
+            return deepEntry != null ? deepEntry.hashCode() : 0;
+        }
+
+        public boolean hasMagic(byte magic) {
+            return deepEntry.magic() == magic;
+        }
+
+        @Override
+        public boolean isCompressed() {
+            return deepEntry.compressionType() != CompressionType.NONE;
+        }
+
+        @Override
+        public boolean hasTimestampType(TimestampType timestampType) {
+            return deepEntry.timestampType() == timestampType;
+        }
+    }
+
+    public abstract static class ShallowLogEntry extends LogEntry {
+        public abstract void setOffset(long offset);
+
+        public abstract void setCreateTime(long timestamp);
+
+        public abstract void setLogAppendTime(long timestamp);
     }
 
 }

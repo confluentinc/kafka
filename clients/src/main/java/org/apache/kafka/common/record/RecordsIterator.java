@@ -141,6 +141,20 @@ public class RecordsIterator extends AbstractIterator<LogEntry> {
         private final long absoluteBaseOffset;
         private final byte wrapperMagic;
 
+        public LogEntry nextEntry(DataInputStream stream, int maxMessageSize) throws IOException {
+            long offset = stream.readLong();
+            int size = stream.readInt();
+            if (size < Record.RECORD_OVERHEAD_V0)
+                throw new CorruptRecordException(String.format("Record size is less than the minimum record overhead (%d)", Record.RECORD_OVERHEAD_V0));
+            if (size > maxMessageSize)
+                throw new CorruptRecordException(String.format("Record size exceeds the largest allowable message size (%d).", maxMessageSize));
+
+            byte[] recordBuffer = new byte[size];
+            stream.readFully(recordBuffer, 0, size);
+            ByteBuffer buf = ByteBuffer.wrap(recordBuffer);
+            return LogEntry.create(offset, new Record(buf));
+        }
+
         public DeepRecordsIterator(LogEntry wrapperEntry, boolean ensureMatchingMagic, int maxMessageSize) {
             Record wrapperRecord = wrapperEntry.record();
             this.wrapperMagic = wrapperRecord.magic();

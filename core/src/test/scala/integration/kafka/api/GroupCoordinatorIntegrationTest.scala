@@ -56,7 +56,7 @@ class GroupCoordinatorIntegrationTest extends KafkaServerTestHarness {
 
     val logSegments = getGroupMetadataLogOpt.get.logSegments
     val incorrectCompressionCodecs = logSegments
-      .flatMap(_.log.shallowEntries.asScala.map(_.record.compressionType))
+      .flatMap(_.log.shallowEntries.asScala.map(_.compressionType))
       .filter(_ != offsetsTopicCompressionCodec)
     assertEquals("Incorrect compression codecs should be empty", Seq.empty, incorrectCompressionCodecs)
 

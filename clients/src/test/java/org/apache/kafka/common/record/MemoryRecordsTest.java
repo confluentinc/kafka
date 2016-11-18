@@ -24,11 +24,10 @@ import org.junit.runners.Parameterized;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
 
 import static java.util.Arrays.asList;
-import static org.apache.kafka.common.utils.Utils.toNullableArray;
+import static org.apache.kafka.common.utils.Utils.wrapNullable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -39,6 +38,9 @@ public class MemoryRecordsTest {
     private CompressionType compression;
     private byte magic;
     private long firstOffset;
+    private long pid = 134234L;
+    private short epoch = 28;
+    private int firstSequence = 777;
 
     public MemoryRecordsTest(byte magic, long firstOffset, CompressionType compression) {
         this.magic = magic;
@@ -48,36 +50,54 @@ public class MemoryRecordsTest {
 
     @Test
     public void testIterator() {
-        MemoryRecordsBuilder builder1 = MemoryRecords.builder(ByteBuffer.allocate(1024), magic, compression, TimestampType.CREATE_TIME, firstOffset);
-        MemoryRecordsBuilder builder2 = MemoryRecords.builder(ByteBuffer.allocate(1024), magic, compression, TimestampType.CREATE_TIME, firstOffset);
-        List<Record> list = asList(
-                Record.create(magic, 1L, "a".getBytes(), "1".getBytes()),
-                Record.create(magic, 2L, "b".getBytes(), "2".getBytes()),
-                Record.create(magic, 3L, "c".getBytes(), "3".getBytes()),
-                Record.create(magic, 4L, null, "4".getBytes()),
-                Record.create(magic, 5L, "e".getBytes(), null),
-                Record.create(magic, 6L, null, null));
+       MemoryRecordsBuilder builder = MemoryRecords.builder(ByteBuffer.allocate(1024), magic, compression,
+                TimestampType.CREATE_TIME, firstOffset, pid, epoch, firstSequence);
 
-        for (int i = 0; i < list.size(); i++) {
-            Record r = list.get(i);
-            builder1.append(r);
-            builder2.append(i + 1, toNullableArray(r.key()), toNullableArray(r.value()));
-        }
+        byte[][] keys = new byte[][] {"a".getBytes(), "b".getBytes(), "c".getBytes(), null, "d".getBytes(), null};
+        byte[][] values = new byte[][] {"1".getBytes(), "2".getBytes(), "3".getBytes(), "4".getBytes(), null, null};
+        long[] timestamps = new long[] {1, 2, 3, 4, 5, 6};
 
-        MemoryRecords recs1 = builder1.build();
-        MemoryRecords recs2 = builder2.build();
+        for (int i = 0; i < keys.length; i++)
+            builder.append(timestamps[i], keys[i], values[i]);
 
+
+        MemoryRecords logBuffer = builder.build();
         for (int iteration = 0; iteration < 2; iteration++) {
-            for (MemoryRecords recs : asList(recs1, recs2)) {
-                Iterator<LogEntry> iter = recs.deepEntries().iterator();
-                for (int i = 0; i < list.size(); i++) {
-                    assertTrue(iter.hasNext());
-                    LogEntry entry = iter.next();
-                    assertEquals(firstOffset + i, entry.offset());
-                    assertEquals(list.get(i), entry.record());
-                    entry.record().ensureValid();
+            int total = 0;
+            for (LogEntry entry : logBuffer) {
+                assertTrue(entry.isValid());
+                assertEquals(compression, entry.compressionType());
+                assertEquals(firstOffset + total, entry.firstOffset());
+
+                if (magic >= Record.MAGIC_VALUE_V2) {
+                    assertEquals(pid, entry.pid());
+                    assertEquals(epoch, entry.epoch());
+                    assertEquals(firstSequence + total, entry.firstSequence());
                 }
-                assertFalse(iter.hasNext());
+
+                int records = 0;
+                for (LogRecord record : entry) {
+                    assertTrue(record.isValid());
+                    assertTrue(record.hasMagic(entry.magic()));
+                    assertFalse(record.isCompressed());
+                    assertEquals(firstOffset + total, record.offset());
+                    assertEquals(wrapNullable(keys[total]), record.key());
+                    assertEquals(wrapNullable(values[total]), record.value());
+
+                    if (magic >= Record.MAGIC_VALUE_V2)
+                        assertEquals(firstSequence + total, record.sequence());
+
+                    if (magic > Record.MAGIC_VALUE_V0) {
+                        assertEquals(timestamps[total], record.timestamp());
+                        if (magic < Record.MAGIC_VALUE_V2)
+                            assertTrue(record.hasTimestampType(entry.timestampType()));
+                    }
+
+                    total++;
+                    records++;
+                }
+
+                assertEquals(entry.firstOffset() + records - 1, entry.lastOffset());
             }
         }
     }
@@ -85,8 +105,7 @@ public class MemoryRecordsTest {
     @Test
     public void testHasRoomForMethod() {
         MemoryRecordsBuilder builder = MemoryRecords.builder(ByteBuffer.allocate(1024), magic, compression, TimestampType.CREATE_TIME);
-        builder.append(Record.create(magic, 0L, "a".getBytes(), "1".getBytes()));
-
+        builder.append(0L, "a".getBytes(), "1".getBytes());
         assertTrue(builder.hasRoomFor("b".getBytes(), "2".getBytes()));
         builder.close();
         assertFalse(builder.hasRoomFor("b".getBytes(), "2".getBytes()));
@@ -135,7 +154,7 @@ public class MemoryRecordsTest {
 
         MemoryRecords filteredRecords = MemoryRecords.readableRecords(filtered);
 
-        List<ByteBufferLogInputStream.ByteBufferLogEntry> shallowEntries = TestUtils.toList(filteredRecords.shallowEntries().iterator());
+        List<LogEntry.ShallowLogEntry> shallowEntries = TestUtils.toList(filteredRecords.shallowIterator());
         List<Long> expectedOffsets = compression == CompressionType.NONE ? asList(1L, 4L, 5L, 6L) : asList(1L, 5L, 6L);
         assertEquals(expectedOffsets.size(), shallowEntries.size());
 
@@ -197,7 +216,7 @@ public class MemoryRecordsTest {
         filtered.flip();
         MemoryRecords filteredRecords = MemoryRecords.readableRecords(filtered);
 
-        List<ByteBufferLogInputStream.ByteBufferLogEntry> shallowEntries = TestUtils.toList(filteredRecords.shallowEntries().iterator());
+        List<LogEntry.ShallowLogEntry> shallowEntries = TestUtils.toList(filteredRecords.shallowIterator());
         assertEquals(compression == CompressionType.NONE ? 3 : 2, shallowEntries.size());
 
         for (LogEntry shallowEntry : shallowEntries) {
@@ -213,16 +232,16 @@ public class MemoryRecordsTest {
     public static Collection<Object[]> data() {
         List<Object[]> values = new ArrayList<>();
         for (long firstOffset : asList(0L, 57L))
-            for (byte magic : asList(Record.MAGIC_VALUE_V0, Record.MAGIC_VALUE_V1))
+            for (byte magic : asList(Record.MAGIC_VALUE_V0, Record.MAGIC_VALUE_V1, Record.MAGIC_VALUE_V2))
                 for (CompressionType type: CompressionType.values())
                     values.add(new Object[] {magic, firstOffset, type});
         return values;
     }
 
-    private static class RetainNonNullKeysFilter implements MemoryRecords.LogEntryFilter {
+    private static class RetainNonNullKeysFilter implements MemoryRecords.LogRecordFilter {
         @Override
-        public boolean shouldRetain(LogEntry entry) {
-            return entry.record().hasKey();
+        public boolean shouldRetain(LogRecord record) {
+            return record.hasKey();
         }
     }
 }

@@ -222,12 +222,11 @@ class LogSegment(val log: FileRecords,
     maxTimestampSoFar = Record.NO_TIMESTAMP
     try {
       for (entry <- log.shallowEntries(maxMessageSize).asScala) {
-        val record = entry.record
-        record.ensureValid()
+        entry.ensureValid()
 
         // The max timestamp should have been put in the outer message, so we don't need to iterate over the inner messages.
-        if (record.timestamp > maxTimestampSoFar) {
-          maxTimestampSoFar = record.timestamp
+        if (entry.timestamp > maxTimestampSoFar) {
+          maxTimestampSoFar = entry.timestamp
           offsetOfMaxTimestamp = entry.offset
         }
 
@@ -375,7 +374,7 @@ class LogSegment(val log: FileRecords,
     if (rollingBasedTimestamp.isEmpty) {
       val iter = log.shallowEntries.iterator()
       if (iter.hasNext)
-        rollingBasedTimestamp = Some(iter.next().record.timestamp)
+        rollingBasedTimestamp = Some(iter.next().timestamp)
     }
     rollingBasedTimestamp match {
       case Some(t) if t >= 0 => messageTimestamp - t

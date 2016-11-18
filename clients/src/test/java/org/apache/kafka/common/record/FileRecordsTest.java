@@ -83,7 +83,7 @@ public class FileRecordsTest {
         fileRecords.channel().write(buffer);
 
         // appending those bytes should not change the contents
-        TestUtils.checkEquals(Arrays.asList(records), fileRecords.records());
+        TestUtils.checkEquals(Arrays.asList(records).iterator(), fileRecords.rawRecords());
     }
 
     /**
@@ -92,7 +92,7 @@ public class FileRecordsTest {
     @Test
     public void testIterationDoesntChangePosition() throws IOException {
         long position = fileRecords.channel().position();
-        TestUtils.checkEquals(Arrays.asList(records), fileRecords.records());
+        TestUtils.checkEquals(Arrays.asList(records).iterator(), fileRecords.rawRecords());
         assertEquals(position, fileRecords.channel().position());
     }
 
@@ -371,21 +371,20 @@ public class FileRecordsTest {
 
     private void verifyConvertedMessageSet(List<LogEntry> initialEntries, Records convertedRecords, byte magicByte) {
         int i = 0;
-        for (LogEntry logEntry : deepEntries(convertedRecords)) {
-            assertEquals("magic byte should be " + magicByte, magicByte, logEntry.record().magic());
-            assertEquals("offset should not change", initialEntries.get(i).offset(), logEntry.offset());
-            assertEquals("key should not change", initialEntries.get(i).record().key(), logEntry.record().key());
-            assertEquals("payload should not change", initialEntries.get(i).record().value(), logEntry.record().value());
-            i += 1;
+        for (LogEntry entry : convertedRecords) {
+            assertEquals("magic byte should be " + magicByte, magicByte, entry.magic());
+            for (LogRecord record : entry) {
+                assertTrue("Inner record should have magic " + magicByte, record.hasMagic(magicByte));
+                assertEquals("offset should not change", initialEntries.get(i).offset(), record.offset());
+                assertEquals("key should not change", initialEntries.get(i).record().key(), record.key());
+                assertEquals("payload should not change", initialEntries.get(i).record().value(), record.value());
+                i += 1;
+            }
         }
     }
 
     private static List<LogEntry> shallowEntries(Records buffer) {
         return TestUtils.toList(buffer.shallowEntries().iterator());
-    }
-
-    private static List<LogEntry> deepEntries(Records buffer) {
-        return TestUtils.toList(buffer.deepEntries().iterator());
     }
 
     private FileRecords createFileRecords(Record ... records) throws IOException {

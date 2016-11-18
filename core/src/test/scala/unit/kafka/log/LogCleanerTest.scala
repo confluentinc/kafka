@@ -230,7 +230,7 @@ class LogCleanerTest extends JUnitSuite {
 
     // the last (active) segment has just one message
 
-    def distinctValuesBySegment = log.logSegments.map(s => s.log.shallowEntries.asScala.map(m => TestUtils.readString(m.record.value)).toSet.size).toSeq
+    def distinctValuesBySegment = log.logSegments.map(s => s.log.records.asScala.map(record => TestUtils.readString(record.value)).toSet.size).toSeq
 
     val disctinctValuesBySegmentBeforeClean = distinctValuesBySegment
     assertTrue("Test is not effective unless each segment contains duplicates. Increase segment size or decrease number of keys.",
@@ -254,7 +254,7 @@ class LogCleanerTest extends JUnitSuite {
     val log = makeLog(config = LogConfig.fromProps(logConfig.originals, logProps))
 
     // create 6 segments with only one message in each segment
-    val messageSet = TestUtils.singletonRecords(value = Array.fill[Byte](50)(0), key = 1.toString.getBytes)
+    val messageSet = TestUtils.records(value = Array.fill[Byte](25)(0), key = 1.toString.getBytes)
     for (_ <- 0 until 6)
       log.append(messageSet, assignOffsets = true)
 
@@ -272,7 +272,7 @@ class LogCleanerTest extends JUnitSuite {
     val log = makeLog(config = LogConfig.fromProps(logConfig.originals, logProps))
 
     // create 6 segments with only one message in each segment
-    val messageSet = TestUtils.singletonRecords(value = Array.fill[Byte](50)(0), key = 1.toString.getBytes)
+    val messageSet = TestUtils.records(value = Array.fill[Byte](25)(0), key = 1.toString.getBytes)
     for (_ <- 0 until 6)
       log.append(messageSet, assignOffsets = true)
 
@@ -325,14 +325,14 @@ class LogCleanerTest extends JUnitSuite {
 
   /* extract all the keys from a log */
   def keysInLog(log: Log): Iterable[Int] =
-    log.logSegments.flatMap(s => s.log.shallowEntries.asScala.filter(!_.record.hasNullValue).filter(_.record.hasKey).map(m => TestUtils.readString(m.record.key).toInt))
+    log.logSegments.flatMap(s => s.log.records.asScala.filter(!_.hasNullValue).filter(_.hasKey).map(record => TestUtils.readString(record.key).toInt))
 
   /* extract all the offsets from a log */
   def offsetsInLog(log: Log): Iterable[Long] =
-    log.logSegments.flatMap(s => s.log.shallowEntries.asScala.filter(!_.record.hasNullValue).filter(_.record.hasKey).map(m => m.offset))
+    log.logSegments.flatMap(s => s.log.records.asScala.filter(!_.hasNullValue).filter(_.hasKey).map(m => m.offset))
 
   def unkeyedMessageCountInLog(log: Log) =
-    log.logSegments.map(s => s.log.shallowEntries.asScala.filter(!_.record.hasNullValue).count(m => !m.record.hasKey)).sum
+    log.logSegments.map(s => s.log.records.asScala.filter(!_.hasNullValue).count(m => !m.hasKey)).sum
 
   def abortCheckDone(topicPartition: TopicPartition): Unit = {
     throw new LogCleaningAbortedException()
@@ -376,7 +376,7 @@ class LogCleanerTest extends JUnitSuite {
     // append some messages to the log
     var i = 0
     while(log.numberOfSegments < 10) {
-      log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
+      log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
       i += 1
     }
 
@@ -429,12 +429,12 @@ class LogCleanerTest extends JUnitSuite {
 
     // fill up first segment
     while (log.numberOfSegments == 1)
-      log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
+      log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
 
     // forward offset and append message to next segment at offset Int.MaxValue
     val records = MemoryRecords.withLogEntries(LogEntry.create(Int.MaxValue - 1, Record.create("hello".getBytes, "hello".getBytes)))
     log.append(records, assignOffsets = false)
-    log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
+    log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
     assertEquals(Int.MaxValue, log.activeSegment.index.lastOffset)
 
     // grouping should result in a single group with maximum relative offset of Int.MaxValue
@@ -442,7 +442,7 @@ class LogCleanerTest extends JUnitSuite {
     assertEquals(1, groups.size)
 
     // append another message, making last offset of second segment > Int.MaxValue
-    log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
+    log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
 
     // grouping should not group the two segments to ensure that maximum relative offset in each group <= Int.MaxValue
     groups = cleaner.groupSegmentsBySize(log.logSegments, maxSize = Int.MaxValue, maxIndexSize = Int.MaxValue)
@@ -451,7 +451,7 @@ class LogCleanerTest extends JUnitSuite {
 
     // append more messages, creating new segments, further grouping should still occur
     while (log.numberOfSegments < 4)
-      log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
+      log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
 
     groups = cleaner.groupSegmentsBySize(log.logSegments, maxSize = Int.MaxValue, maxIndexSize = Int.MaxValue)
     assertEquals(log.numberOfSegments - 1, groups.size)
@@ -680,10 +680,10 @@ class LogCleanerTest extends JUnitSuite {
 
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 0, log.activeSegment.baseOffset))
 
-    for (segment <- log.logSegments; shallowLogEntry <- segment.log.shallowEntries.asScala; deepLogEntry <- shallowLogEntry.asScala) {
-      assertEquals(shallowLogEntry.record.magic, deepLogEntry.record.magic)
-      val value = TestUtils.readString(deepLogEntry.record.value).toLong
-      assertEquals(deepLogEntry.offset, value)
+    for (segment <- log.logSegments; entry <- segment.log.asScala; record <- entry.asScala) {
+      assertTrue(record.hasMagic(entry.magic))
+      val value = TestUtils.readString(record.value).toLong
+      assertEquals(record.offset, value)
     }
   }
 
@@ -702,9 +702,9 @@ class LogCleanerTest extends JUnitSuite {
     val corruptedMessage = invalidCleanedMessage(offset, set)
     val records = MemoryRecords.readableRecords(corruptedMessage.buffer)
 
-    for (logEntry <- records.deepEntries.asScala) {
+    for (logEntry <- records.records.asScala) {
       val offset = logEntry.offset
-      val value = TestUtils.readString(logEntry.record.value).toLong
+      val value = TestUtils.readString(logEntry.value).toLong
       assertEquals(offset, value)
     }
   }
@@ -717,22 +717,22 @@ class LogCleanerTest extends JUnitSuite {
     val cleaner = makeCleaner(10)
 
     // Append a message with a large timestamp.
-    log.append(TestUtils.singletonRecords(value = "0".getBytes,
-                                          key = "0".getBytes,
-                                          timestamp = time.milliseconds() + logConfig.deleteRetentionMs + 10000))
+    log.append(TestUtils.records(value = "0".getBytes,
+                                 key = "0".getBytes,
+                                 timestamp = time.milliseconds() + logConfig.deleteRetentionMs + 10000))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 0, log.activeSegment.baseOffset))
     // Append a tombstone with a small timestamp and roll out a new log segment.
-    log.append(TestUtils.singletonRecords(value = null,
-                                          key = "0".getBytes,
-                                          timestamp = time.milliseconds() - logConfig.deleteRetentionMs - 10000))
+    log.append(TestUtils.records(value = null,
+                                 key = "0".getBytes,
+                                 timestamp = time.milliseconds() - logConfig.deleteRetentionMs - 10000))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 1, log.activeSegment.baseOffset))
     assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.shallowEntries.iterator().next().offset())
     // Append a message and roll out another log segment.
-    log.append(TestUtils.singletonRecords(value = "1".getBytes,
-                                          key = "1".getBytes,
-                                          timestamp = time.milliseconds()))
+    log.append(TestUtils.records(value = "1".getBytes,
+                                 key = "1".getBytes,
+                                 timestamp = time.milliseconds()))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 2, log.activeSegment.baseOffset))
     assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.shallowEntries.iterator().next().offset())
@@ -796,10 +796,10 @@ class LogCleanerTest extends JUnitSuite {
     record(key, value.toString.getBytes)
 
   def record(key: Int, value: Array[Byte]) =
-    MemoryRecords.withRecords(Record.create(key.toString.getBytes, value))
+    TestUtils.records(key = key.toString.getBytes, value = value)
 
   def unkeyedRecord(value: Int) =
-    MemoryRecords.withRecords(Record.create(value.toString.getBytes))
+    TestUtils.records(value = value.toString.getBytes)
 
   def tombstoneRecord(key: Int) = record(key, null)
 

@@ -42,10 +42,10 @@ public class ApiException extends KafkaException {
         super();
     }
 
-    /* avoid the expensive and useless stack trace for api exceptions */
-    @Override
-    public Throwable fillInStackTrace() {
-        return this;
-    }
+//    /* avoid the expensive and useless stack trace for api exceptions */
+//    @Override
+//    public Throwable fillInStackTrace() {
+//        return this;
+//    }
 
 }

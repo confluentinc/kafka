@@ -18,6 +18,7 @@ package org.apache.kafka.common.record;
 
 import java.io.IOException;
 import java.nio.channels.GatheringByteChannel;
+import java.util.Iterator;
 
 /**
  * Interface for accessing the records contained in a log. The log itself is represented as a sequence of log entries.
@@ -29,7 +30,7 @@ import java.nio.channels.GatheringByteChannel;
  * shallow record is returned; otherwise, the shallow record is decompressed and the deep entries are returned.
  * See {@link MemoryRecords} for the in-memory representation and {@link FileRecords} for the on-disk representation.
  */
-public interface Records {
+public interface Records extends Iterable<LogEntry> {
 
     int OFFSET_OFFSET = 0;
     int OFFSET_LENGTH = 8;
@@ -78,6 +79,13 @@ public interface Records {
      */
     boolean hasMatchingShallowMagic(byte magic);
 
+    /**
+     * Check whether this log buffer has a magic value compatible with a particular value
+     * (i.e. whether all message sets contained in the buffer have a lower magic)
+     * @param magic
+     * @return
+     */
+    boolean hasCompatibleMagic(byte magic);
 
     /**
      * Convert all entries in this buffer to the format passed as a parameter. Note that this requires
@@ -87,4 +95,9 @@ public interface Records {
      */
     Records toMessageFormat(byte toMagic);
 
+    /**
+     * Get an iterator over the records in this log (i.e. the "deep" entries)
+     * @return The record iterator
+     */
+    Iterator<LogRecord> records();
 }

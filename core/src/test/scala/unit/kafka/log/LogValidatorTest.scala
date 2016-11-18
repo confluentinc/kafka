@@ -31,7 +31,7 @@ import scala.collection.JavaConverters._
 class LogValidatorTest extends JUnitSuite {
 
   @Test
-  def testLogAppendTimeNonCompressed() {
+  def testLogAppendTimeNonCompressedV1() {
     val now = System.currentTimeMillis()
     // The timestamps should be overwritten
     val records = createRecords(magicValue = Record.MAGIC_VALUE_V1, timestamp = 0L, codec = CompressionType.NONE)
@@ -44,15 +44,36 @@ class LogValidatorTest extends JUnitSuite {
       messageTimestampType = TimestampType.LOG_APPEND_TIME,
       messageTimestampDiffMaxMs = 1000L)
     val validatedRecords = validatedResults.validatedRecords
-    assertEquals("number of messages should not change", records.deepEntries.asScala.size, validatedRecords.deepEntries.asScala.size)
-    validatedRecords.deepEntries.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry.record))
+    assertEquals("message set size should not change", records.records.asScala.size, validatedRecords.records.asScala.size)
+    validatedRecords.shallowIterator.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry))
     assertEquals(s"Max timestamp should be $now", now, validatedResults.maxTimestamp)
     assertEquals(s"The offset of max timestamp should be 0", 0, validatedResults.shallowOffsetOfMaxTimestamp)
     assertFalse("Message size should not have been changed", validatedResults.messageSizeMaybeChanged)
   }
 
   @Test
-  def testLogAppendTimeWithRecompression() {
+  def testLogAppendTimeNonCompressedV2() {
+    val now = System.currentTimeMillis()
+    // The timestamps should be overwritten
+    val records = createRecords(magicValue = Record.MAGIC_VALUE_V2, timestamp = 0L, codec = CompressionType.NONE)
+    val validatedResults = LogValidator.validateMessagesAndAssignOffsets(records,
+      offsetCounter = new LongRef(0),
+      now = now,
+      sourceCodec = NoCompressionCodec,
+      targetCodec = NoCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V2,
+      messageTimestampType = TimestampType.LOG_APPEND_TIME,
+      messageTimestampDiffMaxMs = 1000L)
+    val validatedRecords = validatedResults.validatedRecords
+    assertEquals("message set size should not change", records.records.asScala.size, validatedRecords.records.asScala.size)
+    validatedRecords.shallowIterator.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry))
+    assertEquals(s"Max timestamp should be $now", now, validatedResults.maxTimestamp)
+    assertEquals("The offset of max timestamp should be 0", 0, validatedResults.shallowOffsetOfMaxTimestamp)
+    assertFalse("Message size should not have been changed", validatedResults.messageSizeMaybeChanged)
+  }
+
+  @Test
+  def testLogAppendTimeWithRecompressionV1() {
     val now = System.currentTimeMillis()
     // The timestamps should be overwritten
     val records = createRecords(magicValue = Record.MAGIC_VALUE_V0, codec = CompressionType.GZIP)
@@ -67,12 +88,37 @@ class LogValidatorTest extends JUnitSuite {
       messageTimestampDiffMaxMs = 1000L)
     val validatedRecords = validatedResults.validatedRecords
 
-    assertEquals("number of messages should not change", records.deepEntries.asScala.size, validatedRecords.deepEntries.asScala.size)
-    validatedRecords.deepEntries.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry.record))
-    assertTrue("MessageSet should still valid", validatedRecords.shallowEntries.iterator.next().record.isValid)
+    assertEquals("message set size should not change", records.records.asScala.size, validatedRecords.records.asScala.size)
+    validatedRecords.shallowIterator.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry))
+    assertTrue("MessageSet should still valid", validatedRecords.shallowIterator.next().isValid)
     assertEquals(s"Max timestamp should be $now", now, validatedResults.maxTimestamp)
-    assertEquals(s"The offset of max timestamp should be ${records.deepEntries.asScala.size - 1}",
-      records.deepEntries.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
+    assertEquals(s"The offset of max timestamp should be ${records.records.asScala.size - 1}",
+      records.records.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
+    assertTrue("Message size may have been changed", validatedResults.messageSizeMaybeChanged)
+  }
+
+  @Test
+  def testLogAppendTimeWithRecompressionV2() {
+    val now = System.currentTimeMillis()
+    // The timestamps should be overwritten
+    val records = createRecords(magicValue = Record.MAGIC_VALUE_V0, codec = CompressionType.GZIP)
+    val validatedResults = LogValidator.validateMessagesAndAssignOffsets(
+      records,
+      offsetCounter = new LongRef(0),
+      now = now,
+      sourceCodec = DefaultCompressionCodec,
+      targetCodec = DefaultCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V2,
+      messageTimestampType = TimestampType.LOG_APPEND_TIME,
+      messageTimestampDiffMaxMs = 1000L)
+    val validatedRecords = validatedResults.validatedRecords
+
+    assertEquals("message set size should not change", records.records.asScala.size, validatedRecords.records.asScala.size)
+    validatedRecords.shallowIterator.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry))
+    assertTrue("MessageSet should still valid", validatedRecords.shallowIterator.next().isValid)
+    assertEquals(s"Max timestamp should be $now", now, validatedResults.maxTimestamp)
+    assertEquals(s"The offset of max timestamp should be ${records.records.asScala.size - 1}",
+      records.records.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
     assertTrue("Message size may have been changed", validatedResults.messageSizeMaybeChanged)
   }
 
@@ -80,8 +126,7 @@ class LogValidatorTest extends JUnitSuite {
   def testLogAppendTimeWithoutRecompression() {
     val now = System.currentTimeMillis()
     // The timestamps should be overwritten
-    val records = createRecords(magicValue = Record.MAGIC_VALUE_V1,
-      timestamp = 0L, codec = CompressionType.GZIP)
+    val records = createRecords(magicValue = Record.MAGIC_VALUE_V1, timestamp = 0L, codec = CompressionType.GZIP)
     val validatedResults = LogValidator.validateMessagesAndAssignOffsets(
       records,
       offsetCounter = new LongRef(0),
@@ -93,18 +138,18 @@ class LogValidatorTest extends JUnitSuite {
       messageTimestampDiffMaxMs = 1000L)
     val validatedRecords = validatedResults.validatedRecords
 
-    assertEquals("number of messages should not change", records.deepEntries.asScala.size,
-      validatedRecords.deepEntries.asScala.size)
-    validatedRecords.deepEntries.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry.record))
-    assertTrue("MessageSet should still valid", validatedRecords.shallowEntries.iterator.next().record.isValid)
+    assertEquals("message set size should not change", records.records.asScala.size,
+      validatedRecords.records.asScala.size)
+    validatedRecords.shallowIterator.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry))
+    assertTrue("MessageSet should still valid", validatedRecords.shallowIterator.next().isValid)
     assertEquals(s"Max timestamp should be $now", now, validatedResults.maxTimestamp)
-    assertEquals(s"The offset of max timestamp should be ${records.deepEntries.asScala.size - 1}",
-      records.deepEntries.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
+    assertEquals(s"The offset of max timestamp should be ${records.records.asScala.size - 1}",
+      records.records.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
     assertFalse("Message size should not have been changed", validatedResults.messageSizeMaybeChanged)
   }
 
   @Test
-  def testCreateTimeNonCompressed() {
+  def testCreateTimeNonCompressedV1() {
     val now = System.currentTimeMillis()
     val timestampSeq = Seq(now - 1, now + 1, now)
     val records =
@@ -124,11 +169,15 @@ class LogValidatorTest extends JUnitSuite {
     val validatedRecords = validatingResults.validatedRecords
 
     var i = 0
-    for (logEntry <- validatedRecords.deepEntries.asScala) {
-      logEntry.record.ensureValid()
-      assertEquals(logEntry.record.timestamp, timestampSeq(i))
-      assertEquals(logEntry.record.timestampType, TimestampType.CREATE_TIME)
-      i += 1
+    for (entry <- validatedRecords.shallowIterator.asScala) {
+      assertTrue(entry.isValid)
+      assertEquals(entry.timestampType, TimestampType.CREATE_TIME)
+      assertEquals(entry.timestamp, entry.asScala.map(_.timestamp).max)
+      for (record <- entry.asScala) {
+        assertTrue(record.isValid)
+        assertEquals(record.timestamp, timestampSeq(i))
+        i += 1
+      }
     }
     assertEquals(s"Max timestamp should be ${now + 1}", now + 1, validatingResults.maxTimestamp)
     assertEquals(s"Offset of max timestamp should be 1", 1, validatingResults.shallowOffsetOfMaxTimestamp)
@@ -136,7 +185,44 @@ class LogValidatorTest extends JUnitSuite {
   }
 
   @Test
-  def testCreateTimeCompressed() {
+  def testCreateTimeNonCompressedV2() {
+    val now = System.currentTimeMillis()
+    val timestampSeq = Seq(now - 1, now + 1, now)
+    val buf = ByteBuffer.allocate(512)
+    val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME)
+    builder.append(0, timestampSeq(0), null, "hello".getBytes)
+    builder.append(1, timestampSeq(1), null, "there".getBytes)
+    builder.append(2, timestampSeq(2), null, "beautiful".getBytes)
+    val records = builder.build()
+
+    val validatingResults = LogValidator.validateMessagesAndAssignOffsets(records,
+      offsetCounter = new LongRef(0),
+      now = System.currentTimeMillis(),
+      sourceCodec = NoCompressionCodec,
+      targetCodec = NoCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V2,
+      messageTimestampType = TimestampType.CREATE_TIME,
+      messageTimestampDiffMaxMs = 1000L)
+    val validatedRecords = validatingResults.validatedRecords
+
+    var i = 0
+    for (entry <- validatedRecords.shallowIterator.asScala) {
+      assertTrue(entry.isValid)
+      assertEquals(entry.timestampType, TimestampType.CREATE_TIME)
+      assertEquals(entry.timestamp, entry.asScala.map(_.timestamp).max)
+      for (record <- entry.asScala) {
+        assertTrue(record.isValid)
+        assertEquals(record.timestamp, timestampSeq(i))
+        i += 1
+      }
+    }
+    assertEquals(s"Max timestamp should be ${now + 1}", now + 1, validatingResults.maxTimestamp)
+    assertEquals(s"Offset of max timestamp should be 1", 1, validatingResults.shallowOffsetOfMaxTimestamp)
+    assertFalse("Message size should not have been changed", validatingResults.messageSizeMaybeChanged)
+  }
+
+  @Test
+  def testCreateTimeCompressedV1() {
     val now = System.currentTimeMillis()
     val timestampSeq = Seq(now - 1, now + 1, now)
     val records =
@@ -157,15 +243,58 @@ class LogValidatorTest extends JUnitSuite {
     val validatedRecords = validatedResults.validatedRecords
 
     var i = 0
-    for (logEntry <- validatedRecords.deepEntries.asScala) {
-      logEntry.record.ensureValid()
-      assertEquals(logEntry.record.timestamp, timestampSeq(i))
-      assertEquals(logEntry.record.timestampType, TimestampType.CREATE_TIME)
-      i += 1
+    for (entry <- validatedRecords.shallowIterator.asScala) {
+      assertTrue(entry.isValid)
+      assertEquals(entry.timestampType, TimestampType.CREATE_TIME)
+      assertEquals(entry.timestamp, entry.asScala.map(_.timestamp).max)
+      for (record <- entry.asScala) {
+        assertTrue(record.isValid)
+        assertEquals(record.timestamp, timestampSeq(i))
+        i += 1
+      }
     }
     assertEquals(s"Max timestamp should be ${now + 1}", now + 1, validatedResults.maxTimestamp)
-    assertEquals(s"Offset of max timestamp should be ${validatedRecords.deepEntries.asScala.size - 1}",
-      validatedRecords.deepEntries.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
+    assertEquals(s"Offset of max timestamp should be ${validatedRecords.records.asScala.size - 1}",
+      validatedRecords.records.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
+    assertFalse("Message size should not have been changed", validatedResults.messageSizeMaybeChanged)
+  }
+
+  @Test
+  def testCreateTimeCompressedV2() {
+    val now = System.currentTimeMillis()
+    val timestampSeq = Seq(now - 1, now + 1, now)
+    val buf = ByteBuffer.allocate(512)
+    val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME)
+    builder.append(0, timestampSeq(0), null, "hello".getBytes)
+    builder.append(1, timestampSeq(1), null, "there".getBytes)
+    builder.append(2, timestampSeq(2), null, "beautiful".getBytes)
+    val records = builder.build()
+
+    val validatedResults =
+      LogValidator.validateMessagesAndAssignOffsets(records,
+        offsetCounter = new LongRef(0),
+        now = System.currentTimeMillis(),
+        sourceCodec = DefaultCompressionCodec,
+        targetCodec = DefaultCompressionCodec,
+        messageFormatVersion = Record.MAGIC_VALUE_V2,
+        messageTimestampType = TimestampType.CREATE_TIME,
+        messageTimestampDiffMaxMs = 1000L)
+    val validatedRecords = validatedResults.validatedRecords
+
+    var i = 0
+    for (entry <- validatedRecords.shallowIterator.asScala) {
+      assertTrue(entry.isValid)
+      assertEquals(entry.timestampType, TimestampType.CREATE_TIME)
+      assertEquals(entry.timestamp, entry.asScala.map(_.timestamp).max)
+      for (record <- entry.asScala) {
+        assertTrue(record.isValid)
+        assertEquals(record.timestamp, timestampSeq(i))
+        i += 1
+      }
+    }
+    assertEquals(s"Max timestamp should be ${now + 1}", now + 1, validatedResults.maxTimestamp)
+    assertEquals(s"Offset of max timestamp should be ${validatedRecords.records.asScala.size - 1}",
+      validatedRecords.records.asScala.size - 1, validatedResults.shallowOffsetOfMaxTimestamp)
     assertFalse("Message size should not have been changed", validatedResults.messageSizeMaybeChanged)
   }
 
@@ -231,7 +360,7 @@ class LogValidatorTest extends JUnitSuite {
   }
 
   @Test
-  def testRelativeOffsetAssignmentNonCompressed() {
+  def testRelativeOffsetAssignmentNonCompressedV1() {
     val now = System.currentTimeMillis()
     val records = createRecords(magicValue = Record.MAGIC_VALUE_V1, timestamp = now, codec = CompressionType.NONE)
     val offset = 1234567
@@ -241,13 +370,31 @@ class LogValidatorTest extends JUnitSuite {
       now = System.currentTimeMillis(),
       sourceCodec = NoCompressionCodec,
       targetCodec = NoCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.CREATE_TIME,
       messageTimestampDiffMaxMs = 5000L).validatedRecords
     checkOffsets(messageWithOffset, offset)
   }
 
   @Test
-  def testRelativeOffsetAssignmentCompressed() {
+  def testRelativeOffsetAssignmentNonCompressedV2() {
+    val now = System.currentTimeMillis()
+    val records = createRecords(magicValue = Record.MAGIC_VALUE_V2, timestamp = now, codec = CompressionType.NONE)
+    val offset = 1234567
+    checkOffsets(records, 0)
+    val messageWithOffset = LogValidator.validateMessagesAndAssignOffsets(records,
+      offsetCounter = new LongRef(offset),
+      now = System.currentTimeMillis(),
+      sourceCodec = NoCompressionCodec,
+      targetCodec = NoCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V2,
+      messageTimestampType = TimestampType.CREATE_TIME,
+      messageTimestampDiffMaxMs = 5000L).validatedRecords
+    checkOffsets(messageWithOffset, offset)
+  }
+
+  @Test
+  def testRelativeOffsetAssignmentCompressedV1() {
     val now = System.currentTimeMillis()
     val records = createRecords(magicValue = Record.MAGIC_VALUE_V1, timestamp = now, codec = CompressionType.GZIP)
     val offset = 1234567
@@ -258,6 +405,25 @@ class LogValidatorTest extends JUnitSuite {
       now = System.currentTimeMillis(),
       sourceCodec = DefaultCompressionCodec,
       targetCodec = DefaultCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V1,
+      messageTimestampType = TimestampType.CREATE_TIME,
+      messageTimestampDiffMaxMs = 5000L).validatedRecords
+    checkOffsets(compressedMessagesWithOffset, offset)
+  }
+
+  @Test
+  def testRelativeOffsetAssignmentCompressedV2() {
+    val now = System.currentTimeMillis()
+    val records = createRecords(magicValue = Record.MAGIC_VALUE_V2, timestamp = now, codec = CompressionType.GZIP)
+    val offset = 1234567
+    checkOffsets(records, 0)
+    val compressedMessagesWithOffset = LogValidator.validateMessagesAndAssignOffsets(
+      records,
+      offsetCounter = new LongRef(offset),
+      now = System.currentTimeMillis(),
+      sourceCodec = DefaultCompressionCodec,
+      targetCodec = DefaultCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V2,
       messageTimestampType = TimestampType.CREATE_TIME,
       messageTimestampDiffMaxMs = 5000L).validatedRecords
     checkOffsets(compressedMessagesWithOffset, offset)
@@ -334,33 +500,27 @@ class LogValidatorTest extends JUnitSuite {
       now = System.currentTimeMillis(),
       sourceCodec = SnappyCompressionCodec,
       targetCodec = SnappyCompressionCodec,
+      messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.CREATE_TIME,
       messageTimestampDiffMaxMs = 5000L)
   }
 
   private def createRecords(magicValue: Byte = Message.CurrentMagicValue,
-                              timestamp: Long = Message.NoTimestamp,
-                              codec: CompressionType = CompressionType.NONE): MemoryRecords = {
-    if (magicValue == Record.MAGIC_VALUE_V0) {
-      MemoryRecords.withRecords(
-        codec,
-        Record.create(Record.MAGIC_VALUE_V0, Record.NO_TIMESTAMP, "hello".getBytes),
-        Record.create(Record.MAGIC_VALUE_V0, Record.NO_TIMESTAMP, "there".getBytes),
-        Record.create(Record.MAGIC_VALUE_V0, Record.NO_TIMESTAMP, "beautiful".getBytes))
-    } else {
-      MemoryRecords.withRecords(
-        codec,
-        Record.create(Record.MAGIC_VALUE_V1, timestamp, "hello".getBytes),
-        Record.create(Record.MAGIC_VALUE_V1, timestamp, "there".getBytes),
-        Record.create(Record.MAGIC_VALUE_V1, timestamp, "beautiful".getBytes))
-    }
+                            timestamp: Long = Message.NoTimestamp,
+                            codec: CompressionType = CompressionType.NONE): MemoryRecords = {
+    val buf = ByteBuffer.allocate(512)
+    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME)
+    builder.append(0, timestamp, null, "hello".getBytes)
+    builder.append(1, timestamp, null, "there".getBytes)
+    builder.append(2, timestamp, null, "beautiful".getBytes)
+    builder.build()
   }
 
   /* check that offsets are assigned consecutively from the given base offset */
-  private def checkOffsets(records: MemoryRecords, baseOffset: Long) {
-    assertTrue("Message set should not be empty", records.deepEntries.asScala.nonEmpty)
+  def checkOffsets(records: MemoryRecords, baseOffset: Long) {
+    assertTrue("Message set should not be empty", records.records.asScala.nonEmpty)
     var offset = baseOffset
-    for (entry <- records.deepEntries.asScala) {
+    for (entry <- records.records.asScala) {
       assertEquals("Unexpected offset in message set iterator", offset, entry.offset)
       offset += 1
     }
@@ -386,10 +546,14 @@ class LogValidatorTest extends JUnitSuite {
     builder.build()
   }
 
-  def validateLogAppendTime(now: Long, record: Record) {
-    record.ensureValid()
-    assertEquals(s"Timestamp of message $record should be $now", now, record.timestamp)
-    assertEquals(TimestampType.LOG_APPEND_TIME, record.timestampType)
+  def validateLogAppendTime(now: Long, entry: LogEntry) {
+    assertTrue(entry.isValid)
+    assertTrue(entry.timestampType() == TimestampType.LOG_APPEND_TIME)
+    assertEquals(s"Timestamp of message $entry should be $now", now, entry.timestamp)
+    for (record <- entry.asScala) {
+      assertTrue(record.isValid)
+      assertEquals(s"Timestamp of message $record should be $now", now, record.timestamp)
+    }
   }
 
 }

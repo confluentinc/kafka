@@ -20,9 +20,9 @@ import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.record.CompressionType;
-import org.apache.kafka.common.record.LogEntry;
-import org.apache.kafka.common.record.Record;
-import org.apache.kafka.common.record.Records;
+import org.apache.kafka.common.record.EosLogEntry;
+import org.apache.kafka.common.record.EosLogRecord;
+import org.apache.kafka.common.record.LogRecord;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
 import org.junit.After;
@@ -62,7 +62,7 @@ public class RecordAccumulatorTest {
     private MockTime time = new MockTime();
     private byte[] key = "key".getBytes();
     private byte[] value = "value".getBytes();
-    private int msgSize = Records.LOG_OVERHEAD + Record.recordSize(key, value);
+    private int msgSize = EosLogRecord.sizeOf(key, value);
     private Cluster cluster = new Cluster(null, Arrays.asList(node1, node2), Arrays.asList(part1, part2, part3),
             Collections.<String>emptySet(), Collections.<String>emptySet());
     private Metrics metrics = new Metrics(time);
@@ -77,7 +77,8 @@ public class RecordAccumulatorTest {
     public void testFull() throws Exception {
         long now = time.milliseconds();
         int batchSize = 1024;
-        RecordAccumulator accum = new RecordAccumulator(batchSize, 10 * batchSize, CompressionType.NONE, 10L, 100L, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(batchSize + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * batchSize,
+                CompressionType.NONE, 10L, 100L, metrics, time);
         int appends = batchSize / msgSize;
         for (int i = 0; i < appends; i++) {
             // append to the first batch
@@ -101,11 +102,11 @@ public class RecordAccumulatorTest {
         assertEquals(1, batches.size());
         RecordBatch batch = batches.get(0);
 
-        Iterator<LogEntry> iter = batch.records().deepEntries().iterator();
+        Iterator<LogRecord> iter = batch.records().records();
         for (int i = 0; i < appends; i++) {
-            LogEntry entry = iter.next();
-            assertEquals("Keys should match", ByteBuffer.wrap(key), entry.record().key());
-            assertEquals("Values should match", ByteBuffer.wrap(value), entry.record().value());
+            LogRecord record = iter.next();
+            assertEquals("Keys should match", ByteBuffer.wrap(key), record.key());
+            assertEquals("Values should match", ByteBuffer.wrap(value), record.value());
         }
         assertFalse("No more records", iter.hasNext());
     }
@@ -113,7 +114,8 @@ public class RecordAccumulatorTest {
     @Test
     public void testAppendLarge() throws Exception {
         int batchSize = 512;
-        RecordAccumulator accum = new RecordAccumulator(batchSize, 10 * 1024, CompressionType.NONE, 0L, 100L, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(batchSize + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, 0L, 100L, metrics, time);
         accum.append(tp1, 0L, key, new byte[2 * batchSize], null, maxBlockTimeMs);
         assertEquals("Our partition's leader should be ready", Collections.singleton(node1), accum.ready(cluster, time.milliseconds()).readyNodes);
     }
@@ -121,7 +123,8 @@ public class RecordAccumulatorTest {
     @Test
     public void testLinger() throws Exception {
         long lingerMs = 10L;
-        RecordAccumulator accum = new RecordAccumulator(1024, 10 * 1024, CompressionType.NONE, lingerMs, 100L, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, lingerMs, 100L, metrics, time);
         accum.append(tp1, 0L, key, value, null, maxBlockTimeMs);
         assertEquals("No partitions should be ready", 0, accum.ready(cluster, time.milliseconds()).readyNodes.size());
         time.sleep(10);
@@ -130,16 +133,17 @@ public class RecordAccumulatorTest {
         assertEquals(1, batches.size());
         RecordBatch batch = batches.get(0);
 
-        Iterator<LogEntry> iter = batch.records().deepEntries().iterator();
-        LogEntry entry = iter.next();
-        assertEquals("Keys should match", ByteBuffer.wrap(key), entry.record().key());
-        assertEquals("Values should match", ByteBuffer.wrap(value), entry.record().value());
+        Iterator<LogRecord> iter = batch.records().records();
+        LogRecord record = iter.next();
+        assertEquals("Keys should match", ByteBuffer.wrap(key), record.key());
+        assertEquals("Values should match", ByteBuffer.wrap(value), record.value());
         assertFalse("No more records", iter.hasNext());
     }
 
     @Test
     public void testPartialDrain() throws Exception {
-        RecordAccumulator accum = new RecordAccumulator(1024, 10 * 1024, CompressionType.NONE, 10L, 100L, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, 10L, 100L, metrics, time);
         int appends = 1024 / msgSize + 1;
         List<TopicPartition> partitions = asList(tp1, tp2);
         for (TopicPartition tp : partitions) {
@@ -158,7 +162,8 @@ public class RecordAccumulatorTest {
         final int numThreads = 5;
         final int msgs = 10000;
         final int numParts = 2;
-        final RecordAccumulator accum = new RecordAccumulator(1024, 10 * 1024, CompressionType.NONE, 0L, 100L, metrics, time);
+        final RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, 0L, 100L, metrics, time);
         List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < numThreads; i++) {
             threads.add(new Thread() {
@@ -182,8 +187,11 @@ public class RecordAccumulatorTest {
             List<RecordBatch> batches = accum.drain(cluster, nodes, 5 * 1024, 0).get(node1.id());
             if (batches != null) {
                 for (RecordBatch batch : batches) {
-                    for (LogEntry entry : batch.records().deepEntries())
+                    Iterator<LogRecord> records = batch.records().records();
+                    while (records.hasNext()) {
+                        records.next();
                         read++;
+                    }
                     accum.deallocate(batch);
                 }
             }
@@ -198,7 +206,8 @@ public class RecordAccumulatorTest {
     public void testNextReadyCheckDelay() throws Exception {
         // Next check time will use lingerMs since this test won't trigger any retries/backoff
         long lingerMs = 10L;
-        RecordAccumulator accum = new RecordAccumulator(1024, 10 * 1024,  CompressionType.NONE, lingerMs, 100L, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, lingerMs, 100L, metrics, time);
         // Just short of going over the limit so we trigger linger time
         int appends = 1024 / msgSize;
 
@@ -232,7 +241,8 @@ public class RecordAccumulatorTest {
     public void testRetryBackoff() throws Exception {
         long lingerMs = Long.MAX_VALUE / 4;
         long retryBackoffMs = Long.MAX_VALUE / 2;
-        final RecordAccumulator accum = new RecordAccumulator(1024, 10 * 1024, CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time);
+        final RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time);
 
         long now = time.milliseconds();
         accum.append(tp1, 0L, key, value, null, maxBlockTimeMs);
@@ -269,7 +279,8 @@ public class RecordAccumulatorTest {
     @Test
     public void testFlush() throws Exception {
         long lingerMs = Long.MAX_VALUE;
-        final RecordAccumulator accum = new RecordAccumulator(4 * 1024, 64 * 1024, CompressionType.NONE, lingerMs, 100L, metrics, time);
+        final RecordAccumulator accum = new RecordAccumulator(4 * 1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 64 * 1024,
+                CompressionType.NONE, lingerMs, 100L, metrics, time);
         for (int i = 0; i < 100; i++)
             accum.append(new TopicPartition(topic, i % 3), 0L, key, value, null, maxBlockTimeMs);
         RecordAccumulator.ReadyCheckResult result = accum.ready(cluster, time.milliseconds());
@@ -302,7 +313,8 @@ public class RecordAccumulatorTest {
 
     @Test
     public void testAwaitFlushComplete() throws Exception {
-        RecordAccumulator accum = new RecordAccumulator(4 * 1024, 64 * 1024, CompressionType.NONE, Long.MAX_VALUE, 100L, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(4 * 1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 64 * 1024,
+                CompressionType.NONE, Long.MAX_VALUE, 100L, metrics, time);
         accum.append(new TopicPartition(topic, 0), 0L, key, value, null, maxBlockTimeMs);
 
         accum.beginFlush();
@@ -321,7 +333,8 @@ public class RecordAccumulatorTest {
     public void testAbortIncompleteBatches() throws Exception {
         long lingerMs = Long.MAX_VALUE;
         final AtomicInteger numExceptionReceivedInCallback = new AtomicInteger(0);
-        final RecordAccumulator accum = new RecordAccumulator(4 * 1024, 64 * 1024, CompressionType.NONE, lingerMs, 100L, metrics, time);
+        final RecordAccumulator accum = new RecordAccumulator(4 * 1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 64 * 1024,
+                CompressionType.NONE, lingerMs, 100L, metrics, time);
         class TestCallback implements Callback {
             @Override
             public void onCompletion(RecordMetadata metadata, Exception exception) {
@@ -346,7 +359,8 @@ public class RecordAccumulatorTest {
         long lingerMs = 3000L;
         int requestTimeout = 60;
 
-        RecordAccumulator accum = new RecordAccumulator(1024, 10 * 1024, CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time);
         int appends = 1024 / msgSize;
 
         // Test batches not in retry
@@ -412,7 +426,8 @@ public class RecordAccumulatorTest {
     @Test
     public void testMutedPartitions() throws InterruptedException {
         long now = time.milliseconds();
-        RecordAccumulator accum = new RecordAccumulator(1024, 10 * 1024, CompressionType.NONE, 10, 100L, metrics, time);
+        RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
+                CompressionType.NONE, 10, 100L, metrics, time);
         int appends = 1024 / msgSize;
         for (int i = 0; i < appends; i++) {
             accum.append(tp1, 0L, key, value, null, maxBlockTimeMs);
