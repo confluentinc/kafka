@@ -19,18 +19,16 @@ package kafka.server
 
 import kafka.utils._
 import kafka.utils.timer._
-import kafka.utils.CoreUtils.{inReadLock, inWriteLock}
+import kafka.utils.CoreUtils.{inReadLock, inWriteLock, inLock}
 import kafka.metrics.KafkaMetricsGroup
-
 import java.util.LinkedList
 import java.util.concurrent._
 import java.util.concurrent.atomic._
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.locks.{ReentrantLock, ReentrantReadWriteLock}
 
 import org.apache.kafka.common.utils.Utils
 
 import scala.collection._
-
 import com.yammer.metrics.core.Gauge
 
 
@@ -293,33 +291,50 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
   private class Watchers(val key: Any) {
 
     private[this] val operations = new LinkedList[T]()
+    private[this] val addedOperations = new ConcurrentLinkedQueue[T]()
+    private[this] val lock = new ReentrantLock()
+    private[this] val size = new AtomicInteger(0)
 
-    def watched: Int = operations synchronized operations.size
+    def watched: Int = size.get
 
     // add the element to watch
     def watch(t: T) {
-      operations synchronized operations.add(t)
+      addedOperations.add(t)
+      size.incrementAndGet()
     }
 
     // traverse the list and try to complete some watched elements
     def tryCompleteWatched(): Int = {
+      if (!lock.tryLock())
+        return 0
 
-      var completed = 0
-      operations synchronized {
+      val (completed, tryRemove) = try {
+        var op: T = addedOperations.poll()
+        while (op != null) {
+          operations.add(op)
+          op = addedOperations.poll()
+        }
+
+        var completed = 0
         val iter = operations.iterator()
         while (iter.hasNext) {
           val curr = iter.next()
           if (curr.isCompleted) {
             // another thread has completed this operation, just remove it
             iter.remove()
+            size.decrementAndGet()
           } else if (curr synchronized curr.tryComplete()) {
             completed += 1
             iter.remove()
+            size.decrementAndGet()
           }
         }
+        (completed, operations.isEmpty)
+      } finally {
+        lock.unlock()
       }
 
-      if (operations.size == 0)
+      if (tryRemove)
         removeKeyIfEmpty(key, this)
 
       completed
@@ -327,19 +342,32 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
 
     // traverse the list and purge elements that are already completed by others
     def purgeCompleted(): Int = {
-      var purged = 0
-      operations synchronized {
+      if (!lock.tryLock())
+        return 0
+
+      val (purged, tryRemove) = try {
+        var op: T = addedOperations.poll()
+        while (op != null) {
+          operations.add(op)
+          op = addedOperations.poll()
+        }
+
+        var purged = 0
         val iter = operations.iterator()
         while (iter.hasNext) {
           val curr = iter.next()
           if (curr.isCompleted) {
             iter.remove()
+            size.decrementAndGet()
             purged += 1
           }
         }
+        (purged, operations.isEmpty)
+      } finally {
+        lock.unlock()
       }
 
-      if (operations.size == 0)
+      if (tryRemove)
         removeKeyIfEmpty(key, this)
 
       purged
