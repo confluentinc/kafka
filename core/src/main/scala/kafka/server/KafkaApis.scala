@@ -486,13 +486,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             case _ => data
           }
 
-//          val convertedData = if (versionId <= 1 && replicaManager.getMessageFormatVersion(tp).exists(_ > Record.MAGIC_VALUE_V0) &&
-//            !data.logBuffer.hasMatchingShallowMagic(Record.MAGIC_VALUE_V0)) {
-//            trace(s"Down converting message to V0 for fetch request from $clientId")
-//            FetchPartitionData(data.error, data.hw, data.logBuffer.toMessageFormat(Record.MAGIC_VALUE_V0))
-//          } else data
-
-          tp -> new FetchResponse.PartitionData(convertedData.error, convertedData.hw, convertedData.records)
+          new TopicPartition(tp.topic, tp.partition) -> new FetchResponse.PartitionData(convertedData.error, convertedData.hw, convertedData.records)
         }
       }
 

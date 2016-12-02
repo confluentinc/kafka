@@ -109,7 +109,7 @@ public class MemoryRecords extends AbstractRecords {
         return filterTo(shallowEntries(), filter, destinationBuffer);
     }
 
-    private static FilterResult filterTo(Iterable<ByteBufferLogEntry> fromShallowEntries, LogEntryFilter filter,
+    private static FilterResult filterTo(Iterable<LogEntry.ShallowLogEntry> fromShallowEntries, LogEntryFilter filter,
                                        ByteBuffer destinationBuffer) {
         long firstOffset = -1;
         long maxTimestamp = Record.NO_TIMESTAMP;
@@ -120,7 +120,7 @@ public class MemoryRecords extends AbstractRecords {
         int messagesRetained = 0;
         int bytesRetained = 0;
 
-       for (LogEntry.ShallowLogEntry entry : shallowEntries()) {
+       for (LogEntry.ShallowLogEntry entry : fromShallowEntries) {
             bytesRead += entry.sizeInBytes();
 
             // We use the absolute offset to decide whether to retain the message or not Due KAFKA-4298, we have to
@@ -160,13 +160,13 @@ public class MemoryRecords extends AbstractRecords {
                 bytesRetained += entry.sizeInBytes();
                 if (entry.timestamp() > maxTimestamp) {
                     maxTimestamp = entry.timestamp();
-                    shallowOffsetOfMaxTimestamp = entry.offset();
+                    shallowOffsetOfMaxTimestamp = entry.lastOffset();
                 }
 
             } else if (!retainedRecords.isEmpty()) {
                 ByteBuffer slice = destinationBuffer.slice();
                 TimestampType timestampType = entry.timestampType();
-                long logAppendTime = timestampType == TimestampType.LOG_APPEND_TIME ? entry.timestamp() : -1L;
+                long logAppendTime = timestampType == TimestampType.LOG_APPEND_TIME ? entry.timestamp() : Record.NO_TIMESTAMP;
                 MemoryRecordsBuilder builder = builderWithRecords(slice, false, entry.magic(), firstOffset,
                         timestampType, entry.compressionType(), logAppendTime, retainedRecords);
                 MemoryRecords records = builder.build();

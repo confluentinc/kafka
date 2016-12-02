@@ -277,10 +277,10 @@ object KafkaConfig {
   val LogFlushIntervalMsProp = "log.flush.interval.ms"
   val LogFlushOffsetCheckpointIntervalMsProp = "log.flush.offset.checkpoint.interval.ms"
   val LogPreAllocateProp = "log.preallocate"
-  val LogMessageFormatVersionProp = LogConfigPrefix + LogConfig.MessageFormatVersionProp
-  val LogMessageTimestampTypeProp = LogConfigPrefix + LogConfig.MessageTimestampTypeProp
-  val LogMessageTimestampDifferenceMaxMsProp = LogConfigPrefix + LogConfig.MessageTimestampDifferenceMaxMsProp
-  val LogMaxIdMapSnapshotsProp = "log.num.id.mapping.snapshots"
+  val LogMessageFormatVersionProp = LogConfigPrefix + "message.format.version"
+  val LogMessageTimestampTypeProp = LogConfigPrefix + "message.timestamp.type"
+  val LogMessageTimestampDifferenceMaxMsProp = LogConfigPrefix + "message.timestamp.difference.max.ms"
+  val LogMaxIdMapSnapshotsProp = LogConfigPrefix + "max.id.map.snapshots"
   val NumRecoveryThreadsPerDataDirProp = "num.recovery.threads.per.data.dir"
   val AutoCreateTopicsEnableProp = "auto.create.topics.enable"
   val MinInSyncReplicasProp = "min.insync.replicas"

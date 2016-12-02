@@ -412,33 +412,34 @@ class GroupMetadataManager(val brokerId: Int,
               val fileRecords = log.read(currOffset, config.loadBufferSize, minOneMessage = true).records.asInstanceOf[FileRecords]
               fileRecords.readInto(buffer, 0)
 
-              MemoryRecords.readableRecords(buffer).deepEntries.asScala.foreach { entry =>
-                val record = entry.record
-                require(record.hasKey, "Offset entry key should not be null")
-                val baseKey = GroupMetadataManager.readMessageKey(record.key)
+              MemoryRecords.readableRecords(buffer).asScala.foreach { entry =>
+                for (record <- entry.asScala) {
+                  require(record.hasKey, "Offset entry key should not be null")
+                  val baseKey = GroupMetadataManager.readMessageKey(record.key)
 
-                if (baseKey.isInstanceOf[OffsetKey]) {
-                  // load offset
-                  val key = baseKey.key.asInstanceOf[GroupTopicPartition]
-                  if (record.hasNullValue) {
-                    loadedOffsets.remove(key)
-                    removedOffsets.add(key)
+                  if (baseKey.isInstanceOf[OffsetKey]) {
+                    // load offset
+                    val key = baseKey.key.asInstanceOf[GroupTopicPartition]
+                    if (record.hasNullValue) {
+                      loadedOffsets.remove(key)
+                      removedOffsets.add(key)
+                    } else {
+                      val value = GroupMetadataManager.readOffsetMessageValue(record.value)
+                      loadedOffsets.put(key, value)
+                      removedOffsets.remove(key)
+                    }
                   } else {
-                    val value = GroupMetadataManager.readOffsetMessageValue(record.value)
-                    loadedOffsets.put(key, value)
-                    removedOffsets.remove(key)
-                  }
-                } else {
-                  // load group metadata
-                  val groupId = baseKey.key.asInstanceOf[String]
-                  val groupMetadata = GroupMetadataManager.readGroupMessageValue(groupId, record.value)
-                  if (groupMetadata != null) {
-                    trace(s"Loaded group metadata for group ${groupMetadata.groupId} with generation ${groupMetadata.generationId}")
-                    removedGroups.remove(groupId)
-                    loadedGroups.put(groupId, groupMetadata)
-                  } else {
-                    loadedGroups.remove(groupId)
-                    removedGroups.add(groupId)
+                    // load group metadata
+                    val groupId = baseKey.key.asInstanceOf[String]
+                    val groupMetadata = GroupMetadataManager.readGroupMessageValue(groupId, record.value)
+                    if (groupMetadata != null) {
+                      trace(s"Loaded group metadata for group ${groupMetadata.groupId} with generation ${groupMetadata.generationId}")
+                      removedGroups.remove(groupId)
+                      loadedGroups.put(groupId, groupMetadata)
+                    } else {
+                      loadedGroups.remove(groupId)
+                      removedGroups.add(groupId)
+                    }
                   }
                 }
                 currOffset = entry.nextOffset

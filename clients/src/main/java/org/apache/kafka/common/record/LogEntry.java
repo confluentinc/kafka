@@ -159,7 +159,7 @@ public abstract class LogEntry implements Iterable<LogRecord> {
         };
     }
 
-    public Iterator<LogEntry> deepEntries() {
+    private Iterator<LogEntry> deepEntries() {
         if (isCompressed())
             return new RecordsIterator.DeepRecordsIterator(this, false, Integer.MAX_VALUE);
         return Collections.singletonList(this).iterator();

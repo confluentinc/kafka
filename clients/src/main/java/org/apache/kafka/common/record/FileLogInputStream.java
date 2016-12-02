@@ -23,6 +23,7 @@ import org.apache.kafka.common.record.ByteBufferLogInputStream.ByteBufferLogEntr
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Iterator;
 
 import static org.apache.kafka.common.record.Records.LOG_OVERHEAD;
 
@@ -111,6 +112,24 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         }
 
         @Override
+        public CompressionType compressionType() {
+            loadUnderlyingEntry();
+            return underlying.compressionType();
+        }
+
+        @Override
+        public TimestampType timestampType() {
+            loadUnderlyingEntry();
+            return underlying.timestampType();
+        }
+
+        @Override
+        public long timestamp() {
+            loadUnderlyingEntry();
+            return underlying.timestamp();
+        }
+
+        @Override
         public long offset() {
             if (magic() < Record.MAGIC_VALUE_V2)
                 return offset;
@@ -150,31 +169,55 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
             }
         }
 
-        private void loadUnderlyingEntry() throws IOException {
-            if (underlying != null)
-                return;
+        private void loadUnderlyingEntry() {
+            try {
+                if (underlying != null)
+                    return;
 
-            ByteBuffer buffer = ByteBuffer.allocate(LOG_OVERHEAD + recordSize);
-            channel.read(buffer, position);
-            if (buffer.hasRemaining())
-                throw new KafkaException("Failed to read full record from channel " + channel);
-            buffer.rewind();
+                ByteBuffer buffer = ByteBuffer.allocate(LOG_OVERHEAD + recordSize);
+                channel.read(buffer, position);
+                if (buffer.hasRemaining())
+                    throw new KafkaException("Failed to read full record from channel " + channel);
+                buffer.rewind();
 
-            byte magic = buffer.get(LOG_OVERHEAD + Record.MAGIC_OFFSET);
-            if (magic > Record.MAGIC_VALUE_V1)
-                underlying = new EosLogEntry(buffer);
-            else
-                underlying = new ByteBufferLogEntry(buffer);
+                byte magic = buffer.get(LOG_OVERHEAD + Record.MAGIC_OFFSET);
+                if (magic > Record.MAGIC_VALUE_V1)
+                    underlying = new EosLogEntry(buffer);
+                else
+                    underlying = new ByteBufferLogEntry(buffer);
+            } catch (IOException e) {
+                throw new KafkaException("Failed to load log entry at position " + position + " from file channel " + channel);
+            }
+        }
+
+        @Override
+        public Iterator<LogRecord> iterator() {
+            loadUnderlyingEntry();
+            return underlying.iterator();
         }
 
         @Override
         public Record record() {
-            try {
-                loadUnderlyingEntry();
-                return underlying.record();
-            } catch (IOException e) {
-                throw new KafkaException("Failed to load log entry at position " + position + " from file channel " + channel);
-            }
+            loadUnderlyingEntry();
+            return underlying.record();
+        }
+
+        @Override
+        public boolean isValid() {
+            loadUnderlyingEntry();
+            return underlying.isValid();
+        }
+
+        @Override
+        public void ensureValid() {
+            loadUnderlyingEntry();
+            underlying.ensureValid();
+        }
+
+        @Override
+        public long checksum() {
+            loadUnderlyingEntry();
+            return underlying.checksum();
         }
 
         @Override

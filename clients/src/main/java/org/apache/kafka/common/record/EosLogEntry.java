@@ -225,11 +225,6 @@ public class EosLogEntry extends LogEntry.ShallowLogEntry {
     }
 
     @Override
-    public Iterator<LogEntry> deepEntries() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public long checksum() {
         return Utils.readUnsignedInt(buffer, CRC_OFFSET);
     }
@@ -272,7 +267,7 @@ public class EosLogEntry extends LogEntry.ShallowLogEntry {
     public static void writeInPlaceHeader(ByteBuffer buffer,
                                           long offset,
                                           int offsetDelta,
-                                          int limit,
+                                          int size,
                                           byte magic,
                                           CompressionType compressionType,
                                           TimestampType timestampType,
@@ -281,30 +276,31 @@ public class EosLogEntry extends LogEntry.ShallowLogEntry {
                                           short epoch,
                                           int sequence) {
         byte attributes = computeAttributes(compressionType, timestampType);
-        writeInPlaceHeader(buffer, offset, offsetDelta, limit, magic, attributes, timestamp, pid, epoch, sequence);
+        writeInPlaceHeader(buffer, offset, offsetDelta, size, magic, attributes, timestamp, pid, epoch, sequence);
     }
 
     private static void writeInPlaceHeader(ByteBuffer buffer,
                                            long offset,
                                            int offsetDelta,
-                                           int limit,
+                                           int size,
                                            byte magic,
                                            byte attributes,
                                            long timestamp,
                                            long pid,
                                            short epoch,
                                            int sequence) {
-        buffer.putLong(OFFSET_OFFSET, offset);
-        buffer.putInt(SIZE_OFFSET, limit - LOG_OVERHEAD);
-        buffer.put(MAGIC_OFFSET, magic);
-        buffer.put(ATTRIBUTES_OFFSET, attributes);
-        buffer.putLong(TIMESTAMP_OFFSET, timestamp);
-        buffer.putInt(OFFSET_DELTA_OFFSET, offsetDelta);
-        buffer.putLong(PID_OFFSET, pid);
-        buffer.putShort(EPOCH_OFFSET, epoch);
-        buffer.putInt(SEQUENCE_OFFSET, sequence);
-        long crc = Utils.computeChecksum(buffer, MAGIC_OFFSET, limit - MAGIC_OFFSET);
-        buffer.putInt(CRC_OFFSET, (int) (crc & 0xffffffffL));
+        int position = buffer.position();
+        buffer.putLong(position + OFFSET_OFFSET, offset);
+        buffer.putInt(position + SIZE_OFFSET, size - LOG_OVERHEAD);
+        buffer.put(position + MAGIC_OFFSET, magic);
+        buffer.put(position + ATTRIBUTES_OFFSET, attributes);
+        buffer.putLong(position + TIMESTAMP_OFFSET, timestamp);
+        buffer.putInt(position + OFFSET_DELTA_OFFSET, offsetDelta);
+        buffer.putLong(position + PID_OFFSET, pid);
+        buffer.putShort(position + EPOCH_OFFSET, epoch);
+        buffer.putInt(position + SEQUENCE_OFFSET, sequence);
+        long crc = Utils.computeChecksum(buffer, position + MAGIC_OFFSET, size - MAGIC_OFFSET);
+        buffer.putInt(position + CRC_OFFSET, (int) (crc & 0xffffffffL));
     }
 
     public static void writeHeader(DataOutputStream out,

@@ -474,7 +474,7 @@ private[log] class Cleaner(val id: Int,
       if (writeBuffer.position > 0) {
         writeBuffer.flip()
         val retained = MemoryRecords.readableRecords(writeBuffer)
-        dest.append(firstOffset = retained.deepEntries.iterator.next().offset,
+        dest.append(firstOffset = retained.shallowIterator.next().firstOffset,
           largestOffset = result.maxOffset,
           largestTimestamp = result.maxTimestamp,
           shallowOffsetOfMaxTimestamp = result.shallowOffsetOfMaxTimestamp,

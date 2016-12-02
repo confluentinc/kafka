@@ -307,7 +307,7 @@ object LogConfig {
       .define(FollowerReplicationThrottledReplicasProp, LIST, Defaults.FollowerReplicationThrottledReplicas, ThrottledReplicaListValidator, MEDIUM,
         FollowerReplicationThrottledReplicasDoc, FollowerReplicationThrottledReplicasProp)
       /** ********* Id mapping snapshots configuration ***********/
-      .define(MaxIdMapSnapshotsProp, INT, Defaults.MaxIdMapSnapshots, MEDIUM, MaxIdMapSnapshotsDoc,
+      .define(MaxIdMapSnapshotsProp, INT, Defaults.MaxIdMapSnapshots, atLeast(1), MEDIUM, MaxIdMapSnapshotsDoc,
         KafkaConfig.LogMaxIdMapSnapshotsProp)
   }
 
