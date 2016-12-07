@@ -96,6 +96,11 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.API_VERSIONS => handleApiVersionsRequest(request)
         case ApiKeys.CREATE_TOPICS => handleCreateTopicsRequest(request)
         case ApiKeys.DELETE_TOPICS => handleDeleteTopicsRequest(request)
+        case ApiKeys.INIT_PRODUCER_ID => handleInitPIDRequest(request)
+        case ApiKeys.BEGIN_TXN => handleBeginTransactionRequest(request)
+        case ApiKeys.ADD_PARTITION_TO_TXN => handleAddPartitionToTransactionRequest(request)
+        case ApiKeys.END_TXN => handleEndTransactionRequest(request)
+        case ApiKeys.UPDATE_TXN => handleAbortTransactionRequest(request)
         case requestId => throw new KafkaException("Unknown api code " + requestId)
       }
     } catch {
@@ -1223,6 +1228,29 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
     }
   }
+
+  def handleInitPIDRequest(request: RequestChannel.Request): Unit = {
+    // Without AppID, return random 64bit PID.
+
+  }
+
+  def handleBeginTransactionRequest(request: RequestChannel.Request): Unit = {
+
+  }
+
+  def handleEndTransactionRequest(request: RequestChannel.Request): Unit = {
+
+  }
+
+  def handleAbortTransactionRequest(request: RequestChannel.Request): Unit = {
+
+  }
+
+
+  def handleAddPartitionToTransactionRequest(request: RequestChannel.Request): Unit = {
+
+  }
+
 
   def authorizeClusterAction(request: RequestChannel.Request): Unit = {
     if (!authorize(request.session, ClusterAction, Resource.ClusterResource))
