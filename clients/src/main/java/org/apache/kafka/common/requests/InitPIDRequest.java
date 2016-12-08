@@ -19,6 +19,8 @@ import org.apache.kafka.common.protocol.ProtoUtils;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Struct;
 
+import java.nio.ByteBuffer;
+
 public class InitPIDRequest extends AbstractRequest {
     private static final String APP_ID_KEY_NAME = "appid";
 
@@ -45,6 +47,14 @@ public class InitPIDRequest extends AbstractRequest {
     public AbstractResponse getErrorResponse(int versionId, Throwable e) {
         return new InitPIDResponse(Errors.forException(e));
 
+    }
+
+    public static InitPIDRequest parse(ByteBuffer buffer, int versionId) {
+        return new InitPIDRequest(ProtoUtils.parseRequest(ApiKeys.INIT_PRODUCER_ID.id, versionId, buffer));
+    }
+
+    public static InitPIDRequest parse(ByteBuffer buffer) {
+        return new InitPIDRequest(CURRENT_SCHEMA.read(buffer));
     }
 
     public String appId() {

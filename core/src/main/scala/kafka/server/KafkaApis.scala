@@ -97,10 +97,10 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.CREATE_TOPICS => handleCreateTopicsRequest(request)
         case ApiKeys.DELETE_TOPICS => handleDeleteTopicsRequest(request)
         case ApiKeys.INIT_PRODUCER_ID => handleInitPIDRequest(request)
-        case ApiKeys.BEGIN_TXN => handleBeginTransactionRequest(request)
-        case ApiKeys.ADD_PARTITION_TO_TXN => handleAddPartitionToTransactionRequest(request)
-        case ApiKeys.END_TXN => handleEndTransactionRequest(request)
-        case ApiKeys.UPDATE_TXN => handleAbortTransactionRequest(request)
+        //case ApiKeys.BEGIN_TXN => handleBeginTransactionRequest(request)
+        //case ApiKeys.ADD_PARTITION_TO_TXN => handleAddPartitionToTransactionRequest(request)
+        //case ApiKeys.END_TXN => handleEndTransactionRequest(request)
+        //case ApiKeys.UPDATE_TXN => handleAbortTransactionRequest(request)
         case requestId => throw new KafkaException("Unknown api code " + requestId)
       }
     } catch {

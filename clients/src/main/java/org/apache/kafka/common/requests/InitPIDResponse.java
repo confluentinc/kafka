@@ -21,6 +21,8 @@ import org.apache.kafka.common.protocol.ProtoUtils;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Struct;
 
+import java.nio.ByteBuffer;
+
 public class InitPIDResponse extends AbstractResponse {
     public static final long INVALID_PID = -1;
     private static final Schema CURRENT_SCHEMA = ProtoUtils.currentResponseSchema(ApiKeys.INIT_PRODUCER_ID.id);
@@ -33,6 +35,9 @@ public class InitPIDResponse extends AbstractResponse {
 
     public InitPIDResponse(int version, long producerId, short epoch, short errorCode) {
         super(new Struct(ProtoUtils.responseSchema(ApiKeys.INIT_PRODUCER_ID.id, version)));
+        struct.set(PRODUCER_ID_KEY_NAME, producerId);
+        struct.set(EPOCH_KEY_NAME, epoch);
+        struct.set(ERROR_CODE_KEY_NAME, errorCode);
         this.producerId = producerId;
         this.epoch = epoch;
         this.errorCode = errorCode;
@@ -52,6 +57,13 @@ public class InitPIDResponse extends AbstractResponse {
         this.producerId = INVALID_PID;
         this.epoch = 0;
         this.errorCode = errors.code();
+        struct.set(PRODUCER_ID_KEY_NAME, this.producerId);
+        struct.set(EPOCH_KEY_NAME, this.epoch);
+        struct.set(ERROR_CODE_KEY_NAME, this.errorCode);
+    }
+
+    public static InitPIDResponse parse(ByteBuffer buffer) {
+        return new InitPIDResponse(CURRENT_SCHEMA.read(buffer));
     }
 
     public long producerId() {
@@ -65,5 +77,7 @@ public class InitPIDResponse extends AbstractResponse {
     public short epoch() {
         return epoch;
     }
+
+
 }
 
