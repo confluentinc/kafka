@@ -13,8 +13,6 @@
 
 package org.apache.kafka.common.requests;
 
-import com.sun.org.apache.xml.internal.security.Init;
-import org.apache.kafka.common.Node;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.ProtoUtils;
@@ -33,14 +31,14 @@ public class InitPIDResponse extends AbstractResponse {
     private final short epoch;
     private final short errorCode;
 
-    public InitPIDResponse(int version, long producerId, short epoch, short errorCode) {
-        super(new Struct(ProtoUtils.responseSchema(ApiKeys.INIT_PRODUCER_ID.id, version)));
+    public InitPIDResponse(long producerId, short epoch, Errors errors) {
+        super(new Struct(CURRENT_SCHEMA));
         struct.set(PRODUCER_ID_KEY_NAME, producerId);
         struct.set(EPOCH_KEY_NAME, epoch);
-        struct.set(ERROR_CODE_KEY_NAME, errorCode);
+        struct.set(ERROR_CODE_KEY_NAME, errors.code());
         this.producerId = producerId;
         this.epoch = epoch;
-        this.errorCode = errorCode;
+        this.errorCode = errors.code();
         // Stub implementation.
 
     }
@@ -53,14 +51,8 @@ public class InitPIDResponse extends AbstractResponse {
     }
 
     public InitPIDResponse(Errors errors) {
-        super(new Struct(CURRENT_SCHEMA));
-        this.producerId = INVALID_PID;
-        this.epoch = 0;
-        this.errorCode = errors.code();
-        struct.set(PRODUCER_ID_KEY_NAME, this.producerId);
-        struct.set(EPOCH_KEY_NAME, this.epoch);
-        struct.set(ERROR_CODE_KEY_NAME, this.errorCode);
-    }
+        this(INVALID_PID, (short) 0, errors);
+   }
 
     public static InitPIDResponse parse(ByteBuffer buffer) {
         return new InitPIDResponse(CURRENT_SCHEMA.read(buffer));
