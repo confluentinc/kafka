@@ -13,30 +13,39 @@
 
 package org.apache.kafka.common.requests;
 
+import com.sun.org.apache.xml.internal.security.Init;
+import org.apache.kafka.common.Node;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.ProtoUtils;
+import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Struct;
 
-public class InitPIDResponse extends AbstractRequestResponse {
+public class InitPIDResponse extends AbstractResponse {
+    private static final Schema CURRENT_SCHEMA = ProtoUtils.currentResponseSchema(ApiKeys.INIT_PRODUCER_ID.id);
     private static final String PRODUCER_ID_KEY_NAME = "pid";
 
-    // The 'String' type is temporary.
-    private final String producerId;
+    private final long producerId;
 
-    public InitPIDResponse(int version, String producerId) {
+    public InitPIDResponse(int version, long producerId) {
         super(new Struct(ProtoUtils.responseSchema(ApiKeys.INIT_PRODUCER_ID.id, version)));
         this.producerId = producerId;
-        struct.set(PRODUCER_ID_KEY_NAME, producerId);
         // Stub implementation.
 
     }
 
     public InitPIDResponse(Struct struct) {
         super(struct);
-        this.producerId = struct.getString(PRODUCER_ID_KEY_NAME);
+        this.producerId = struct.getLong(PRODUCER_ID_KEY_NAME);
     }
 
-    public String producerId() {
+    public InitPIDResponse(short errorCode, Node node) {
+        super(new Struct(CURRENT_SCHEMA));
+        // TODO(apurva): define a proper invalid producer id eventually.
+        this.producerId = -1;
+    }
+
+    public long producerId() {
         return producerId;
     }
 
