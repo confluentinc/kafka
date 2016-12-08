@@ -113,7 +113,10 @@ public class RequestResponseTest {
                 createCreateTopicResponse(),
                 createDeleteTopicsRequest(),
                 createDeleteTopicsRequest().getErrorResponse(0, new UnknownServerException()),
-                createDeleteTopicsResponse()
+                createDeleteTopicsResponse(),
+                createInitPIDRequest(),
+                createInitPIDResponse()
+
         );
 
         for (AbstractRequestResponse req : requestResponseList)
@@ -573,6 +576,14 @@ public class RequestResponseTest {
         errors.put("t1", Errors.INVALID_TOPIC_EXCEPTION);
         errors.put("t2", Errors.TOPIC_AUTHORIZATION_FAILED);
         return new DeleteTopicsResponse(errors);
+    }
+
+    private InitPIDRequest createInitPIDRequest() {
+        return new InitPIDRequest(0, null);
+    }
+
+    private InitPIDResponse createInitPIDResponse() {
+        return new InitPIDResponse(0, 3332, (short) 3, Errors.NONE.code());
     }
 
     private static class ByteBufferChannel implements GatheringByteChannel {

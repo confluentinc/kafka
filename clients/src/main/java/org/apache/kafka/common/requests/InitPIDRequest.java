@@ -43,7 +43,7 @@ public class InitPIDRequest extends AbstractRequest {
 
     @Override
     public AbstractResponse getErrorResponse(int versionId, Throwable e) {
-        return new InitPIDResponse(Errors.forException(e).code(), null);
+        return new InitPIDResponse(Errors.forException(e));
 
     }
 

@@ -22,14 +22,20 @@ import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Struct;
 
 public class InitPIDResponse extends AbstractResponse {
+    public static final long INVALID_PID = -1;
     private static final Schema CURRENT_SCHEMA = ProtoUtils.currentResponseSchema(ApiKeys.INIT_PRODUCER_ID.id);
     private static final String PRODUCER_ID_KEY_NAME = "pid";
-
+    private static final String EPOCH_KEY_NAME = "epoch";
+    private static final String ERROR_CODE_KEY_NAME = "error_code";
     private final long producerId;
+    private final short epoch;
+    private final short errorCode;
 
-    public InitPIDResponse(int version, long producerId) {
+    public InitPIDResponse(int version, long producerId, short epoch, short errorCode) {
         super(new Struct(ProtoUtils.responseSchema(ApiKeys.INIT_PRODUCER_ID.id, version)));
         this.producerId = producerId;
+        this.epoch = epoch;
+        this.errorCode = errorCode;
         // Stub implementation.
 
     }
@@ -37,16 +43,27 @@ public class InitPIDResponse extends AbstractResponse {
     public InitPIDResponse(Struct struct) {
         super(struct);
         this.producerId = struct.getLong(PRODUCER_ID_KEY_NAME);
+        this.epoch = struct.getShort(EPOCH_KEY_NAME);
+        this.errorCode = struct.getShort(ERROR_CODE_KEY_NAME);
     }
 
-    public InitPIDResponse(short errorCode, Node node) {
+    public InitPIDResponse(Errors errors) {
         super(new Struct(CURRENT_SCHEMA));
-        // TODO(apurva): define a proper invalid producer id eventually.
-        this.producerId = -1;
+        this.producerId = INVALID_PID;
+        this.epoch = 0;
+        this.errorCode = errors.code();
     }
 
     public long producerId() {
         return producerId;
     }
 
+    public short errorCode() {
+        return errorCode;
+    }
+
+    public short epoch() {
+        return epoch;
+    }
 }
+
