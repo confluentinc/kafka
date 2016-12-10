@@ -1231,24 +1231,24 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   def handleInitPIDRequest(request: RequestChannel.Request): Unit = {
     // Without AppID, return random 64bit PID.
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
 
   def handleBeginTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
 
   def handleEndTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
 
   def handleAbortTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
 
 
   def handleAddPartitionToTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
 
 

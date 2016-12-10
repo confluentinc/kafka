@@ -52,7 +52,7 @@ public class InitPIDResponse extends AbstractResponse {
 
     public InitPIDResponse(Errors errors) {
         this(INVALID_PID, (short) 0, errors);
-   }
+    }
 
     public static InitPIDResponse parse(ByteBuffer buffer) {
         return new InitPIDResponse(CURRENT_SCHEMA.read(buffer));

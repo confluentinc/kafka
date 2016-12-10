@@ -943,7 +943,7 @@ public class Protocol {
             new Field("epoch",
                     INT16,
                     "The epoch for the PID. Will always be 0 if no appId was specified in the request."),
-            new Field( "error_code",
+            new Field("error_code",
                     INT16,
                     "An integer error code.")
     );

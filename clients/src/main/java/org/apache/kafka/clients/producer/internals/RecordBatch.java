@@ -157,7 +157,7 @@ public final class RecordBatch {
         }
 
         if (expire) {
-            close();
+            close(null);
             this.done(-1L, Record.NO_TIMESTAMP,
                       new TimeoutException("Expiring " + recordCount + " record(s) for " + topicPartition + " due to " + errorMessage));
         }
@@ -195,8 +195,16 @@ public final class RecordBatch {
         return logBufferBuilder.isFull();
     }
 
-    public void close() {
+    /**
+     * Writes the final metadata in the batch and updates transaction state with the new sequence number for the
+     * TopicPartition
+     * @param transactionState the global transaction state which keeps track of sequence numbers for each TopicPartition.
+     */
+    public void close(TransactionState transactionState) {
         logBufferBuilder.close();
+        if (transactionState != null) {
+            transactionState.incrementSequenceNumber(topicPartition, this.recordCount);
+        }
     }
 
     public ByteBuffer initialBuffer() {

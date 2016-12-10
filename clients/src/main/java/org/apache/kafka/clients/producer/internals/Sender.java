@@ -94,6 +94,9 @@ public class Sender implements Runnable {
     /* the max time to wait for the server to respond to the request*/
     private final int requestTimeout;
 
+    /* all the state related to transactions, in particular the PID, epoch, and sequence numbers */
+    private final TransactionState transactionState;
+
     public Sender(KafkaClient client,
                   Metadata metadata,
                   RecordAccumulator accumulator,
@@ -103,7 +106,7 @@ public class Sender implements Runnable {
                   int retries,
                   Metrics metrics,
                   Time time,
-                  int requestTimeout) {
+                  int requestTimeout, TransactionState transactionState) {
         this.client = client;
         this.accumulator = accumulator;
         this.metadata = metadata;
@@ -115,6 +118,7 @@ public class Sender implements Runnable {
         this.time = time;
         this.sensors = new SenderMetrics(metrics);
         this.requestTimeout = requestTimeout;
+        this.transactionState = transactionState;
     }
 
     /**
@@ -166,6 +170,12 @@ public class Sender implements Runnable {
      */
     void run(long now) {
         Cluster cluster = metadata.fetch();
+        if (!transactionState.pidIsSet()) {
+            long pid = getPID();
+            transactionState.setPid(pid);
+
+        }
+
         // get the list of partitions with data ready to send
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
@@ -245,6 +255,13 @@ public class Sender implements Runnable {
     public void forceClose() {
         this.forceClose = true;
         initiateClose();
+    }
+
+    private long getPID() {
+        // Send an InitPIDRequest, wait for the response, retrieve the PID from the response if success. Return it.
+        // Otherwise throw exception.
+        return 234343L;
+
     }
 
     /**
