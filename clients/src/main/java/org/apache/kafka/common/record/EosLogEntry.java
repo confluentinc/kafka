@@ -126,6 +126,12 @@ public class EosLogEntry extends LogEntry.ShallowLogEntry {
     }
 
     @Override
+    public int lastSequence() {
+        // FIXME: cast to int
+        return firstSequence() + (int) Utils.readUnsignedInt(buffer, OFFSET_DELTA_OFFSET);
+    }
+
+    @Override
     public CompressionType compressionType() {
         return CompressionType.forId(attributes() & COMPRESSION_CODEC_MASK);
     }

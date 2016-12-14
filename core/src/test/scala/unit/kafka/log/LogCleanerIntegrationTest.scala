@@ -138,7 +138,7 @@ class LogCleanerIntegrationTest(compressionCodec: String) {
       new String(random.alphanumeric.take(length).toArray)
     }
     val value = messageValue(128)
-    val messageSet = TestUtils.records(value = value.getBytes, codec = codec, key = key.toString.getBytes,
+    val messageSet = TestUtils.singletonRecords(value = value.getBytes, codec = codec, key = key.toString.getBytes,
       magicValue = messageFormatVersion)
     (value, messageSet)
   }
@@ -262,7 +262,7 @@ class LogCleanerIntegrationTest(compressionCodec: String) {
                         startKey: Int = 0, magicValue: Byte = Record.MAGIC_VALUE_V1): Seq[(Int, String, Long)] = {
     for(_ <- 0 until numDups; key <- startKey until (startKey + numKeys)) yield {
       val value = counter.toString
-      val appendInfo = log.append(TestUtils.records(value = value.toString.getBytes, codec = codec,
+      val appendInfo = log.append(TestUtils.singletonRecords(value = value.toString.getBytes, codec = codec,
         key = key.toString.getBytes, magicValue = magicValue), assignOffsets = true)
       counter += 1
       (key, value, appendInfo.firstOffset)

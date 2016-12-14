@@ -27,32 +27,30 @@ public class InitPIDResponse extends AbstractResponse {
     private static final String PRODUCER_ID_KEY_NAME = "pid";
     private static final String EPOCH_KEY_NAME = "epoch";
     private static final String ERROR_CODE_KEY_NAME = "error_code";
+    private final short errorCode;
     private final long producerId;
     private final short epoch;
-    private final short errorCode;
 
-    public InitPIDResponse(long producerId, short epoch, Errors errors) {
+    public InitPIDResponse(Errors errors, long producerId, short epoch) {
         super(new Struct(CURRENT_SCHEMA));
+        struct.set(ERROR_CODE_KEY_NAME, errors.code());
         struct.set(PRODUCER_ID_KEY_NAME, producerId);
         struct.set(EPOCH_KEY_NAME, epoch);
-        struct.set(ERROR_CODE_KEY_NAME, errors.code());
+        this.errorCode = errors.code();
         this.producerId = producerId;
         this.epoch = epoch;
-        this.errorCode = errors.code();
-        // Stub implementation.
-
     }
 
     public InitPIDResponse(Struct struct) {
         super(struct);
+        this.errorCode = struct.getShort(ERROR_CODE_KEY_NAME);
         this.producerId = struct.getLong(PRODUCER_ID_KEY_NAME);
         this.epoch = struct.getShort(EPOCH_KEY_NAME);
-        this.errorCode = struct.getShort(ERROR_CODE_KEY_NAME);
     }
 
     public InitPIDResponse(Errors errors) {
-        this(INVALID_PID, (short) 0, errors);
-   }
+        this(errors, INVALID_PID, (short) 0);
+    }
 
     public static InitPIDResponse parse(ByteBuffer buffer) {
         return new InitPIDResponse(CURRENT_SCHEMA.read(buffer));
@@ -70,6 +68,4 @@ public class InitPIDResponse extends AbstractResponse {
         return epoch;
     }
 
-
 }
-

@@ -254,7 +254,7 @@ class LogCleanerTest extends JUnitSuite {
     val log = makeLog(config = LogConfig.fromProps(logConfig.originals, logProps))
 
     // create 6 segments with only one message in each segment
-    val messageSet = TestUtils.records(value = Array.fill[Byte](25)(0), key = 1.toString.getBytes)
+    val messageSet = TestUtils.singletonRecords(value = Array.fill[Byte](25)(0), key = 1.toString.getBytes)
     for (_ <- 0 until 6)
       log.append(messageSet, assignOffsets = true)
 
@@ -272,7 +272,7 @@ class LogCleanerTest extends JUnitSuite {
     val log = makeLog(config = LogConfig.fromProps(logConfig.originals, logProps))
 
     // create 6 segments with only one message in each segment
-    val messageSet = TestUtils.records(value = Array.fill[Byte](25)(0), key = 1.toString.getBytes)
+    val messageSet = TestUtils.singletonRecords(value = Array.fill[Byte](25)(0), key = 1.toString.getBytes)
     for (_ <- 0 until 6)
       log.append(messageSet, assignOffsets = true)
 
@@ -376,7 +376,7 @@ class LogCleanerTest extends JUnitSuite {
     // append some messages to the log
     var i = 0
     while(log.numberOfSegments < 10) {
-      log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
+      log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
       i += 1
     }
 
@@ -429,12 +429,12 @@ class LogCleanerTest extends JUnitSuite {
 
     // fill up first segment
     while (log.numberOfSegments == 1)
-      log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
+      log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
 
     // forward offset and append message to next segment at offset Int.MaxValue
     val records = MemoryRecords.withLogEntries(LogEntry.create(Int.MaxValue - 1, Record.create("hello".getBytes, "hello".getBytes)))
     log.append(records, assignOffsets = false)
-    log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
+    log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
     assertEquals(Int.MaxValue, log.activeSegment.index.lastOffset)
 
     // grouping should result in a single group with maximum relative offset of Int.MaxValue
@@ -442,7 +442,7 @@ class LogCleanerTest extends JUnitSuite {
     assertEquals(1, groups.size)
 
     // append another message, making last offset of second segment > Int.MaxValue
-    log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
+    log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
 
     // grouping should not group the two segments to ensure that maximum relative offset in each group <= Int.MaxValue
     groups = cleaner.groupSegmentsBySize(log.logSegments, maxSize = Int.MaxValue, maxIndexSize = Int.MaxValue)
@@ -451,7 +451,7 @@ class LogCleanerTest extends JUnitSuite {
 
     // append more messages, creating new segments, further grouping should still occur
     while (log.numberOfSegments < 4)
-      log.append(TestUtils.records(value = "hello".getBytes, key = "hello".getBytes))
+      log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
 
     groups = cleaner.groupSegmentsBySize(log.logSegments, maxSize = Int.MaxValue, maxIndexSize = Int.MaxValue)
     assertEquals(log.numberOfSegments - 1, groups.size)
@@ -717,22 +717,22 @@ class LogCleanerTest extends JUnitSuite {
     val cleaner = makeCleaner(10)
 
     // Append a message with a large timestamp.
-    log.append(TestUtils.records(value = "0".getBytes,
-                                 key = "0".getBytes,
-                                 timestamp = time.milliseconds() + logConfig.deleteRetentionMs + 10000))
+    log.append(TestUtils.singletonRecords(value = "0".getBytes,
+                                          key = "0".getBytes,
+                                          timestamp = time.milliseconds() + logConfig.deleteRetentionMs + 10000))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 0, log.activeSegment.baseOffset))
     // Append a tombstone with a small timestamp and roll out a new log segment.
-    log.append(TestUtils.records(value = null,
-                                 key = "0".getBytes,
-                                 timestamp = time.milliseconds() - logConfig.deleteRetentionMs - 10000))
+    log.append(TestUtils.singletonRecords(value = null,
+                                          key = "0".getBytes,
+                                          timestamp = time.milliseconds() - logConfig.deleteRetentionMs - 10000))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 1, log.activeSegment.baseOffset))
     assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.shallowEntries.iterator().next().offset())
     // Append a message and roll out another log segment.
-    log.append(TestUtils.records(value = "1".getBytes,
-                                 key = "1".getBytes,
-                                 timestamp = time.milliseconds()))
+    log.append(TestUtils.singletonRecords(value = "1".getBytes,
+                                          key = "1".getBytes,
+                                          timestamp = time.milliseconds()))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 2, log.activeSegment.baseOffset))
     assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.shallowEntries.iterator().next().offset())
@@ -796,10 +796,10 @@ class LogCleanerTest extends JUnitSuite {
     record(key, value.toString.getBytes)
 
   def record(key: Int, value: Array[Byte]) =
-    TestUtils.records(key = key.toString.getBytes, value = value)
+    TestUtils.singletonRecords(key = key.toString.getBytes, value = value)
 
   def unkeyedRecord(value: Int) =
-    TestUtils.records(value = value.toString.getBytes)
+    TestUtils.singletonRecords(value = value.toString.getBytes)
 
   def tombstoneRecord(key: Int) = record(key, null)
 

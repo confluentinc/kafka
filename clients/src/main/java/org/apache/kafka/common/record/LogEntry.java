@@ -106,6 +106,10 @@ public abstract class LogEntry implements Iterable<LogRecord> {
         return 0;
     }
 
+    public int lastSequence() {
+        return 0;
+    }
+
     public CompressionType compressionType() {
         return record().compressionType();
     }

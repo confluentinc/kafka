@@ -50,6 +50,7 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.{ListenerName, Mode}
 import org.apache.kafka.common.record._
+import org.apache.kafka.common.requests.InitPIDResponse
 import org.apache.kafka.common.serialization.{ByteArraySerializer, Serializer}
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.test.{TestUtils => JTestUtils}
@@ -291,11 +292,11 @@ object TestUtils extends Logging {
   /**
    * Wrap a single record log buffer.
    */
-  def records(value: Array[Byte],
-              key: Array[Byte] = null,
-              codec: CompressionType = CompressionType.NONE,
-              timestamp: Long = Record.NO_TIMESTAMP,
-              magicValue: Byte = Record.CURRENT_MAGIC_VALUE): MemoryRecords = {
+  def singletonRecords(value: Array[Byte],
+                       key: Array[Byte] = null,
+                       codec: CompressionType = CompressionType.NONE,
+                       timestamp: Long = Record.NO_TIMESTAMP,
+                       magicValue: Byte = Record.CURRENT_MAGIC_VALUE): MemoryRecords = {
     records(magicValue = magicValue, codec = codec, (key, value, timestamp))
   }
 
@@ -308,14 +309,22 @@ object TestUtils extends Logging {
   def records(magicValue: Byte,
               codec: CompressionType,
               records: (Array[Byte], Array[Byte], Long)*): MemoryRecords = {
+    this.records(records, magicValue = magicValue, codec = codec)
+  }
+
+  def records(records: Iterable[(Array[Byte], Array[Byte], Long)],
+              magicValue: Byte = Record.CURRENT_MAGIC_VALUE,
+              codec: CompressionType = CompressionType.NONE,
+              pid: Long = InitPIDResponse.INVALID_PID,
+              epoch: Short = 0,
+              sequence: Int = 0): MemoryRecords = {
     val buf = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + records.map(r => EosLogRecord.sizeOf(r._1, r._2)).sum)
-    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME)
+    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, 0L, pid, epoch, sequence)
     records.foreach { case (key, value, timestamp) =>
       builder.append(0, timestamp, key, value)
     }
     builder.build()
   }
-
 
   /**
    * Generate an array of random bytes

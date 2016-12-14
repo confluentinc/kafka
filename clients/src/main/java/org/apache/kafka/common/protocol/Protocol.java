@@ -999,15 +999,15 @@ public class Protocol {
     );
 
     public static final Schema INIT_PRODUCER_ID_RESPONSE_V0 = new Schema(
+            new Field("error_code",
+                    INT16,
+                    "An integer error code."),
             new Field("pid",
                     INT64,
                     "The PID for the input appid. If the input appid was empty, then this is used only for ensuring idempotence of messages"),
             new Field("epoch",
                     INT16,
-                    "The epoch for the PID. Will always be 0 if no appId was specified in the request."),
-            new Field( "error_code",
-                    INT16,
-                    "An integer error code.")
+                    "The epoch for the PID. Will always be 0 if no appId was specified in the request.")
     );
 
     public static final Schema[] INIT_PRODUCER_ID_REQUEST = new Schema[] {INIT_PRODUCER_ID_REQUEST_V0};

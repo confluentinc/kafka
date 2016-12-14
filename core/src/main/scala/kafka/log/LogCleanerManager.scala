@@ -220,11 +220,8 @@ private[log] class LogCleanerManager(val logDirs: Array[File], val logs: Pool[To
       val existing = checkpoint.read().filterKeys(logs.keys) ++ update
       checkpoint.write(existing)
 
-      update match {
-        case Some((topicPartition, offset)) => {
-          logs.get(topicPartition).updateIdMap(offset)
-        }
-        case None => {}
+      update.foreach { case (topicPartition, offset) =>
+        logs.get(topicPartition).updateIdMap(offset)
       }
     }
   }

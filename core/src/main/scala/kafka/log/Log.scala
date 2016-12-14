@@ -17,31 +17,32 @@
 
 package kafka.log
 
+import java.io.{File, IOException}
+import java.text.NumberFormat
+import java.util.concurrent.atomic._
+import java.util.concurrent.{ConcurrentNavigableMap, ConcurrentSkipListMap}
+
 import kafka.api.KAFKA_0_10_0_IV0
-import kafka.idempotence.IdMapping
-import kafka.utils._
 import kafka.common._
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.{BrokerTopicStats, FetchDataInfo, LogOffsetMetadata}
-import java.io.{File, IOException}
-import java.util.concurrent.{ConcurrentNavigableMap, ConcurrentSkipListMap}
-import java.util.concurrent.atomic._
-import java.text.NumberFormat
-
+import kafka.utils._
 import org.apache.kafka.common.errors.{CorruptRecordException, OffsetOutOfRangeException, RecordBatchTooLargeException, RecordTooLargeException, UnsupportedForMessageFormatException}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.requests.ListOffsetRequest
 
-import scala.collection.Seq
-import scala.collection.JavaConverters._
 import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.{Time, Utils}
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, NoCompressionCodec}
 import org.apache.kafka.common.TopicPartition
 
+import scala.collection.JavaConverters._
+import scala.collection.Seq
+
 object LogAppendInfo {
   val UnknownLogAppendInfo = LogAppendInfo(-1, -1, Record.NO_TIMESTAMP, -1L, Record.NO_TIMESTAMP,
-    NoCompressionCodec, NoCompressionCodec, -1, -1, offsetsMonotonic = false)
+    NoCompressionCodec, NoCompressionCodec, -1, -1, offsetsMonotonic = false, pid = 0L, epoch = 0,
+    firstSequence = -1, lastSequence = -1)
 }
 
 /**
@@ -67,8 +68,11 @@ case class LogAppendInfo(var firstOffset: Long,
                          targetCodec: CompressionCodec,
                          shallowCount: Int,
                          validBytes: Int,
-                         offsetsMonotonic: Boolean)
-
+                         offsetsMonotonic: Boolean,
+                         pid: Long,
+                         epoch: Short,
+                         firstSequence: Int,
+                         lastSequence: Int)
 
 /**
  * An append-only log for storing messages.
@@ -107,10 +111,18 @@ class Log(@volatile var dir: File,
       0
   }
 
+  val topicAndPartition: TopicAndPartition = Log.parseTopicPartitionName(dir)
+
   @volatile private var nextOffsetMetadata: LogOffsetMetadata = _
+
+  /* Construct and load PID map */
+  private val pidMap = new ProducerIdMapping(topicAndPartition, config, dir)
 
   /* the actual segments of the log */
   private val segments: ConcurrentNavigableMap[java.lang.Long, LogSegment] = new ConcurrentSkipListMap[java.lang.Long, LogSegment]
+
+  val tags = Map("topic" -> topicAndPartition.topic, "partition" -> topicAndPartition.partition.toString)
+
   locally {
     val startMs = time.milliseconds
 
@@ -119,8 +131,7 @@ class Log(@volatile var dir: File,
     nextOffsetMetadata = new LogOffsetMetadata(activeSegment.nextOffset(), activeSegment.baseOffset,
       activeSegment.size.toInt)
 
-  /* Construct and load id map */
-//  private val idMap = buildAndRecoverIdMap(logEndOffset)
+    buildAndRecoverPidMap(logEndOffset)
 
     info("Completed load of log %s with %d log segments and log end offset %d in %d ms"
       .format(name, segments.size(), logEndOffset, time.milliseconds - startMs))
@@ -138,7 +149,7 @@ class Log(@volatile var dir: File,
 
   newGauge("LogStartOffset",
     new Gauge[Long] {
-      def value = logStartOffset
+      def value = logStartOffset.get
     },
     tags)
 
@@ -326,18 +337,20 @@ class Log(@volatile var dir: File,
     *
     * @param lastOffset
     *
-    * @return An instance of IdMapping
+    * @return An instance of ProducerIdMapping
     */
-  private def buildAndRecoverIdMap(lastOffset: Long): IdMapping = {
-//    val newIdMap = new IdMapping(topicAndPartition, config, dir, logStartOffset, lastOffset)
-//    // Iterate over the messages between idMap.lastSnapshotOffset
-//    // and the last offset of the active segment
-//    val msgs = read(idMap.mapEndOffset, 0, Some(logEndOffset))
-//    msgs.logBuffer.asScala.foreach(mao => {
-//      mao.firstOffset
-//    })
-//    newIdMap
-    null
+  private def buildAndRecoverPidMap(lastOffset: Long) {
+    lock synchronized {
+      pidMap.truncateAndReload(lastOffset)
+      logSegments(pidMap.mapEndOffset, lastOffset).foreach { segment =>
+        val startOffset = math.max(segment.baseOffset, pidMap.mapEndOffset)
+        val logEntries = segment.read(startOffset, Some(lastOffset), Int.MaxValue).records
+        logEntries.asScala.foreach { entry =>
+          pidMap.update(entry.pid, entry.lastSequence, entry.epoch, entry.lastOffset())
+        }
+      }
+      logStartOffset.foreach(pidMap.cleanFrom)
+    }
   }
 
   /**
@@ -345,14 +358,16 @@ class Log(@volatile var dir: File,
     * after a compaction round.
     *
     * The current contract is that we expire all ids that do not
-    * have a latest offset greater or equal to the first dity
+    * have a latest offset greater or equal to the first dirty
     * offset. The first dirty offset should be the value of the
     * newStartOffset parameter for this call.
     *
     * @param newStartOffset New start offset to clean up the map
     */
   private[log] def updateIdMap(newStartOffset: Long): Unit = {
-//    idMap.maybeClean(newStartOffset)
+    lock synchronized {
+      pidMap.cleanFrom(newStartOffset)
+    }
   }
 
   /**
@@ -370,7 +385,7 @@ class Log(@volatile var dir: File,
    * Close this log
    */
   def close() {
-    debug("Closing log " + name)
+    debug(s"Closing log $name")
     lock synchronized {
       logSegments.foreach(_.close())
     }
@@ -458,12 +473,18 @@ class Log(@volatile var dir: File,
           maxOffsetInMessages = appendInfo.lastOffset)
 
 
+        // verify that the epoch and sequence are correct before appending
+        pidMap.checkSeqAndEpoch(appendInfo.pid, appendInfo.firstSequence, appendInfo.epoch)
+
         // now append to the log
         segment.append(firstOffset = appendInfo.firstOffset,
           largestOffset = appendInfo.lastOffset,
           largestTimestamp = appendInfo.maxTimestamp,
           shallowOffsetOfMaxTimestamp = appendInfo.offsetOfMaxTimestamp,
           records = validRecords)
+
+        // update the PID sequence mapping
+        pidMap.update(appendInfo.pid, appendInfo.lastSequence, appendInfo.epoch, appendInfo.lastOffset)
 
         // increment the log end offset
         updateLogEndOffset(appendInfo.lastOffset + 1)
@@ -507,15 +528,29 @@ class Log(@volatile var dir: File,
     var monotonic = true
     var maxTimestamp = Record.NO_TIMESTAMP
     var offsetOfMaxTimestamp = -1L
+    var pid = 0L
+    var firstSequence = 0
+    var lastSequence = -1
+    var epoch: Short = 0
     for (entry <- records.asScala) {
       // update the first offset if on the first message
-      if (firstOffset < 0)
+      if (firstOffset < 0) {
         firstOffset = if (entry.magic >= Record.MAGIC_VALUE_V2) entry.firstOffset else entry.offset
+        firstSequence = entry.firstSequence()
+        pid = entry.pid
+        epoch = entry.epoch
+      }
+
       // check that offsets are monotonically increasing
       if (lastOffset >= entry.offset)
         monotonic = false
+
+      if (lastSequence > 0 && lastSequence != entry.firstSequence() + 1)
+        throw new IllegalArgumentException("Non-consecutive sequence numbers found in records")
+
       // update the last offset seen
-      lastOffset = entry.offset
+      lastOffset = entry.lastOffset
+      lastSequence = entry.lastSequence
 
       // Check if the message sizes are valid.
       val messageSize = entry.sizeInBytes
@@ -531,8 +566,9 @@ class Log(@volatile var dir: File,
 
       if (entry.timestamp > maxTimestamp) {
         maxTimestamp = entry.timestamp
-        offsetOfMaxTimestamp = lastOffset
+        offsetOfMaxTimestamp = entry.lastOffset
       }
+
       shallowMessageCount += 1
       validBytesCount += messageSize
 
@@ -545,7 +581,7 @@ class Log(@volatile var dir: File,
     val targetCodec = BrokerCompressionCodec.getTargetCompressionCodec(config.compressionType, sourceCodec)
 
     LogAppendInfo(firstOffset, lastOffset, maxTimestamp, offsetOfMaxTimestamp, Record.NO_TIMESTAMP, sourceCodec,
-      targetCodec, shallowMessageCount, validBytesCount, monotonic)
+      targetCodec, shallowMessageCount, validBytesCount, monotonic, pid, epoch, firstSequence, lastSequence)
   }
 
   /**
@@ -731,7 +767,6 @@ class Log(@volatile var dir: File,
   def deleteOldSegments(): Int = {
     if (!config.delete) return 0
     val numDeleted = deleteRetenionMsBreachedSegments() + deleteRetentionSizeBreachedSegments()
-//    idMap.maybeClean(logStartOffset)
     numDeleted
   }
 
@@ -763,7 +798,7 @@ class Log(@volatile var dir: File,
    /**
    * The earliest message offset in the log
    */
-  def logStartOffset: Long = logSegments.head.baseOffset
+  def logStartOffset: Option[Long] = logSegments.headOption.map(_.baseOffset)
 
   /**
    * The offset metadata of the next message that will be appended to the log
@@ -932,7 +967,7 @@ class Log(@volatile var dir: File,
         updateLogEndOffset(targetOffset)
         this.recoveryPoint = math.min(targetOffset, this.recoveryPoint)
       }
-      buildAndRecoverIdMap(targetOffset)
+      buildAndRecoverPidMap(targetOffset)
     }
   }
 
@@ -957,7 +992,7 @@ class Log(@volatile var dir: File,
                                 preallocate = config.preallocate))
       updateLogEndOffset(newOffset)
       this.recoveryPoint = math.min(newOffset, this.recoveryPoint)
-      buildAndRecoverIdMap(newOffset)
+      buildAndRecoverPidMap(newOffset)
     }
   }
 
@@ -1192,4 +1227,3 @@ object Log {
   }
 
 }
-
