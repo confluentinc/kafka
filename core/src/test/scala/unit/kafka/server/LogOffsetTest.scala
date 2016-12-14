@@ -89,7 +89,7 @@ class LogOffsetTest extends ZooKeeperTestHarness {
                   "Log for partition [topic,0] should be created")
     val log = logManager.getLog(TopicAndPartition(topic, part)).get
     for (_ <- 0 until 20)
-      log.append(TestUtils.records(value = Integer.toString(42).getBytes()))
+      log.append(TestUtils.singletonRecords(value = Integer.toString(42).getBytes()))
     log.flush()
 
     val offsets = server.apis.fetchOffsets(logManager, new TopicPartition(topic, part), OffsetRequest.LatestTime, 15)
@@ -149,7 +149,7 @@ class LogOffsetTest extends ZooKeeperTestHarness {
     val logManager = server.getLogManager
     val log = logManager.createLog(TopicAndPartition(topic, part), logManager.defaultConfig)
     for (_ <- 0 until 20)
-      log.append(TestUtils.records(value = Integer.toString(42).getBytes()))
+      log.append(TestUtils.singletonRecords(value = Integer.toString(42).getBytes()))
     log.flush()
 
     val now = time.milliseconds + 30000 // pretend it is the future to avoid race conditions with the fs
@@ -177,7 +177,7 @@ class LogOffsetTest extends ZooKeeperTestHarness {
     val logManager = server.getLogManager
     val log = logManager.createLog(TopicAndPartition(topic, part), logManager.defaultConfig)
     for (_ <- 0 until 20)
-      log.append(TestUtils.records(value = Integer.toString(42).getBytes()))
+      log.append(TestUtils.singletonRecords(value = Integer.toString(42).getBytes()))
     log.flush()
 
     val offsets = server.apis.fetchOffsets(logManager, new TopicPartition(topic, part), OffsetRequest.EarliestTime, 10)

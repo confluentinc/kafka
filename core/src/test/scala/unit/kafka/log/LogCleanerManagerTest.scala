@@ -54,7 +54,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     */
   @Test
   def testLogsWithSegmentsToDeleteShouldNotConsiderCleanupPolicyDeleteLogs(): Unit = {
-    val records = TestUtils.records("test".getBytes)
+    val records = TestUtils.singletonRecords("test".getBytes)
     val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
@@ -67,7 +67,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     */
   @Test
   def testLogsWithSegmentsToDeleteShouldConsiderCleanupPolicyCompactDeleteLogs(): Unit = {
-    val records = TestUtils.records("test".getBytes, key="test".getBytes)
+    val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
     val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact + "," + LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
@@ -81,7 +81,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     */
   @Test
   def testLogsWithSegmentsToDeleteShouldNotConsiderCleanupPolicyCompactLogs(): Unit = {
-    val records = TestUtils.records("test".getBytes, key="test".getBytes)
+    val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
     val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 

@@ -347,13 +347,7 @@ class LogManager(val logDirs: Array[File],
   /**
    * Get the log if it exists, otherwise return None
    */
-  def getLog(topicAndPartition: TopicAndPartition): Option[Log] = {
-    val log = logs.get(topicAndPartition)
-    if (log == null)
-      None
-    else
-      Some(log)
-  }
+  def getLog(topicAndPartition: TopicAndPartition): Option[Log] = Option(logs.get(topicAndPartition))
 
   /**
    * Create a log for the given topic and the given partition
@@ -465,7 +459,7 @@ class LogManager(val logDirs: Array[File],
       // count the number of logs in each parent directory (including 0 for empty directories
       val logCounts = allLogs.groupBy(_.dir.getParent).mapValues(_.size)
       val zeros = logDirs.map(dir => (dir.getPath, 0)).toMap
-      var dirCounts = (zeros ++ logCounts).toBuffer
+      val dirCounts = (zeros ++ logCounts).toBuffer
     
       // choose the directory with the least logs in it
       val leastLoaded = dirCounts.sortBy(_._2).head

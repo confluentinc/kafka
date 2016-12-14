@@ -46,7 +46,6 @@ public class InitPIDRequest extends AbstractRequest {
     @Override
     public AbstractResponse getErrorResponse(int versionId, Throwable e) {
         return new InitPIDResponse(Errors.forException(e));
-
     }
 
     public static InitPIDRequest parse(ByteBuffer buffer, int versionId) {
@@ -60,4 +59,5 @@ public class InitPIDRequest extends AbstractRequest {
     public String appId() {
         return  appId;
     }
+
 }

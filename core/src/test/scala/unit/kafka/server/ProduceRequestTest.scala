@@ -70,7 +70,7 @@ class ProduceRequestTest extends BaseRequestTest {
   def testCorruptLz4ProduceRequest() {
     val (partition, leader) = createTopicAndFindPartitionWithLeader("topic")
     val timestamp = 1000000
-    val recordBuffer = TestUtils.records(codec = CompressionType.LZ4, timestamp = timestamp,
+    val recordBuffer = TestUtils.singletonRecords(codec = CompressionType.LZ4, timestamp = timestamp,
       key = "key".getBytes, value = "value".getBytes).buffer()
     // Change the lz4 checksum value so that it doesn't match the contents
     recordBuffer.array.update(40, 3) // FIXME: Is this index significant? For older magic, the CRC should be at offset 13

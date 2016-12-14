@@ -47,6 +47,7 @@ import org.apache.kafka.common.requests.SaslHandshakeResponse
 
 import scala.collection._
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 /**
  * Logic to handle the various Kafka requests
@@ -65,6 +66,8 @@ class KafkaApis(val requestChannel: RequestChannel,
                 val quotas: QuotaManagers,
                 val clusterId: String,
                 time: Time) extends Logging {
+
+  val random = new Random()
 
   this.logIdent = "[KafkaApi-%d] ".format(brokerId)
 
@@ -1234,27 +1237,33 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   def handleInitPIDRequest(request: RequestChannel.Request): Unit = {
-    // Without AppID, return random 64bit PID.
-    throw UnsupportedOperationException
+    val initPidRequest = request.body.asInstanceOf[InitPIDRequest]
+    if (initPidRequest.appId != null)
+      throw new UnsupportedOperationException
+
+    val pid = math.abs(random.nextLong())
+    val epoch: Short = 0
+    val responseBody = new InitPIDResponse(Errors.NONE, pid, epoch)
+
+    trace(s"Generated new PID $pid from InitPIDRequest from client ${request.header.clientId}")
+    requestChannel.sendResponse(new RequestChannel.Response(request, responseBody))
   }
 
   def handleBeginTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
 
   def handleEndTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
 
   def handleAbortTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
-
 
   def handleAddPartitionToTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw UnsupportedOperationException
+    throw new UnsupportedOperationException
   }
-
 
   def authorizeClusterAction(request: RequestChannel.Request): Unit = {
     if (!authorize(request.session, ClusterAction, Resource.ClusterResource))

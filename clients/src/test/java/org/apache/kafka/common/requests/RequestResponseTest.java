@@ -583,7 +583,7 @@ public class RequestResponseTest {
     }
 
     private InitPIDResponse createInitPIDResponse() {
-        return new InitPIDResponse(3332, (short) 3, Errors.NONE);
+        return new InitPIDResponse(Errors.NONE, 3332, (short) 3);
     }
 
     private static class ByteBufferChannel implements GatheringByteChannel {
