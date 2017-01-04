@@ -728,14 +728,14 @@ class LogCleanerTest extends JUnitSuite {
                                           timestamp = time.milliseconds() - logConfig.deleteRetentionMs - 10000))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 1, log.activeSegment.baseOffset))
-    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.shallowEntries.iterator().next().offset())
+    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.entries.iterator().next().offset())
     // Append a message and roll out another log segment.
     log.append(TestUtils.singletonRecords(value = "1".getBytes,
                                           key = "1".getBytes,
                                           timestamp = time.milliseconds()))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 2, log.activeSegment.baseOffset))
-    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.shallowEntries.iterator().next().offset())
+    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.entries.iterator().next().offset())
   }
 
   private def writeToLog(log: Log, keysAndValues: Iterable[(Int, Int)], offsetSeq: Iterable[Long]): Iterable[Long] = {

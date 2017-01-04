@@ -38,7 +38,12 @@ public class MemoryRecords extends AbstractRecords {
         }
     };
 
-    private final Iterable<LogEntry> deepEntries = deepEntries(false);
+    private final Iterable<LogEntry> deepEntries = new Iterable<LogEntry>() {
+        @Override
+        public Iterator<LogEntry> iterator() {
+            return deepIterator(false, Integer.MAX_VALUE);
+        }
+    };
 
     private int validBytes = -1;
 
@@ -92,7 +97,7 @@ public class MemoryRecords extends AbstractRecords {
             return validBytes;
 
         int bytes = 0;
-        for (LogEntry entry : shallowEntries())
+        for (LogEntry entry : entries())
             bytes += entry.sizeInBytes();
 
         this.validBytes = bytes;
@@ -193,26 +198,17 @@ public class MemoryRecords extends AbstractRecords {
     }
 
     @Override
-    public Iterable<LogEntry.ShallowLogEntry> shallowEntries() {
+    public Iterable<LogEntry.ShallowLogEntry> entries() {
         return shallowEntries;
     }
 
-    public Iterator<LogEntry.ShallowLogEntry> shallowIterator() {
+    private Iterator<LogEntry.ShallowLogEntry> shallowIterator() {
         return RecordsIterator.shallowIterator(new ByteBufferLogInputStream(buffer.duplicate(), Integer.MAX_VALUE));
     }
 
     @Override
     public Iterable<LogEntry> deepEntries() {
         return deepEntries;
-    }
-
-    public Iterable<LogEntry> deepEntries(final boolean ensureMatchingMagic) {
-        return new Iterable<LogEntry>() {
-            @Override
-            public Iterator<LogEntry> iterator() {
-                return deepIterator(ensureMatchingMagic, Integer.MAX_VALUE);
-            }
-        };
     }
 
     private Iterator<LogEntry> deepIterator(boolean ensureMatchingMagic, int maxMessageSize) {
@@ -222,7 +218,7 @@ public class MemoryRecords extends AbstractRecords {
 
     @Override
     public String toString() {
-        Iterator<LogRecord> iter = records();
+        Iterator<LogRecord> iter = records().iterator();
         StringBuilder builder = new StringBuilder();
         builder.append('[');
         while (iter.hasNext()) {

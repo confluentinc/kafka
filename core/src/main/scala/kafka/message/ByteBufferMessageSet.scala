@@ -166,7 +166,7 @@ class ByteBufferMessageSet(val buffer: ByteBuffer) extends MessageSet with Loggi
   /** When flag isShallow is set to be true, we do a shallow iteration: just traverse the first level of messages. **/
   private def internalIterator(isShallow: Boolean = false): Iterator[MessageAndOffset] = {
     val entries = if (isShallow)
-      asRecords.shallowEntries
+      asRecords.entries
     else
       asRecords.deepEntries
     entries.iterator.asScala.map(MessageAndOffset.fromLogEntry)

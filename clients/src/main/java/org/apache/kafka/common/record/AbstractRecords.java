@@ -24,30 +24,16 @@ import java.util.List;
 
 public abstract class AbstractRecords implements Records {
 
-    private final Iterable<Record> records = new Iterable<Record>() {
+    private final Iterable<LogRecord> records = new Iterable<LogRecord>() {
         @Override
-        public Iterator<Record> iterator() {
-            return new Iterator<Record>() {
-                private final Iterator<? extends LogEntry> deepEntries = deepEntries().iterator();
-                @Override
-                public boolean hasNext() {
-                    return deepEntries.hasNext();
-                }
-                @Override
-                public Record next() {
-                    return deepEntries.next().record();
-                }
-                @Override
-                public void remove() {
-                    throw new UnsupportedOperationException("Removal not supported");
-                }
-            };
+        public Iterator<LogRecord> iterator() {
+            return recordsIterator();
         }
     };
 
     @Override
     public boolean hasMatchingShallowMagic(byte magic) {
-        for (LogEntry entry : this)
+        for (LogEntry entry : entries())
             if (entry.magic() != magic)
                 return false;
         return true;
@@ -55,7 +41,7 @@ public abstract class AbstractRecords implements Records {
 
     @Override
     public boolean hasCompatibleMagic(byte magic) {
-        for (LogEntry entry : this)
+        for (LogEntry entry : entries())
             if (entry.magic() > magic)
                 return false;
         return true;
@@ -66,7 +52,7 @@ public abstract class AbstractRecords implements Records {
      */
     @Override
     public Records toMessageFormat(byte toMagic) {
-        List<LogRecord> records = Utils.toList(records());
+        List<LogRecord> records = Utils.toList(records().iterator());
         if (records.isEmpty()) {
             // This indicates that the message is too large, which indicates that the buffer is not large
             // enough to hold a full log entry. We just return all the bytes in the file message set.
@@ -82,15 +68,9 @@ public abstract class AbstractRecords implements Records {
             // cause some timestamp information to be lost (e.g. if the timestamp type was changed) since
             // we are essentially merging multiple message sets. However, currently this method is only
             // used for down-conversion, so we've ignored the problem.
-            LogEntry firstEntry = iterator().next();
+            LogEntry firstEntry = entries().iterator().next();
             return MemoryRecords.withLogRecords(toMagic, firstEntry.compressionType(), firstEntry.timestampType(), records);
         }
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public Iterator<LogEntry> iterator() {
-        return (Iterator<LogEntry>) shallowEntries().iterator();
     }
 
     /**
@@ -98,9 +78,13 @@ public abstract class AbstractRecords implements Records {
      * @return An iterator over the records
      */
     @Override
-    public Iterator<LogRecord> records() {
+    public Iterable<LogRecord> records() {
+        return records;
+    }
+
+    private Iterator<LogRecord> recordsIterator() {
         return new AbstractIterator<LogRecord>() {
-            private final Iterator<? extends LogEntry> entries = shallowEntries().iterator();
+            private final Iterator<? extends LogEntry> entries = entries().iterator();
             private Iterator<LogRecord> records;
 
             @Override
@@ -118,10 +102,6 @@ public abstract class AbstractRecords implements Records {
         };
     }
 
-    public Iterator<Record> rawRecords() {
-        return records.iterator();
-    }
-
     public static int estimatedSize(CompressionType compressionType, Iterable<LogEntry> entries) {
         int size = 0;
         for (LogEntry entry : entries)
@@ -129,10 +109,10 @@ public abstract class AbstractRecords implements Records {
         return compressionType == CompressionType.NONE ? size : Math.min(Math.max(size / 2, 1024), 1 << 16);
     }
 
-    public static int estimatedSizeRecords(CompressionType compressionType, Iterable<LogRecord> entries) {
+    public static int estimatedSizeRecords(CompressionType compressionType, Iterable<LogRecord> records) {
         int size = 0;
-        for (LogRecord entry : entries)
-            size += entry.sizeInBytes();
+        for (LogRecord record : records)
+            size += record.sizeInBytes();
         // TODO: Account for header overhead
         return compressionType == CompressionType.NONE ? size : Math.min(Math.max(size / 2, 1024), 1 << 16);
     }

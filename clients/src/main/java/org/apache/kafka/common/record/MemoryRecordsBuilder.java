@@ -253,7 +253,7 @@ public class MemoryRecordsBuilder {
             if (lastOffset >= 0 && offset <= lastOffset)
                 throw new IllegalArgumentException(String.format("Illegal offset %s following previous offset %s (Offsets must increase monotonically).", offset, lastOffset));
 
-            if (magic > 1)
+            if (magic > Record.MAGIC_VALUE_V1)
                 return appendEosRecord(offset, timestamp, key, value);
 
             if (compressionType == CompressionType.NONE && timestampType == TimestampType.LOG_APPEND_TIME)

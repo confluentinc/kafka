@@ -247,7 +247,7 @@ class ReplicaManagerTest {
       
       assertTrue(fetchCallbackFired)
       assertEquals("Should not give an exception", Errors.NONE.code, fetchError)
-      assertTrue("Should return some data", fetchedRecords.shallowEntries.iterator.hasNext)
+      assertTrue("Should return some data", fetchedRecords.entries.iterator.hasNext)
       fetchCallbackFired = false
       
       // Fetch a message above the high watermark as a consumer

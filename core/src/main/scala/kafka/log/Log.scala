@@ -444,7 +444,7 @@ class Log(@volatile var dir: File,
           // re-validate message sizes if there's a possibility that they have changed (due to re-compression or message
           // format conversion)
           if (validateAndOffsetAssignResult.messageSizeMaybeChanged) {
-            for (logEntry <- validRecords.shallowEntries.asScala) {
+            for (logEntry <- validRecords.entries.asScala) {
               if (logEntry.sizeInBytes > config.maxMessageSize) {
                 // we record the original message set size instead of the trimmed size
                 // to be consistent with pre-compression bytesRejectedRate recording

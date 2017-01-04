@@ -18,19 +18,18 @@ package org.apache.kafka.common.record;
 
 import java.io.IOException;
 import java.nio.channels.GatheringByteChannel;
-import java.util.Iterator;
 
 /**
  * Interface for accessing the records contained in a log. The log itself is represented as a sequence of log entries.
  * Each log entry consists of an 8 byte offset, a 4 byte record size, and a "shallow" {@link Record record}.
  * If the entry is not compressed, then each entry will have only the shallow record contained inside it. If it is
  * compressed, the entry contains "deep" records, which are packed into the value field of the shallow record. To iterate
- * over the shallow records, use {@link #shallowEntries()}; for the deep records, use {@link #deepEntries()}. Note
+ * over the shallow entries, use {@link #entries()}; for the deep records, use {@link #records()}. Note
  * that the deep iterator handles both compressed and non-compressed entries: if the entry is not compressed, the
  * shallow record is returned; otherwise, the shallow record is decompressed and the deep entries are returned.
  * See {@link MemoryRecords} for the in-memory representation and {@link FileRecords} for the on-disk representation.
  */
-public interface Records extends Iterable<LogEntry> {
+public interface Records {
 
     int OFFSET_OFFSET = 0;
     int OFFSET_LENGTH = 8;
@@ -61,15 +60,16 @@ public interface Records extends Iterable<LogEntry> {
      * record data (see {@link FileLogInputStream.FileChannelLogEntry#magic()}.
      * @return An iterator over the shallow entries of the log
      */
-    Iterable<? extends LogEntry> shallowEntries();
+    Iterable<? extends LogEntry> entries();
 
     /**
      * Get the deep log entries (i.e. descend into compressed message sets). For the deep records,
      * there are fewer options for optimization since the data must be decompressed before it can be
      * returned. Hence there is little advantage in allowing subclasses to return a more specific type
-     * as we do for {@link #shallowEntries()}.
+     * as we do for {@link #entries()}.
      * @return An iterator over the deep entries of the log
      */
+    @Deprecated
     Iterable<LogEntry> deepEntries();
 
     /**
@@ -99,5 +99,5 @@ public interface Records extends Iterable<LogEntry> {
      * Get an iterator over the records in this log (i.e. the "deep" entries)
      * @return The record iterator
      */
-    Iterator<LogRecord> records();
+    Iterable<LogRecord> records();
 }

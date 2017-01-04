@@ -261,13 +261,13 @@ class LogTest extends JUnitSuite {
       log.append(TestUtils.singletonRecords(value = value))
 
     for(i <- values.indices) {
-      val read = log.read(i, 100, Some(i+1)).records.shallowEntries.iterator.next()
+      val read = log.read(i, 100, Some(i+1)).records.entries.iterator.next()
       assertEquals("Offset read should match order appended.", i, read.offset)
       val actual = read.iterator().next()
       assertNull(s"Key should be null", actual.key)
       assertEquals(s"Values not equal", ByteBuffer.wrap(values(i)), actual.value)
     }
-    assertEquals("Reading beyond the last message returns nothing.", 0, log.read(values.length, 100, None).records.shallowEntries.asScala.size)
+    assertEquals("Reading beyond the last message returns nothing.", 0, log.read(values.length, 100, None).records.entries.asScala.size)
   }
 
   /**
@@ -287,7 +287,7 @@ class LogTest extends JUnitSuite {
       log.append(MemoryRecords.withLogEntries(LogEntry.create(messageIds(i), records(i))), assignOffsets = false)
     for(i <- 50 until messageIds.max) {
       val idx = messageIds.indexWhere(_ >= i)
-      val read = log.read(i, 100, None).records.shallowEntries.iterator.next()
+      val read = log.read(i, 100, None).records.entries.iterator.next()
       assertEquals("Offset read should match message id.", messageIds(idx), read.offset)
       assertEquals("Message should match appended.", records(idx), read.record)
     }
@@ -313,7 +313,7 @@ class LogTest extends JUnitSuite {
     log.logSegments.head.truncateTo(1)
 
     assertEquals("A read should now return the last message in the log", log.logEndOffset - 1,
-      log.read(1, 200, None).records.shallowEntries.iterator.next().offset)
+      log.read(1, 200, None).records.entries.iterator.next().offset)
   }
 
   @Test
@@ -334,15 +334,14 @@ class LogTest extends JUnitSuite {
         log.read(i, 1, minOneMessage = true),
         log.read(i, 100, minOneMessage = true),
         log.read(i, 100, Some(10000), minOneMessage = true)
-      ).map(_.records.shallowEntries.iterator.next())
+      ).map(_.records.entries.iterator.next())
       reads.foreach { read =>
         assertEquals("Offset read should match message id.", messageIds(idx), read.offset)
         assertEquals("Message should match appended.", records(idx), read.record)
       }
 
-      assertEquals(Seq.empty, log.read(i, 1, Some(1), minOneMessage = true).records.shallowEntries.asScala.toIndexedSeq)
+      assertEquals(Seq.empty, log.read(i, 1, Some(1), minOneMessage = true).records.asScala.toIndexedSeq)
     }
-
   }
 
   @Test
@@ -425,7 +424,7 @@ class LogTest extends JUnitSuite {
     /* do successive reads to ensure all our messages are there */
     var offset = 0L
     for(i <- 0 until numMessages) {
-      val messages = log.read(offset, 1024*1024).records.shallowEntries
+      val messages = log.read(offset, 1024*1024).records.entries
       val head = messages.iterator.next()
       assertEquals("Offsets not equal", offset, head.offset)
 
@@ -437,7 +436,7 @@ class LogTest extends JUnitSuite {
       offset = head.offset + 1
     }
     val lastRead = log.read(startOffset = numMessages, maxLength = 1024*1024, maxOffset = Some(numMessages + 1)).records
-    assertEquals("Should be no more messages", 0, lastRead.shallowEntries.asScala.size)
+    assertEquals("Should be no more messages", 0, lastRead.asScala.size)
 
     // check that rolling the log forced a flushed the log--the flush is asyn so retry in case of failure
     TestUtils.retry(1000L){
@@ -698,7 +697,7 @@ class LogTest extends JUnitSuite {
     assertTrue("The index should have been rebuilt", log.logSegments.head.index.entries > 0)
     assertTrue("The time index should have been rebuilt", log.logSegments.head.timeIndex.entries > 0)
     for(i <- 0 until numMessages) {
-      assertEquals(i, log.read(i, 100, None).records.shallowEntries.iterator.next().offset)
+      assertEquals(i, log.read(i, 100, None).records.entries.iterator.next().offset)
       if (i == 0)
         assertEquals(log.logSegments.head.baseOffset, log.fetchOffsetsByTimestamp(time.milliseconds + i * 10).get.offset)
       else
@@ -774,7 +773,7 @@ class LogTest extends JUnitSuite {
     log = new Log(logDir, config, recoveryPoint = 200L, time.scheduler, time)
     assertEquals("Should have %d messages when log is reopened".format(numMessages), numMessages, log.logEndOffset)
     for(i <- 0 until numMessages) {
-      assertEquals(i, log.read(i, 100, None).records.shallowEntries.iterator.next().offset)
+      assertEquals(i, log.read(i, 100, None).records.entries.iterator.next().offset)
       if (i == 0)
         assertEquals(log.logSegments.head.baseOffset, log.fetchOffsetsByTimestamp(time.milliseconds + i * 10).get.offset)
       else

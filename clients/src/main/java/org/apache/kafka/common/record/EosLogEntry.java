@@ -247,6 +247,20 @@ public class EosLogEntry extends LogEntry.ShallowLogEntry {
         return buffer.get(ATTRIBUTES_OFFSET);
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        EosLogEntry that = (EosLogEntry) o;
+        return buffer != null ? buffer.equals(that.buffer) : that.buffer == null;
+    }
+
+    @Override
+    public int hashCode() {
+        return buffer != null ? buffer.hashCode() : 0;
+    }
+
     public static void write(DataOutputStream out,
                              long offset,
                              int offsetDelta,

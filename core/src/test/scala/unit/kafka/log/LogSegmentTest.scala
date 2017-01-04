@@ -286,7 +286,7 @@ class LogSegmentTest {
       val position = recordPosition.position + TestUtils.random.nextInt(15)
       TestUtils.writeNonsenseToFile(seg.log.file, position, (seg.log.file.length - position).toInt)
       seg.recover(64*1024)
-      assertEquals("Should have truncated off bad messages.", (0 until offsetToBeginCorruption).toList, seg.log.shallowEntries.asScala.map(_.offset).toList)
+      assertEquals("Should have truncated off bad messages.", (0 until offsetToBeginCorruption).toList, seg.log.entries.asScala.map(_.offset).toList)
       seg.delete()
     }
   }

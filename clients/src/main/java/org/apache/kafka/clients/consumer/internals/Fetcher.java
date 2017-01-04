@@ -756,7 +756,7 @@ public class Fetcher<K, V> {
                 }
 
                 List<ConsumerRecord<K, V>> parsed = new ArrayList<>();
-                for (LogEntry entry : partition.records.shallowEntries()) {
+                for (LogEntry entry : partition.records.entries()) {
                     for (LogRecord record : entry) {
                         // Skip the messages earlier than current position.
                         if (record.offset() >= position) {

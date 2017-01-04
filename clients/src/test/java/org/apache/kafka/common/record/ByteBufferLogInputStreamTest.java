@@ -37,7 +37,7 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer recordsBuffer = builder.build().buffer();
         recordsBuffer.limit(recordsBuffer.limit() - 5);
 
-        Iterator<LogEntry.ShallowLogEntry> iterator = MemoryRecords.readableRecords(recordsBuffer).shallowIterator();
+        Iterator<LogEntry.ShallowLogEntry> iterator = MemoryRecords.readableRecords(recordsBuffer).entries().iterator();
         assertTrue(iterator.hasNext());
         LogEntry.ShallowLogEntry first = iterator.next();
         assertEquals(0L, first.offset());
@@ -50,7 +50,7 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V1, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().shallowIterator();
+        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
         LogEntry.ShallowLogEntry entry = iterator.next();
@@ -67,7 +67,7 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V0, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().shallowIterator();
+        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
         LogEntry.ShallowLogEntry entry = iterator.next();
@@ -81,7 +81,7 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V1, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().shallowIterator();
+        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
         LogEntry.ShallowLogEntry entry = iterator.next();
@@ -98,7 +98,7 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V0, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().shallowIterator();
+        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
         LogEntry.ShallowLogEntry entry = iterator.next();

@@ -61,10 +61,10 @@ public class MemoryRecordsTest {
             builder.append(timestamps[i], keys[i], values[i]);
 
 
-        MemoryRecords logBuffer = builder.build();
+        MemoryRecords memoryRecords = builder.build();
         for (int iteration = 0; iteration < 2; iteration++) {
             int total = 0;
-            for (LogEntry entry : logBuffer) {
+            for (LogEntry entry : memoryRecords.entries()) {
                 assertTrue(entry.isValid());
                 assertEquals(compression, entry.compressionType());
                 assertEquals(firstOffset + total, entry.firstOffset());
@@ -154,7 +154,7 @@ public class MemoryRecordsTest {
 
         MemoryRecords filteredRecords = MemoryRecords.readableRecords(filtered);
 
-        List<LogEntry.ShallowLogEntry> shallowEntries = TestUtils.toList(filteredRecords.shallowIterator());
+        List<LogEntry.ShallowLogEntry> shallowEntries = TestUtils.toList(filteredRecords.entries().iterator());
         List<Long> expectedOffsets = magic < Record.MAGIC_VALUE_V2 && compression == CompressionType.NONE ? asList(1L, 4L, 5L, 6L) : asList(1L, 5L, 6L);
         assertEquals(expectedOffsets.size(), shallowEntries.size());
 
@@ -167,7 +167,7 @@ public class MemoryRecordsTest {
                     shallowEntry.timestampType());
         }
 
-        List<LogRecord> records = TestUtils.toList(filteredRecords.records());
+        List<LogRecord> records = TestUtils.toList(filteredRecords.records().iterator());
         assertEquals(4, records.size());
 
         LogRecord first = records.get(0);
@@ -228,7 +228,7 @@ public class MemoryRecordsTest {
         filtered.flip();
         MemoryRecords filteredRecords = MemoryRecords.readableRecords(filtered);
 
-        List<LogEntry.ShallowLogEntry> shallowEntries = TestUtils.toList(filteredRecords.shallowIterator());
+        List<LogEntry.ShallowLogEntry> shallowEntries = TestUtils.toList(filteredRecords.entries().iterator());
         assertEquals(magic < Record.MAGIC_VALUE_V2 && compression == CompressionType.NONE ? 3 : 2, shallowEntries.size());
 
         for (LogEntry shallowEntry : shallowEntries) {

@@ -186,7 +186,7 @@ class FetchRequestTest extends BaseRequestTest {
       val records = partitionData.records
       responseBufferSize += records.sizeInBytes
 
-      val entries = records.shallowEntries.asScala.toIndexedSeq
+      val entries = records.entries.asScala.toIndexedSeq
       assertTrue(entries.size < numMessagesPerPartition)
       val entriesSize = entries.map(_.sizeInBytes).sum
       responseSize += entriesSize

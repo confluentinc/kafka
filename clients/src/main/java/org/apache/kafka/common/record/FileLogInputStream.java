@@ -95,9 +95,9 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         private LogEntry underlying;
 
         private FileChannelLogEntry(long offset,
-                                   FileChannel channel,
-                                   int position,
-                                   int recordSize) {
+                                    FileChannel channel,
+                                    int position,
+                                    int recordSize) {
             this.offset = offset;
             this.channel = channel;
             this.position = position;
@@ -225,5 +225,27 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
             return LOG_OVERHEAD + recordSize;
         }
 
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            FileChannelLogEntry that = (FileChannelLogEntry) o;
+
+            if (offset != that.offset) return false;
+            if (position != that.position) return false;
+            if (recordSize != that.recordSize) return false;
+            return channel != null ? channel.equals(that.channel) : that.channel == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = super.hashCode();
+            result = 31 * result + (int) (offset ^ (offset >>> 32));
+            result = 31 * result + (channel != null ? channel.hashCode() : 0);
+            result = 31 * result + position;
+            result = 31 * result + recordSize;
+            return result;
+        }
     }
 }

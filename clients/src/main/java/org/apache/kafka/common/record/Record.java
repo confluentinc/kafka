@@ -244,7 +244,7 @@ public final class Record {
 
     /**
      * The timestamp of the message.
-     * @return the timstamp type or {@link TimestampType#NO_TIMESTAMP_TYPE} if the magic is 0 or the message has
+     * @return the timestamp type or {@link TimestampType#NO_TIMESTAMP_TYPE} if the magic is 0 or the message has
      *   been up-converted.
      */
     public TimestampType timestampType() {
@@ -513,7 +513,6 @@ public final class Record {
         return crc;
     }
 
-
     /**
      * Write a record using raw fields (without validation). This should only be used in testing.
      */
@@ -549,7 +548,7 @@ public final class Record {
         out.writeByte(attributes);
 
         // maybe write timestamp
-        if (magic > 0)
+        if (magic > MAGIC_VALUE_V0)
             out.writeLong(timestamp);
 
         // write the key
@@ -591,7 +590,7 @@ public final class Record {
         byte attributes = 0;
         if (type.id > 0)
             attributes = (byte) (attributes | (COMPRESSION_CODEC_MASK & type.id));
-        if (magic > 0)
+        if (magic > MAGIC_VALUE_V0)
             return timestampType.updateAttributes(attributes);
         return attributes;
     }
@@ -608,7 +607,7 @@ public final class Record {
         Crc32 crc = new Crc32();
         crc.update(magic);
         crc.update(attributes);
-        if (magic > 0)
+        if (magic > MAGIC_VALUE_V0)
             crc.updateLong(timestamp);
         // update for the key
         if (key == null) {

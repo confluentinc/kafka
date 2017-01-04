@@ -82,6 +82,10 @@ public abstract class LogEntry implements Iterable<LogRecord> {
         return offset();
     }
 
+    /**
+     * Get the next consecutive offset following the records in this log entry.
+     * @return
+     */
     public long nextOffset() {
         return offset() + 1;
     }
@@ -152,7 +156,12 @@ public abstract class LogEntry implements Iterable<LogRecord> {
      */
     @Override
     public Iterator<LogRecord> iterator() {
-        final Iterator<LogEntry> iterator = deepEntries();
+        final Iterator<LogEntry> iterator;
+        if (isCompressed())
+            iterator = new RecordsIterator.DeepRecordsIterator(this, false, Integer.MAX_VALUE);
+        else
+            iterator = Collections.singletonList(this).iterator();
+
         return new AbstractIterator<LogRecord>() {
             @Override
             protected LogRecord makeNext() {
@@ -161,12 +170,6 @@ public abstract class LogEntry implements Iterable<LogRecord> {
                 return allDone();
             }
         };
-    }
-
-    private Iterator<LogEntry> deepEntries() {
-        if (isCompressed())
-            return new RecordsIterator.DeepRecordsIterator(this, false, Integer.MAX_VALUE);
-        return Collections.singletonList(this).iterator();
     }
 
     @Override
@@ -226,11 +229,10 @@ public abstract class LogEntry implements Iterable<LogRecord> {
         return new SimpleLogEntry(offset, record);
     }
 
-
-    public static class LogRecordShim implements LogRecord {
+    private static class LogRecordShim implements LogRecord {
         private final LogEntry deepEntry;
 
-        public LogRecordShim(LogEntry deepEntry) {
+        private LogRecordShim(LogEntry deepEntry) {
             this.deepEntry = deepEntry;
         }
 
@@ -249,18 +251,8 @@ public abstract class LogEntry implements Iterable<LogRecord> {
         }
 
         @Override
-        public long nextOffset() {
-            return offset() + 1;
-        }
-
-        @Override
         public int sizeInBytes() {
             return deepEntry.sizeInBytes();
-        }
-
-        @Override
-        public byte attributes() {
-            return deepEntry.record().attributes();
         }
 
         @Override
@@ -315,9 +307,9 @@ public abstract class LogEntry implements Iterable<LogRecord> {
 
         @Override
         public String toString() {
-            return "LogRecordShim{" +
+            return "LogRecordShim(" +
                     "deepEntry=" + deepEntry +
-                    '}';
+                    ')';
         }
 
         @Override

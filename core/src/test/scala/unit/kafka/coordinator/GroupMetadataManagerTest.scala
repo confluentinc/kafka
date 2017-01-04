@@ -404,7 +404,7 @@ class GroupMetadataManagerTest {
     assertTrue(recordsCapture.hasCaptured)
 
     val records = recordsCapture.getValue.records.asScala.toList
-    recordsCapture.getValue.shallowIterator().asScala.foreach { entry =>
+    recordsCapture.getValue.entries.asScala.foreach { entry =>
       assertEquals(Record.MAGIC_VALUE_V1, entry.magic)
       assertEquals(TimestampType.CREATE_TIME, entry.timestampType)
     }
@@ -452,7 +452,7 @@ class GroupMetadataManagerTest {
     assertTrue(recordsCapture.hasCaptured)
 
     val records = recordsCapture.getValue.records.asScala.toList
-    recordsCapture.getValue.shallowIterator().asScala.foreach { entry =>
+    recordsCapture.getValue.entries.asScala.foreach { entry =>
       assertEquals(Record.MAGIC_VALUE_V1, entry.magic)
       assertEquals(TimestampType.LOG_APPEND_TIME, entry.timestampType)
     }

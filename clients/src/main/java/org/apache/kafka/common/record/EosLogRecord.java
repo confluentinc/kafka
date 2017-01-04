@@ -73,17 +73,11 @@ public class EosLogRecord implements LogRecord {
     }
 
     @Override
-    public long nextOffset() {
-        return offset() + 1;
-    }
-
-    @Override
     public int sizeInBytes() {
         return buffer.getInt(SIZE_OFFSET);
     }
 
-    @Override
-    public byte attributes() {
+    private byte attributes() {
         return buffer.get(ATTRIBUTES_OFFSET);
     }
 
