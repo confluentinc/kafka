@@ -63,6 +63,7 @@ public class SenderTest {
     private Metadata metadata = new Metadata(0, Long.MAX_VALUE, true, new ClusterResourceListeners());
     private Cluster cluster = TestUtils.singletonCluster("test", 1);
     private Metrics metrics = null;
+    private TransactionState transactionState;
     private RecordAccumulator accumulator = null;
     private Sender sender = null;
 
@@ -71,8 +72,10 @@ public class SenderTest {
         Map<String, String> metricTags = new LinkedHashMap<>();
         metricTags.put("client-id", CLIENT_ID);
         MetricConfig metricConfig = new MetricConfig().tags(metricTags);
+        this.transactionState = new TransactionState();
+        transactionState.setPid(1113);
         metrics = new Metrics(metricConfig, time);
-        accumulator = new RecordAccumulator(batchSize, 1024 * 1024, CompressionType.NONE, 0L, 0L, metrics, time);
+        accumulator = new RecordAccumulator(batchSize, 1024 * 1024, CompressionType.NONE, 0L, 0L, metrics, time, transactionState);
         sender = new Sender(client,
                             metadata,
                             this.accumulator,
@@ -82,7 +85,7 @@ public class SenderTest {
                             MAX_RETRIES,
                             metrics,
                             time,
-                            REQUEST_TIMEOUT);
+                            REQUEST_TIMEOUT, transactionState);
 
         metadata.update(cluster, time.milliseconds());
     }
@@ -141,7 +144,7 @@ public class SenderTest {
                                        maxRetries,
                                        m,
                                        time,
-                                       REQUEST_TIMEOUT);
+                                       REQUEST_TIMEOUT, transactionState);
             // do a successful retry
             Future<RecordMetadata> future = accumulator.append(tp, 0L, "key".getBytes(), "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
             sender.run(time.milliseconds()); // connect
@@ -193,7 +196,7 @@ public class SenderTest {
                 maxRetries,
                 m,
                 time,
-                REQUEST_TIMEOUT);
+                REQUEST_TIMEOUT, transactionState);
 
             // Create a two broker cluster, with partition 0 on broker 0 and partition 1 on broker 1
             Cluster cluster1 = TestUtils.clusterWith(2, "test", 2);

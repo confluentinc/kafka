@@ -48,6 +48,7 @@ public final class RecordBatch {
     private long offsetCounter = 0L;
     private boolean retry;
     private final MemoryRecordsBuilder recordsBuilder;
+    private boolean isClosed;
 
     public RecordBatch(TopicPartition tp, MemoryRecordsBuilder recordsBuilder, long now) {
         this.createdMs = now;
@@ -58,6 +59,7 @@ public final class RecordBatch {
         this.thunks = new ArrayList<>();
         this.lastAppendTime = createdMs;
         this.retry = false;
+        this.isClosed = false;
     }
 
     /**
@@ -157,7 +159,7 @@ public final class RecordBatch {
         }
 
         if (expire) {
-            close();
+            close(null);
             this.done(-1L, Record.NO_TIMESTAMP,
                       new TimeoutException("Expiring " + recordCount + " record(s) for " + topicPartition + " due to " + errorMessage));
         }
@@ -194,9 +196,19 @@ public final class RecordBatch {
     public boolean isFull() {
         return recordsBuilder.isFull();
     }
-
-    public void close() {
-        recordsBuilder.close();
+    /**
+     * Writes the final metadata in the batch and updates transaction state with the new sequence number for the
+     * TopicPartition
+     * @param transactionState the global transaction state which keeps track of sequence numbers for each TopicPartition.
+     */
+    synchronized public void close(TransactionState transactionState) {
+        if (!isClosed) {
+            recordsBuilder.close();
+            if (transactionState != null) {
+                transactionState.incrementSequenceNumber(topicPartition, this.recordCount);
+            }
+            isClosed = true;
+        }
     }
 
     public ByteBuffer buffer() {

@@ -28,7 +28,7 @@ class ProducerBounceTest extends KafkaServerTestHarness {
   private val producerBufferSize = 30000
   private val serverMessageMaxBytes =  producerBufferSize/2
 
-  val numServers = 2
+  val numServers = 4
 
   val overridingProps = new Properties()
   overridingProps.put(KafkaConfig.AutoCreateTopicsEnableProp, false.toString)
@@ -36,7 +36,9 @@ class ProducerBounceTest extends KafkaServerTestHarness {
   // Set a smaller value for the number of partitions for the offset commit topic (__consumer_offset topic)
   // so that the creation of that topic/partition(s) and subsequent leader assignment doesn't take relatively long
   overridingProps.put(KafkaConfig.OffsetsTopicPartitionsProp, 1.toString)
-
+  overridingProps.put(KafkaConfig.ControlledShutdownEnableProp, true.toString)
+  overridingProps.put(KafkaConfig.UncleanLeaderElectionEnableProp, false.toString)
+  overridingProps.put(KafkaConfig.AutoLeaderRebalanceEnableProp, false.toString)
   // This is the one of the few tests we currently allow to preallocate ports, despite the fact that this can result in transient
   // failures due to ports getting reused. We can't use random ports because of bad behavior that can result from bouncing
   // brokers too quickly when they get new, random ports. If we're not careful, the client can end up in a situation
@@ -61,9 +63,9 @@ class ProducerBounceTest extends KafkaServerTestHarness {
   override def setUp() {
     super.setUp()
 
-    producer1 = TestUtils.createNewProducer(brokerList, acks = 0, bufferSize = producerBufferSize)
-    producer2 = TestUtils.createNewProducer(brokerList, acks = 1, bufferSize = producerBufferSize)
-    producer3 = TestUtils.createNewProducer(brokerList, acks = -1, bufferSize = producerBufferSize)
+    //producer1 = TestUtils.createNewProducer(brokerList, acks = 0, bufferSize = producerBufferSize)
+    //producer2 = TestUtils.createNewProducer(brokerList, acks = 1, bufferSize = producerBufferSize)
+    //producer3 = TestUtils.createNewProducer(brokerList, acks = -1, bufferSize = producerBufferSize)
   }
 
   @After
@@ -81,19 +83,26 @@ class ProducerBounceTest extends KafkaServerTestHarness {
   @Test
   def testBrokerFailure() {
     val numPartitions = 3
-    val leaders = TestUtils.createTopic(zkUtils, topic1, numPartitions, numServers, servers)
+    val topicConfig = new Properties();
+    topicConfig.put(KafkaConfig.MinInSyncReplicasProp, 2.toString)
+    val leaders = TestUtils.createTopic(zkUtils, topic1, numPartitions, numServers, servers, topicConfig)
+
     assertTrue("Leader of all partitions of the topic should exist", leaders.values.forall(leader => leader.isDefined))
 
     val scheduler = new ProducerScheduler()
     scheduler.start
 
     // rolling bounce brokers
+
     for (_ <- 0 until numServers) {
       for (server <- servers) {
+        info("Shutting down server : %s".format(server.config.brokerId))
         server.shutdown()
         server.awaitShutdown()
+        info("Server %s shut down. Starting it up again.".format(server.config.brokerId))
         server.startup()
-        Thread.sleep(2000)
+        info("Restarted server: %s".format(server.config.brokerId))
+        Thread.sleep(10000)
       }
 
       // Make sure the producer do not see any exception in returned metadata due to broker failures
@@ -133,11 +142,13 @@ class ProducerBounceTest extends KafkaServerTestHarness {
     val producer = TestUtils.createNewProducer(brokerList, bufferSize = producerBufferSize, retries = 10)
 
     override def doWork(): Unit = {
+      info("Startinging to send messages..")
       val responses =
         for (i <- sent+1 to sent+numRecords)
         yield producer.send(new ProducerRecord[Array[Byte],Array[Byte]](topic1, null, null, i.toString.getBytes),
                             new ErrorLoggingCallback(topic1, null, null, true))
       val futures = responses.toList
+      info("sent " + numRecords + " messages")
 
       try {
         futures.map(_.get)

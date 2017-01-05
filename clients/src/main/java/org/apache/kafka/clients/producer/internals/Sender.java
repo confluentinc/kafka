@@ -34,6 +34,7 @@ import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Rate;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.record.LogEntry;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.requests.ProduceRequest;
@@ -49,6 +50,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 /**
  * The background thread that handles the sending of produce requests to the Kafka cluster. This thread makes metadata
@@ -94,6 +96,12 @@ public class Sender implements Runnable {
     /* the max time to wait for the server to respond to the request*/
     private final int requestTimeout;
 
+    /* all the state related to transactions, in particular the PID, epoch, and sequence numbers */
+    private final TransactionState transactionState;
+
+    /* Random number generator.. To be removed once we implement the InitPID request properly */
+    private final Random pidGenerator;
+
     public Sender(KafkaClient client,
                   Metadata metadata,
                   RecordAccumulator accumulator,
@@ -103,7 +111,7 @@ public class Sender implements Runnable {
                   int retries,
                   Metrics metrics,
                   Time time,
-                  int requestTimeout) {
+                  int requestTimeout, TransactionState transactionState) {
         this.client = client;
         this.accumulator = accumulator;
         this.metadata = metadata;
@@ -115,6 +123,8 @@ public class Sender implements Runnable {
         this.time = time;
         this.sensors = new SenderMetrics(metrics);
         this.requestTimeout = requestTimeout;
+        this.transactionState = transactionState;
+        this.pidGenerator = new Random();
     }
 
     /**
@@ -166,6 +176,11 @@ public class Sender implements Runnable {
      */
     void run(long now) {
         Cluster cluster = metadata.fetch();
+        if (!transactionState.pidIsSet()) {
+            long pid = getPID();
+            transactionState.setPid(pid);
+        }
+
         // get the list of partitions with data ready to send
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
@@ -247,6 +262,14 @@ public class Sender implements Runnable {
         initiateClose();
     }
 
+    private long getPID() {
+        // Send an InitPIDRequest, wait for the response, retrieve the PID from the response if success. Return it.
+        // Otherwise throw exception.
+        Long pid = Math.abs(pidGenerator.nextLong());
+        log.info("Creating new producer with PID: {}", pid);
+        return pid;
+    }
+
     /**
      * Handle a produce response
      */
@@ -289,7 +312,7 @@ public class Sender implements Runnable {
      * @param now The current POSIX time stamp in milliseconds
      */
     private void completeBatch(RecordBatch batch, Errors error, long baseOffset, long timestamp, long correlationId, long now) {
-        if (error != Errors.NONE && canRetry(batch, error)) {
+        if (error != Errors.NONE && error != Errors.DUPLICATE_SEQUENCE_NUMBER && canRetry(batch, error)) {
             // retry
             log.warn("Got error produce response with correlation id {} on topic-partition {}, retrying ({} attempts left). Error: {}",
                      correlationId,
