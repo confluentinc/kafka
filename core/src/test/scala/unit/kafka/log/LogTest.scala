@@ -191,7 +191,7 @@ class LogTest extends JUnitSuite {
     val maxJitter = 20 * 60L
 
     val logProps = new Properties()
-    logProps.put(LogConfig.SegmentMsProp, 1 * 60 * 60: java.lang.Long)
+    logProps.put(LogConfig.SegmentMsProp, 1 * 60 * 60L: java.lang.Long)
     logProps.put(LogConfig.SegmentJitterMsProp, maxJitter: java.lang.Long)
     // create a log
     val log = new Log(logDir,
@@ -263,7 +263,7 @@ class LogTest extends JUnitSuite {
     for(i <- values.indices) {
       val read = log.read(i, 100, Some(i+1)).records.entries.iterator.next()
       assertEquals("Offset read should match order appended.", i, read.offset)
-      val actual = read.iterator().next()
+      val actual = read.iterator.next()
       assertNull(s"Key should be null", actual.key)
       assertEquals(s"Values not equal", ByteBuffer.wrap(values(i)), actual.value)
     }
@@ -340,7 +340,7 @@ class LogTest extends JUnitSuite {
         assertEquals("Message should match appended.", records(idx), read.record)
       }
 
-      assertEquals(Seq.empty, log.read(i, 1, Some(1), minOneMessage = true).records.asScala.toIndexedSeq)
+      assertEquals(Seq.empty, log.read(i, 1, Some(1), minOneMessage = true).records.records.asScala.toIndexedSeq)
     }
   }
 
@@ -428,15 +428,15 @@ class LogTest extends JUnitSuite {
       val head = messages.iterator.next()
       assertEquals("Offsets not equal", offset, head.offset)
 
-      val expected = messageSets(i).records().next()
-      val actual = head.iterator().next()
+      val expected = messageSets(i).records.iterator.next()
+      val actual = head.iterator.next()
       assertEquals(s"Keys not equal at offset $offset", expected.key, actual.key)
       assertEquals(s"Values not equal at offset $offset", expected.value, actual.value)
       assertEquals(s"Timestamps not equal at offset $offset", expected.timestamp, actual.timestamp)
       offset = head.offset + 1
     }
     val lastRead = log.read(startOffset = numMessages, maxLength = 1024*1024, maxOffset = Some(numMessages + 1)).records
-    assertEquals("Should be no more messages", 0, lastRead.asScala.size)
+    assertEquals("Should be no more messages", 0, lastRead.records.asScala.size)
 
     // check that rolling the log forced a flushed the log--the flush is asyn so retry in case of failure
     TestUtils.retry(1000L){
@@ -461,10 +461,10 @@ class LogTest extends JUnitSuite {
     def read(offset: Int) = log.read(offset, 4096).records.records
 
     /* we should always get the first message in the compressed set when reading any offset in the set */
-    assertEquals("Read at offset 0 should produce 0", 0, read(0).next().offset)
-    assertEquals("Read at offset 1 should produce 0", 0, read(1).next().offset)
-    assertEquals("Read at offset 2 should produce 2", 2, read(2).next().offset)
-    assertEquals("Read at offset 3 should produce 2", 2, read(3).next().offset)
+    assertEquals("Read at offset 0 should produce 0", 0, read(0).iterator.next().offset)
+    assertEquals("Read at offset 1 should produce 0", 0, read(1).iterator.next().offset)
+    assertEquals("Read at offset 2 should produce 2", 2, read(2).iterator.next().offset)
+    assertEquals("Read at offset 3 should produce 2", 2, read(3).iterator.next().offset)
   }
 
   /**
@@ -1032,7 +1032,7 @@ class LogTest extends JUnitSuite {
                       time.scheduler,
                       time)
     log.append(TestUtils.singletonRecords(value = null))
-    val head = log.read(0, 4096, None).records.records.next()
+    val head = log.read(0, 4096, None).records.records.iterator.next()
     assertEquals(0, head.offset)
     assertTrue("Message payload should be null.", head.hasNullValue)
   }

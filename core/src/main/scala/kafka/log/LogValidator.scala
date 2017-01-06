@@ -91,7 +91,7 @@ private[kafka] object LogValidator extends Logging {
     val builder = MemoryRecords.builder(newBuffer, toMagicValue, CompressionType.NONE, timestampType,
       offsetCounter.value, now)
 
-    for (entry <- records.asScala) {
+    for (entry <- records.entries.asScala) {
       for (record <- entry.asScala) {
         validateKey(record, compactedTopic)
         validateTimestamp(entry, record, now, timestampType, messageTimestampDiffMaxMs)
@@ -173,7 +173,7 @@ private[kafka] object LogValidator extends Logging {
                                                  messageFormatVersion: Byte = Record.CURRENT_MAGIC_VALUE,
                                                  messageTimestampType: TimestampType,
                                                  messageTimestampDiffMaxMs: Long): ValidationAndOffsetAssignResult = {
-       // Deal with compressed messages
+      // Deal with compressed messages
       // We cannot do in place assignment in one of the following situations:
       // 1. Source and target compression codec are different
       // 2. When magic value to use is 0 because offsets need to be overwritten
@@ -187,7 +187,7 @@ private[kafka] object LogValidator extends Logging {
       val expectedInnerOffset = new LongRef(0)
       val validatedRecords = new mutable.ArrayBuffer[LogRecord]
 
-      for (entry <- records.asScala) {
+      for (entry <- records.entries.asScala) {
         // TODO: Do message set validation?
         for (record <- entry.asScala) {
           if (!record.hasMagic(entry.magic))

@@ -78,7 +78,7 @@ class LogSegmentTest {
     val ms = records(50, "hello", "there", "little", "bee")
     seg.append(50, 53, Record.NO_TIMESTAMP, -1L, ms)
     val read = seg.read(startOffset = 41, maxSize = 300, maxOffset = None).records
-    checkEquals(ms.records, read.records)
+    checkEquals(ms.records.iterator, read.records.iterator)
   }
 
   /**
@@ -123,7 +123,7 @@ class LogSegmentTest {
     val ms2 = records(60, "alpha", "beta")
     seg.append(60, 61, Record.NO_TIMESTAMP, -1L, ms2)
     val read = seg.read(startOffset = 55, maxSize = 200, maxOffset = None)
-    checkEquals(ms2.records, read.records.records)
+    checkEquals(ms2.records.iterator, read.records.records.iterator)
   }
 
   /**
@@ -141,12 +141,12 @@ class LogSegmentTest {
       seg.append(offset + 1, offset + 1, Record.NO_TIMESTAMP, -1L, ms2)
       // check that we can read back both messages
       val read = seg.read(offset, None, 10000)
-      assertEquals(List(ms1.records.next(), ms2.records.next()), read.records.records.asScala.toList)
+      assertEquals(List(ms1.records.iterator.next(), ms2.records.iterator.next()), read.records.records.asScala.toList)
       // now truncate off the last message
       seg.truncateTo(offset + 1)
       val read2 = seg.read(offset, None, 10000)
       assertEquals(1, read2.records.records.asScala.size)
-      checkEquals(ms1.records, read2.records.records)
+      checkEquals(ms1.records.iterator, read2.records.records.iterator)
       offset += 1
     }
   }
@@ -247,7 +247,7 @@ class LogSegmentTest {
     TestUtils.writeNonsenseToFile(indexFile, 5, indexFile.length.toInt)
     seg.recover(64*1024)
     for(i <- 0 until 100)
-      assertEquals(i, seg.read(i, Some(i + 1), 1024).records.records.next().offset)
+      assertEquals(i, seg.read(i, Some(i + 1), 1024).records.records.iterator.next().offset)
   }
 
   /**
@@ -308,7 +308,7 @@ class LogSegmentTest {
     val ms2 = records(60, "alpha", "beta")
     seg.append(60, 61, Record.NO_TIMESTAMP, -1L, ms2)
     val read = seg.read(startOffset = 55, maxSize = 200, maxOffset = None)
-    checkEquals(ms2.records, read.records.records)
+    checkEquals(ms2.records.iterator, read.records.records.iterator)
   }
 
   /* create a segment with   pre allocate and clearly shut down*/
@@ -322,7 +322,7 @@ class LogSegmentTest {
     val ms2 = records(60, "alpha", "beta")
     seg.append(60, 61, Record.NO_TIMESTAMP, -1L, ms2)
     val read = seg.read(startOffset = 55, maxSize = 200, maxOffset = None)
-    checkEquals(ms2.records, read.records.records)
+    checkEquals(ms2.records.iterator, read.records.records.iterator)
     val oldSize = seg.log.sizeInBytes()
     val oldPosition = seg.log.channel.position
     val oldFileSize = seg.log.file.length
@@ -335,7 +335,7 @@ class LogSegmentTest {
     segments += segReopen
 
     val readAgain = segReopen.read(startOffset = 55, maxSize = 200, maxOffset = None)
-    checkEquals(ms2.records, readAgain.records.records)
+    checkEquals(ms2.records.iterator, readAgain.records.records.iterator)
     val size = segReopen.log.sizeInBytes()
     val position = segReopen.log.channel.position
     val fileSize = segReopen.log.file.length
