@@ -124,7 +124,7 @@ trait BaseMessageSetTestCases extends JUnitSuite {
         fileRecords.resize() // resize since we wrote to the channel directly
 
         assertEquals("Expect to write the number of bytes in the set.", set.sizeInBytes, written)
-        checkEquals(set.asRecords.records, fileRecords.records)
+        checkEquals(set.asRecords.records.iterator(), fileRecords.records.iterator())
       } finally fileRecords.close()
     }
   }

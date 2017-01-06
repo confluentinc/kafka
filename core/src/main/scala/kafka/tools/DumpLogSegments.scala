@@ -146,7 +146,7 @@ object DumpLogSegments {
     for(i <- 0 until index.entries) {
       val entry = index.entry(i)
       val slice = fileRecords.read(entry.position, maxMessageSize)
-      val firstRecord = slice.records().next()
+      val firstRecord = slice.records().iterator().next()
       if (firstRecord.offset != entry.offset + index.baseOffset) {
         var misMatchesSeq = misMatchesForIndexFilesMap.getOrElse(file.getAbsolutePath, List[(Long, Long)]())
         misMatchesSeq ::=(entry.offset + index.baseOffset, firstRecord.offset)

@@ -79,7 +79,7 @@ private[kafka] object LogValidator extends Logging {
       val expectedInnerOffset = new LongRef(0)
       val validatedRecords = new mutable.ArrayBuffer[LogRecord]
 
-      for (entry <- records.asScala) {
+      for (entry <- records.entries().asScala) {
         // TODO: Do message set validation?
         for (record <- entry.asScala) {
           if (!record.hasMagic(entry.magic))
@@ -171,7 +171,7 @@ private[kafka] object LogValidator extends Logging {
     val builder = MemoryRecords.builder(newBuffer, toMagicValue, CompressionType.NONE, timestampType,
       offsetCounter.value, now)
 
-    for (entry <- records.asScala) {
+    for (entry <- records.entries().asScala) {
       for (record <- entry.asScala) {
         validateKey(record, compactedTopic)
         validateTimestamp(entry, record, now, timestampType, messageTimestampDiffMaxMs)

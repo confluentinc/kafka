@@ -340,7 +340,7 @@ class Log(@volatile var dir: File,
       logSegments(pidMap.mapEndOffset, lastOffset).foreach { segment =>
         val startOffset = math.max(segment.baseOffset, pidMap.mapEndOffset)
         val logEntries = segment.read(startOffset, Some(lastOffset), Int.MaxValue).records
-        logEntries.asScala.foreach { entry =>
+        logEntries.entries().asScala.foreach { entry =>
           pidMap.update(entry.pid, entry.lastSequence, entry.epoch, entry.lastOffset())
         }
       }
@@ -527,7 +527,7 @@ class Log(@volatile var dir: File,
     var firstSequence = 0
     var lastSequence = -1
     var epoch: Short = 0
-    for (entry <- records.asScala) {
+    for (entry <- records.entries().asScala) {
       // update the first offset if on the first message
       if (firstOffset < 0) {
         firstOffset = if (entry.magic >= Record.MAGIC_VALUE_V2) entry.firstOffset else entry.offset
