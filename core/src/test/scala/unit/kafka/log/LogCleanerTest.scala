@@ -679,7 +679,7 @@ class LogCleanerTest extends JUnitSuite {
 
     cleaner.clean(LogToClean(TopicAndPartition("test", 0), log, 0, log.activeSegment.baseOffset))
 
-    for (segment <- log.logSegments; entry <- segment.log.entries().asScala; record <- entry.asScala) {
+    for (segment <- log.logSegments; entry <- segment.log.entries.asScala; record <- entry.asScala) {
       assertTrue(record.hasMagic(entry.magic))
       val value = TestUtils.readString(record.value).toLong
       assertEquals(record.offset, value)
