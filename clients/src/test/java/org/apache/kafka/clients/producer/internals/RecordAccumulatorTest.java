@@ -78,7 +78,7 @@ public class RecordAccumulatorTest {
         long now = time.milliseconds();
         int batchSize = 1024;
         RecordAccumulator accum = new RecordAccumulator(batchSize + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * batchSize,
-                CompressionType.NONE, 10L, 100L, metrics, time);
+                CompressionType.NONE, 10L, 100L, metrics, time, new TransactionState());
         int appends = batchSize / msgSize;
         for (int i = 0; i < appends; i++) {
             // append to the first batch
@@ -115,7 +115,7 @@ public class RecordAccumulatorTest {
     public void testAppendLarge() throws Exception {
         int batchSize = 512;
         RecordAccumulator accum = new RecordAccumulator(batchSize + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, 0L, 100L, metrics, time);
+                CompressionType.NONE, 0L, 100L, metrics, time, new TransactionState());
         accum.append(tp1, 0L, key, new byte[2 * batchSize], null, maxBlockTimeMs);
         assertEquals("Our partition's leader should be ready", Collections.singleton(node1), accum.ready(cluster, time.milliseconds()).readyNodes);
     }
@@ -124,7 +124,7 @@ public class RecordAccumulatorTest {
     public void testLinger() throws Exception {
         long lingerMs = 10L;
         RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, lingerMs, 100L, metrics, time);
+                CompressionType.NONE, lingerMs, 100L, metrics, time, new TransactionState());
         accum.append(tp1, 0L, key, value, null, maxBlockTimeMs);
         assertEquals("No partitions should be ready", 0, accum.ready(cluster, time.milliseconds()).readyNodes.size());
         time.sleep(10);
@@ -143,7 +143,7 @@ public class RecordAccumulatorTest {
     @Test
     public void testPartialDrain() throws Exception {
         RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, 10L, 100L, metrics, time);
+                CompressionType.NONE, 10L, 100L, metrics, time, new TransactionState());
         int appends = 1024 / msgSize + 1;
         List<TopicPartition> partitions = asList(tp1, tp2);
         for (TopicPartition tp : partitions) {
@@ -163,7 +163,7 @@ public class RecordAccumulatorTest {
         final int msgs = 10000;
         final int numParts = 2;
         final RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, 0L, 100L, metrics, time);
+                CompressionType.NONE, 0L, 100L, metrics, time, new TransactionState());
         List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < numThreads; i++) {
             threads.add(new Thread() {
@@ -204,7 +204,7 @@ public class RecordAccumulatorTest {
         // Next check time will use lingerMs since this test won't trigger any retries/backoff
         long lingerMs = 10L;
         RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, lingerMs, 100L, metrics, time);
+                CompressionType.NONE, lingerMs, 100L, metrics, time, new TransactionState());
         // Just short of going over the limit so we trigger linger time
         int appends = 1024 / msgSize;
 
@@ -239,7 +239,7 @@ public class RecordAccumulatorTest {
         long lingerMs = Long.MAX_VALUE / 4;
         long retryBackoffMs = Long.MAX_VALUE / 2;
         final RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time);
+                CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time, new TransactionState());
 
         long now = time.milliseconds();
         accum.append(tp1, 0L, key, value, null, maxBlockTimeMs);
@@ -277,7 +277,7 @@ public class RecordAccumulatorTest {
     public void testFlush() throws Exception {
         long lingerMs = Long.MAX_VALUE;
         final RecordAccumulator accum = new RecordAccumulator(4 * 1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 64 * 1024,
-                CompressionType.NONE, lingerMs, 100L, metrics, time);
+                CompressionType.NONE, lingerMs, 100L, metrics, time, new TransactionState());
         for (int i = 0; i < 100; i++)
             accum.append(new TopicPartition(topic, i % 3), 0L, key, value, null, maxBlockTimeMs);
         RecordAccumulator.ReadyCheckResult result = accum.ready(cluster, time.milliseconds());
@@ -311,7 +311,7 @@ public class RecordAccumulatorTest {
     @Test
     public void testAwaitFlushComplete() throws Exception {
         RecordAccumulator accum = new RecordAccumulator(4 * 1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 64 * 1024,
-                CompressionType.NONE, Long.MAX_VALUE, 100L, metrics, time);
+                CompressionType.NONE, Long.MAX_VALUE, 100L, metrics, time, new TransactionState());
         accum.append(new TopicPartition(topic, 0), 0L, key, value, null, maxBlockTimeMs);
 
         accum.beginFlush();
@@ -331,7 +331,7 @@ public class RecordAccumulatorTest {
         long lingerMs = Long.MAX_VALUE;
         final AtomicInteger numExceptionReceivedInCallback = new AtomicInteger(0);
         final RecordAccumulator accum = new RecordAccumulator(4 * 1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 64 * 1024,
-                CompressionType.NONE, lingerMs, 100L, metrics, time);
+                CompressionType.NONE, lingerMs, 100L, metrics, time, new TransactionState());
         class TestCallback implements Callback {
             @Override
             public void onCompletion(RecordMetadata metadata, Exception exception) {
@@ -357,7 +357,7 @@ public class RecordAccumulatorTest {
         int requestTimeout = 60;
 
         RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time);
+                CompressionType.NONE, lingerMs, retryBackoffMs, metrics, time, new TransactionState());
         int appends = 1024 / msgSize;
 
         // Test batches not in retry
@@ -424,7 +424,7 @@ public class RecordAccumulatorTest {
     public void testMutedPartitions() throws InterruptedException {
         long now = time.milliseconds();
         RecordAccumulator accum = new RecordAccumulator(1024 + EosLogEntry.LOG_ENTRY_OVERHEAD, 10 * 1024,
-                CompressionType.NONE, 10, 100L, metrics, time);
+                CompressionType.NONE, 10, 100L, metrics, time, new TransactionState());
         int appends = 1024 / msgSize;
         for (int i = 0; i < appends; i++) {
             accum.append(tp1, 0L, key, value, null, maxBlockTimeMs);

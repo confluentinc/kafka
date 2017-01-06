@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.internals.FutureRecordMetadata;
 import org.apache.kafka.clients.producer.internals.DefaultPartitioner;
 import org.apache.kafka.clients.producer.internals.ProduceRequestResult;
@@ -94,6 +95,33 @@ public class MockProducer<K, V> implements Producer<K, V> {
      */
     public MockProducer(boolean autoComplete, Partitioner partitioner, Serializer<K> keySerializer, Serializer<V> valueSerializer) {
         this(Cluster.empty(), autoComplete, partitioner, keySerializer, valueSerializer);
+    }
+
+
+    @Override
+    public void initTransactions() {
+
+    }
+
+    @Override
+    public void beginTransaction() {
+
+    }
+
+    @Override
+    public void sendOffsets(Map<TopicPartition, OffsetAndMetadata> offsets,
+                            String consumerGroupId) {
+
+    }
+
+    @Override
+    public void commitTransaction() {
+
+    }
+
+    @Override
+    public void abortTransaction() {
+
     }
 
     /**

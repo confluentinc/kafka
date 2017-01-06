@@ -540,7 +540,7 @@ class Log(@volatile var dir: File,
       if (lastOffset >= entry.offset)
         monotonic = false
 
-      if (lastSequence > 0 && lastSequence != entry.firstSequence() + 1)
+     if (lastSequence > 0 && entry.firstSequence() != lastSequence + 1)
         throw new IllegalArgumentException("Non-consecutive sequence numbers found in records")
 
       // update the last offset seen

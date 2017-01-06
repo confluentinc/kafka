@@ -75,6 +75,7 @@ public final class RecordAccumulator {
     // The following variables are only accessed by the sender thread, so we don't need to protect them.
     private final Set<TopicPartition> muted;
     private int drainIndex;
+    private final TransactionState transactionState;
 
     /**
      * Create a new record accumulator
@@ -89,6 +90,7 @@ public final class RecordAccumulator {
      *        exhausting all retries in a short period of time.
      * @param metrics The metrics
      * @param time The time instance to use
+     * @param transactionState 
      */
     public RecordAccumulator(int batchSize,
                              long totalSize,
@@ -96,7 +98,7 @@ public final class RecordAccumulator {
                              long lingerMs,
                              long retryBackoffMs,
                              Metrics metrics,
-                             Time time) {
+                             Time time, TransactionState transactionState) {
         this.drainIndex = 0;
         this.closed = false;
         this.flushesInProgress = new AtomicInteger(0);
@@ -111,6 +113,7 @@ public final class RecordAccumulator {
         this.incomplete = new IncompleteRecordBatches();
         this.muted = new HashSet<>();
         this.time = time;
+        this.transactionState = transactionState;
         registerMetrics(metrics, metricGrpName);
     }
 
@@ -192,7 +195,8 @@ public final class RecordAccumulator {
                     free.deallocate(buffer);
                     return appendResult;
                 }
-                MemoryRecordsBuilder recordsBuilder = MemoryRecords.builder(buffer, compression, TimestampType.CREATE_TIME, this.batchSize);
+                MemoryRecordsBuilder recordsBuilder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V2, compression,
+                        TimestampType.CREATE_TIME, 0L, transactionState.pid(), transactionState.epoch(), transactionState.sequenceNumber(tp));
                 RecordBatch batch = new RecordBatch(tp, recordsBuilder, time.milliseconds());
                 FutureRecordMetadata future = Utils.notNull(batch.tryAppend(timestamp, key, value, callback, time.milliseconds()));
 
@@ -214,7 +218,7 @@ public final class RecordAccumulator {
         if (last != null) {
             FutureRecordMetadata future = last.tryAppend(timestamp, key, value, callback, time.milliseconds());
             if (future == null)
-                last.close();
+                last.close(transactionState);
             else
                 return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false);
         }
@@ -398,7 +402,7 @@ public final class RecordAccumulator {
                                         break;
                                     } else {
                                         RecordBatch batch = deque.pollFirst();
-                                        batch.close();
+                                        batch.close(transactionState);
                                         size += batch.sizeInBytes();
                                         ready.add(batch);
                                         batch.drainedMs = now;
@@ -509,7 +513,7 @@ public final class RecordAccumulator {
             Deque<RecordBatch> dq = getDeque(batch.topicPartition);
             // Close the batch before aborting
             synchronized (dq) {
-                batch.close();
+                batch.close(null);
                 dq.remove(batch);
             }
             batch.done(-1L, Record.NO_TIMESTAMP, new IllegalStateException("Producer is closed forcefully."));
