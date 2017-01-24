@@ -72,8 +72,8 @@ public class InitPIDRequest extends AbstractRequest {
         return new InitPIDResponse(Errors.forException(e));
     }
 
-    public static InitPIDRequest parse(ByteBuffer buffer, short versionId) {
-        return new InitPIDRequest(ProtoUtils.parseRequest(ApiKeys.INIT_PRODUCER_ID.id, versionId, buffer), versionId);
+    public static InitPIDRequest parse(ByteBuffer buffer, int versionId) {
+        return new InitPIDRequest(ProtoUtils.parseRequest(ApiKeys.INIT_PRODUCER_ID.id, versionId, buffer), (short) versionId);
     }
 
     public static InitPIDRequest parse(ByteBuffer buffer) {

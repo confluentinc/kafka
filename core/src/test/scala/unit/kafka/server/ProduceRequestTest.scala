@@ -51,12 +51,13 @@ class ProduceRequestTest extends BaseRequestTest {
       partitionResponse
     }
 
-    sendAndCheck(TestUtils.records(Record.CURRENT_MAGIC_VALUE, CompressionType.NONE,
-      ("key".getBytes, "value".getBytes, System.currentTimeMillis())), 0)
+    sendAndCheck(MemoryRecords.withRecords(
+      Record.create(System.currentTimeMillis(), "key".getBytes, "value".getBytes)), 0)
 
-    sendAndCheck(TestUtils.records(Record.CURRENT_MAGIC_VALUE, CompressionType.GZIP,
-      ("key1".getBytes, "value1".getBytes, System.currentTimeMillis()),
-      ("key2".getBytes, "value2".getBytes, System.currentTimeMillis())), 1)
+    sendAndCheck(MemoryRecords.withRecords(CompressionType.GZIP,
+      Record.create(System.currentTimeMillis(), "key1".getBytes, "value1".getBytes),
+      Record.create(System.currentTimeMillis(), "key2".getBytes, "value2".getBytes)), 1)
+
   }
 
   /* returns a pair of partition id and leader id */

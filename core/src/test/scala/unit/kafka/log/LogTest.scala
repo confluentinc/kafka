@@ -574,10 +574,9 @@ class LogTest extends JUnitSuite {
    */
   @Test
   def testMessageSizeCheck() {
-    val first = TestUtils.recordsWithValues(Record.CURRENT_MAGIC_VALUE, CompressionType.NONE,
-      "1".getBytes, "2".getBytes)
-    val second = TestUtils.recordsWithValues(Record.CURRENT_MAGIC_VALUE, CompressionType.NONE,
-      "10".getBytes, "20".getBytes)
+    val first = MemoryRecords.withRecords(CompressionType.NONE, Record.create("You".getBytes), Record.create("bethe".getBytes))
+    val second = MemoryRecords.withRecords(CompressionType.NONE,
+      Record.create("change (I need more bytes)... blah blah blah.".getBytes), Record.create("More padding boo hoo".getBytes))
 
     // append messages to log
     val maxMessageSize = second.sizeInBytes - 1

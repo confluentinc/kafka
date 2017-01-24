@@ -92,7 +92,6 @@ private[kafka] object LogValidator extends Logging {
       offsetCounter.value, now)
 
     for (entry <- records.entries.asScala) {
-      entry.record()
       for (record <- entry.asScala) {
         validateKey(record, compactedTopic)
         validateTimestamp(entry, record, now, timestampType, messageTimestampDiffMaxMs)
