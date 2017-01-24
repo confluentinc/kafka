@@ -171,7 +171,7 @@ class AbstractFetcherThreadTest {
 
       // Now check message's crc
       val records = partitionData.toRecords
-      for (entry <- records.shallowEntries.asScala) {
+      for (entry <- records.entries.asScala) {
         entry.record.ensureValid()
         logEndOffset = entry.nextOffset
       }

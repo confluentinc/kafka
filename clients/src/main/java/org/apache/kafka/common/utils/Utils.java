@@ -798,9 +798,39 @@ public class Utils {
      * @param buffer Buffer containing the data to checksum
      * @param start Offset in the buffer to read from
      * @param size The number of bytes to include
+     * @return the computed checksum
      */
     public static long computeChecksum(ByteBuffer buffer, int start, int size) {
-        return Crc32.crc32(buffer.array(), buffer.arrayOffset() + start, size);
+        return computeChecksum(buffer.array(), buffer.arrayOffset() + start, size);
+    }
+
+    /**
+     * Compute the checksum of a range of data
+     * @param buffer Buffer containing the data to checksum
+     * @param start Offset in the buffer to read from
+     * @param size The number of bytes to include
+     * @return the computed checksum
+     */
+    public static long computeChecksum(byte[] buffer, int start, int size) {
+        Crc32 crc = new Crc32();
+        crc.update(buffer, start, size);
+        return crc.getValue();
+    }
+
+    /**
+     * Compute the checksum of a range of data
+     * @param buffer Buffer containing the data to checksum
+     * @return the computed checksum
+     */
+    public static long computeChecksum(byte[] buffer) {
+        return computeChecksum(buffer, 0, buffer.length);
+    }
+
+    public static <T> List<T> toList(Iterator<T> iterator) {
+        List<T> res = new ArrayList<>();
+        while (iterator.hasNext())
+            res.add(iterator.next());
+        return res;
     }
 
 }

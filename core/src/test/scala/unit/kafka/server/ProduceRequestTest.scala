@@ -57,6 +57,7 @@ class ProduceRequestTest extends BaseRequestTest {
     sendAndCheck(MemoryRecords.withRecords(CompressionType.GZIP,
       Record.create(System.currentTimeMillis(), "key1".getBytes, "value1".getBytes),
       Record.create(System.currentTimeMillis(), "key2".getBytes, "value2".getBytes)), 1)
+
   }
 
   /* returns a pair of partition id and leader id */
@@ -74,7 +75,7 @@ class ProduceRequestTest extends BaseRequestTest {
     val memoryRecords = MemoryRecords.withRecords(CompressionType.LZ4,
       Record.create(timestamp, "key".getBytes, "value".getBytes))
     // Change the lz4 checksum value so that it doesn't match the contents
-    memoryRecords.buffer.array.update(40, 0)
+    memoryRecords.buffer.array.update(40, 3) // FIXME: Is this index significant? For older magic, the CRC should be at offset 13
     val topicPartition = new TopicPartition("topic", partition)
     val partitionRecords = Map(topicPartition -> memoryRecords)
     val produceResponse = sendProduceRequest(leader, 

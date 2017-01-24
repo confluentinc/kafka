@@ -41,7 +41,7 @@ import org.apache.kafka.common.metrics.stats.Value;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.InvalidRecordException;
 import org.apache.kafka.common.record.LogEntry;
-import org.apache.kafka.common.record.Record;
+import org.apache.kafka.common.record.LogRecord;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.requests.FetchRequest;
 import org.apache.kafka.common.requests.FetchResponse;
@@ -756,11 +756,13 @@ public class Fetcher<K, V> {
                 }
 
                 List<ConsumerRecord<K, V>> parsed = new ArrayList<>();
-                for (LogEntry logEntry : partition.records.deepEntries()) {
-                    // Skip the messages earlier than current position.
-                    if (logEntry.offset() >= position) {
-                        parsed.add(parseRecord(tp, logEntry));
-                        bytes += logEntry.sizeInBytes();
+                for (LogEntry entry : partition.records.entries()) {
+                    for (LogRecord record : entry) {
+                        // Skip the messages earlier than current position.
+                        if (record.offset() >= position) {
+                            parsed.add(parseRecord(tp, entry, record));
+                            bytes += record.sizeInBytes();
+                        }
                     }
                 }
 
@@ -826,22 +828,22 @@ public class Fetcher<K, V> {
     /**
      * Parse the record entry, deserializing the key / value fields if necessary
      */
-    private ConsumerRecord<K, V> parseRecord(TopicPartition partition, LogEntry logEntry) {
-        Record record = logEntry.record();
-
+    private ConsumerRecord<K, V> parseRecord(TopicPartition partition,
+                                             LogEntry entry,
+                                             LogRecord record) {
         if (this.checkCrcs) {
             try {
                 record.ensureValid();
             } catch (InvalidRecordException e) {
-                throw new KafkaException("Record for partition " + partition + " at offset " + logEntry.offset()
+                throw new KafkaException("Record for partition " + partition + " at offset " + record.offset()
                         + " is invalid, cause: " + e.getMessage());
             }
         }
 
         try {
-            long offset = logEntry.offset();
+            long offset = record.offset();
             long timestamp = record.timestamp();
-            TimestampType timestampType = record.timestampType();
+            TimestampType timestampType = entry.timestampType();
             ByteBuffer keyBytes = record.key();
             byte[] keyByteArray = keyBytes == null ? null : Utils.toArray(keyBytes);
             K key = keyBytes == null ? null : this.keyDeserializer.deserialize(partition.topic(), keyByteArray);
@@ -856,7 +858,7 @@ public class Fetcher<K, V> {
                                         key, value);
         } catch (RuntimeException e) {
             throw new SerializationException("Error deserializing key/value for partition " + partition +
-                    " at offset " + logEntry.offset(), e);
+                    " at offset " + record.offset(), e);
         }
     }
 

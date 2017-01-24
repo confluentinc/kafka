@@ -142,12 +142,15 @@ class GroupMetadataManager(val brokerId: Int,
             GroupMetadataManager.CURRENT_GROUP_VALUE_SCHEMA_VERSION
         }
 
-        val record = Record.create(magicValue, timestampType, timestamp,
-          GroupMetadataManager.groupMetadataKey(group.groupId),
-          GroupMetadataManager.groupMetadataValue(group, groupAssignment, version = groupMetadataValueVersion))
+        val key = GroupMetadataManager.groupMetadataKey(group.groupId)
+        val value = GroupMetadataManager.groupMetadataValue(group, groupAssignment, version = groupMetadataValueVersion)
+
+        val buffer = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + EosLogRecord.sizeOf(key, value))
+        val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME)
+        builder.appendWithOffset(0, timestamp, key, value)
 
         val groupMetadataPartition = new TopicPartition(Topic.GroupMetadataTopicName, partitionFor(group.groupId))
-        val groupMetadataRecords = Map(groupMetadataPartition -> MemoryRecords.withRecords(timestampType, compressionType, record))
+        val groupMetadataRecords = Map(groupMetadataPartition -> builder.build())
         val generationId = group.generationId
 
         // set the callback function to insert the created group into cache after log append completed
@@ -235,14 +238,20 @@ class GroupMetadataManager(val brokerId: Int,
     getMagicAndTimestamp(partitionFor(group.groupId)) match {
       case Some((magicValue, timestampType, timestamp)) =>
         val records = filteredOffsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
-          Record.create(magicValue, timestampType, timestamp,
-            GroupMetadataManager.offsetCommitKey(group.groupId, topicPartition.topic, topicPartition.partition),
-            GroupMetadataManager.offsetCommitValue(offsetAndMetadata))
+          val key = GroupMetadataManager.offsetCommitKey(group.groupId, topicPartition.topic, topicPartition.partition)
+          val value = GroupMetadataManager.offsetCommitValue(offsetAndMetadata)
+          (key, value)
         }.toSeq
 
         val offsetTopicPartition = new TopicPartition(Topic.GroupMetadataTopicName, partitionFor(group.groupId))
 
-        val entries = Map(offsetTopicPartition -> MemoryRecords.withRecords(timestampType, compressionType, records:_*))
+        // FIXME: Lots of builder boilerplate here that could be moved elsewhere
+        val buffer = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + records.map(r => EosLogRecord.sizeOf(r._1, r._2)).sum)
+        val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME)
+        var offset = 0
+        records.foreach { record => builder.appendWithOffset(offset, timestamp, record._1, record._2); offset += 1 }
+
+        val entries = Map(offsetTopicPartition -> builder.build())
 
         // set the callback function to insert offsets into cache after log append completed
         def putCacheCallback(responseStatus: Map[TopicPartition, PartitionResponse]) {
@@ -403,37 +412,36 @@ class GroupMetadataManager(val brokerId: Int,
               val fileRecords = log.read(currOffset, config.loadBufferSize, minOneMessage = true).records.asInstanceOf[FileRecords]
               fileRecords.readInto(buffer, 0)
 
-              MemoryRecords.readableRecords(buffer).deepEntries.asScala.foreach { entry =>
-                val record = entry.record
+              MemoryRecords.readableRecords(buffer).entries.asScala.foreach { entry =>
+                for (record <- entry.asScala) {
+                  require(record.hasKey, "Offset entry key should not be null")
+                  val baseKey = GroupMetadataManager.readMessageKey(record.key)
 
-                require(record.hasKey, "Offset entry key should not be null")
-                val baseKey = GroupMetadataManager.readMessageKey(record.key)
-
-                if (baseKey.isInstanceOf[OffsetKey]) {
-                  // load offset
-                  val key = baseKey.key.asInstanceOf[GroupTopicPartition]
-                  if (record.hasNullValue) {
-                    loadedOffsets.remove(key)
-                    removedOffsets.add(key)
+                  if (baseKey.isInstanceOf[OffsetKey]) {
+                    // load offset
+                    val key = baseKey.key.asInstanceOf[GroupTopicPartition]
+                    if (record.hasNullValue) {
+                      loadedOffsets.remove(key)
+                      removedOffsets.add(key)
+                    } else {
+                      val value = GroupMetadataManager.readOffsetMessageValue(record.value)
+                      loadedOffsets.put(key, value)
+                      removedOffsets.remove(key)
+                    }
                   } else {
-                    val value = GroupMetadataManager.readOffsetMessageValue(record.value)
-                    loadedOffsets.put(key, value)
-                    removedOffsets.remove(key)
-                  }
-                } else {
-                  // load group metadata
-                  val groupId = baseKey.key.asInstanceOf[String]
-                  val groupMetadata = GroupMetadataManager.readGroupMessageValue(groupId, record.value)
-                  if (groupMetadata != null) {
-                    trace(s"Loaded group metadata for group ${groupMetadata.groupId} with generation ${groupMetadata.generationId}")
-                    removedGroups.remove(groupId)
-                    loadedGroups.put(groupId, groupMetadata)
-                  } else {
-                    loadedGroups.remove(groupId)
-                    removedGroups.add(groupId)
+                    // load group metadata
+                    val groupId = baseKey.key.asInstanceOf[String]
+                    val groupMetadata = GroupMetadataManager.readGroupMessageValue(groupId, record.value)
+                    if (groupMetadata != null) {
+                      trace(s"Loaded group metadata for group ${groupMetadata.groupId} with generation ${groupMetadata.generationId}")
+                      removedGroups.remove(groupId)
+                      loadedGroups.put(groupId, groupMetadata)
+                    } else {
+                      loadedGroups.remove(groupId)
+                      removedGroups.add(groupId)
+                    }
                   }
                 }
-
                 currOffset = entry.nextOffset
               }
             }
@@ -567,11 +575,14 @@ class GroupMetadataManager(val brokerId: Int,
         case Some((magicValue, timestampType, timestamp)) =>
           val partitionOpt = replicaManager.getPartition(appendPartition)
           partitionOpt.foreach { partition =>
-            val tombstones = expiredOffsets.map { case (topicPartition, offsetAndMetadata) =>
+            val builder = MemoryRecords.builder(ByteBuffer.allocate(1024), magicValue, compressionType, timestampType)
+            var offset = 0
+            expiredOffsets.foreach { case (topicPartition, offsetAndMetadata) =>
               trace(s"Removing expired offset and metadata for $groupId, $topicPartition: $offsetAndMetadata")
               val commitKey = GroupMetadataManager.offsetCommitKey(groupId, topicPartition.topic, topicPartition.partition)
-              Record.create(magicValue, timestampType, timestamp, commitKey, null)
-            }.toBuffer
+              builder.appendWithOffset(offset, timestamp, commitKey, null)
+              offset += 1
+            }
             trace(s"Marked ${expiredOffsets.size} offsets in $appendPartition for deletion.")
 
             // We avoid writing the tombstone when the generationId is 0, since this group is only using
@@ -580,21 +591,22 @@ class GroupMetadataManager(val brokerId: Int,
               // Append the tombstone messages to the partition. It is okay if the replicas don't receive these (say,
               // if we crash or leaders move) since the new leaders will still expire the consumers with heartbeat and
               // retry removing this group.
-              tombstones += Record.create(magicValue, timestampType, timestamp, GroupMetadataManager.groupMetadataKey(group.groupId), null)
+              builder.appendWithOffset(offset, timestamp, GroupMetadataManager.groupMetadataKey(group.groupId), null)
               trace(s"Group $groupId removed from the metadata cache and marked for deletion in $appendPartition.")
+              offset += 1
             }
 
-            if (tombstones.nonEmpty) {
+            if (offset > 0) {
               try {
                 // do not need to require acks since even if the tombstone is lost,
                 // it will be appended again in the next purge cycle
-                partition.appendRecordsToLeader(MemoryRecords.withRecords(timestampType, compressionType, tombstones: _*))
+                partition.appendRecordsToLeader(builder.build())
                 offsetsRemoved += expiredOffsets.size
-                trace(s"Successfully appended ${tombstones.size} tombstones to $appendPartition for expired offsets and/or metadata for group $groupId")
+                trace(s"Successfully appended $offset tombstones to $appendPartition for expired offsets and/or metadata for group $groupId")
               } catch {
                 case t: Throwable =>
-                  error(s"Failed to append ${tombstones.size} tombstones to $appendPartition for expired offsets and/or metadata for group $groupId.", t)
-                  // ignore and continue
+                  error(s"Failed to append $offset tombstones to $appendPartition for expired offsets and/or metadata for group $groupId.", t)
+                // ignore and continue
               }
             }
           }

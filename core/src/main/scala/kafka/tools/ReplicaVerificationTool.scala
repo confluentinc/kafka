@@ -275,7 +275,7 @@ private class ReplicaBuffer(expectedReplicasPerTopicAndPartition: Map[TopicAndPa
             "fetched " + fetchResponsePerReplica.size + " replicas for " + topicAndPartition + ", but expected "
             + expectedReplicasPerTopicAndPartition(topicAndPartition) + " replicas")
       val logEntryIteratorMap = fetchResponsePerReplica.map { case (replicaId, fetchResponse) =>
-        replicaId -> fetchResponse.messages.asInstanceOf[ByteBufferMessageSet].asRecords.shallowEntries.iterator
+        replicaId -> fetchResponse.messages.asInstanceOf[ByteBufferMessageSet].asRecords.entries.iterator
       }
       val maxHw = fetchResponsePerReplica.values.map(_.hw).max
 
@@ -295,7 +295,7 @@ private class ReplicaBuffer(expectedReplicasPerTopicAndPartition: Map[TopicAndPa
                 messageInfoFromFirstReplicaOpt match {
                   case None =>
                     messageInfoFromFirstReplicaOpt = Some(
-                      MessageInfo(replicaId, logEntry.offset, logEntry.nextOffset, logEntry.record.checksum))
+                      MessageInfo(replicaId, logEntry.offset, logEntry.nextOffset, logEntry.checksum))
                   case Some(messageInfoFromFirstReplica) =>
                     if (messageInfoFromFirstReplica.offset != logEntry.offset) {
                       println(ReplicaVerificationTool.getCurrentTimeString + ": partition " + topicAndPartition
@@ -304,11 +304,11 @@ private class ReplicaBuffer(expectedReplicasPerTopicAndPartition: Map[TopicAndPa
                         + replicaId + "'s offset " + logEntry.offset)
                       System.exit(1)
                     }
-                    if (messageInfoFromFirstReplica.checksum != logEntry.record.checksum)
+                    if (messageInfoFromFirstReplica.checksum != logEntry.checksum)
                       println(ReplicaVerificationTool.getCurrentTimeString + ": partition "
                         + topicAndPartition + " has unmatched checksum at offset " + logEntry.offset + "; replica "
                         + messageInfoFromFirstReplica.replicaId + "'s checksum " + messageInfoFromFirstReplica.checksum
-                        + "; replica " + replicaId + "'s checksum " + logEntry.record.checksum)
+                        + "; replica " + replicaId + "'s checksum " + logEntry.checksum)
                 }
               }
             } else

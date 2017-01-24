@@ -141,6 +141,7 @@ public class ProduceRequest extends AbstractRequest {
                 return new ProduceResponse(responseMap);
             case 1:
             case 2:
+            case 3:
                 return new ProduceResponse(responseMap, ProduceResponse.DEFAULT_THROTTLE_TIME, versionId);
             default:
                 throw new IllegalArgumentException(String.format("Version %d is not valid. Valid versions for %s are 0 to %d",

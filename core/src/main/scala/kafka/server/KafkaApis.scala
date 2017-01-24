@@ -48,6 +48,7 @@ import org.apache.kafka.common.requests.SaslHandshakeResponse
 
 import scala.collection._
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 /**
  * Logic to handle the various Kafka requests
@@ -66,6 +67,8 @@ class KafkaApis(val requestChannel: RequestChannel,
                 val quotas: QuotaManagers,
                 val clusterId: String,
                 time: Time) extends Logging {
+
+  val random = new Random()
 
   this.logIdent = "[KafkaApi-%d] ".format(brokerId)
 
@@ -98,6 +101,11 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.API_VERSIONS => handleApiVersionsRequest(request)
         case ApiKeys.CREATE_TOPICS => handleCreateTopicsRequest(request)
         case ApiKeys.DELETE_TOPICS => handleDeleteTopicsRequest(request)
+        case ApiKeys.INIT_PRODUCER_ID => handleInitPIDRequest(request)
+        //case ApiKeys.BEGIN_TXN => handleBeginTransactionRequest(request)
+        //case ApiKeys.ADD_PARTITION_TO_TXN => handleAddPartitionToTransactionRequest(request)
+        //case ApiKeys.END_TXN => handleEndTransactionRequest(request)
+        //case ApiKeys.UPDATE_TXN => handleAbortTransactionRequest(request)
         case requestId => throw new KafkaException("Unknown api code " + requestId)
       }
     } catch {
@@ -397,7 +405,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         } else {
           val respBody = request.header.apiVersion match {
             case 0 => new ProduceResponse(mergedResponseStatus.asJava)
-            case version@(1 | 2) => new ProduceResponse(mergedResponseStatus.asJava, delayTimeMs, version)
+            case version@(1 | 2 | 3) => new ProduceResponse(mergedResponseStatus.asJava, delayTimeMs, version)
             // This case shouldn't happen unless a new version of ProducerRequest is added without
             // updating this part of the code to handle it properly.
             case version => throw new IllegalArgumentException(s"Version `$version` of ProduceRequest is not handled. Code must be updated.")
@@ -474,13 +482,19 @@ class KafkaApis(val requestChannel: RequestChannel,
           // Please note that if the message format is changed from a higher version back to lower version this
           // test might break because some messages in new message format can be delivered to consumers before 0.10.0.0
           // without format down conversion.
-          val convertedData = if (versionId <= 1 && replicaManager.getMagicAndTimestampType(tp).exists(_._1 > Record.MAGIC_VALUE_V0) &&
-            !data.records.hasMatchingShallowMagic(Record.MAGIC_VALUE_V0)) {
-            trace(s"Down converting message to V0 for fetch request from $clientId")
-            FetchPartitionData(data.error, data.hw, data.records.toMessageFormat(Record.MAGIC_VALUE_V0))
-          } else data
+          val convertedData = replicaManager.getMagicAndTimestampType(tp) match {
+            case Some((magic, _)) if magic > 0 && versionId <= 1 && !data.records.hasCompatibleMagic(Record.MAGIC_VALUE_V0) =>
+              trace(s"Down converting message to V0 for fetch request from $clientId")
+              FetchPartitionData(data.error, data.hw, data.records.toMessageFormat(Record.MAGIC_VALUE_V0))
 
-          tp -> new FetchResponse.PartitionData(convertedData.error, convertedData.hw, convertedData.records)
+            case Some((magic, _)) if magic > 1 && versionId <= 3 && !data.records.hasCompatibleMagic(Record.MAGIC_VALUE_V1) =>
+              trace(s"Down converting message to V1 for fetch request from $clientId")
+              FetchPartitionData(data.error, data.hw, data.records.toMessageFormat(Record.MAGIC_VALUE_V1))
+
+            case _ => data
+          }
+
+          new TopicPartition(tp.topic, tp.partition) -> new FetchResponse.PartitionData(convertedData.error, convertedData.hw, convertedData.records)
         }
       }
 
@@ -1246,6 +1260,35 @@ class KafkaApis(val requestChannel: RequestChannel,
         )
       }
     }
+  }
+
+  def handleInitPIDRequest(request: RequestChannel.Request): Unit = {
+    val initPidRequest = request.body.asInstanceOf[InitPIDRequest]
+    if (initPidRequest.appId != null)
+      throw new UnsupportedOperationException
+
+    val pid = math.abs(random.nextLong())
+    val epoch: Short = 0
+    val responseBody = new InitPIDResponse(Errors.NONE, pid, epoch)
+
+    trace(s"Generated new PID $pid from InitPIDRequest from client ${request.header.clientId}")
+    requestChannel.sendResponse(new RequestChannel.Response(request, responseBody))
+  }
+
+  def handleBeginTransactionRequest(request: RequestChannel.Request): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def handleEndTransactionRequest(request: RequestChannel.Request): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def handleAbortTransactionRequest(request: RequestChannel.Request): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def handleAddPartitionToTransactionRequest(request: RequestChannel.Request): Unit = {
+    throw new UnsupportedOperationException
   }
 
   def authorizeClusterAction(request: RequestChannel.Request): Unit = {

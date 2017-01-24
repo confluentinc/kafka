@@ -59,14 +59,14 @@ class BrokerCompressionTest(messageCompression: String, brokerCompression: Strin
     log.append(MemoryRecords.withRecords(CompressionType.forId(messageCompressionCode.codec),
       Record.create("hello".getBytes), Record.create("there".getBytes)))
 
-    def readMessage(offset: Int) = log.read(offset, 4096).records.shallowEntries.iterator.next().record
+    def readEntry(offset: Int) = log.read(offset, 4096).records.entries.iterator.next()
 
     if (!brokerCompression.equals("producer")) {
       val brokerCompressionCode = BrokerCompressionCodec.getCompressionCodec(brokerCompression)
-      assertEquals("Compression at offset 0 should produce " + brokerCompressionCode.name, brokerCompressionCode.codec, readMessage(0).compressionType.id)
+      assertEquals("Compression at offset 0 should produce " + brokerCompressionCode.name, brokerCompressionCode.codec, readEntry(0).compressionType.id)
     }
     else
-      assertEquals("Compression at offset 0 should produce " + messageCompressionCode.name, messageCompressionCode.codec, readMessage(0).compressionType.id)
+      assertEquals("Compression at offset 0 should produce " + messageCompressionCode.name, messageCompressionCode.codec, readEntry(0).compressionType.id)
   }
 
 }

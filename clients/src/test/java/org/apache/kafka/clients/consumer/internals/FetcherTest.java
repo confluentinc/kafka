@@ -215,7 +215,7 @@ public class FetcherTest {
         ByteBuffer buffer = ByteBuffer.allocate(1024);
         ByteBufferOutputStream out = new ByteBufferOutputStream(buffer);
 
-        byte magic = Record.CURRENT_MAGIC_VALUE;
+        byte magic = Record.MAGIC_VALUE_V1;
         byte[] key = "foo".getBytes();
         byte[] value = "baz".getBytes();
         long offset = 0;

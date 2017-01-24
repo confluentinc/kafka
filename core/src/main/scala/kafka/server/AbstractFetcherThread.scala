@@ -119,7 +119,7 @@ abstract class AbstractFetcherThread(name: String,
     } catch {
       case t: Throwable =>
         if (isRunning.get) {
-          warn(s"Error in fetch $fetchRequest", t)
+          warn(s" fetch $fetchRequest", t)
           inLock(partitionMapLock) {
             partitionStates.partitionSet.asScala.foreach(updatePartitionsWithError)
             // there is an error occurred while fetching partitions, sleep a while
@@ -145,7 +145,7 @@ abstract class AbstractFetcherThread(name: String,
                 case Errors.NONE =>
                   try {
                     val records = partitionData.toRecords
-                    val newOffset = records.shallowEntries.asScala.lastOption.map(_.nextOffset).getOrElse(
+                    val newOffset = records.entries.asScala.toSeq.lastOption.map(_.nextOffset).getOrElse(
                       currentPartitionFetchState.offset)
 
                     fetcherLagStats.getAndMaybePut(topic, partitionId).lag = Math.max(0L, partitionData.highWatermark - newOffset)

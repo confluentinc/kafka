@@ -28,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 import static org.apache.kafka.test.TestUtils.tempFile;
@@ -37,16 +38,16 @@ import static org.junit.Assert.fail;
 
 public class FileRecordsTest {
 
-    private Record[] records = new Record[] {
-            Record.create("abcd".getBytes()),
-            Record.create("efgh".getBytes()),
-            Record.create("ijkl".getBytes())
+    private byte[][] values = new byte[][] {
+            "abcd".getBytes(),
+            "efgh".getBytes(),
+            "ijkl".getBytes()
     };
     private FileRecords fileRecords;
 
     @Before
     public void setup() throws IOException {
-        this.fileRecords = createFileRecords(records);
+        this.fileRecords = createFileRecords(values);
     }
 
     /**
@@ -83,7 +84,11 @@ public class FileRecordsTest {
         fileRecords.channel().write(buffer);
 
         // appending those bytes should not change the contents
-        TestUtils.checkEquals(Arrays.asList(records), fileRecords.records());
+        Iterator<LogRecord> logRecords = fileRecords.records().iterator();
+        for (int i = 0; i < values.length; i++) {
+            assertTrue(logRecords.hasNext());
+            assertEquals(logRecords.next().value(), ByteBuffer.wrap(values[i]));
+        }
     }
 
     /**
@@ -92,7 +97,11 @@ public class FileRecordsTest {
     @Test
     public void testIterationDoesntChangePosition() throws IOException {
         long position = fileRecords.channel().position();
-        TestUtils.checkEquals(Arrays.asList(records), fileRecords.records());
+        Iterator<LogRecord> logRecords = fileRecords.records().iterator();
+        for (int i = 0; i < values.length; i++) {
+            assertTrue(logRecords.hasNext());
+            assertEquals(logRecords.next().value(), ByteBuffer.wrap(values[i]));
+        }
         assertEquals(position, fileRecords.channel().position());
     }
 
@@ -102,7 +111,7 @@ public class FileRecordsTest {
     @Test
     public void testRead() throws IOException {
         FileRecords read = fileRecords.read(0, fileRecords.sizeInBytes());
-        TestUtils.checkEquals(fileRecords.shallowEntries(), read.shallowEntries());
+        TestUtils.checkEquals(fileRecords.entries(), read.entries());
 
         List<LogEntry> items = shallowEntries(read);
         LogEntry second = items.get(1);
@@ -274,14 +283,14 @@ public class FileRecordsTest {
     @Test
     public void testPreallocateClearShutdown() throws IOException {
         File temp = tempFile();
-        FileRecords set = FileRecords.open(temp, false, 512 * 1024 * 1024, true);
-        set.append(MemoryRecords.withRecords(records));
+        FileRecords fileRecords = FileRecords.open(temp, false, 512 * 1024 * 1024, true);
+        append(fileRecords, values);
 
-        int oldPosition = (int) set.channel().position();
-        int oldSize = set.sizeInBytes();
-        assertEquals(fileRecords.sizeInBytes(), oldPosition);
-        assertEquals(fileRecords.sizeInBytes(), oldSize);
-        set.close();
+        int oldPosition = (int) fileRecords.channel().position();
+        int oldSize = fileRecords.sizeInBytes();
+        assertEquals(this.fileRecords.sizeInBytes(), oldPosition);
+        assertEquals(this.fileRecords.sizeInBytes(), oldSize);
+        fileRecords.close();
 
         File tempReopen = new File(temp.getAbsolutePath());
         FileRecords setReopen = FileRecords.open(tempReopen, true, 512 * 1024 * 1024, true);
@@ -371,28 +380,38 @@ public class FileRecordsTest {
 
     private void verifyConvertedMessageSet(List<LogEntry> initialEntries, Records convertedRecords, byte magicByte) {
         int i = 0;
-        for (LogEntry logEntry : deepEntries(convertedRecords)) {
-            assertEquals("magic byte should be " + magicByte, magicByte, logEntry.record().magic());
-            assertEquals("offset should not change", initialEntries.get(i).offset(), logEntry.offset());
-            assertEquals("key should not change", initialEntries.get(i).record().key(), logEntry.record().key());
-            assertEquals("payload should not change", initialEntries.get(i).record().value(), logEntry.record().value());
-            i += 1;
+        for (LogEntry entry : convertedRecords.entries()) {
+            assertEquals("magic byte should be " + magicByte, magicByte, entry.magic());
+            for (LogRecord record : entry) {
+                assertTrue("Inner record should have magic " + magicByte, record.hasMagic(magicByte));
+                assertEquals("offset should not change", initialEntries.get(i).offset(), record.offset());
+                assertEquals("key should not change", initialEntries.get(i).record().key(), record.key());
+                assertEquals("payload should not change", initialEntries.get(i).record().value(), record.value());
+                i += 1;
+            }
         }
     }
 
     private static List<LogEntry> shallowEntries(Records buffer) {
-        return TestUtils.toList(buffer.shallowEntries().iterator());
+        return TestUtils.toList(buffer.entries().iterator());
     }
 
-    private static List<LogEntry> deepEntries(Records buffer) {
-        return TestUtils.toList(buffer.deepEntries().iterator());
-    }
-
-    private FileRecords createFileRecords(Record ... records) throws IOException {
+    private FileRecords createFileRecords(byte[][] values) throws IOException {
         FileRecords fileRecords = FileRecords.open(tempFile());
-        fileRecords.append(MemoryRecords.withRecords(records));
-        fileRecords.flush();
+        append(fileRecords, values);
         return fileRecords;
+    }
+
+    private void append(FileRecords fileRecords, byte[][] values) throws IOException {
+        long offset = 0L;
+        for (byte[] value : values) {
+            ByteBuffer buffer = ByteBuffer.allocate(128);
+            MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.CURRENT_MAGIC_VALUE,
+                    CompressionType.NONE, TimestampType.CREATE_TIME, offset);
+            builder.appendWithOffset(offset++, System.currentTimeMillis(), null, value);
+            fileRecords.append(builder.build());
+        }
+        fileRecords.flush();
     }
 
 }

@@ -69,11 +69,12 @@ public final class Record {
      */
     public static final byte MAGIC_VALUE_V0 = 0;
     public static final byte MAGIC_VALUE_V1 = 1;
+    public static final byte MAGIC_VALUE_V2 = 2;
 
     /**
      * The current "magic" value
      */
-    public static final byte CURRENT_MAGIC_VALUE = MAGIC_VALUE_V1;
+    public static final byte CURRENT_MAGIC_VALUE = MAGIC_VALUE_V2;
 
     /**
      * Specifies the mask for the compression code. 3 bits to hold the compression codec. 0 is reserved to indicate no
@@ -243,7 +244,7 @@ public final class Record {
 
     /**
      * The timestamp of the message.
-     * @return the timstamp type or {@link TimestampType#NO_TIMESTAMP_TYPE} if the magic is 0 or the message has
+     * @return the timestamp type or {@link TimestampType#NO_TIMESTAMP_TYPE} if the magic is 0 or the message has
      *   been up-converted.
      */
     public TimestampType timestampType() {
@@ -402,7 +403,7 @@ public final class Record {
     }
 
     public static Record create(long timestamp, byte[] key, byte[] value) {
-        return create(CURRENT_MAGIC_VALUE, timestamp, key, value, CompressionType.NONE, TimestampType.CREATE_TIME);
+        return create(MAGIC_VALUE_V1, timestamp, key, value, CompressionType.NONE, TimestampType.CREATE_TIME);
     }
 
     public static Record create(byte magic, long timestamp, byte[] key, byte[] value) {
@@ -426,7 +427,7 @@ public final class Record {
     }
 
     public static Record create(byte[] value) {
-        return create(CURRENT_MAGIC_VALUE, NO_TIMESTAMP, null, value, CompressionType.NONE, TimestampType.CREATE_TIME);
+        return create(MAGIC_VALUE_V1, NO_TIMESTAMP, null, value, CompressionType.NONE, TimestampType.CREATE_TIME);
     }
 
     /**
@@ -499,19 +500,18 @@ public final class Record {
         return write(out, magic, timestamp, wrapNullable(key), wrapNullable(value), compressionType, timestampType);
     }
 
-    private static long write(DataOutputStream out,
-                              byte magic,
-                              long timestamp,
-                              ByteBuffer key,
-                              ByteBuffer value,
-                              CompressionType compressionType,
-                              TimestampType timestampType) throws IOException {
+    public static long write(DataOutputStream out,
+                             byte magic,
+                             long timestamp,
+                             ByteBuffer key,
+                             ByteBuffer value,
+                             CompressionType compressionType,
+                             TimestampType timestampType) throws IOException {
         byte attributes = computeAttributes(magic, compressionType, timestampType);
         long crc = computeChecksum(magic, attributes, timestamp, key, value);
         write(out, magic, crc, attributes, timestamp, key, value);
         return crc;
     }
-
 
     /**
      * Write a record using raw fields (without validation). This should only be used in testing.
@@ -548,7 +548,7 @@ public final class Record {
         out.writeByte(attributes);
 
         // maybe write timestamp
-        if (magic > 0)
+        if (magic > MAGIC_VALUE_V0)
             out.writeLong(timestamp);
 
         // write the key
@@ -577,6 +577,10 @@ public final class Record {
         return recordSize(magic, key == null ? 0 : key.length, value == null ? 0 : value.length);
     }
 
+    public static int recordSize(byte magic, ByteBuffer key, ByteBuffer value) {
+        return recordSize(magic, key == null ? 0 : key.limit(), value == null ? 0 : value.limit());
+    }
+
     private static int recordSize(byte magic, int keySize, int valueSize) {
         return recordOverhead(magic) + keySize + valueSize;
     }
@@ -586,7 +590,7 @@ public final class Record {
         byte attributes = 0;
         if (type.id > 0)
             attributes = (byte) (attributes | (COMPRESSION_CODEC_MASK & type.id));
-        if (magic > 0)
+        if (magic > MAGIC_VALUE_V0)
             return timestampType.updateAttributes(attributes);
         return attributes;
     }
@@ -603,7 +607,7 @@ public final class Record {
         Crc32 crc = new Crc32();
         crc.update(magic);
         crc.update(attributes);
-        if (magic > 0)
+        if (magic > MAGIC_VALUE_V0)
             crc.updateLong(timestamp);
         // update for the key
         if (key == null) {

@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.kafka.common.record;
 
 import org.junit.Test;
@@ -90,6 +91,26 @@ public class SimpleRecordTest {
             assertEquals(record.value(), converted.value());
             assertTrue(record.isValid());
             assertEquals(record.convertedSize(Record.MAGIC_VALUE_V0), converted.sizeInBytes());
+        }
+    }
+
+    @Test
+    public void buildEosRecord() {
+        ByteBuffer buffer = ByteBuffer.allocate(2048);
+
+        MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME, 1234567L);
+        builder.appendWithOffset(1234567, System.currentTimeMillis(), "a".getBytes(), "v".getBytes());
+        builder.appendWithOffset(1234568, System.currentTimeMillis(), "b".getBytes(), "v".getBytes());
+
+        MemoryRecords records = builder.build();
+        for (LogEntry.ShallowLogEntry entry : records.entries()) {
+            assertEquals(1234567, entry.firstOffset());
+            assertEquals(1234568, entry.lastOffset());
+            assertTrue(entry.isValid());
+
+            for (LogRecord record : entry) {
+                assertTrue(record.isValid());
+            }
         }
     }
 
