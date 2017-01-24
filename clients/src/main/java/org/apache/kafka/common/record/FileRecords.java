@@ -90,7 +90,6 @@ public class FileRecords extends AbstractRecords implements Closeable {
             channel.position(limit);
         }
 
-        shallowEntries = shallowEntriesFrom(start);
     }
 
     @Override

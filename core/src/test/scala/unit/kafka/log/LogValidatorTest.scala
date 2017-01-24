@@ -190,9 +190,9 @@ class LogValidatorTest extends JUnitSuite {
     val timestampSeq = Seq(now - 1, now + 1, now)
     val buf = ByteBuffer.allocate(512)
     val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME)
-    builder.append(0, timestampSeq(0), null, "hello".getBytes)
-    builder.append(1, timestampSeq(1), null, "there".getBytes)
-    builder.append(2, timestampSeq(2), null, "beautiful".getBytes)
+    builder.appendWithOffset(0, timestampSeq(0), null, "hello".getBytes)
+    builder.appendWithOffset(1, timestampSeq(1), null, "there".getBytes)
+    builder.appendWithOffset(2, timestampSeq(2), null, "beautiful".getBytes)
     val records = builder.build()
 
     val validatingResults = LogValidator.validateMessagesAndAssignOffsets(records,
@@ -265,9 +265,9 @@ class LogValidatorTest extends JUnitSuite {
     val timestampSeq = Seq(now - 1, now + 1, now)
     val buf = ByteBuffer.allocate(512)
     val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME)
-    builder.append(0, timestampSeq(0), null, "hello".getBytes)
-    builder.append(1, timestampSeq(1), null, "there".getBytes)
-    builder.append(2, timestampSeq(2), null, "beautiful".getBytes)
+    builder.appendWithOffset(0, timestampSeq(0), null, "hello".getBytes)
+    builder.appendWithOffset(1, timestampSeq(1), null, "there".getBytes)
+    builder.appendWithOffset(2, timestampSeq(2), null, "beautiful".getBytes)
     val records = builder.build()
 
     val validatedResults =
@@ -510,9 +510,9 @@ class LogValidatorTest extends JUnitSuite {
                             codec: CompressionType = CompressionType.NONE): MemoryRecords = {
     val buf = ByteBuffer.allocate(512)
     val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME)
-    builder.append(0, timestamp, null, "hello".getBytes)
-    builder.append(1, timestamp, null, "there".getBytes)
-    builder.append(2, timestamp, null, "beautiful".getBytes)
+    builder.appendWithOffset(0, timestamp, null, "hello".getBytes)
+    builder.appendWithOffset(1, timestamp, null, "there".getBytes)
+    builder.appendWithOffset(2, timestamp, null, "beautiful".getBytes)
     builder.build()
   }
 

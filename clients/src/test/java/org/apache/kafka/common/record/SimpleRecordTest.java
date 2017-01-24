@@ -99,8 +99,8 @@ public class SimpleRecordTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
 
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME, 1234567L);
-        builder.append(1234567, System.currentTimeMillis(), "a".getBytes(), "v".getBytes());
-        builder.append(1234568, System.currentTimeMillis(), "b".getBytes(), "v".getBytes());
+        builder.appendWithOffset(1234567, System.currentTimeMillis(), "a".getBytes(), "v".getBytes());
+        builder.appendWithOffset(1234568, System.currentTimeMillis(), "b".getBytes(), "v".getBytes());
 
         MemoryRecords records = builder.build();
         for (LogEntry.ShallowLogEntry entry : records.entries()) {

@@ -352,7 +352,7 @@ public class MemoryRecordsBuilder {
      * @param entry The entry to append
      */
     public void append(LogEntry entry) {
-        append(entry.offset(), entry.record());
+        appendWithOffset(entry.offset(), entry.record());
     }
 
     /**
@@ -360,7 +360,7 @@ public class MemoryRecordsBuilder {
      * @param record
      */
     public void append(LogRecord record) {
-        append(record.offset(), record.timestamp(), record.key(), record.value());
+        appendWithOffset(record.offset(), record.timestamp(), record.key(), record.value());
     }
 
     /**
@@ -369,7 +369,7 @@ public class MemoryRecordsBuilder {
      * @param record
      */
     public void append(long offset, LogRecord record) {
-        append(offset, record.timestamp(), record.key(), record.value());
+        appendWithOffset(offset, record.timestamp(), record.key(), record.value());
     }
 
 

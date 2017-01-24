@@ -23,6 +23,7 @@ import java.nio.file.Files
 
 import kafka.common.{KafkaException, TopicAndPartition}
 import kafka.utils.{Logging, nonthreadsafe}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, InvalidSequenceNumberException, ProducerFencedException}
 import org.apache.kafka.common.protocol.types._
 import org.apache.kafka.common.utils.Utils
@@ -121,7 +122,7 @@ object ProducerIdMapping {
     s"${file.getName.replace(s".$FilenameSuffix", "")}".toLong
   }
 
-  private def formatDirName(topicPartition: TopicAndPartition): String = {
+  private def formatDirName(topicPartition: TopicPartition): String = {
     s"$DirnamePrefix-${topicPartition.topic}-${topicPartition.partition}"
   }
 
@@ -144,7 +145,7 @@ object ProducerIdMapping {
  * @param snapParentDir
  */
 @nonthreadsafe
-class ProducerIdMapping(val topicPartition: TopicAndPartition,
+class ProducerIdMapping(val topicPartition: TopicPartition,
                         val config: LogConfig,
                         val snapParentDir: File) extends Logging {
   import ProducerIdMapping._

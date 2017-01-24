@@ -110,11 +110,11 @@ public class MemoryRecords extends AbstractRecords {
      * @param destinationBuffer The byte buffer to write the filtered records to
      * @return A FilterResult with a summary of the output (for metrics)
      */
-    public FilterResult filterTo(LogEntryFilter filter, ByteBuffer destinationBuffer) {
-        return filterTo(shallowEntries(), filter, destinationBuffer);
+    public FilterResult filterTo(LogRecordFilter filter, ByteBuffer destinationBuffer) {
+        return filterTo(entries(), filter, destinationBuffer);
     }
 
-    private static FilterResult filterTo(Iterable<LogEntry.ShallowLogEntry> fromShallowEntries, LogEntryFilter filter,
+    private static FilterResult filterTo(Iterable<LogEntry.ShallowLogEntry> fromShallowEntries, LogRecordFilter filter,
                                        ByteBuffer destinationBuffer) {
         long firstOffset = -1;
         long maxTimestamp = Record.NO_TIMESTAMP;
@@ -452,9 +452,9 @@ public class MemoryRecords extends AbstractRecords {
         long offset = firstOffset;
         for (LogRecord record : records) {
             if (assignOffsets)
-                builder.append(offset++, record.timestamp(), record.key(), record.value());
+                builder.appendWithOffset(offset++, record.timestamp(), record.key(), record.value());
             else
-                builder.append(record.offset(), record.timestamp(), record.key(), record.value());
+                builder.appendWithOffset(record.offset(), record.timestamp(), record.key(), record.value());
         }
         return builder;
     }

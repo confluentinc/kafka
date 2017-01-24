@@ -28,32 +28,56 @@ public class InitPIDRequest extends AbstractRequest {
 
     private final String appId;
 
-    public InitPIDRequest(Struct struct) {
-        super(struct);
+    public static class Builder extends AbstractRequest.Builder<InitPIDRequest> {
+        private String appId;
+        public Builder(String appId) {
+            super(ApiKeys.API_VERSIONS);
+            this.appId = appId;
+        }
+
+        public void setAppId(String appId) {
+            this.appId = appId;
+        }
+
+        @Override
+        public InitPIDRequest build() {
+            return new InitPIDRequest(version(), this.appId);
+
+        }
+
+        @Override
+        public String toString() {
+            return "(type=InitPIDRequest)";
+        }
+
+    }
+
+    public InitPIDRequest(Struct struct, short versionId) {
+        super(struct, versionId);
         this.appId = struct.getString(APP_ID_KEY_NAME);
     }
 
-    public InitPIDRequest(int version, String appId) {
-        super(new Struct(ProtoUtils.requestSchema(ApiKeys.INIT_PRODUCER_ID.id, version)));
+    private InitPIDRequest(short version, String appId) {
+        super(new Struct(ProtoUtils.requestSchema(ApiKeys.INIT_PRODUCER_ID.id, version)), version);
         this.appId = appId;
         struct.set(APP_ID_KEY_NAME, appId);
     }
 
-    public InitPIDRequest(String appId) {
-        this(0, appId);
+    private InitPIDRequest(String appId) {
+        this((short)0, appId);
     }
 
     @Override
-    public AbstractResponse getErrorResponse(int versionId, Throwable e) {
+    public AbstractResponse getErrorResponse(Throwable e) {
         return new InitPIDResponse(Errors.forException(e));
     }
 
-    public static InitPIDRequest parse(ByteBuffer buffer, int versionId) {
-        return new InitPIDRequest(ProtoUtils.parseRequest(ApiKeys.INIT_PRODUCER_ID.id, versionId, buffer));
+    public static InitPIDRequest parse(ByteBuffer buffer, short versionId) {
+        return new InitPIDRequest(ProtoUtils.parseRequest(ApiKeys.INIT_PRODUCER_ID.id, versionId, buffer), versionId);
     }
 
     public static InitPIDRequest parse(ByteBuffer buffer) {
-        return new InitPIDRequest(CURRENT_SCHEMA.read(buffer));
+        return parse(buffer, ProtoUtils.latestVersion(ApiKeys.INIT_PRODUCER_ID.id));
     }
 
     public String appId() {

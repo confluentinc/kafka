@@ -150,8 +150,8 @@ case object KAFKA_0_10_2_IV0 extends ApiVersion {
   val id: Int = 9
 }
 
-case object KAFKA_0_10_3_IV0 extends ApiVersino {
-  val version: Sting = "0.10.3-IV0"
+case object KAFKA_0_10_3_IV0 extends ApiVersion {
+  val version: String = "0.10.3-IV0"
   val messageFormatVersion: Byte = Record.MAGIC_VALUE_V2
   val id: Int = 10
 }

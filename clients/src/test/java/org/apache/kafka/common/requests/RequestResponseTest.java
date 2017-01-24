@@ -607,7 +607,7 @@ public class RequestResponseTest {
     }
 
     private InitPIDRequest createInitPIDRequest() {
-        return new InitPIDRequest(0, null);
+        return new InitPIDRequest.Builder(null).build();
     }
 
     private InitPIDResponse createInitPIDResponse() {

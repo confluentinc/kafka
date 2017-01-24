@@ -408,7 +408,7 @@ public class FileRecordsTest {
             ByteBuffer buffer = ByteBuffer.allocate(128);
             MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.CURRENT_MAGIC_VALUE,
                     CompressionType.NONE, TimestampType.CREATE_TIME, offset);
-            builder.append(offset++, System.currentTimeMillis(), null, value);
+            builder.appendWithOffset(offset++, System.currentTimeMillis(), null, value);
             fileRecords.append(builder.build());
         }
         fileRecords.flush();

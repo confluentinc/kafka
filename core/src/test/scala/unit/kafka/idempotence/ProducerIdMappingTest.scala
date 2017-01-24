@@ -20,9 +20,9 @@ package unit.kafka.idempotence
 import java.io.File
 import java.util.Properties
 
-import kafka.common.TopicAndPartition
 import kafka.log.{LogConfig, ProducerIdMapping}
 import kafka.utils.TestUtils
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, InvalidSequenceNumberException, ProducerFencedException}
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
@@ -32,7 +32,7 @@ class ProducerIdMappingTest extends JUnitSuite {
   var idMappingDir: File = null
   var config: LogConfig = null
   var idMapping: ProducerIdMapping = null
-  val partition = TopicAndPartition("test", 0)
+  val partition = new TopicPartition("test", 0)
   val pid = 1L
 
   @Before

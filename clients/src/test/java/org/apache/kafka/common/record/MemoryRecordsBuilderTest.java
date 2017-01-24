@@ -214,7 +214,7 @@ public class MemoryRecordsBuilderTest {
 
         long logAppendTime = System.currentTimeMillis();
         MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, Record.MAGIC_VALUE_V1, compressionType,
-                TimestampType.CREATE_TIME, 0L, logAppendTime, buffer.capacity());
+                TimestampType.CREATE_TIME, 0L, logAppendTime, 0, (short) 0, 0, buffer.capacity());
 
         builder.appendWithOffset(0L, System.currentTimeMillis(), "a".getBytes(), null);
 
@@ -229,7 +229,7 @@ public class MemoryRecordsBuilderTest {
 
         long logAppendTime = System.currentTimeMillis();
         MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, Record.MAGIC_VALUE_V1, compressionType,
-                TimestampType.CREATE_TIME, 0L, logAppendTime, buffer.capacity());
+                TimestampType.CREATE_TIME, 0L, logAppendTime, 9, (short) 0, 0, buffer.capacity());
 
         builder.append(Record.create(Record.MAGIC_VALUE_V0, 0L, "a".getBytes(), null));
     }

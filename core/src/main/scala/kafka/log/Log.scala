@@ -111,7 +111,7 @@ class Log(@volatile var dir: File,
       0
   }
 
-  val topicAndPartition: TopicAndPartition = Log.parseTopicPartitionName(dir)
+  val topicAndPartition: TopicPartition = Log.parseTopicPartitionName(dir)
 
   @volatile private var nextOffsetMetadata: LogOffsetMetadata = _
 
@@ -120,8 +120,6 @@ class Log(@volatile var dir: File,
 
   /* the actual segments of the log */
   private val segments: ConcurrentNavigableMap[java.lang.Long, LogSegment] = new ConcurrentSkipListMap[java.lang.Long, LogSegment]
-
-  val tags = Map("topic" -> topicAndPartition.topic, "partition" -> topicAndPartition.partition.toString)
 
   locally {
     val startMs = time.milliseconds

@@ -39,7 +39,7 @@ object ByteBufferMessageSet {
         timestampType, offsetAssigner.baseOffset)
 
       for (message <- messages)
-        builder.append(offsetAssigner.nextAbsoluteOffset(), message.asRecord)
+        builder.appendWithOffset(offsetAssigner.nextAbsoluteOffset(), message.asRecord)
 
       builder.build().buffer
     }
