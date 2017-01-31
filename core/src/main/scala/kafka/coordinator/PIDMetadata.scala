@@ -21,5 +21,6 @@ import kafka.utils.nonthreadsafe
 @nonthreadsafe
 private[coordinator] class PIDMetadata(val PID: Long) {
 
-  var epoch = 0
+  /* current epoch number of the PID */
+  var epoch: Short = 0
 }

@@ -708,6 +708,14 @@ class ZkUtils(val zkClient: ZkClient,
     }
   }
 
+  def getTopicPartitionCount(topic: String, defaultNumPartitions: Int): Int = {
+    val topicData = getPartitionAssignmentForTopics(Seq(topic))
+    if (topicData(topic).nonEmpty)
+      topicData(topic).size
+    else
+      defaultNumPartitions
+  }
+
   def getPartitionsBeingReassigned(): Map[TopicAndPartition, ReassignedPartitionsContext] = {
     // read the partitions and their new replica list
     val jsonPartitionMapOpt = readDataMaybeNull(ReassignPartitionsPath)._1

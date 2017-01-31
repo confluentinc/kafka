@@ -28,28 +28,66 @@ import org.apache.kafka.common.protocol.Errors
   * Producers with no specific appIDs may talk to a random broker as their coordinators.
   */
 class TransactionCoordinator(val brokerId: Int,
-                             val pIDManager: PIDManager) extends Logging {
+                             val pIDManager: PIDManager,
+                             val logManager: TransactionLogManager) extends Logging {
 
   this.logIdent = "[Transaction Coordinator " + brokerId + "]: "
 
   type InitPIDCallback = InitPIDResult => Unit
 
+  /* AppID to PID metadata map cache */
   private val pIDMetadataCache = new Pool[String, PIDMetadata]
 
   def handleInitPID(appID: String,
                     responseCallback: InitPIDCallback): Unit = {
-    if (appID.equals("")) {
+    if (appID == null || appID.isEmpty) {
       // if the appID is not specified, then always blindly accept the request
       // and return a new PID from the PID manager
       val pID: Long = pIDManager.getNewPID()
-      responseCallback(InitPIDResult(pID, -1 /* epoch */, Errors.NONE.code()))
-    } else {
 
+      responseCallback(InitPIDResult(pID, -1 /* epoch */, Errors.NONE.code()))
+    } else if(!logManager.isCoordinatorFor(appID)) {
+      // check if it is the assigned coordinator for the appID
+      responseCallback(initPIDError(Errors.NOT_COORDINATOR_FOR_GROUP.code()))
+    } else {
+      // only try to get a new PID and update the cache if the appID is unknown
+      getPIDMetadata(appID) match {
+        case None =>
+          val pID: Long = pIDManager.getNewPID()
+          val metadata = addPIDMetadata(appID, new PIDMetadata(pID))
+
+          responseCallback(initPIDMetadata(metadata))
+
+        case Some(metadata) =>
+          metadata.epoch += 1
+
+          responseCallback(initPIDMetadata(metadata))
+      }
     }
   }
 
-  private
+  private def getPIDMetadata(appID: String): Option[PIDMetadata] = {
+    Option(pIDMetadataCache.get(appID))
+  }
+
+  private def addPIDMetadata(appID: String, pIDMetadata: PIDMetadata): PIDMetadata = {
+    val currentMetadata = pIDMetadataCache.putIfNotExists(appID, pIDMetadata)
+    if (currentMetadata != null) {
+      currentMetadata
+    } else {
+      pIDMetadata
+    }
+  }
+
+  private def initPIDError(errorCode: Short): InitPIDResult = {
+    InitPIDResult(-1L /* PID */, -1 /* epoch */, errorCode)
+  }
+
+  private def initPIDMetadata(pIDMetadata: PIDMetadata): InitPIDResult = {
+    InitPIDResult(pIDMetadata.PID, pIDMetadata.epoch, Errors.NONE.code())
+  }
 }
+
 
 
 case class InitPIDResult(pID: Long, epoch: Short, errorCode: Short)
