@@ -19,12 +19,11 @@ package kafka.coordinator
 import kafka.utils.{Json, Logging, ZkUtils}
 
 /**
-  * PID Manager is part of the transaction coordinator that provides PIDs in a unique way such that the same PID will not be
+  * PID manager is part of the transaction coordinator that provides PIDs in a unique way such that the same PID will not be
   * assigned twice across multiple transaction coordinators.
   *
   * PIDs are managed via ZooKeeper as the coordination mechanism.
   */
-
 object PIDManager {
   val version: Long = 1L
   val PIDBlockSize: Int = 1000
