@@ -17,6 +17,7 @@
 package kafka.coordinator
 
 import kafka.utils.{Logging, Pool}
+import org.apache.kafka.common.protocol.Errors
 
 /**
   * Transaction coordinator handles message transactions sent by producers and communicate with brokers
@@ -31,9 +32,24 @@ class TransactionCoordinator(val brokerId: Int,
 
   this.logIdent = "[Transaction Coordinator " + brokerId + "]: "
 
-  private val groupMetadataCache = new Pool[String, GroupMetadata]
+  type InitPIDCallback = InitPIDResult => Unit
 
-  def handleInitPID(appID: String): Unit = {
+  private val pIDMetadataCache = new Pool[String, PIDMetadata]
 
+  def handleInitPID(appID: String,
+                    responseCallback: InitPIDCallback): Unit = {
+    if (appID.equals("")) {
+      // if the appID is not specified, then always blindly accept the request
+      // and return a new PID from the PID manager
+      val pID: Long = pIDManager.getNewPID()
+      responseCallback(InitPIDResult(pID, -1 /* epoch */, Errors.NONE.code()))
+    } else {
+
+    }
   }
+
+  private
 }
+
+
+case class InitPIDResult(pID: Long, epoch: Short, errorCode: Short)
