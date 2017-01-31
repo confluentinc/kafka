@@ -16,8 +16,10 @@
   */
 package kafka.coordinator
 
-import kafka.utils.{Logging, Pool}
+import kafka.server.{KafkaConfig, ReplicaManager}
+import kafka.utils.{Logging, Pool, ZkUtils}
 import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.utils.Time
 
 /**
   * Transaction coordinator handles message transactions sent by producers and communicate with brokers
@@ -27,6 +29,16 @@ import org.apache.kafka.common.protocol.Errors
   * producers. Producers with specific appIDs are assigned to their corresponding coordinators;
   * Producers with no specific appIDs may talk to a random broker as their coordinators.
   */
+object TransactionCoordinator {
+
+  def apply(config: KafkaConfig, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
+
+    val pIDManager = new PIDManager(config.brokerId, zkUtils)
+    val logManager = new TransactionLogManager(config.brokerId, zkUtils)
+    new TransactionCoordinator(config.brokerId, pIDManager, logManager)
+  }
+}
+
 class TransactionCoordinator(val brokerId: Int,
                              val pIDManager: PIDManager,
                              val logManager: TransactionLogManager) extends Logging {
