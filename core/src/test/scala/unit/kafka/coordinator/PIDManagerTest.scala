@@ -26,35 +26,33 @@ import org.junit.Assert._
 
 class PIDManagerTest {
 
-  var block: Int = -1
-  val capturedArgument: Capture[String] = EasyMock.newCapture()
   val zkUtils: ZkUtils = EasyMock.createNiceMock(classOf[ZkUtils])
-  EasyMock.expect(zkUtils.createSequentialPersistentPath(EasyMock.capture(capturedArgument),
-                                                         EasyMock.anyString(),
-                                                         EasyMock.anyObject().asInstanceOf[java.util.List[ACL]]))
-    .andAnswer(new IAnswer[String] {
-      override def answer(): String = {
-        block += 1
-        capturedArgument + block.toString
-      }
-    })
-    .anyTimes()
-  EasyMock.replay(zkUtils)
-
-  val manager1: PIDManager = new PIDManager(0, zkUtils)
-  val manager2: PIDManager = new PIDManager(1, zkUtils)
-
-  var pid1: Long = manager1.getNewPID()
 
   @After
   def tearDown(): Unit = {
     EasyMock.reset(zkUtils)
-    manager1.shutdown()
-    manager2.shutdown()
   }
 
   @Test
   def testGetPID() {
+    var block: Long = -1L
+    val capturedArgument: Capture[String] = EasyMock.newCapture()
+    EasyMock.expect(zkUtils.createSequentialPersistentPath(EasyMock.capture(capturedArgument),
+      EasyMock.anyString(),
+      EasyMock.anyObject().asInstanceOf[java.util.List[ACL]]))
+      .andAnswer(new IAnswer[String] {
+        override def answer(): String = {
+          block += 1
+          capturedArgument + block.toString
+        }
+      })
+      .anyTimes()
+    EasyMock.replay(zkUtils)
+
+    val manager1: PIDManager = new PIDManager(0, zkUtils)
+    val manager2: PIDManager = new PIDManager(1, zkUtils)
+
+    var pid1: Long = manager1.getNewPID()
     var pid2: Long = manager2.getNewPID()
 
     assertEquals(0, pid1)
@@ -70,6 +68,23 @@ class PIDManagerTest {
 
     assertEquals(pid2 + PIDManager.PIDBlockSize, manager1.getNewPID())
     assertEquals(pid2 + PIDManager.PIDBlockSize * 2, manager2.getNewPID())
+  }
+
+  @Test(expected = classOf[java.lang.NumberFormatException])
+  def testExceedPIDLimit() {
+    val capturedArgument: Capture[String] = EasyMock.newCapture()
+    EasyMock.expect(zkUtils.createSequentialPersistentPath(EasyMock.capture(capturedArgument),
+      EasyMock.anyString(),
+      EasyMock.anyObject().asInstanceOf[java.util.List[ACL]]))
+      .andAnswer(new IAnswer[String] {
+        override def answer(): String = {
+          capturedArgument + "92233720368547758071"
+        }
+      })
+      .anyTimes()
+    EasyMock.replay(zkUtils)
+
+    val manager: PIDManager = new PIDManager(0, zkUtils)
   }
 }
 
