@@ -38,23 +38,22 @@ class PIDManager(val brokerId: Int,
 
   private var blockStartPID: Long = -1L
   private var blockEndPID: Long = -1L
-  private var currentPID: Long = -1L
+  private var nextPID: Long = -1L
 
   // grab the first block of PIDs
   this synchronized {
     getNewPIDBlock()
-    currentPID = blockStartPID
+    nextPID = blockStartPID
   }
 
   private def getNewPIDBlock(): Unit = {
-    val pIDBlock: String = zkUtils.createSequentialPersistentPath(
-      ZkUtils.IdempotentPIDPath + "/" + PIDManager.PIDBLockPrefix,
-      generatePIDBlockJson())
+    val zkPath = ZkUtils.IdempotentPIDPath + "/" + PIDManager.PIDBLockPrefix
+    val pIDBlock: String = zkUtils.createSequentialPersistentPath(zkPath, generatePIDBlockJson())
 
-    blockStartPID = pIDBlock.stripPrefix(PIDManager.PIDBLockPrefix).toLong
+    blockStartPID = pIDBlock.stripPrefix(zkPath).toLong * PIDManager.PIDBlockSize
     blockEndPID = blockStartPID + PIDManager.PIDBlockSize - 1
 
-    debug("Acquired new block from %d to %d".format(blockStartPID, blockEndPID))
+    debug("Acquired new PID block from %d to %d".format(blockStartPID, blockEndPID))
   }
 
   private def generatePIDBlockJson(): String = {
@@ -64,18 +63,18 @@ class PIDManager(val brokerId: Int,
   def getNewPID(): Long = {
     this synchronized {
       // grab a new block of PIDs if this block has been exhausted
-      if (currentPID + 1 > blockEndPID) {
+      if (nextPID > blockEndPID) {
         getNewPIDBlock()
-        currentPID = blockStartPID
+        nextPID = blockStartPID + 1
       } else {
-        currentPID += 1
+        nextPID += 1
       }
 
-      currentPID
+      nextPID - 1
     }
   }
 
   def shutdown() {
-    info("Shutdown complete: last PID assigned %d".format(currentPID))
+    info("Shutdown complete: last PID assigned %d".format(nextPID))
   }
 }
