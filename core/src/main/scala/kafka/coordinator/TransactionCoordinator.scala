@@ -62,7 +62,7 @@ class TransactionCoordinator(val brokerId: Int,
       // and return a new PID from the PID manager
       val pID: Long = pIDManager.getNewPID()
 
-      responseCallback(InitPIDResult(pID, -1 /* epoch */, Errors.NONE))
+      responseCallback(InitPIDResult(pID, 0 /* epoch */, Errors.NONE))
     } else if(!logManager.isCoordinatorFor(txnID)) {
       // check if it is the assigned coordinator for the txnID
       responseCallback(initPIDError(Errors.NOT_COORDINATOR_FOR_GROUP))

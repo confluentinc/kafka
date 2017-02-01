@@ -64,7 +64,7 @@ class TransactionLogManager(val brokerId: Int,
   /**
     * Add the partition into the owned list
     *
-    * NOTE: this is for test only
+    * TODO: this is for test only and should be augmented with txn log bootstrapping
     */
   def addPartitionOwnership(partition: Int) {
     inLock(partitionLock) {
@@ -75,7 +75,7 @@ class TransactionLogManager(val brokerId: Int,
   /**
     * Remove the partition from the owned list
     *
-    * NOTE: this is for test only
+    * TODO: this is for test only and should be augmented with cache cleaning
     */
   def removePartitionOwnership(offsetsPartition: Int): Unit = {
     inLock(partitionLock) {

@@ -708,7 +708,7 @@ class ZkUtils(val zkClient: ZkClient,
     }
   }
 
-  def getTopicPartitionCount(topic: String, defaultNumPartitions: Int): Int = {
+  def getTopicPartitionCount(topic: String, defaultNumPartitions: Int = 50): Int = {
     val topicData = getPartitionAssignmentForTopics(Seq(topic))
     if (topicData(topic).nonEmpty)
       topicData(topic).size
