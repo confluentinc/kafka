@@ -49,9 +49,9 @@ class TransactionLogManager(val brokerId: Int,
   /* partitions of transaction topics that are assigned to this manager */
   private val ownedPartitions: mutable.Set[Int] = mutable.Set()
 
-  def partitionFor(appID: String): Int = Utils.abs(appID.hashCode) % transactionTopicPartitionCount
+  def partitionFor(txnID: String): Int = Utils.abs(txnID.hashCode) % transactionTopicPartitionCount
 
-  def isCoordinatorFor(appID: String): Boolean = inLock(partitionLock) { ownedPartitions.contains(partitionFor(appID)) }
+  def isCoordinatorFor(txnID: String): Boolean = inLock(partitionLock) { ownedPartitions.contains(partitionFor(txnID)) }
 
   /**
     * Gets the partition count of the transaction log topic from ZooKeeper.

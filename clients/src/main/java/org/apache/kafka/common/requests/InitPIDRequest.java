@@ -26,23 +26,23 @@ public class InitPIDRequest extends AbstractRequest {
 
     private static final Schema CURRENT_SCHEMA = ProtoUtils.currentRequestSchema(ApiKeys.INIT_PRODUCER_ID.id);
 
-    private final String appId;
+    private final String txnId;
 
     public static class Builder extends AbstractRequest.Builder<InitPIDRequest> {
-        private String appId;
-        public Builder(String appId) {
+        private String txnId;
+
+        public Builder(String txnId) {
             super(ApiKeys.API_VERSIONS);
-            this.appId = appId;
+            this.txnId = txnId;
         }
 
-        public void setAppId(String appId) {
-            this.appId = appId;
+        public void setTxnId(String txnId) {
+            this.txnId = txnId;
         }
 
         @Override
         public InitPIDRequest build() {
-            return new InitPIDRequest(version(), this.appId);
-
+            return new InitPIDRequest(version(), this.txnId);
         }
 
         @Override
@@ -52,19 +52,19 @@ public class InitPIDRequest extends AbstractRequest {
 
     }
 
-    public InitPIDRequest(Struct struct, short versionId) {
+    private InitPIDRequest(Struct struct, short versionId) {
         super(struct, versionId);
-        this.appId = struct.getString(APP_ID_KEY_NAME);
+        this.txnId = struct.getString(APP_ID_KEY_NAME);
     }
 
-    private InitPIDRequest(short version, String appId) {
+    private InitPIDRequest(short version, String txnId) {
         super(new Struct(ProtoUtils.requestSchema(ApiKeys.INIT_PRODUCER_ID.id, version)), version);
-        this.appId = appId;
-        struct.set(APP_ID_KEY_NAME, appId);
+        this.txnId = txnId;
+        struct.set(APP_ID_KEY_NAME, txnId);
     }
 
-    private InitPIDRequest(String appId) {
-        this((short) 0, appId);
+    private InitPIDRequest(String txnId) {
+        this((short) 0, txnId);
     }
 
     @Override
@@ -81,7 +81,7 @@ public class InitPIDRequest extends AbstractRequest {
     }
 
     public String appId() {
-        return  appId;
+        return txnId;
     }
 
 }

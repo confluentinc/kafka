@@ -16,6 +16,8 @@
   */
 package kafka.coordinator
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import kafka.server.{KafkaConfig, ReplicaManager}
 import kafka.utils.{Logging, Pool, ZkUtils}
 import org.apache.kafka.common.protocol.Errors
@@ -26,8 +28,8 @@ import org.apache.kafka.common.utils.Time
   * to update ongoing transaction's status.
   *
   * Each Kafka server instantiates a transaction coordinator which is responsible for a set of
-  * producers. Producers with specific appIDs are assigned to their corresponding coordinators;
-  * Producers with no specific appIDs may talk to a random broker as their coordinators.
+  * producers. Producers with specific transactional ids are assigned to their corresponding coordinators;
+  * Producers with no specific transactional id may talk to a random broker as their coordinators.
   */
 object TransactionCoordinator {
 
@@ -47,43 +49,74 @@ class TransactionCoordinator(val brokerId: Int,
 
   type InitPIDCallback = InitPIDResult => Unit
 
-  /* AppID to PID metadata map cache */
+  /* Active flag of the coordinator */
+  private val isActive = new AtomicBoolean(false)
+
+  /* TxnID to PID metadata map cache */
   private val pIDMetadataCache = new Pool[String, PIDMetadata]
 
-  def handleInitPID(appID: String,
+  def handleInitPID(txnID: String,
                     responseCallback: InitPIDCallback): Unit = {
-    if (appID == null || appID.isEmpty) {
-      // if the appID is not specified, then always blindly accept the request
+    if (txnID == null || txnID.isEmpty) {
+      // if the txnID is not specified, then always blindly accept the request
       // and return a new PID from the PID manager
       val pID: Long = pIDManager.getNewPID()
 
-      responseCallback(InitPIDResult(pID, -1 /* epoch */, Errors.NONE.code()))
-    } else if(!logManager.isCoordinatorFor(appID)) {
-      // check if it is the assigned coordinator for the appID
-      responseCallback(initPIDError(Errors.NOT_COORDINATOR_FOR_GROUP.code()))
+      responseCallback(InitPIDResult(pID, -1 /* epoch */, Errors.NONE))
+    } else if(!logManager.isCoordinatorFor(txnID)) {
+      // check if it is the assigned coordinator for the txnID
+      responseCallback(initPIDError(Errors.NOT_COORDINATOR_FOR_GROUP))
     } else {
-      // only try to get a new PID and update the cache if the appID is unknown
-      getPIDMetadata(appID) match {
+      // only try to get a new PID and update the cache if the txnID is unknown
+      getPIDMetadata(txnID) match {
         case None =>
           val pID: Long = pIDManager.getNewPID()
-          val metadata = addPIDMetadata(appID, new PIDMetadata(pID))
+          val metadata = addPIDMetadata(txnID, new PIDMetadata(pID))
 
           responseCallback(initPIDMetadata(metadata))
 
         case Some(metadata) =>
-          metadata.epoch += 1
+          metadata.epoch = (metadata.epoch + 1).toShort
 
           responseCallback(initPIDMetadata(metadata))
       }
     }
   }
 
-  private def getPIDMetadata(appID: String): Option[PIDMetadata] = {
-    Option(pIDMetadataCache.get(appID))
+  def handleTxnImmigration(offsetTopicPartitionId: Int) {
+    logManager.addPartitionOwnership(offsetTopicPartitionId)
   }
 
-  private def addPIDMetadata(appID: String, pIDMetadata: PIDMetadata): PIDMetadata = {
-    val currentMetadata = pIDMetadataCache.putIfNotExists(appID, pIDMetadata)
+  def handleTxnEmigration(offsetTopicPartitionId: Int) {
+    logManager.removePartitionOwnership(offsetTopicPartitionId)
+  }
+
+  /**
+    * Startup logic executed at the same time when the server starts up.
+    */
+  def startup() {
+    info("Starting up.")
+    isActive.set(true)
+    info("Startup complete.")
+  }
+
+  /**
+    * Shutdown logic executed at the same time when server shuts down.
+    * Ordering of actions should be reversed from the startup process.
+    */
+  def shutdown() {
+    info("Shutting down.")
+    isActive.set(false)
+    pIDManager.shutdown()
+    info("Shutdown complete.")
+  }
+
+  private def getPIDMetadata(txnID: String): Option[PIDMetadata] = {
+    Option(pIDMetadataCache.get(txnID))
+  }
+
+  private def addPIDMetadata(txnID: String, pIDMetadata: PIDMetadata): PIDMetadata = {
+    val currentMetadata = pIDMetadataCache.putIfNotExists(txnID, pIDMetadata)
     if (currentMetadata != null) {
       currentMetadata
     } else {
@@ -91,15 +124,15 @@ class TransactionCoordinator(val brokerId: Int,
     }
   }
 
-  private def initPIDError(errorCode: Short): InitPIDResult = {
-    InitPIDResult(-1L /* PID */, -1 /* epoch */, errorCode)
+  private def initPIDError(error: Errors): InitPIDResult = {
+    InitPIDResult(-1L /* PID */, -1 /* epoch */, error)
   }
 
   private def initPIDMetadata(pIDMetadata: PIDMetadata): InitPIDResult = {
-    InitPIDResult(pIDMetadata.PID, pIDMetadata.epoch, Errors.NONE.code())
+    InitPIDResult(pIDMetadata.PID, pIDMetadata.epoch, Errors.NONE)
   }
 }
 
 
 
-case class InitPIDResult(pID: Long, epoch: Short, errorCode: Short)
+case class InitPIDResult(pID: Long, epoch: Short, error: Errors)
