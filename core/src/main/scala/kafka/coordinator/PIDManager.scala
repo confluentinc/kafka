@@ -50,7 +50,14 @@ class PIDManager(val brokerId: Int,
     val zkPath = ZkUtils.IdempotentPIDPath + "/" + PIDManager.PIDBLockPrefix
     val pIDBlock: String = zkUtils.createSequentialPersistentPath(zkPath, generatePIDBlockJson())
 
-    blockStartPID = pIDBlock.stripPrefix(zkPath).toLong * PIDManager.PIDBlockSize
+    try {
+      blockStartPID = pIDBlock.stripPrefix(zkPath).toLong * PIDManager.PIDBlockSize
+    } catch {
+      case e: java.lang.NumberFormatException =>
+        // we have exhausted all the PIDs (wow!), treat it as a fatal error
+        fatal("Exhausted all PIDs as the returned sequence number in %s has exceeded long type limit".format(pIDBlock))
+        throw e
+    }
     blockEndPID = blockStartPID + PIDManager.PIDBlockSize - 1
 
     debug("Acquired new PID block from %d to %d".format(blockStartPID, blockEndPID))
