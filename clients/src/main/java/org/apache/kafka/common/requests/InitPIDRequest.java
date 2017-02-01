@@ -80,7 +80,7 @@ public class InitPIDRequest extends AbstractRequest {
         return parse(buffer, ProtoUtils.latestVersion(ApiKeys.INIT_PRODUCER_ID.id));
     }
 
-    public String appId() {
+    public String txnId() {
         return txnId;
     }
 

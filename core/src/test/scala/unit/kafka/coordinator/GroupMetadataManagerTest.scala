@@ -67,10 +67,8 @@ class GroupMetadataManagerTest {
 
     // make two partitions of the group topic to make sure some partitions are not owned by the coordinator
     zkUtils = EasyMock.createNiceMock(classOf[ZkUtils])
-    EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.GroupMetadataTopicName, 0)).andReturn(2)
+    EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.GroupMetadataTopicName, OffsetConfig.DefaultOffsetsTopicNumPartitions)).andReturn(2)
     EasyMock.replay(zkUtils)
-
-
 
     time = new MockTime
     replicaManager = EasyMock.createNiceMock(classOf[ReplicaManager])
