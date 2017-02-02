@@ -43,13 +43,6 @@ public class FileRecords extends AbstractRecords implements Closeable {
 
     private final Iterable<FileChannelLogEntry> entries;
 
-    private final Iterable<LogEntry> deepEntries = new Iterable<LogEntry>() {
-        @Override
-        public Iterator<LogEntry> iterator() {
-            return deepIterator();
-        }
-    };
-
     // mutable state
     private final AtomicInteger size;
     private final FileChannel channel;
@@ -292,7 +285,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
                 }
                 throw new IllegalStateException(String.format("The message set (max timestamp = %s, max offset = %s)" +
                         " should contain target timestamp %s but it does not.", logEntry.timestamp(),
-                        logEntry.offset(), targetTimestamp));
+                        logEntry.lastOffset(), targetTimestamp));
             }
         }
         return null;
@@ -311,7 +304,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
             long timestamp = logEntry.timestamp();
             if (timestamp > maxTimestamp) {
                 maxTimestamp = timestamp;
-                offsetOfMaxTimestamp = logEntry.offset();
+                offsetOfMaxTimestamp = logEntry.lastOffset();
             }
         }
         return new TimestampAndOffset(maxTimestamp, offsetOfMaxTimestamp);
@@ -357,22 +350,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
         else
             end = this.sizeInBytes();
         FileLogInputStream inputStream = new FileLogInputStream(channel, maxRecordSize, start, end);
-        return RecordsIterator.shallowIterator(inputStream);
-    }
-
-    @Override
-    public Iterable<LogEntry> deepEntries() {
-        return deepEntries;
-    }
-
-    private Iterator<LogEntry> deepIterator() {
-        final int end;
-        if (isSlice)
-            end = this.end;
-        else
-            end = this.sizeInBytes();
-        FileLogInputStream inputStream = new FileLogInputStream(channel, Integer.MAX_VALUE, start, end);
-        return new RecordsIterator(inputStream, false, false, Integer.MAX_VALUE);
+        return new LogEntryIterator<>(inputStream);
     }
 
     public static FileRecords open(File file,

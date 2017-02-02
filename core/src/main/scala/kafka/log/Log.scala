@@ -533,14 +533,14 @@ class Log(@volatile var dir: File,
     for (entry <- records.entries.asScala) {
       // update the first offset if on the first message
       if (firstOffset < 0) {
-        firstOffset = if (entry.magic >= Record.MAGIC_VALUE_V2) entry.firstOffset else entry.offset
+        firstOffset = if (entry.magic >= Record.MAGIC_VALUE_V2) entry.baseOffset else entry.lastOffset
         firstSequence = entry.firstSequence()
         pid = entry.pid
         epoch = entry.epoch
       }
 
       // check that offsets are monotonically increasing
-      if (lastOffset >= entry.offset)
+      if (lastOffset >= entry.lastOffset)
         monotonic = false
 
       if (lastSequence > 0 && lastSequence != entry.firstSequence() + 1)

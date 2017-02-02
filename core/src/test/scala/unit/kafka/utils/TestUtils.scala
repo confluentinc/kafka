@@ -319,7 +319,8 @@ object TestUtils extends Logging {
               epoch: Short = 0,
               sequence: Int = 0): MemoryRecords = {
     val buf = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + records.map(r => EosLogRecord.sizeOf(r._1, r._2)).sum)
-    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, 0L, pid, epoch, sequence)
+    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, 0L,
+      System.currentTimeMillis, pid, epoch, sequence)
     records.foreach { case (key, value, timestamp) =>
       builder.appendWithOffset(0, timestamp, key, value)
     }

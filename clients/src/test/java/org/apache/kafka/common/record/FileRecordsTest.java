@@ -57,7 +57,7 @@ public class FileRecordsTest {
     public void testFileSize() throws IOException {
         assertEquals(fileRecords.channel().size(), fileRecords.sizeInBytes());
         for (int i = 0; i < 20; i++) {
-            fileRecords.append(MemoryRecords.withRecords(Record.create("abcd".getBytes())));
+            fileRecords.append(MemoryRecords.withRecords(CompressionType.NONE, new KafkaRecord("abcd".getBytes())));
             assertEquals(fileRecords.channel().size(), fileRecords.sizeInBytes());
         }
     }
@@ -98,9 +98,9 @@ public class FileRecordsTest {
     public void testIterationDoesntChangePosition() throws IOException {
         long position = fileRecords.channel().position();
         Iterator<LogRecord> logRecords = fileRecords.records().iterator();
-        for (int i = 0; i < values.length; i++) {
+        for (byte[] value : values) {
             assertTrue(logRecords.hasNext());
-            assertEquals(logRecords.next().value(), ByteBuffer.wrap(values[i]));
+            assertEquals(logRecords.next().value(), ByteBuffer.wrap(value));
         }
         assertEquals(position, fileRecords.channel().position());
     }
@@ -131,8 +131,8 @@ public class FileRecordsTest {
     @Test
     public void testSearch() throws IOException {
         // append a new message with a high offset
-        Record lastMessage = Record.create("test".getBytes());
-        fileRecords.append(MemoryRecords.withRecords(50L, lastMessage));
+        KafkaRecord lastMessage = new KafkaRecord("test".getBytes());
+        fileRecords.append(MemoryRecords.withRecords(50L, CompressionType.NONE, lastMessage));
 
         List<LogEntry> entries = shallowEntries(fileRecords);
         int position = 0;
@@ -315,78 +315,97 @@ public class FileRecordsTest {
 
     @Test
     public void testConvertNonCompressedToMagic1() throws IOException {
-        List<LogEntry> entries = Arrays.asList(
-                LogEntry.create(0L, Record.create(Record.MAGIC_VALUE_V0, Record.NO_TIMESTAMP, "k1".getBytes(), "hello".getBytes())),
-                LogEntry.create(2L, Record.create(Record.MAGIC_VALUE_V0, Record.NO_TIMESTAMP, "k2".getBytes(), "goodbye".getBytes())));
-        MemoryRecords records = MemoryRecords.withLogEntries(CompressionType.NONE, entries);
+        List<Long> offsets = Arrays.asList(0L, 2L);
+        List<KafkaRecord> records = Arrays.asList(
+                new KafkaRecord(1L, "k1".getBytes(), "hello".getBytes()),
+                new KafkaRecord(2L, "k2".getBytes(), "goodbye".getBytes()));
+
+        MemoryRecordsBuilder builder = MemoryRecords.builder(Record.MAGIC_VALUE_V0, CompressionType.NONE, 0L);
+        for (int i = 0; i < offsets.size(); i++)
+            builder.appendWithOffset(offsets.get(i), records.get(i));
 
         // Up conversion. In reality we only do down conversion, but up conversion should work as well.
         // up conversion for non-compressed messages
         try (FileRecords fileRecords = FileRecords.open(tempFile())) {
-            fileRecords.append(records);
+            fileRecords.append(builder.build());
             fileRecords.flush();
             Records convertedRecords = fileRecords.toMessageFormat(Record.MAGIC_VALUE_V1);
-            verifyConvertedMessageSet(entries, convertedRecords, Record.MAGIC_VALUE_V1);
+            verifyConvertedMessageSet(records, offsets, convertedRecords, Record.MAGIC_VALUE_V1);
         }
     }
 
     @Test
     public void testConvertCompressedToMagic1() throws IOException {
-        List<LogEntry> entries = Arrays.asList(
-                LogEntry.create(0L, Record.create(Record.MAGIC_VALUE_V0, Record.NO_TIMESTAMP, "k1".getBytes(), "hello".getBytes())),
-                LogEntry.create(2L, Record.create(Record.MAGIC_VALUE_V0, Record.NO_TIMESTAMP, "k2".getBytes(), "goodbye".getBytes())));
-        MemoryRecords records = MemoryRecords.withLogEntries(CompressionType.GZIP, entries);
+        List<Long> offsets = Arrays.asList(0L, 2L);
+        List<KafkaRecord> records = Arrays.asList(
+                new KafkaRecord(1L, "k1".getBytes(), "hello".getBytes()),
+                new KafkaRecord(2L, "k2".getBytes(), "goodbye".getBytes()));
+
+        MemoryRecordsBuilder builder = MemoryRecords.builder(Record.MAGIC_VALUE_V0, CompressionType.GZIP, 0L);
+        for (int i = 0; i < offsets.size(); i++)
+            builder.appendWithOffset(offsets.get(i), records.get(i));
 
         // up conversion for compressed messages
         try (FileRecords fileRecords = FileRecords.open(tempFile())) {
-            fileRecords.append(records);
+            fileRecords.append(builder.build());
             fileRecords.flush();
             Records convertedRecords = fileRecords.toMessageFormat(Record.MAGIC_VALUE_V1);
-            verifyConvertedMessageSet(entries, convertedRecords, Record.MAGIC_VALUE_V1);
+            verifyConvertedMessageSet(records, offsets, convertedRecords, Record.MAGIC_VALUE_V1);
         }
     }
 
     @Test
     public void testConvertNonCompressedToMagic0() throws IOException {
-        List<LogEntry> entries = Arrays.asList(
-                LogEntry.create(0L, Record.create(Record.MAGIC_VALUE_V1, 1L, "k1".getBytes(), "hello".getBytes())),
-                LogEntry.create(2L, Record.create(Record.MAGIC_VALUE_V1, 2L, "k2".getBytes(), "goodbye".getBytes())));
-        MemoryRecords records = MemoryRecords.withLogEntries(CompressionType.NONE, entries);
+        List<Long> offsets = Arrays.asList(0L, 2L);
+        List<KafkaRecord> records = Arrays.asList(
+                new KafkaRecord(1L, "k1".getBytes(), "hello".getBytes()),
+                new KafkaRecord(2L, "k2".getBytes(), "goodbye".getBytes()));
+
+        MemoryRecordsBuilder builder = MemoryRecords.builder(Record.MAGIC_VALUE_V1, CompressionType.NONE, 0L);
+        for (int i = 0; i < offsets.size(); i++)
+            builder.appendWithOffset(offsets.get(i), records.get(i));
 
         // down conversion for non-compressed messages
         try (FileRecords fileRecords = FileRecords.open(tempFile())) {
-            fileRecords.append(records);
+            fileRecords.append(builder.build());
             fileRecords.flush();
             Records convertedRecords = fileRecords.toMessageFormat(Record.MAGIC_VALUE_V0);
-            verifyConvertedMessageSet(entries, convertedRecords, Record.MAGIC_VALUE_V0);
+            verifyConvertedMessageSet(records, offsets, convertedRecords, Record.MAGIC_VALUE_V0);
         }
     }
 
     @Test
     public void testConvertCompressedToMagic0() throws IOException {
-        List<LogEntry> entries = Arrays.asList(
-                LogEntry.create(0L, Record.create(Record.MAGIC_VALUE_V1, 1L, "k1".getBytes(), "hello".getBytes())),
-                LogEntry.create(2L, Record.create(Record.MAGIC_VALUE_V1, 2L, "k2".getBytes(), "goodbye".getBytes())));
-        MemoryRecords records = MemoryRecords.withLogEntries(CompressionType.GZIP, entries);
+        List<Long> offsets = Arrays.asList(0L, 2L);
+        List<KafkaRecord> records = Arrays.asList(
+                new KafkaRecord(1L, "k1".getBytes(), "hello".getBytes()),
+                new KafkaRecord(2L, "k2".getBytes(), "goodbye".getBytes()));
+
+        MemoryRecordsBuilder builder = MemoryRecords.builder(Record.MAGIC_VALUE_V1, CompressionType.GZIP, 0L);
+        for (int i = 0; i < offsets.size(); i++)
+            builder.appendWithOffset(offsets.get(i), records.get(i));
 
         // down conversion for compressed messages
         try (FileRecords fileRecords = FileRecords.open(tempFile())) {
-            fileRecords.append(records);
+            fileRecords.append(builder.build());
             fileRecords.flush();
             Records convertedRecords = fileRecords.toMessageFormat(Record.MAGIC_VALUE_V0);
-            verifyConvertedMessageSet(entries, convertedRecords, Record.MAGIC_VALUE_V0);
+            verifyConvertedMessageSet(records, offsets, convertedRecords, Record.MAGIC_VALUE_V0);
         }
     }
 
-    private void verifyConvertedMessageSet(List<LogEntry> initialEntries, Records convertedRecords, byte magicByte) {
+    private void verifyConvertedMessageSet(List<KafkaRecord> initialRecords,
+                                           List<Long> initialOffsets,
+                                           Records convertedRecords,
+                                           byte magicByte) {
         int i = 0;
         for (LogEntry entry : convertedRecords.entries()) {
             assertEquals("magic byte should be " + magicByte, magicByte, entry.magic());
             for (LogRecord record : entry) {
                 assertTrue("Inner record should have magic " + magicByte, record.hasMagic(magicByte));
-                assertEquals("offset should not change", initialEntries.get(i).offset(), record.offset());
-                assertEquals("key should not change", initialEntries.get(i).record().key(), record.key());
-                assertEquals("payload should not change", initialEntries.get(i).record().value(), record.value());
+                assertEquals("offset should not change", initialOffsets.get(i).longValue(), record.offset());
+                assertEquals("key should not change", ByteBuffer.wrap(initialRecords.get(i).key()), record.key());
+                assertEquals("value should not change", ByteBuffer.wrap(initialRecords.get(i).value()), record.value());
                 i += 1;
             }
         }

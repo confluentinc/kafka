@@ -24,7 +24,7 @@ import kafka.api.{KAFKA_0_10_0_IV1, KAFKA_0_9_0}
 import kafka.server.OffsetCheckpoint
 import kafka.utils._
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.record.{CompressionType, MemoryRecords, Record}
+import org.apache.kafka.common.record.{CompressionType, KafkaRecord, MemoryRecords, Record}
 import org.apache.kafka.common.utils.Utils
 import org.junit.Assert._
 import org.junit._
@@ -277,12 +277,11 @@ class LogCleanerIntegrationTest(compressionCodec: String) {
       (key, payload)
     }
 
-    val messages = kvs.map { case (key, payload) =>
-      Record.create(magicValue, key.toString.getBytes, payload.toString.getBytes)
+    val records = kvs.map { case (key, payload) =>
+      new KafkaRecord(key.toString.getBytes, payload.toString.getBytes)
     }
 
-    val records = MemoryRecords.withRecords(codec, messages: _*)
-    val appendInfo = log.append(records, assignOffsets = true)
+    val appendInfo = log.append(MemoryRecords.withRecords(magicValue, codec, records: _*), assignOffsets = true)
     val offsets = appendInfo.firstOffset to appendInfo.lastOffset
 
     kvs.zip(offsets).map { case (kv, offset) => (kv._1, kv._2, offset) }

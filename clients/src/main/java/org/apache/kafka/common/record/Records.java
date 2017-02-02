@@ -63,16 +63,6 @@ public interface Records {
     Iterable<? extends LogEntry> entries();
 
     /**
-     * Get the deep log entries (i.e. descend into compressed message sets). For the deep records,
-     * there are fewer options for optimization since the data must be decompressed before it can be
-     * returned. Hence there is little advantage in allowing subclasses to return a more specific type
-     * as we do for {@link #entries()}.
-     * @return An iterator over the deep entries of the log
-     */
-    @Deprecated
-    Iterable<LogEntry> deepEntries();
-
-    /**
      * Check whether all shallow entries in this buffer have a certain magic value.
      * @param magic The magic value to check
      * @return true if all shallow entries have a matching magic value, false otherwise

@@ -18,7 +18,6 @@ package org.apache.kafka.common.record;
 
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.errors.CorruptRecordException;
-import org.apache.kafka.common.record.ByteBufferLogInputStream.ByteBufferLogEntry;
 import org.apache.kafka.common.utils.Utils;
 
 import java.io.IOException;
@@ -86,7 +85,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
      * entries without needing to read the record data into memory until it is needed. The downside
      * is that entries will generally no longer be readable when the underlying channel is closed.
      */
-    public static class FileChannelLogEntry extends LogEntry {
+    public static class FileChannelLogEntry extends AbstractLogEntry {
         private final long offset;
         private final FileChannel channel;
         private final int position;
@@ -104,10 +103,12 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         }
 
         @Override
-        public long firstOffset() {
+        public long baseOffset() {
             if (magic() >= Record.MAGIC_VALUE_V2)
                 return offset;
-            return super.firstOffset();
+
+            loadUnderlyingEntry();
+            return underlying.baseOffset();
         }
 
         @Override
@@ -129,13 +130,16 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         }
 
         @Override
-        public long offset() {
+        public long lastOffset() {
             if (magic() < Record.MAGIC_VALUE_V2)
                 return offset;
             else if (underlying != null)
-                return underlying.offset();
+                return underlying.lastOffset();
 
             try {
+                // FIXME: This logic probably should be moved into EosLogEntry somehow
+                // maybe we just need two separate implementations
+
                 byte[] offsetDelta = new byte[4];
                 ByteBuffer buf = ByteBuffer.wrap(offsetDelta);
                 channel.read(buf, position + EosLogEntry.OFFSET_DELTA_OFFSET);
@@ -166,6 +170,30 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
             }
         }
 
+        @Override
+        public long pid() {
+            loadUnderlyingEntry();
+            return underlying.pid();
+        }
+
+        @Override
+        public short epoch() {
+            loadUnderlyingEntry();
+            return underlying.epoch();
+        }
+
+        @Override
+        public int firstSequence() {
+            loadUnderlyingEntry();
+            return underlying.firstSequence();
+        }
+
+        @Override
+        public int lastSequence() {
+            loadUnderlyingEntry();
+            return underlying.lastSequence();
+        }
+
         private void loadUnderlyingEntry() {
             try {
                 if (underlying != null)
@@ -179,7 +207,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
                 if (magic > Record.MAGIC_VALUE_V1)
                     underlying = new EosLogEntry(entryBuffer);
                 else
-                    underlying = new ByteBufferLogEntry(entryBuffer);
+                    underlying = new OldLogEntry.ByteBufferLogEntry(entryBuffer);
             } catch (IOException e) {
                 throw new KafkaException("Failed to load log entry at position " + position + " from file channel " + channel);
             }
@@ -189,12 +217,6 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         public Iterator<LogRecord> iterator() {
             loadUnderlyingEntry();
             return underlying.iterator();
-        }
-
-        @Override
-        public Record record() {
-            loadUnderlyingEntry();
-            return underlying.record();
         }
 
         @Override
@@ -218,6 +240,12 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         @Override
         public int sizeInBytes() {
             return LOG_OVERHEAD + recordSize;
+        }
+
+        @Override
+        public void writeTo(ByteBuffer buffer) {
+            loadUnderlyingEntry();
+            underlying.writeTo(buffer);
         }
 
         @Override

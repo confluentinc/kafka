@@ -153,10 +153,10 @@ class LogValidatorTest extends JUnitSuite {
     val now = System.currentTimeMillis()
     val timestampSeq = Seq(now - 1, now + 1, now)
     val records =
-      MemoryRecords.withRecords(CompressionType.NONE,
-        Record.create(Record.MAGIC_VALUE_V1, timestampSeq(0), "hello".getBytes),
-        Record.create(Record.MAGIC_VALUE_V1, timestampSeq(1), "there".getBytes),
-        Record.create(Record.MAGIC_VALUE_V1, timestampSeq(2), "beautiful".getBytes))
+      MemoryRecords.withRecords(Record.MAGIC_VALUE_V1, CompressionType.NONE,
+        new KafkaRecord(timestampSeq(0), "hello".getBytes),
+        new KafkaRecord(timestampSeq(1), "there".getBytes),
+        new KafkaRecord(timestampSeq(2), "beautiful".getBytes))
 
     val validatingResults = LogValidator.validateMessagesAndAssignOffsets(records,
       offsetCounter = new LongRef(0),
@@ -189,7 +189,7 @@ class LogValidatorTest extends JUnitSuite {
     val now = System.currentTimeMillis()
     val timestampSeq = Seq(now - 1, now + 1, now)
     val buf = ByteBuffer.allocate(512)
-    val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME)
+    val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME, 0L)
     builder.appendWithOffset(0, timestampSeq(0), null, "hello".getBytes)
     builder.appendWithOffset(1, timestampSeq(1), null, "there".getBytes)
     builder.appendWithOffset(2, timestampSeq(2), null, "beautiful".getBytes)
@@ -226,10 +226,10 @@ class LogValidatorTest extends JUnitSuite {
     val now = System.currentTimeMillis()
     val timestampSeq = Seq(now - 1, now + 1, now)
     val records =
-      MemoryRecords.withRecords(CompressionType.GZIP,
-        Record.create(Record.MAGIC_VALUE_V1, timestampSeq(0), "hello".getBytes),
-        Record.create(Record.MAGIC_VALUE_V1, timestampSeq(1), "there".getBytes),
-        Record.create(Record.MAGIC_VALUE_V1, timestampSeq(2), "beautiful".getBytes))
+      MemoryRecords.withRecords(Record.MAGIC_VALUE_V1, CompressionType.GZIP,
+        new KafkaRecord(timestampSeq(0), "hello".getBytes),
+        new KafkaRecord(timestampSeq(1), "there".getBytes),
+        new KafkaRecord(timestampSeq(2), "beautiful".getBytes))
 
     val validatedResults =
       LogValidator.validateMessagesAndAssignOffsets(records,
@@ -264,7 +264,7 @@ class LogValidatorTest extends JUnitSuite {
     val now = System.currentTimeMillis()
     val timestampSeq = Seq(now - 1, now + 1, now)
     val buf = ByteBuffer.allocate(512)
-    val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME)
+    val builder = MemoryRecords.builder(buf, Record.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.CREATE_TIME, 0L)
     builder.appendWithOffset(0, timestampSeq(0), null, "hello".getBytes)
     builder.appendWithOffset(1, timestampSeq(1), null, "there".getBytes)
     builder.appendWithOffset(2, timestampSeq(2), null, "beautiful".getBytes)
@@ -509,7 +509,7 @@ class LogValidatorTest extends JUnitSuite {
                             timestamp: Long = Message.NoTimestamp,
                             codec: CompressionType = CompressionType.NONE): MemoryRecords = {
     val buf = ByteBuffer.allocate(512)
-    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME)
+    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, 0L)
     builder.appendWithOffset(0, timestamp, null, "hello".getBytes)
     builder.appendWithOffset(1, timestamp, null, "there".getBytes)
     builder.appendWithOffset(2, timestamp, null, "beautiful".getBytes)
@@ -535,11 +535,11 @@ class LogValidatorTest extends JUnitSuite {
 
     val buffer = ByteBuffer.allocate(math.min(math.max(records.map(_.sizeInBytes()).sum / 2, 1024), 1 << 16))
     val builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V1, CompressionType.GZIP,
-      TimestampType.CREATE_TIME)
+      TimestampType.CREATE_TIME, 0L)
 
     var offset = initialOffset
     records.foreach { record =>
-      builder.appendUnchecked(offset, record)
+      builder.appendUncheckedWithOffset(offset, record)
       offset += 1
     }
 

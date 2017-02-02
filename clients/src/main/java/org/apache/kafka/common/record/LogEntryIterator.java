@@ -16,23 +16,28 @@
  **/
 package org.apache.kafka.common.record;
 
+import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.utils.AbstractIterator;
+
 import java.io.IOException;
 
-/**
- * An abstraction between an underlying input stream and record iterators, a LogInputStream
- * returns only the shallow log entries. The generic typing allows for implementations which present only
- * a view of the log entries, which enables more efficient iteration when the record data is
- * not actually needed. See for example {@link org.apache.kafka.common.record.FileLogInputStream.FileChannelLogEntry}
- * in which the record is not brought into memory until needed.
- * @param <T> Type parameter of the log entry
- */
-interface LogInputStream<T extends LogEntry> {
+class LogEntryIterator<T extends LogEntry> extends AbstractIterator<T> {
 
-    /**
-     * Get the next log entry from the underlying input stream.
-     *
-     * @return The next log entry or null if there is none
-     * @throws IOException for any IO errors
-     */
-    T nextEntry() throws IOException;
+    private final LogInputStream<T> logInputStream;
+
+    LogEntryIterator(LogInputStream<T> logInputStream) {
+        this.logInputStream = logInputStream;
+    }
+
+    @Override
+    protected T makeNext() {
+        try {
+            T entry = logInputStream.nextEntry();
+            if (entry == null)
+                return allDone();
+            return entry;
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
 }

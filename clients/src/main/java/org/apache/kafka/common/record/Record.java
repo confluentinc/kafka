@@ -17,6 +17,7 @@
 package org.apache.kafka.common.record;
 
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.utils.ByteBufferOutputStream;
 import org.apache.kafka.common.utils.Crc32;
 import org.apache.kafka.common.utils.Utils;
 
@@ -358,22 +359,6 @@ public final class Record {
             throw new IllegalArgumentException("Cannot use convertTo for deep conversion");
 
         write(buffer, toMagic, timestamp, key(), value(), CompressionType.NONE, timestampType);
-    }
-
-    /**
-     * Convert this record to another message format and write the converted data to the provided outputs stream.
-     *
-     * @param out The output stream to write the converted data to
-     * @param toMagic The target magic version for conversion
-     * @param timestamp The timestamp to use in the converted record (for up-conversion)
-     * @param timestampType The timestamp type to use in the converted record (for up-conversion)
-     * @throws IOException for any IO errors writing the converted record.
-     */
-    public void convertTo(DataOutputStream out, byte toMagic, long timestamp, TimestampType timestampType) throws IOException {
-        if (compressionType() != CompressionType.NONE)
-            throw new IllegalArgumentException("Cannot use convertTo for deep conversion");
-
-        write(out, toMagic, timestamp, key(), value(), CompressionType.NONE, timestampType);
     }
 
     /**

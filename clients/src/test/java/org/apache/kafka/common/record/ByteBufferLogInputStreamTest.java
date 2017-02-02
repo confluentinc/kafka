@@ -37,10 +37,10 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer recordsBuffer = builder.build().buffer();
         recordsBuffer.limit(recordsBuffer.limit() - 5);
 
-        Iterator<LogEntry.ShallowLogEntry> iterator = MemoryRecords.readableRecords(recordsBuffer).entries().iterator();
+        Iterator<LogEntry.MutableLogEntry> iterator = MemoryRecords.readableRecords(recordsBuffer).entries().iterator();
         assertTrue(iterator.hasNext());
-        LogEntry.ShallowLogEntry first = iterator.next();
-        assertEquals(0L, first.offset());
+        LogEntry.MutableLogEntry first = iterator.next();
+        assertEquals(0L, first.lastOffset());
 
         assertFalse(iterator.hasNext());
     }
@@ -50,16 +50,16 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V1, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
+        Iterator<LogEntry.MutableLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
-        LogEntry.ShallowLogEntry entry = iterator.next();
+        LogEntry.MutableLogEntry entry = iterator.next();
 
         long createTimeMs = 20L;
         entry.setCreateTime(createTimeMs);
 
-        assertEquals(TimestampType.CREATE_TIME, entry.record().timestampType());
-        assertEquals(createTimeMs, entry.record().timestamp());
+        assertEquals(TimestampType.CREATE_TIME, entry.timestampType());
+        assertEquals(createTimeMs, entry.timestamp());
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -67,10 +67,10 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V0, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
+        Iterator<LogEntry.MutableLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
-        LogEntry.ShallowLogEntry entry = iterator.next();
+        LogEntry.MutableLogEntry entry = iterator.next();
 
         long createTimeMs = 20L;
         entry.setCreateTime(createTimeMs);
@@ -81,16 +81,16 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V1, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
+        Iterator<LogEntry.MutableLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
-        LogEntry.ShallowLogEntry entry = iterator.next();
+        LogEntry.MutableLogEntry entry = iterator.next();
 
         long logAppendTime = 20L;
         entry.setLogAppendTime(logAppendTime);
 
-        assertEquals(TimestampType.LOG_APPEND_TIME, entry.record().timestampType());
-        assertEquals(logAppendTime, entry.record().timestamp());
+        assertEquals(TimestampType.LOG_APPEND_TIME, entry.timestampType());
+        assertEquals(logAppendTime, entry.timestamp());
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -98,10 +98,10 @@ public class ByteBufferLogInputStreamTest {
         ByteBuffer buffer = ByteBuffer.allocate(2048);
         MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V0, CompressionType.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(15L, "a".getBytes(), "1".getBytes());
-        Iterator<LogEntry.ShallowLogEntry> iterator = builder.build().entries().iterator();
+        Iterator<LogEntry.MutableLogEntry> iterator = builder.build().entries().iterator();
 
         assertTrue(iterator.hasNext());
-        LogEntry.ShallowLogEntry entry = iterator.next();
+        LogEntry.MutableLogEntry entry = iterator.next();
 
         long logAppendTime = 20L;
         entry.setLogAppendTime(logAppendTime);

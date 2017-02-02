@@ -16,23 +16,16 @@
  **/
 package org.apache.kafka.common.record;
 
-import java.io.IOException;
+abstract class AbstractLogEntry implements LogEntry {
 
-/**
- * An abstraction between an underlying input stream and record iterators, a LogInputStream
- * returns only the shallow log entries. The generic typing allows for implementations which present only
- * a view of the log entries, which enables more efficient iteration when the record data is
- * not actually needed. See for example {@link org.apache.kafka.common.record.FileLogInputStream.FileChannelLogEntry}
- * in which the record is not brought into memory until needed.
- * @param <T> Type parameter of the log entry
- */
-interface LogInputStream<T extends LogEntry> {
+    @Override
+    public long nextOffset() {
+        return lastOffset() + 1;
+    }
 
-    /**
-     * Get the next log entry from the underlying input stream.
-     *
-     * @return The next log entry or null if there is none
-     * @throws IOException for any IO errors
-     */
-    T nextEntry() throws IOException;
+    @Override
+    public boolean isCompressed() {
+        return compressionType() != CompressionType.NONE;
+    }
+
 }

@@ -22,7 +22,7 @@ import java.util.Properties
 
 import kafka.utils._
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.record.{CompressionType, MemoryRecords, Record}
+import org.apache.kafka.common.record.{CompressionType, KafkaRecord, MemoryRecords, Record}
 import org.apache.kafka.common.utils.Utils
 import org.junit.Assert._
 import org.junit.{After, Test}
@@ -197,6 +197,6 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     new Log(dir = dir, config = config, recoveryPoint = 0L, scheduler = time.scheduler, time = time)
 
   private def logEntries(key: Int, value: Int, timestamp: Long) =
-    MemoryRecords.withRecords(Record.create(timestamp, key.toString.getBytes, value.toString.getBytes))
+    MemoryRecords.withRecords(CompressionType.NONE, new KafkaRecord(timestamp, key.toString.getBytes, value.toString.getBytes))
 
 }

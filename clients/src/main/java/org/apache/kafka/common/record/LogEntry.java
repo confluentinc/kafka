@@ -16,338 +16,142 @@
  */
 package org.apache.kafka.common.record;
 
-import org.apache.kafka.common.utils.AbstractIterator;
-
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.Iterator;
-
-import static org.apache.kafka.common.record.Records.LOG_OVERHEAD;
 
 /**
  * An offset and record pair
  */
-public abstract class LogEntry implements Iterable<LogRecord> {
+public interface LogEntry extends Iterable<LogRecord> {
 
     /**
-     * Get the offset of this entry. Note that if this entry contains a compressed
-     * message set, then this offset will be the last offset of the nested entries
-     * @return the last offset contained in this entry
+     * Check whether the checksum of this entry is correct.
+     *
+     * @return true If so, false otherwise
      */
-    public abstract long offset();
+    boolean isValid();
 
     /**
-     * Get the shallow record for this log entry.
-     * @return the shallow record
+     * Raise an exception if the checksum is not valid.
      */
-    public abstract Record record();
-
-    public boolean isValid() {
-        return record().isValid();
-    }
-
-    public void ensureValid() {
-        record().ensureValid();
-    }
-
-    public long checksum() {
-        return record().checksum();
-    }
-
-    public long timestamp() {
-        return record().timestamp();
-    }
-
-    public TimestampType timestampType() {
-        return record().timestampType();
-    }
+    void ensureValid();
 
     /**
-     * Get the first offset of the records contained in this entry. Note that this
-     * generally requires deep iteration, which requires decompression, so this should
-     * be used with caution.
-     * @return The first offset contained in this entry
+     * Get the checksum of this entry, which covers the entry header as well as all of the records.
+     *
+     * @return The 4-byte unsigned checksum represented as a long
      */
-    public long firstOffset() {
-        return iterator().next().offset();
-    }
+    long checksum();
+
+    /**
+     * Get the timestamp of this entry. This is the max timestamp among all records contained in this log entry.
+     *
+     * TODO: rename to maxTimestamp()?
+     * @return The max timestamp
+     */
+    long timestamp();
+
+    /**
+     * Get the timestamp type of this entry. This will be {@link TimestampType#CREATE_TIME}
+     * if the message has been up-converted from magic 0.
+     * @return The timestamp type
+     */
+    TimestampType timestampType();
+
+    /**
+     * Get the first offset contained in this log entry. For magic version prior to 2, this generally
+     * requires deep iteration and will return the offset of the first record in the message set. For
+     * magic version 2 and above, this will return the first offset of the original message set (i.e.
+     * prior to compaction). For non-compacted topics, the behavior is equivalent.
+     *
+     * Because this requires deep iteration for older magic versions, this method should be used with
+     * caution. Generally {@link #lastOffset()} is safer since access is efficient for all magic versions.
+     *
+     * @return The base offset of this message set (which may or may not be the offset of the first record
+     *         as described above).
+     */
+    long baseOffset();
 
     /**
      * Get the offset following this entry (i.e. the last offset contained in this entry plus one).
      * @return the next consecutive offset following this entry
      */
-    public long lastOffset() {
-        return offset();
-    }
+    long lastOffset();
 
     /**
      * Get the next consecutive offset following the records in this log entry.
      * @return
      */
-    public long nextOffset() {
-        return offset() + 1;
-    }
+    long nextOffset();
 
     /**
      * Get the message format version of this entry (i.e its magic value).
      * @return the magic byte
      */
-    public byte magic() {
-        return record().magic();
-    }
+    byte magic();
 
-    public long pid() {
-        return 0L;
-    }
+    /**
+     * Get the PID (producer ID) for this log entry. For older magic versions, this will return 0.
+     *
+     * TODO: Maybe use -1 as sentinel instead of 0?
+     * @return The PID or 0 if there is none
+     */
+    long pid();
 
-    public short epoch() {
-        return 0;
-    }
+    /**
+     * Get the producer epoch for this log entry.
+     *
+     * @return The producer epoch, or 0 if there is none
+     */
+    short epoch();
 
-    public int firstSequence() {
-        return 0;
-    }
+    /**
+     * Get the first sequence number of this message set.
+     * @return The first sequence number
+     */
+    int firstSequence();
 
-    public int lastSequence() {
-        return 0;
-    }
+    /**
+     * Get the last sequence number of this message set.
+     *
+     * @return The last sequence number
+     */
+    int lastSequence();
 
-    public CompressionType compressionType() {
-        return record().compressionType();
-    }
-
-    @Override
-    public String toString() {
-        return "LogEntry(" + offset() + ", " + record() + ")";
-    }
+    /**
+     * Get the compression type of this log entry
+     *
+     * @return The compression type
+     */
+    CompressionType compressionType();
 
     /**
      * Get the size in bytes of this entry, including the size of the record and the log overhead.
      * @return The size in bytes of this entry
      */
-    public int sizeInBytes() {
-        return record().sizeInBytes() + LOG_OVERHEAD;
-    }
+    int sizeInBytes();
 
     /**
      * Check whether this entry contains a compressed message set.
      * @return true if so, false otherwise
      */
-    public boolean isCompressed() {
-        return compressionType() != CompressionType.NONE;
-    }
+    boolean isCompressed();
 
     /**
      * Write this entry into a buffer.
      * @param buffer The buffer to write the entry to
      */
-    public void writeTo(ByteBuffer buffer) {
-        writeHeader(buffer, offset(), record().sizeInBytes());
-        buffer.put(record().buffer().duplicate());
-    }
+    void writeTo(ByteBuffer buffer);
+
 
     /**
-     * Get an iterator for the nested entries contained within this log entry. Note that
-     * if the entry is not compressed, then this method will return an iterator over the
-     * shallow entry only (i.e. this object).
-     * @return An iterator over the entries contained within this log entry
+     * A mutable log entry is one that can be modified in place (without copying).
      */
-    @Override
-    public Iterator<LogRecord> iterator() {
-        final Iterator<LogEntry> iterator;
-        if (isCompressed())
-            iterator = new RecordsIterator.DeepRecordsIterator(this, false, Integer.MAX_VALUE);
-        else
-            iterator = Collections.singletonList(this).iterator();
+    interface MutableLogEntry extends LogEntry {
+        void setOffset(long offset);
 
-        return new AbstractIterator<LogRecord>() {
-            @Override
-            protected LogRecord makeNext() {
-                if (iterator.hasNext())
-                    return new LogRecordShim(iterator.next());
-                return allDone();
-            }
-        };
-    }
+        void setCreateTime(long timestamp);
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || !(o instanceof LogEntry)) return false;
-
-        LogEntry that = (LogEntry) o;
-
-        if (offset() != that.offset()) return false;
-        Record thisRecord = record();
-        Record thatRecord = that.record();
-        return thisRecord != null ? thisRecord.equals(thatRecord) : thatRecord == null;
-    }
-
-    @Override
-    public int hashCode() {
-        long offset = offset();
-        Record record = record();
-        int result = (int) (offset ^ (offset >>> 32));
-        result = 31 * result + (record != null ? record.hashCode() : 0);
-        return result;
-    }
-
-    public static void writeHeader(ByteBuffer buffer, long offset, int size) {
-        buffer.putLong(offset);
-        buffer.putInt(size);
-    }
-
-    public static void writeHeader(DataOutputStream out, long offset, int size) throws IOException {
-        out.writeLong(offset);
-        out.writeInt(size);
-    }
-
-    private static class SimpleLogEntry extends LogEntry {
-        private final long offset;
-        private final Record record;
-
-        public SimpleLogEntry(long offset, Record record) {
-            this.offset = offset;
-            this.record = record;
-        }
-
-        @Override
-        public long offset() {
-            return offset;
-        }
-
-        @Override
-        public Record record() {
-            return record;
-        }
-
-    }
-
-    public static LogEntry create(long offset, Record record) {
-        return new SimpleLogEntry(offset, record);
-    }
-
-    private static class LogRecordShim implements LogRecord {
-        private final LogEntry deepEntry;
-
-        private LogRecordShim(LogEntry deepEntry) {
-            this.deepEntry = deepEntry;
-        }
-
-        public LogEntry entry() {
-            return deepEntry;
-        }
-
-        @Override
-        public long offset() {
-            return deepEntry.offset();
-        }
-
-        @Override
-        public long sequence() {
-            return 0L;
-        }
-
-        @Override
-        public int sizeInBytes() {
-            return deepEntry.sizeInBytes();
-        }
-
-        @Override
-        public long timestamp() {
-            return deepEntry.record().timestamp();
-        }
-
-        @Override
-        public long checksum() {
-            return deepEntry.record().checksum();
-        }
-
-        @Override
-        public boolean isValid() {
-            return deepEntry.record().isValid();
-        }
-
-        @Override
-        public void ensureValid() {
-            deepEntry.record().ensureValid();
-        }
-
-        @Override
-        public int keySize() {
-            return deepEntry.record().keySize();
-        }
-
-        @Override
-        public boolean hasKey() {
-            return deepEntry.record().hasKey();
-        }
-
-        @Override
-        public ByteBuffer key() {
-            return deepEntry.record().key();
-        }
-
-        @Override
-        public int valueSize() {
-            return deepEntry.record().valueSize();
-        }
-
-        @Override
-        public boolean hasNullValue() {
-            return deepEntry.record().hasNullValue();
-        }
-
-        @Override
-        public ByteBuffer value() {
-            return deepEntry.record().value();
-        }
-
-        @Override
-        public String toString() {
-            return "LogRecordShim(" +
-                    "deepEntry=" + deepEntry +
-                    ')';
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            LogRecordShim that = (LogRecordShim) o;
-
-            return deepEntry != null ? deepEntry.equals(that.deepEntry) : that.deepEntry == null;
-        }
-
-        @Override
-        public int hashCode() {
-            return deepEntry != null ? deepEntry.hashCode() : 0;
-        }
-
-        public boolean hasMagic(byte magic) {
-            return deepEntry.magic() == magic;
-        }
-
-        @Override
-        public boolean isCompressed() {
-            return deepEntry.compressionType() != CompressionType.NONE;
-        }
-
-        @Override
-        public boolean hasTimestampType(TimestampType timestampType) {
-            return deepEntry.timestampType() == timestampType;
-        }
-    }
-
-    public abstract static class ShallowLogEntry extends LogEntry {
-        public abstract void setOffset(long offset);
-
-        public abstract void setCreateTime(long timestamp);
-
-        public abstract void setLogAppendTime(long timestamp);
+        void setLogAppendTime(long timestamp);
     }
 
 }

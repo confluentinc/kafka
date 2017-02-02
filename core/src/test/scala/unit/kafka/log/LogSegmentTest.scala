@@ -18,7 +18,7 @@
 
 import kafka.utils.TestUtils
 import kafka.utils.TestUtils.checkEquals
-import org.apache.kafka.common.record.{FileRecords, MemoryRecords, Record}
+import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.Time
 import org.junit.Assert._
 import org.junit.{After, Test}
@@ -47,7 +47,9 @@ class LogSegmentTest {
   
   /* create a ByteBufferMessageSet for the given messages starting from the given offset */
   def records(offset: Long, records: String*): MemoryRecords = {
-    MemoryRecords.withRecords(offset, records.map(s => Record.create(Record.MAGIC_VALUE_V1, offset * 10, s.getBytes)):_*)
+    MemoryRecords.withRecords(Record.MAGIC_VALUE_V1, offset, CompressionType.NONE, records.map { s =>
+      new KafkaRecord(offset * 10, s.getBytes)
+    }: _*)
   }
 
   @After
@@ -286,7 +288,8 @@ class LogSegmentTest {
       val position = recordPosition.position + TestUtils.random.nextInt(15)
       TestUtils.writeNonsenseToFile(seg.log.file, position, (seg.log.file.length - position).toInt)
       seg.recover(64*1024)
-      assertEquals("Should have truncated off bad messages.", (0 until offsetToBeginCorruption).toList, seg.log.entries.asScala.map(_.offset).toList)
+      assertEquals("Should have truncated off bad messages.", (0 until offsetToBeginCorruption).toList,
+        seg.log.entries.asScala.map(_.lastOffset).toList)
       seg.delete()
     }
   }
@@ -294,7 +297,8 @@ class LogSegmentTest {
   /* create a segment with   pre allocate */
   def createSegment(offset: Long, fileAlreadyExists: Boolean, initFileSize: Int, preallocate: Boolean): LogSegment = {
     val tempDir = TestUtils.tempDir()
-    val seg = new LogSegment(tempDir, offset, 10, 1000, 0, Time.SYSTEM, fileAlreadyExists = fileAlreadyExists, initFileSize = initFileSize, preallocate = preallocate)
+    val seg = new LogSegment(tempDir, offset, 10, 1000, 0, Time.SYSTEM, fileAlreadyExists = fileAlreadyExists,
+      initFileSize = initFileSize, preallocate = preallocate)
     segments += seg
     seg
   }

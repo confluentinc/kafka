@@ -87,15 +87,20 @@ private[kafka] object LogValidator extends Logging {
         logEntry.sizeInBytes() + Message.headerSizeDiff(logEntry.magic(), toMagicValue)
       }.sum
 
+    val (pid, epoch, sequence) = {
+      val first = records.entries().asScala.head
+      (first.pid, first.epoch, first.firstSequence)
+    }
+
     val newBuffer = ByteBuffer.allocate(sizeInBytesAfterConversion)
     val builder = MemoryRecords.builder(newBuffer, toMagicValue, CompressionType.NONE, timestampType,
-      offsetCounter.value, now)
+      offsetCounter.value, now, pid, epoch, sequence)
 
     for (entry <- records.entries.asScala) {
       for (record <- entry.asScala) {
         validateKey(record, compactedTopic)
         validateTimestamp(entry, record, now, timestampType, messageTimestampDiffMaxMs)
-        builder.append(offsetCounter.getAndIncrement(), record)
+        builder.appendWithOffset(offsetCounter.getAndIncrement(), record)
       }
     }
 
@@ -220,17 +225,8 @@ private[kafka] object LogValidator extends Logging {
       }
 
       if (!inPlaceAssignment) {
-        val builder = MemoryRecords.builderWithRecords(true, messageFormatVersion, offsetCounter.value,
-          messageTimestampType, CompressionType.forId(targetCodec.codec), now, validatedRecords.asJava)
-        builder.close()
-        offsetCounter.addAndGet(validatedRecords.size)
-        val info = builder.info
-
-        ValidationAndOffsetAssignResult(
-          validatedRecords = builder.build(),
-          maxTimestamp = info.maxTimestamp,
-          shallowOffsetOfMaxTimestamp = info.shallowOffsetOfMaxTimestamp,
-          messageSizeMaybeChanged = true)
+        buildRecordsAndAssignOffsets(messageFormatVersion, offsetCounter, messageTimestampType,
+          CompressionType.forId(targetCodec.codec), now, validatedRecords)
       } else {
         // ensure the inner messages are valid
         validatedRecords.foreach(_.ensureValid)
@@ -255,6 +251,26 @@ private[kafka] object LogValidator extends Logging {
           shallowOffsetOfMaxTimestamp = lastOffset,
           messageSizeMaybeChanged = false)
       }
+  }
+
+  private def buildRecordsAndAssignOffsets(magic: Byte, offsetCounter: LongRef, timestampType: TimestampType,
+                                           compressionType: CompressionType, logAppendTime: Long,
+                                           validatedRecords: Seq[LogRecord]): ValidationAndOffsetAssignResult = {
+    val buffer = ByteBuffer.allocate(AbstractRecords.estimatedSizeRecords(compressionType, validatedRecords.asJava))
+    val builder = MemoryRecords.builder(buffer, magic, compressionType, timestampType, offsetCounter.value, logAppendTime)
+
+    validatedRecords.foreach { record =>
+      builder.appendWithOffset(offsetCounter.getAndIncrement(), record)
+    }
+
+    val records = builder.build()
+    val info = builder.info
+
+    ValidationAndOffsetAssignResult(
+      validatedRecords = records,
+      maxTimestamp = info.maxTimestamp,
+      shallowOffsetOfMaxTimestamp = info.shallowOffsetOfMaxTimestamp,
+      messageSizeMaybeChanged = true)
   }
 
   private def validateKey(record: Record, compactedTopic: Boolean) {

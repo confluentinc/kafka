@@ -20,7 +20,7 @@ import java.nio.ByteBuffer;
 
 /**
  * A log record is a tuple consisting of a unique offset in the log, a sequence number assigned by
- * the producer, and
+ * the producer, a timestamp, a key and a value.
  */
 public interface LogRecord {
 

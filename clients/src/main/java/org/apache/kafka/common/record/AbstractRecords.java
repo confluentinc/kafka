@@ -19,6 +19,7 @@ package org.apache.kafka.common.record;
 import org.apache.kafka.common.utils.AbstractIterator;
 import org.apache.kafka.common.utils.Utils;
 
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.List;
 
@@ -69,8 +70,30 @@ public abstract class AbstractRecords implements Records {
             // we are essentially merging multiple message sets. However, currently this method is only
             // used for down-conversion, so we've ignored the problem.
             LogEntry firstEntry = entries().iterator().next();
-            return MemoryRecords.withLogRecords(toMagic, firstEntry.compressionType(), firstEntry.timestampType(), records);
+
+            // FIXME: Using the timestamp and compression type from the first message is almost certainly wrong
+            //        We also need to take into account pid information
+            return convert(toMagic, firstEntry.timestampType(), firstEntry.compressionType(),
+                    firstEntry.timestamp(), records);
         }
+    }
+
+    private MemoryRecords convert(byte magic,
+                                  TimestampType timestampType,
+                                  CompressionType compressionType,
+                                  long logAppendTime,
+                                  List<LogRecord> records) {
+        if (timestampType == TimestampType.NO_TIMESTAMP_TYPE)
+            timestampType = TimestampType.CREATE_TIME;
+
+        LogRecord firstRecord = records.iterator().next();
+        long firstOffset = firstRecord.offset();
+        ByteBuffer buffer = ByteBuffer.allocate(estimatedSizeRecords(compressionType, records));
+        MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, magic, compressionType, timestampType,
+                firstOffset, logAppendTime, 0L, (short) 0, 0);
+        for (LogRecord record : records)
+            builder.appendWithOffset(record.offset(), record.timestamp(), record.key(), record.value());
+        return builder.build();
     }
 
     /**
@@ -100,13 +123,6 @@ public abstract class AbstractRecords implements Records {
                 return allDone();
             }
         };
-    }
-
-    public static int estimatedSize(CompressionType compressionType, Iterable<LogEntry> entries) {
-        int size = 0;
-        for (LogEntry entry : entries)
-            size += entry.sizeInBytes();
-        return compressionType == CompressionType.NONE ? size : Math.min(Math.max(size / 2, 1024), 1 << 16);
     }
 
     public static int estimatedSizeRecords(CompressionType compressionType, Iterable<LogRecord> records) {

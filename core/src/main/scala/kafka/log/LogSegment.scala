@@ -227,12 +227,12 @@ class LogSegment(val log: FileRecords,
         // The max timestamp should have been put in the outer message, so we don't need to iterate over the inner messages.
         if (entry.timestamp > maxTimestampSoFar) {
           maxTimestampSoFar = entry.timestamp
-          offsetOfMaxTimestamp = entry.offset
+          offsetOfMaxTimestamp = entry.lastOffset
         }
 
         // Build offset index
         if(validBytes - lastIndexEntry > indexIntervalBytes) {
-          val startOffset = entry.firstOffset
+          val startOffset = entry.baseOffset
           index.append(startOffset, validBytes)
           timeIndex.maybeAppend(maxTimestampSoFar, offsetOfMaxTimestamp)
           lastIndexEntry = validBytes

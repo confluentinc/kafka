@@ -422,7 +422,7 @@ class LogCleanerTest extends JUnitSuite {
     val cleaner = makeCleaner(Int.MaxValue)
 
     val logProps = new Properties()
-    logProps.put(LogConfig.SegmentBytesProp, 300: java.lang.Integer)
+    logProps.put(LogConfig.SegmentBytesProp, 400: java.lang.Integer)
     logProps.put(LogConfig.IndexIntervalBytesProp, 1: java.lang.Integer)
 
     val log = makeLog(config = LogConfig.fromProps(logConfig.originals, logProps))
@@ -432,7 +432,7 @@ class LogCleanerTest extends JUnitSuite {
       log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
 
     // forward offset and append message to next segment at offset Int.MaxValue
-    val records = MemoryRecords.withLogEntries(LogEntry.create(Int.MaxValue - 1, Record.create("hello".getBytes, "hello".getBytes)))
+    val records = messageWithOffset("hello".getBytes, "hello".getBytes, Int.MaxValue - 1)
     log.append(records, assignOffsets = false)
     log.append(TestUtils.singletonRecords(value = "hello".getBytes, key = "hello".getBytes))
     assertEquals(Int.MaxValue, log.activeSegment.index.lastOffset)
@@ -601,8 +601,8 @@ class LogCleanerTest extends JUnitSuite {
   def testBuildOffsetMapFakeLarge(): Unit = {
     val map = new FakeOffsetMap(1000)
     val logProps = new Properties()
-    logProps.put(LogConfig.SegmentBytesProp, 72: java.lang.Integer)
-    logProps.put(LogConfig.SegmentIndexBytesProp, 72: java.lang.Integer)
+    logProps.put(LogConfig.SegmentBytesProp, 120: java.lang.Integer)
+    logProps.put(LogConfig.SegmentIndexBytesProp, 120: java.lang.Integer)
     logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
     val logConfig = LogConfig(logProps)
     val log = makeLog(config = logConfig)
@@ -728,19 +728,19 @@ class LogCleanerTest extends JUnitSuite {
                                           timestamp = time.milliseconds() - logConfig.deleteRetentionMs - 10000))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 1, log.activeSegment.baseOffset))
-    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.entries.iterator().next().offset())
+    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.entries.iterator.next().lastOffset)
     // Append a message and roll out another log segment.
     log.append(TestUtils.singletonRecords(value = "1".getBytes,
                                           key = "1".getBytes,
                                           timestamp = time.milliseconds()))
     log.roll()
     cleaner.clean(LogToClean(new TopicPartition("test", 0), log, 2, log.activeSegment.baseOffset))
-    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.entries.iterator().next().offset())
+    assertEquals("The tombstone should be retained.", 1, log.logSegments.head.log.entries.iterator.next().lastOffset)
   }
 
   private def writeToLog(log: Log, keysAndValues: Iterable[(Int, Int)], offsetSeq: Iterable[Long]): Iterable[Long] = {
     for(((key, value), offset) <- keysAndValues.zip(offsetSeq))
-      yield log.append(messageWithOffset(key, value, offset), assignOffsets = false).firstOffset
+      yield log.append(messageWithOffset(key, value, offset), assignOffsets = false).lastOffset
   }
 
   private def invalidCleanedMessage(initialOffset: Long,
@@ -756,19 +756,22 @@ class LogCleanerTest extends JUnitSuite {
         kv._2.toString.getBytes))
 
     val buffer = ByteBuffer.allocate(math.min(math.max(records.map(_.sizeInBytes()).sum / 2, 1024), 1 << 16))
-    val builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V1, codec, TimestampType.CREATE_TIME)
+    val builder = MemoryRecords.builder(buffer, Record.MAGIC_VALUE_V1, codec, TimestampType.CREATE_TIME, initialOffset)
 
     var offset = initialOffset
     records.foreach { record =>
-      builder.appendUnchecked(offset, record)
+      builder.appendUncheckedWithOffset(offset, record)
       offset += 1
     }
 
     builder.build()
   }
 
-  private def messageWithOffset(key: Int, value: Int, offset: Long) =
-    MemoryRecords.withLogEntries(LogEntry.create(offset, Record.create(key.toString.getBytes, value.toString.getBytes)))
+  private def messageWithOffset(key: Array[Byte], value: Array[Byte], offset: Long): MemoryRecords =
+    MemoryRecords.withRecords(offset, CompressionType.NONE, new KafkaRecord(key, value))
+
+  private def messageWithOffset(key: Int, value: Int, offset: Long): MemoryRecords =
+    messageWithOffset(key.toString.getBytes, value.toString.getBytes, offset)
 
   def makeLog(dir: File = dir, config: LogConfig = logConfig) =
     new Log(dir = dir, config = config, recoveryPoint = 0L, scheduler = time.scheduler, time = time)
@@ -831,5 +834,5 @@ class FakeOffsetMap(val slots: Int) extends OffsetMap {
 
   def latestOffset: Long = lastOffset
 
-  override def toString: String = map.toString()
+  override def toString: String = map.toString
 }

@@ -145,12 +145,15 @@ class GroupMetadataManager(val brokerId: Int,
         val key = GroupMetadataManager.groupMetadataKey(group.groupId)
         val value = GroupMetadataManager.groupMetadataValue(group, groupAssignment, version = groupMetadataValueVersion)
 
-        val buffer = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + EosLogRecord.sizeOf(key, value))
-        val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME)
-        builder.appendWithOffset(0, timestamp, key, value)
+        val records = {
+          val buffer = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + EosLogRecord.sizeOf(key, value))
+          val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME, 0L)
+          builder.append(timestamp, key, value)
+          builder.build()
+        }
 
         val groupMetadataPartition = new TopicPartition(Topic.GroupMetadataTopicName, partitionFor(group.groupId))
-        val groupMetadataRecords = Map(groupMetadataPartition -> builder.build())
+        val groupMetadataRecords = Map(groupMetadataPartition -> records)
         val generationId = group.generationId
 
         // set the callback function to insert the created group into cache after log append completed
@@ -247,8 +250,9 @@ class GroupMetadataManager(val brokerId: Int,
 
         // FIXME: Lots of builder boilerplate here that could be moved elsewhere
         val buffer = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + records.map(r => EosLogRecord.sizeOf(r._1, r._2)).sum)
-        val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME)
-        var offset = 0
+
+        var offset = 0L
+        val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME, offset)
         records.foreach { record => builder.appendWithOffset(offset, timestamp, record._1, record._2); offset += 1 }
 
         val entries = Map(offsetTopicPartition -> builder.build())
@@ -575,8 +579,9 @@ class GroupMetadataManager(val brokerId: Int,
         case Some((magicValue, timestampType, timestamp)) =>
           val partitionOpt = replicaManager.getPartition(appendPartition)
           partitionOpt.foreach { partition =>
-            val builder = MemoryRecords.builder(ByteBuffer.allocate(1024), magicValue, compressionType, timestampType)
-            var offset = 0
+            var offset = 0L
+            val builder = MemoryRecords.builder(ByteBuffer.allocate(1024), magicValue, compressionType,
+              timestampType, offset)
             expiredOffsets.foreach { case (topicPartition, offsetAndMetadata) =>
               trace(s"Removing expired offset and metadata for $groupId, $topicPartition: $offsetAndMetadata")
               val commitKey = GroupMetadataManager.offsetCommitKey(groupId, topicPartition.topic, topicPartition.partition)

@@ -25,7 +25,7 @@ import org.junit.Assert._
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.junit.runners.Parameterized.Parameters
-import org.apache.kafka.common.record.{CompressionType, MemoryRecords, Record}
+import org.apache.kafka.common.record.{KafkaRecord, CompressionType, MemoryRecords, Record}
 import org.apache.kafka.common.utils.Utils
 import java.util.{Collection, Properties}
 
@@ -57,7 +57,7 @@ class BrokerCompressionTest(messageCompression: String, brokerCompression: Strin
 
     /* append two messages */
     log.append(MemoryRecords.withRecords(CompressionType.forId(messageCompressionCode.codec),
-      Record.create("hello".getBytes), Record.create("there".getBytes)))
+      new KafkaRecord("hello".getBytes), new KafkaRecord("there".getBytes)))
 
     def readEntry(offset: Int) = log.read(offset, 4096).records.entries.iterator.next()
 
