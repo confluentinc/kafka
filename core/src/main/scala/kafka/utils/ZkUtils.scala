@@ -31,9 +31,6 @@ import org.I0Itec.zkclient.exception.{ZkBadVersionException, ZkException, ZkMars
 import org.I0Itec.zkclient.serialize.ZkSerializer
 import org.I0Itec.zkclient.{ZkClient, ZkConnection}
 import org.apache.kafka.common.config.ConfigException
-import org.apache.kafka.common.network.ListenerName
-import org.apache.kafka.common.protocol.SecurityProtocol
-import org.apache.kafka.common.utils.Time
 import org.apache.zookeeper.AsyncCallback.{DataCallback, StringCallback}
 import org.apache.zookeeper.KeeperException.Code
 import org.apache.zookeeper.data.{ACL, Stat}
@@ -56,7 +53,7 @@ object ZkUtils {
   val IsrChangeNotificationPath = "/isr_change_notification"
   val EntityConfigPath = "/config"
   val EntityConfigChangesPath = "/config/changes"
-  val IdempotentPIDPath = "/pids"
+  val PidBlockPath = "/latest_pid_block"
 
   def apply(zkUrl: String, sessionTimeout: Int, connectionTimeout: Int, isZkSecurityEnabled: Boolean): ZkUtils = {
     val (zkClient, zkConnection) = createZkClientAndConnection(zkUrl, sessionTimeout, connectionTimeout)
@@ -619,6 +616,17 @@ class ZkUtils(val zkClient: ZkClient,
     dataAndStat
   }
 
+  def readDataAndVersionMaybeNull(path: String): (Option[String], Int) = {
+    val stat = new Stat()
+    val dataAndStat = try {
+      (Some(zkClient.readData(path, stat)), stat.getVersion)
+    } catch {
+      case _: ZkNoNodeException =>
+        (None, stat.getVersion)
+    }
+    dataAndStat
+  }
+
   def getChildren(path: String): Seq[String] = zkClient.getChildren(path).asScala
 
   def getChildrenParentMayNotExist(path: String): Seq[String] = {
@@ -714,12 +722,12 @@ class ZkUtils(val zkClient: ZkClient,
     }
   }
 
-  def getTopicPartitionCount(topic: String, defaultNumPartitions: Int = 50): Int = {
+  def getTopicPartitionCount(topic: String): Option[Int] = {
     val topicData = getPartitionAssignmentForTopics(Seq(topic))
     if (topicData(topic).nonEmpty)
-      topicData(topic).size
+      Some(topicData(topic).size)
     else
-      defaultNumPartitions
+      None
   }
 
   def getPartitionsBeingReassigned(): Map[TopicAndPartition, ReassignedPartitionsContext] = {

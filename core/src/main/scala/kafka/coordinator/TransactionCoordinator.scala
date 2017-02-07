@@ -35,14 +35,14 @@ object TransactionCoordinator {
 
   def apply(config: KafkaConfig, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
 
-    val pIDManager = new PIDManager(config.brokerId, zkUtils)
+    val pIDManager = new PidManager(config.brokerId, zkUtils)
     val logManager = new TransactionLogManager(config.brokerId, zkUtils)
     new TransactionCoordinator(config.brokerId, pIDManager, logManager)
   }
 }
 
 class TransactionCoordinator(val brokerId: Int,
-                             val pIDManager: PIDManager,
+                             val pIDManager: PidManager,
                              val logManager: TransactionLogManager) extends Logging {
 
   this.logIdent = "[Transaction Coordinator " + brokerId + "]: "
@@ -52,26 +52,26 @@ class TransactionCoordinator(val brokerId: Int,
   /* Active flag of the coordinator */
   private val isActive = new AtomicBoolean(false)
 
-  /* TxnID to PID metadata map cache */
-  private val pIDMetadataCache = new Pool[String, PIDMetadata]
+  /* TransactionalId to pid metadata map cache */
+  private val pIDMetadataCache = new Pool[String, PidMetadata]
 
-  def handleInitPID(txnID: String,
+  def handleInitPID(transactionalId: String,
                     responseCallback: InitPIDCallback): Unit = {
-    if (txnID == null || txnID.isEmpty) {
-      // if the txnID is not specified, then always blindly accept the request
+    if (transactionalId == null || transactionalId.isEmpty) {
+      // if the transactional id is not specified, then always blindly accept the request
       // and return a new PID from the PID manager
-      val pID: Long = pIDManager.getNewPID()
+      val pID: Long = pIDManager.getNewPid()
 
-      responseCallback(InitPIDResult(pID, 0 /* epoch */, Errors.NONE))
-    } else if(!logManager.isCoordinatorFor(txnID)) {
-      // check if it is the assigned coordinator for the txnID
+      responseCallback(InitPIDResult(pID, epoch = 0, Errors.NONE))
+    } else if(!logManager.isCoordinatorFor(transactionalId)) {
+      // check if it is the assigned coordinator for the transactional id
       responseCallback(initPIDError(Errors.NOT_COORDINATOR_FOR_GROUP))
     } else {
-      // only try to get a new PID and update the cache if the txnID is unknown
-      getPIDMetadata(txnID) match {
+      // only try to get a new PID and update the cache if the transactional id is unknown
+      getPIDMetadata(transactionalId) match {
         case None =>
-          val pID: Long = pIDManager.getNewPID()
-          val metadata = addPIDMetadata(txnID, new PIDMetadata(pID))
+          val pID: Long = pIDManager.getNewPid()
+          val metadata = addPIDMetadata(transactionalId, new PidMetadata(pID))
 
           responseCallback(initPIDMetadata(metadata))
 
@@ -111,12 +111,12 @@ class TransactionCoordinator(val brokerId: Int,
     info("Shutdown complete.")
   }
 
-  private def getPIDMetadata(txnID: String): Option[PIDMetadata] = {
-    Option(pIDMetadataCache.get(txnID))
+  private def getPIDMetadata(transactionalId: String): Option[PidMetadata] = {
+    Option(pIDMetadataCache.get(transactionalId))
   }
 
-  private def addPIDMetadata(txnID: String, pIDMetadata: PIDMetadata): PIDMetadata = {
-    val currentMetadata = pIDMetadataCache.putIfNotExists(txnID, pIDMetadata)
+  private def addPIDMetadata(transactionalId: String, pIDMetadata: PidMetadata): PidMetadata = {
+    val currentMetadata = pIDMetadataCache.putIfNotExists(transactionalId, pIDMetadata)
     if (currentMetadata != null) {
       currentMetadata
     } else {
@@ -125,14 +125,13 @@ class TransactionCoordinator(val brokerId: Int,
   }
 
   private def initPIDError(error: Errors): InitPIDResult = {
-    InitPIDResult(-1L /* PID */, -1 /* epoch */, error)
+    InitPIDResult(pID = -1L, epoch = -1, error)
   }
 
-  private def initPIDMetadata(pIDMetadata: PIDMetadata): InitPIDResult = {
+  private def initPIDMetadata(pIDMetadata: PidMetadata): InitPIDResult = {
     InitPIDResult(pIDMetadata.PID, pIDMetadata.epoch, Errors.NONE)
   }
 }
-
 
 
 case class InitPIDResult(pID: Long, epoch: Short, error: Errors)

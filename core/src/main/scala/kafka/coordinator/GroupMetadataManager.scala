@@ -659,7 +659,7 @@ class GroupMetadataManager(val brokerId: Int,
    * If the topic does not exist, the configured partition count is returned.
    */
   private def getOffsetsTopicPartitionCount: Int = {
-    zkUtils.getTopicPartitionCount(Topic.GroupMetadataTopicName, config.offsetsTopicNumPartitions)
+    zkUtils.getTopicPartitionCount(Topic.GroupMetadataTopicName).getOrElse(config.offsetsTopicNumPartitions)
   }
 
   /**

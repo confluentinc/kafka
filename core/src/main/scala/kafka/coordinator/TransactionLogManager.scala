@@ -31,10 +31,6 @@ import kafka.utils.CoreUtils.inLock
   * Transaction log manager is part of the transaction coordinator that manages the transaction log, which is
   * a special internal topic.
   */
-object TransactionLogManager {
-
-}
-
 class TransactionLogManager(val brokerId: Int,
                             val zkUtils: ZkUtils) extends Logging {
 
@@ -49,16 +45,16 @@ class TransactionLogManager(val brokerId: Int,
   /* partitions of transaction topics that are assigned to this manager */
   private val ownedPartitions: mutable.Set[Int] = mutable.Set()
 
-  def partitionFor(txnID: String): Int = Utils.abs(txnID.hashCode) % transactionTopicPartitionCount
+  def partitionFor(transactionalId: String): Int = Utils.abs(transactionalId.hashCode) % transactionTopicPartitionCount
 
-  def isCoordinatorFor(txnID: String): Boolean = inLock(partitionLock) { ownedPartitions.contains(partitionFor(txnID)) }
+  def isCoordinatorFor(transactionalId: String): Boolean = inLock(partitionLock) { ownedPartitions.contains(partitionFor(transactionalId)) }
 
   /**
     * Gets the partition count of the transaction log topic from ZooKeeper.
     * If the topic does not exist, the default partition count is returned.
     */
   private def getTransactionTopicPartitionCount: Int = {
-    zkUtils.getTopicPartitionCount(Topic.TransactionLogTopicName, 50)  // TODO: need a config for this
+    zkUtils.getTopicPartitionCount(Topic.TransactionLogTopicName).getOrElse(50)  // TODO: need a config for this
   }
 
   /**

@@ -19,7 +19,7 @@ package kafka.coordinator
 import kafka.utils.nonthreadsafe
 
 @nonthreadsafe
-private[coordinator] class PIDMetadata(val PID: Long) {
+private[coordinator] class PidMetadata(val PID: Long) {
 
   /* current epoch number of the PID */
   var epoch: Short = 0
