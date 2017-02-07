@@ -82,7 +82,7 @@ class GroupCoordinatorResponseTest extends JUnitSuite {
 
     zkUtils = EasyMock.createNiceMock(classOf[ZkUtils])
     // make two partitions of the group topic to make sure some partitions are not owned by the coordinator
-    EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.GroupMetadataTopicName, OffsetConfig.DefaultOffsetsTopicNumPartitions)).andReturn(2)
+    EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.GroupMetadataTopicName)).andReturn(Some(2))
     EasyMock.replay(zkUtils)
 
     timer = new MockTimer

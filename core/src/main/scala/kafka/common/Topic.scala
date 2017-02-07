@@ -24,7 +24,7 @@ import scala.collection.immutable
 object Topic {
 
   val GroupMetadataTopicName = "__consumer_offsets"
-  val TransactionLogTopicName = "__producer_transactions"  // TODO: better name suggestions?
+  val TransactionLogTopicName = "__transaction_state"
   val InternalTopics = immutable.Set(GroupMetadataTopicName)
 
   val legalChars = "[a-zA-Z0-9\\._\\-]"

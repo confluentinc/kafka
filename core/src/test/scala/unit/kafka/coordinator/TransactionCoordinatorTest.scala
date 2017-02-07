@@ -40,12 +40,12 @@ class TransactionCoordinatorTest {
       }
     })
     .anyTimes()
-  EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.TransactionLogTopicName, 50))
-    .andReturn(2)
+  EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.TransactionLogTopicName))
+    .andReturn(Some(2))
     .once()
   EasyMock.replay(zkUtils)
 
-  val pIDManager: PIDManager = new PIDManager(0, zkUtils)
+  val pIDManager: PidManager = new PidManager(0, zkUtils)
   val logManager: TransactionLogManager = new TransactionLogManager(0, zkUtils)
   val coordinator: TransactionCoordinator = new TransactionCoordinator(0, pIDManager, logManager)
 

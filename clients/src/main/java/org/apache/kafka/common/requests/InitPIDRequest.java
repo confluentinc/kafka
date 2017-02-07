@@ -22,27 +22,27 @@ import org.apache.kafka.common.protocol.types.Struct;
 import java.nio.ByteBuffer;
 
 public class InitPIDRequest extends AbstractRequest {
-    private static final String APP_ID_KEY_NAME = "appid";
+    private static final String TRANSACTIONAL_ID_KEY_NAME = "transactional_id";
 
     private static final Schema CURRENT_SCHEMA = ProtoUtils.currentRequestSchema(ApiKeys.INIT_PRODUCER_ID.id);
 
-    private final String txnId;
+    private final String transactionalId;
 
     public static class Builder extends AbstractRequest.Builder<InitPIDRequest> {
-        private String txnId;
+        private String transactionalId;
 
-        public Builder(String txnId) {
+        public Builder(String transactionalId) {
             super(ApiKeys.API_VERSIONS);
-            this.txnId = txnId;
+            this.transactionalId = transactionalId;
         }
 
-        public void setTxnId(String txnId) {
-            this.txnId = txnId;
+        public void setTransactionalId(String transactionalId) {
+            this.transactionalId = transactionalId;
         }
 
         @Override
         public InitPIDRequest build() {
-            return new InitPIDRequest(version(), this.txnId);
+            return new InitPIDRequest(version(), this.transactionalId);
         }
 
         @Override
@@ -54,17 +54,17 @@ public class InitPIDRequest extends AbstractRequest {
 
     private InitPIDRequest(Struct struct, short versionId) {
         super(struct, versionId);
-        this.txnId = struct.getString(APP_ID_KEY_NAME);
+        this.transactionalId = struct.getString(TRANSACTIONAL_ID_KEY_NAME);
     }
 
-    private InitPIDRequest(short version, String txnId) {
+    private InitPIDRequest(short version, String transactionalId) {
         super(new Struct(ProtoUtils.requestSchema(ApiKeys.INIT_PRODUCER_ID.id, version)), version);
-        this.txnId = txnId;
-        struct.set(APP_ID_KEY_NAME, txnId);
+        this.transactionalId = transactionalId;
+        struct.set(TRANSACTIONAL_ID_KEY_NAME, transactionalId);
     }
 
-    private InitPIDRequest(String txnId) {
-        this((short) 0, txnId);
+    private InitPIDRequest(String transactionalId) {
+        this((short) 0, transactionalId);
     }
 
     @Override
@@ -80,8 +80,8 @@ public class InitPIDRequest extends AbstractRequest {
         return parse(buffer, ProtoUtils.latestVersion(ApiKeys.INIT_PRODUCER_ID.id));
     }
 
-    public String txnId() {
-        return txnId;
+    public String transactionalId() {
+        return transactionalId;
     }
 
 }
