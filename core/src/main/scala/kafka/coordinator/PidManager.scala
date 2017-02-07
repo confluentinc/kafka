@@ -91,6 +91,7 @@ class PidManager(val brokerId: Int,
       // refresh current pid block from zookeeper again
       val (dataOpt, zkVersion) = zkUtils.readDataAndVersionMaybeNull(ZkUtils.PidBlockPath)
 
+      // generate the new pid block
       currentPIDBlock = dataOpt match {
         case Some(data) =>
           val currPIDBlock = PidManager.parsePidBlockData(data)
@@ -128,11 +129,14 @@ class PidManager(val brokerId: Int,
           val currPIDBlock = PidManager.parsePidBlockData(data)
           if (currPIDBlock.equals(expectedPidBlock))
             return (true, zkVersion)
+          else
+            return (false, zkVersion)
         case None =>
       }
     } catch {
       case _: Exception =>
     }
+
     (false, -1)
   }
 

@@ -194,7 +194,8 @@ class ZkUtils(val zkClient: ZkClient,
                               getEntityConfigRootPath(ConfigType.Client),
                               DeleteTopicsPath,
                               BrokerSequenceIdPath,
-                              IsrChangeNotificationPath)
+                              IsrChangeNotificationPath,
+                              PidBlockPath)
 
   val securePersistentZkPaths = Seq(BrokerIdsPath,
                                     BrokerTopicsPath,
@@ -203,7 +204,8 @@ class ZkUtils(val zkClient: ZkClient,
                                     getEntityConfigRootPath(ConfigType.Client),
                                     DeleteTopicsPath,
                                     BrokerSequenceIdPath,
-                                    IsrChangeNotificationPath)
+                                    IsrChangeNotificationPath,
+                                    PidBlockPath)
 
   val DefaultAcls: java.util.List[ACL] = ZkUtils.DefaultAcls(isSecure)
 
@@ -521,12 +523,12 @@ class ZkUtils(val zkClient: ZkClient,
           case Some(checker) => checker(this, path, data)
           case _ =>
             debug("Checker method is not passed skipping zkData match")
-            warn("Conditional update of path %s with data %s and expected version %d failed due to %s"
+            debug("Conditional update of path %s with data %s and expected version %d failed due to %s"
               .format(path, data,expectVersion, e1.getMessage))
             (false, -1)
         }
       case e2: Exception =>
-        warn("Conditional update of path %s with data %s and expected version %d failed due to %s".format(path, data,
+        debug("Conditional update of path %s with data %s and expected version %d failed due to %s".format(path, data,
           expectVersion, e2.getMessage))
         (false, -1)
     }
@@ -619,7 +621,11 @@ class ZkUtils(val zkClient: ZkClient,
   def readDataAndVersionMaybeNull(path: String): (Option[String], Int) = {
     val stat = new Stat()
     val dataAndStat = try {
-      (Some(zkClient.readData(path, stat)), stat.getVersion)
+      val data: String = zkClient.readData(path, stat)
+      if (data == null.asInstanceOf[String])
+        (None, stat.getVersion)
+      else
+      (Some(data), stat.getVersion)
     } catch {
       case _: ZkNoNodeException =>
         (None, stat.getVersion)
