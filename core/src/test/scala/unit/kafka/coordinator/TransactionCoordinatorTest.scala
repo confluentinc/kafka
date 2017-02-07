@@ -27,22 +27,42 @@ import org.junit.Assert._
 
 class TransactionCoordinatorTest {
 
-  var block: Int = -1
-  val capturedArgument: Capture[String] = EasyMock.newCapture()
   val zkUtils: ZkUtils = EasyMock.createNiceMock(classOf[ZkUtils])
-  EasyMock.expect(zkUtils.createSequentialPersistentPath(EasyMock.capture(capturedArgument),
-                                                         EasyMock.anyString(),
-                                                         EasyMock.anyObject().asInstanceOf[java.util.List[ACL]]))
-    .andAnswer(new IAnswer[String] {
-      override def answer(): String = {
-        block += 1
-        capturedArgument + block.toString
+
+  var zkVersion: Int = -1
+  var data: String = null
+  val capturedVersion: Capture[Int] = EasyMock.newCapture()
+  val capturedData: Capture[String] = EasyMock.newCapture()
+  EasyMock.expect(zkUtils.readDataAndVersionMaybeNull(EasyMock.anyString()))
+    .andAnswer(new IAnswer[(Option[String], Int)] {
+      override def answer(): (Option[String], Int) = {
+        if (zkVersion == -1) {
+          (None.asInstanceOf[Option[String]], 0)
+        } else {
+          (Some(data), zkVersion)
+        }
       }
     })
     .anyTimes()
+
+  EasyMock.expect(zkUtils.conditionalUpdatePersistentPath(EasyMock.anyString(),
+    EasyMock.capture(capturedData),
+    EasyMock.capture(capturedVersion),
+    EasyMock.anyObject().asInstanceOf[Option[(ZkUtils, String, String) => (Boolean,Int)]]))
+    .andAnswer(new IAnswer[(Boolean, Int)] {
+      override def answer(): (Boolean, Int) = {
+        zkVersion = capturedVersion.getValue + 1
+        data = capturedData.getValue
+
+        (true, zkVersion)
+      }
+    })
+    .anyTimes()
+
   EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.TransactionLogTopicName))
     .andReturn(Some(2))
     .once()
+  
   EasyMock.replay(zkUtils)
 
   val pIDManager: PidManager = new PidManager(0, zkUtils)
