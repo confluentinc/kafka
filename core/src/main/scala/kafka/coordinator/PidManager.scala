@@ -26,11 +26,11 @@ import kafka.utils.{Json, Logging, ZkUtils}
   * PIDs are managed via ZooKeeper as the coordination mechanism.
   */
 object PidManager extends Logging {
-  val version: Long = 1L
+  val CurrentVersion: Long = 1L
   val PidBlockSize: Long = 1000L
 
   def generatePidBlockJson(pidBlock: PidBlock): String = {
-    Json.encode(Map("version" -> version,
+    Json.encode(Map("version" -> CurrentVersion,
       "broker" -> pidBlock.brokerId,
       "block_start" -> pidBlock.blockStartPid.toString,
       "block_end" -> pidBlock.blockEndPid.toString)
@@ -62,12 +62,6 @@ case class PidBlock(brokerId: Int, blockStartPid: Long, blockEndPid: Long) {
     pidBlockInfo.append(",blockStartPID:" + blockStartPid)
     pidBlockInfo.append(",blockEndPID:" + blockEndPid + ")")
     pidBlockInfo.toString()
-  }
-
-  override def equals(that: Any): Boolean = that match {
-    case other: PidBlock =>
-      brokerId == other.brokerId && blockStartPid == other.blockStartPid && blockEndPid == other.blockEndPid
-    case _ => false
   }
 }
 
@@ -128,18 +122,18 @@ class PidManager(val brokerId: Int,
         case Some(data) =>
           val currPIDBlock = PidManager.parsePidBlockData(data)
           if (currPIDBlock.equals(expectedPidBlock))
-            return (true, zkVersion)
+            (true, zkVersion)
           else
-            return (false, zkVersion)
+            (false, zkVersion)
         case None =>
       }
     } catch {
-      case _: Exception =>
+      case e: Exception =>
+        warn("Error while checking for pid block Zk data on path %s: expected data %s".format(path, expectedData), e)
     }
 
     (false, -1)
   }
-
 
   def getNewPid(): Long = {
     this synchronized {

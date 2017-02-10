@@ -28,7 +28,7 @@ import kafka.cluster.Partition
 import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
 import kafka.common._
 import kafka.controller.KafkaController
-import kafka.coordinator.{GroupCoordinator, InitPIDResult, JoinGroupResult, TransactionCoordinator}
+import kafka.coordinator.{GroupCoordinator, InitPidResult, JoinGroupResult, TransactionCoordinator}
 import kafka.log._
 import kafka.network._
 import kafka.network.RequestChannel.{Response, Session}
@@ -147,14 +147,14 @@ class KafkaApis(val requestChannel: RequestChannel,
         updatedLeaders.foreach { partition =>
           if (partition.topic == Topic.GroupMetadataTopicName)
             groupCoordinator.handleGroupImmigration(partition.partitionId)
-          if (partition.topic == Topic.TransactionLogTopicName)
+          if (partition.topic == Topic.TransactionStateTopicName)
             txnCoordinator.handleTxnImmigration(partition.partitionId)
 
         }
         updatedFollowers.foreach { partition =>
           if (partition.topic == Topic.GroupMetadataTopicName)
             groupCoordinator.handleGroupEmigration(partition.partitionId)
-          if (partition.topic == Topic.TransactionLogTopicName)
+          if (partition.topic == Topic.TransactionStateTopicName)
             txnCoordinator.handleTxnEmigration(partition.partitionId)
         }
       }
@@ -1277,16 +1277,16 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   def handleInitPIDRequest(request: RequestChannel.Request): Unit = {
-    val initPidRequest = request.body.asInstanceOf[InitPIDRequest]
+    val initPidRequest = request.body.asInstanceOf[InitPidRequest]
 
     // Send response callback
-    def sendResponseCallback(result: InitPIDResult): Unit = {
-      val responseBody: InitPIDResponse = new InitPIDResponse(result.error, result.pID, result.epoch)
-      trace(s"Generated new PID ${result.pID} from InitPIDRequest from client ${request.header.clientId}")
+    def sendResponseCallback(result: InitPidResult): Unit = {
+      val responseBody: InitPIDResponse = new InitPIDResponse(result.error, result.pid, result.epoch)
+      trace(s"Generated new PID ${result.pid} from InitPidRequest from client ${request.header.clientId}")
       requestChannel.sendResponse(new RequestChannel.Response(request, responseBody))
     }
 
-    txnCoordinator.handleInitPID(initPidRequest.transactionalId(), sendResponseCallback)
+    txnCoordinator.handleInitPid(initPidRequest.transactionalId, sendResponseCallback)
   }
 
   def handleBeginTransactionRequest(request: RequestChannel.Request): Unit = {

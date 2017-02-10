@@ -54,7 +54,7 @@ class TransactionLogManager(val brokerId: Int,
     * If the topic does not exist, the default partition count is returned.
     */
   private def getTransactionTopicPartitionCount: Int = {
-    zkUtils.getTopicPartitionCount(Topic.TransactionLogTopicName).getOrElse(50)  // TODO: need a config for this
+    zkUtils.getTopicPartitionCount(Topic.TransactionStateTopicName).getOrElse(50)  // TODO: need a config for this
   }
 
   /**

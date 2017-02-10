@@ -59,7 +59,7 @@ class TransactionCoordinatorTest {
     })
     .anyTimes()
 
-  EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.TransactionLogTopicName))
+  EasyMock.expect(zkUtils.getTopicPartitionCount(Topic.TransactionStateTopicName))
     .andReturn(Some(2))
     .once()
   
@@ -69,7 +69,7 @@ class TransactionCoordinatorTest {
   val logManager: TransactionLogManager = new TransactionLogManager(0, zkUtils)
   val coordinator: TransactionCoordinator = new TransactionCoordinator(0, pIDManager, logManager)
 
-  var result: InitPIDResult = null
+  var result: InitPidResult = null
 
   @Before
   def setUp(): Unit = {
@@ -86,26 +86,26 @@ class TransactionCoordinatorTest {
 
   @Test
   def testHandleInitPID() = {
-    coordinator.handleInitPID("", initPIDMockCallback)
-    assertEquals(InitPIDResult(0L, 0, Errors.NONE), result)
+    coordinator.handleInitPid("", initPIDMockCallback)
+    assertEquals(InitPidResult(0L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPID("", initPIDMockCallback)
-    assertEquals(InitPIDResult(1L, 0, Errors.NONE), result)
+    coordinator.handleInitPid("", initPIDMockCallback)
+    assertEquals(InitPidResult(1L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPID("a", initPIDMockCallback)
-    assertEquals(InitPIDResult(2L, 0, Errors.NONE), result)
+    coordinator.handleInitPid("a", initPIDMockCallback)
+    assertEquals(InitPidResult(2L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPID("a", initPIDMockCallback)
-    assertEquals(InitPIDResult(2L, 1, Errors.NONE), result)
+    coordinator.handleInitPid("a", initPIDMockCallback)
+    assertEquals(InitPidResult(2L, 1, Errors.NONE), result)
 
-    coordinator.handleInitPID("c", initPIDMockCallback)
-    assertEquals(InitPIDResult(3L, 0, Errors.NONE), result)
+    coordinator.handleInitPid("c", initPIDMockCallback)
+    assertEquals(InitPidResult(3L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPID("b", initPIDMockCallback)
-    assertEquals(InitPIDResult(-1L, -1, Errors.NOT_COORDINATOR_FOR_GROUP), result)
+    coordinator.handleInitPid("b", initPIDMockCallback)
+    assertEquals(InitPidResult(-1L, -1, Errors.NOT_COORDINATOR_FOR_GROUP), result)
   }
 
-  def initPIDMockCallback(ret: InitPIDResult): Unit = {
+  def initPIDMockCallback(ret: InitPidResult): Unit = {
     result = ret
   }
 }

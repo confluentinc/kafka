@@ -473,13 +473,7 @@ class ZkUtils(val zkClient: ZkClient,
   }
 
   def createSequentialPersistentPath(path: String, data: String = "", acls: java.util.List[ACL] = DefaultAcls): String = {
-    try {
-      ZkPath.createPersistentSequential(zkClient, path, data, acls)
-    } catch {
-      case _: ZkNoNodeException =>
-        createParentPath(path)
-        ZkPath.createPersistentSequential(zkClient, path, data, acls)
-    }
+    ZkPath.createPersistentSequential(zkClient, path, data, acls)
   }
 
   /**
