@@ -124,13 +124,14 @@ class PidManager(val brokerId: Int,
           val currPIDBlock = PidManager.parsePidBlockData(data)
           (currPIDBlock.equals(expectedPidBlock), zkVersion)
         case None =>
+          (false, -1)
       }
     } catch {
       case e: Exception =>
         warn(s"Error while checking for pid block Zk data on path $path: expected data $expectedData", e)
+        
+        (false, -1)
     }
-
-    (false, -1)
   }
 
   def getNewPid(): Long = {
