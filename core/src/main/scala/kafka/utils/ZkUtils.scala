@@ -723,7 +723,10 @@ class ZkUtils(val zkClient: ZkClient,
 
   def getTopicPartitionCount(topic: String): Option[Int] = {
     val topicData = getPartitionAssignmentForTopics(Seq(topic))
-    topicData.get(topic).map(_.size)
+    if (topicData(topic).nonEmpty)
+      Some(topicData(topic).size)
+    else
+      None
   }
 
   def getPartitionsBeingReassigned(): Map[TopicAndPartition, ReassignedPartitionsContext] = {
