@@ -20,10 +20,11 @@ import kafka.common.KafkaException
 import kafka.utils.{Json, Logging, ZkUtils}
 
 /**
-  * PID manager is part of the transaction coordinator that provides PIDs in a unique way such that the same PID will not be
+  * Pid manager is part of the transaction coordinator that provides PIDs in a unique way such that the same PID will not be
   * assigned twice across multiple transaction coordinators.
   *
-  * PIDs are managed via ZooKeeper as the coordination mechanism.
+  * Pids are managed via ZooKeeper, where the latest pid block is written on the corresponding ZK path by the manager who
+  * claims the block, where the written block_start_pid and block_end_pid are both inclusive.
   */
 object PidManager extends Logging {
   val CurrentVersion: Long = 1L
@@ -49,7 +50,7 @@ object PidManager extends Logging {
     } catch {
       case e: java.lang.NumberFormatException =>
         // this should never happen: the written data has exceeded long type limit
-        fatal("Read jason data %s contains pids that have exceeded long type limit".format(jsonData))
+        fatal(s"Read jason data $jsonData contains pids that have exceeded long type limit")
         throw e
     }
   }
@@ -89,17 +90,17 @@ class PidManager(val brokerId: Int,
       currentPIDBlock = dataOpt match {
         case Some(data) =>
           val currPIDBlock = PidManager.parsePidBlockData(data)
-          debug("Read current pid block %s, Zk path version %d".format(currPIDBlock, zkVersion))
+          debug(s"Read current pid block $currPIDBlock, Zk path version $zkVersion")
 
           if (currPIDBlock.blockEndPid > Long.MaxValue - PidManager.PidBlockSize) {
             // we have exhausted all pids (wow!), treat it as a fatal error
-            fatal("Exhausted all pids as the next block's end pid is will has exceeded long type limit (current block end pid is %d)".format(currPIDBlock.blockEndPid))
+            fatal(s"Exhausted all pids as the next block's end pid is will has exceeded long type limit (current block end pid is ${currPIDBlock.blockEndPid})")
             throw new KafkaException("Have exhausted all pids.")
           }
 
           PidBlock(brokerId, currPIDBlock.blockEndPid + 1L, currPIDBlock.blockEndPid + PidManager.PidBlockSize)
         case None =>
-          debug("There is no pid block yet (Zk path version %d), creating the first block".format(zkVersion))
+          debug(s"There is no pid block yet (Zk path version $zkVersion), creating the first block")
           PidBlock(brokerId, 0L, PidManager.PidBlockSize - 1)
       }
 
@@ -110,7 +111,7 @@ class PidManager(val brokerId: Int,
       zkWriteComplete = succeeded
 
       if (zkWriteComplete)
-        info("Acquired new pid block %s by writing to Zk with path version %d".format(currentPIDBlock, version))
+        info(s"Acquired new pid block $currentPIDBlock by writing to Zk with path version $version")
     }
   }
 
@@ -118,18 +119,15 @@ class PidManager(val brokerId: Int,
     try {
       val expectedPidBlock = PidManager.parsePidBlockData(expectedData)
       val (dataOpt, zkVersion) = zkUtils.readDataAndVersionMaybeNull(ZkUtils.PidBlockPath)
-      val newPIDBlock = dataOpt match {
+      dataOpt match {
         case Some(data) =>
           val currPIDBlock = PidManager.parsePidBlockData(data)
-          if (currPIDBlock.equals(expectedPidBlock))
-            (true, zkVersion)
-          else
-            (false, zkVersion)
+          (currPIDBlock.equals(expectedPidBlock), zkVersion)
         case None =>
       }
     } catch {
       case e: Exception =>
-        warn("Error while checking for pid block Zk data on path %s: expected data %s".format(path, expectedData), e)
+        warn(s"Error while checking for pid block Zk data on path $path: expected data $expectedData", e)
     }
 
     (false, -1)
@@ -150,6 +148,6 @@ class PidManager(val brokerId: Int,
   }
 
   def shutdown() {
-    info("Shutdown complete: last PID assigned %d".format(nextPID))
+    info(s"Shutdown complete: last PID assigned $nextPID")
   }
 }

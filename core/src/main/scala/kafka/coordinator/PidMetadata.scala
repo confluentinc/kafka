@@ -23,4 +23,9 @@ private[coordinator] class PidMetadata(val pid: Long) {
 
   /* current epoch number of the PID */
   var epoch: Short = 0
+
+  override def equals(that: Any): Boolean = that match {
+    case other: PidMetadata => pid == other.pid && epoch == other.epoch
+    case _ => false
+  }
 }

@@ -614,7 +614,7 @@ class ZkUtils(val zkClient: ZkClient,
 
   def readDataAndVersionMaybeNull(path: String): (Option[String], Int) = {
     val stat = new Stat()
-    val dataAndStat = try {
+    try {
       val data: String = zkClient.readData(path, stat)
       if (data == null.asInstanceOf[String])
         (None, stat.getVersion)
@@ -624,7 +624,6 @@ class ZkUtils(val zkClient: ZkClient,
       case _: ZkNoNodeException =>
         (None, stat.getVersion)
     }
-    dataAndStat
   }
 
   def getChildren(path: String): Seq[String] = zkClient.getChildren(path).asScala
@@ -724,10 +723,7 @@ class ZkUtils(val zkClient: ZkClient,
 
   def getTopicPartitionCount(topic: String): Option[Int] = {
     val topicData = getPartitionAssignmentForTopics(Seq(topic))
-    if (topicData(topic).nonEmpty)
-      Some(topicData(topic).size)
-    else
-      None
+    topicData.get(topic).map(_.size)
   }
 
   def getPartitionsBeingReassigned(): Map[TopicAndPartition, ReassignedPartitionsContext] = {
