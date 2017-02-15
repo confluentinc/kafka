@@ -24,6 +24,7 @@ import kafka.cluster.Partition
 import kafka.common.{OffsetAndMetadata, Topic}
 import kafka.log.{Log, LogAppendInfo}
 import kafka.server.{FetchDataInfo, KafkaConfig, LogOffsetMetadata, ReplicaManager}
+import kafka.utils.TestUtils.fail
 import kafka.utils.{KafkaScheduler, MockTime, TestUtils, ZkUtils}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.Errors
@@ -31,12 +32,11 @@ import org.apache.kafka.common.record._
 import org.apache.kafka.common.requests.OffsetFetchResponse
 import org.apache.kafka.common.requests.ProduceResponse.PartitionResponse
 import org.easymock.{Capture, EasyMock, IAnswer}
-import org.junit.{Before, Test}
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
-import kafka.utils.TestUtils.fail
+import org.junit.{Before, Test}
 
+import scala.collection.JavaConverters._
 import scala.collection._
-import JavaConverters._
 
 class GroupMetadataManagerTest {
 
@@ -542,7 +542,7 @@ class GroupMetadataManagerTest {
     val recordsCapture: Capture[MemoryRecords] = EasyMock.newCapture()
 
     EasyMock.expect(replicaManager.getMagicAndTimestampType(EasyMock.anyObject()))
-      .andStubReturn(Some(Record.MAGIC_VALUE_V1, TimestampType.CREATE_TIME))
+      .andStubReturn(Some(LogEntry.MAGIC_VALUE_V1, TimestampType.CREATE_TIME))
     EasyMock.expect(replicaManager.getPartition(new TopicPartition(Topic.GroupMetadataTopicName, groupPartitionId))).andStubReturn(Some(partition))
     EasyMock.expect(partition.appendRecordsToLeader(EasyMock.capture(recordsCapture), EasyMock.anyInt()))
       .andReturn(LogAppendInfo.UnknownLogAppendInfo)
@@ -554,7 +554,7 @@ class GroupMetadataManagerTest {
 
     val records = recordsCapture.getValue.records.asScala.toList
     recordsCapture.getValue.entries.asScala.foreach { entry =>
-      assertEquals(Record.MAGIC_VALUE_V1, entry.magic)
+      assertEquals(LogEntry.MAGIC_VALUE_V1, entry.magic)
       assertEquals(TimestampType.CREATE_TIME, entry.timestampType)
     }
     assertEquals(1, records.size)
@@ -590,7 +590,7 @@ class GroupMetadataManagerTest {
     val recordsCapture: Capture[MemoryRecords] = EasyMock.newCapture()
 
     EasyMock.expect(replicaManager.getMagicAndTimestampType(EasyMock.anyObject()))
-      .andStubReturn(Some(Record.MAGIC_VALUE_V1, TimestampType.LOG_APPEND_TIME))
+      .andStubReturn(Some(LogEntry.MAGIC_VALUE_V1, TimestampType.LOG_APPEND_TIME))
     EasyMock.expect(replicaManager.getPartition(new TopicPartition(Topic.GroupMetadataTopicName, groupPartitionId))).andStubReturn(Some(partition))
     EasyMock.expect(partition.appendRecordsToLeader(EasyMock.capture(recordsCapture), EasyMock.anyInt()))
       .andReturn(LogAppendInfo.UnknownLogAppendInfo)
@@ -602,7 +602,7 @@ class GroupMetadataManagerTest {
 
     val records = recordsCapture.getValue.records.asScala.toList
     recordsCapture.getValue.entries.asScala.foreach { entry =>
-      assertEquals(Record.MAGIC_VALUE_V1, entry.magic)
+      assertEquals(LogEntry.MAGIC_VALUE_V1, entry.magic)
       assertEquals(TimestampType.LOG_APPEND_TIME, entry.timestampType)
     }
     assertEquals(1, records.size)
@@ -766,11 +766,11 @@ class GroupMetadataManagerTest {
       EasyMock.capture(capturedArgument))).andAnswer(new IAnswer[Unit] {
       override def answer = capturedArgument.getValue.apply(
         Map(new TopicPartition(Topic.GroupMetadataTopicName, groupPartitionId) ->
-          new PartitionResponse(error, 0L, Record.NO_TIMESTAMP)
+          new PartitionResponse(error, 0L, LogEntry.NO_TIMESTAMP)
         )
       )})
     EasyMock.expect(replicaManager.getMagicAndTimestampType(EasyMock.anyObject()))
-      .andStubReturn(Some(Record.MAGIC_VALUE_V1, TimestampType.CREATE_TIME))
+      .andStubReturn(Some(LogEntry.MAGIC_VALUE_V1, TimestampType.CREATE_TIME))
   }
 
   private def buildStableGroupRecordWithMember(memberId: String): KafkaRecord = {

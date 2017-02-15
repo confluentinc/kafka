@@ -146,7 +146,8 @@ class GroupMetadataManager(val brokerId: Int,
         val value = GroupMetadataManager.groupMetadataValue(group, groupAssignment, version = groupMetadataValueVersion)
 
         val records = {
-          val buffer = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + EosLogRecord.sizeOf(key, value))
+          val buffer = ByteBuffer.allocate(AbstractRecords.estimateSizeInBytes(magicValue, compressionType,
+            Seq(new KafkaRecord(timestamp, key, value)).asJava))
           val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME, 0L)
           builder.append(timestamp, key, value)
           builder.build()
@@ -237,38 +238,37 @@ class GroupMetadataManager(val brokerId: Int,
     }
 
     // construct the message set to append
-    getMagicAndTimestamp(partitionFor(group.groupId)) match {
-      case Some((magicValue, timestampType, timestamp)) =>
-        val records = filteredOffsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
-          val key = GroupMetadataManager.offsetCommitKey(group.groupId, topicPartition)
-          val value = GroupMetadataManager.offsetCommitValue(offsetAndMetadata)
-          (key, value)
-        }.toSeq
+    if (filteredOffsetMetadata.isEmpty) {
+      // compute the final error codes for the commit response
+      val commitStatus = offsetMetadata.mapValues(_ => Errors.OFFSET_METADATA_TOO_LARGE)
+      responseCallback(commitStatus)
+      None
+    } else {
+      getMagicAndTimestamp(partitionFor(group.groupId)) match {
+        case Some((magicValue, timestampType, timestamp)) =>
+          val records = filteredOffsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
+            val key = GroupMetadataManager.offsetCommitKey(group.groupId, topicPartition)
+            val value = GroupMetadataManager.offsetCommitValue(offsetAndMetadata)
+            new KafkaRecord(timestamp, key, value)
+          }
+          val offsetTopicPartition = new TopicPartition(Topic.GroupMetadataTopicName, partitionFor(group.groupId))
+          val buffer = ByteBuffer.allocate(AbstractRecords.estimateSizeInBytes(magicValue, compressionType, records.asJava))
+          val builder = MemoryRecords.builder(buffer, magicValue, compressionType, TimestampType.CREATE_TIME, 0L)
+          records.foreach(builder.append)
+          val entries = Map(offsetTopicPartition -> builder.build())
 
-        val offsetTopicPartition = new TopicPartition(Topic.GroupMetadataTopicName, partitionFor(group.groupId))
+          // set the callback function to insert offsets into cache after log append completed
+          def putCacheCallback(responseStatus: Map[TopicPartition, PartitionResponse]) {
+            // the append response should only contain the topics partition
+            if (responseStatus.size != 1 || !responseStatus.contains(offsetTopicPartition))
+              throw new IllegalStateException("Append status %s should only have one partition %s"
+                .format(responseStatus, offsetTopicPartition))
 
-        // FIXME: Lots of builder boilerplate here that could be moved elsewhere
-        val buffer = ByteBuffer.allocate(EosLogEntry.LOG_ENTRY_OVERHEAD + records.map(r => EosLogRecord.sizeOf(r._1, r._2)).sum)
+            // construct the commit response status and insert
+            // the offset and metadata to cache if the append status has no error
+            val status = responseStatus(offsetTopicPartition)
 
-        var offset = 0L
-        val builder = MemoryRecords.builder(buffer, magicValue, compressionType, timestampType, offset)
-        records.foreach { record => builder.appendWithOffset(offset, timestamp, record._1, record._2); offset += 1 }
-
-        val entries = Map(offsetTopicPartition -> builder.build())
-
-        // set the callback function to insert offsets into cache after log append completed
-        def putCacheCallback(responseStatus: Map[TopicPartition, PartitionResponse]) {
-          // the append response should only contain the topics partition
-          if (responseStatus.size != 1 || ! responseStatus.contains(offsetTopicPartition))
-            throw new IllegalStateException("Append status %s should only have one partition %s"
-              .format(responseStatus, offsetTopicPartition))
-
-          // construct the commit response status and insert
-          // the offset and metadata to cache if the append status has no error
-          val status = responseStatus(offsetTopicPartition)
-
-          val response =
-            group synchronized {
+            val responseError = group synchronized {
               if (status.error == Errors.NONE) {
                 if (!group.is(Dead)) {
                   filteredOffsetMetadata.foreach { case (topicPartition, offsetAndMetadata) =>
@@ -287,7 +287,7 @@ class GroupMetadataManager(val brokerId: Int,
                   s"with generation $generationId failed when appending to log due to ${status.error.exceptionName}")
 
                 // transform the log append error code to the corresponding the commit status error code
-                val responseError = status.error match {
+                status.error match {
                   case Errors.UNKNOWN_TOPIC_OR_PARTITION
                        | Errors.NOT_ENOUGH_REPLICAS
                        | Errors.NOT_ENOUGH_REPLICAS_AFTER_APPEND =>
@@ -303,35 +303,34 @@ class GroupMetadataManager(val brokerId: Int,
 
                   case other => other
                 }
-
-                responseError
               }
             }
 
-          // compute the final error codes for the commit response
-          val commitStatus = offsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
-            if (validateOffsetMetadataLength(offsetAndMetadata.metadata))
-              (topicPartition, response)
-            else
-              (topicPartition, Errors.OFFSET_METADATA_TOO_LARGE)
+            // compute the final error codes for the commit response
+            val commitStatus = offsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
+              if (validateOffsetMetadataLength(offsetAndMetadata.metadata))
+                (topicPartition, responseError)
+              else
+                (topicPartition, Errors.OFFSET_METADATA_TOO_LARGE)
+            }
+
+            // finally trigger the callback logic passed from the API layer
+            responseCallback(commitStatus)
           }
 
-          // finally trigger the callback logic passed from the API layer
+          group synchronized {
+            group.prepareOffsetCommit(offsetMetadata)
+          }
+
+          Some(DelayedStore(entries, putCacheCallback))
+
+        case None =>
+          val commitStatus = offsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
+            (topicPartition, Errors.NOT_COORDINATOR_FOR_GROUP)
+          }
           responseCallback(commitStatus)
-        }
-
-        group synchronized {
-          group.prepareOffsetCommit(offsetMetadata)
-        }
-
-        Some(DelayedStore(entries, putCacheCallback))
-
-      case None =>
-        val commitStatus = offsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
-          (topicPartition, Errors.NOT_COORDINATOR_FOR_GROUP)
-        }
-        responseCallback(commitStatus)
-        None
+          None
+      }
     }
   }
 
@@ -676,7 +675,7 @@ class GroupMetadataManager(val brokerId: Int,
   private def getMagicAndTimestamp(partition: Int): Option[(Byte, TimestampType, Long)] = {
     val groupMetadataTopicPartition = new TopicPartition(Topic.GroupMetadataTopicName, partition)
     replicaManager.getMagicAndTimestampType(groupMetadataTopicPartition).map { case (messageFormatVersion, timestampType) =>
-      val timestamp = if (messageFormatVersion == Record.MAGIC_VALUE_V0) Record.NO_TIMESTAMP else time.milliseconds()
+      val timestamp = if (messageFormatVersion == LogEntry.MAGIC_VALUE_V0) LogEntry.NO_TIMESTAMP else time.milliseconds()
       (messageFormatVersion, timestampType, timestamp)
     }
   }

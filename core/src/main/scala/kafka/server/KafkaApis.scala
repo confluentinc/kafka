@@ -40,7 +40,7 @@ import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.protocol.{ApiKeys, Errors, Protocol}
-import org.apache.kafka.common.record.{MemoryRecords, Record, TimestampType}
+import org.apache.kafka.common.record.{LogEntry, MemoryRecords, TimestampType}
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.requests.ProduceResponse.PartitionResponse
 import org.apache.kafka.common.utils.{Time, Utils}
@@ -471,13 +471,13 @@ class KafkaApis(val requestChannel: RequestChannel,
           // test might break because some messages in new message format can be delivered to consumers before 0.10.0.0
           // without format down conversion.
           val convertedData = replicaManager.getMagicAndTimestampType(tp) match {
-            case Some((magic, _)) if magic > 0 && versionId <= 1 && !data.records.hasCompatibleMagic(Record.MAGIC_VALUE_V0) =>
+            case Some((magic, _)) if magic > 0 && versionId <= 1 && !data.records.hasCompatibleMagic(LogEntry.MAGIC_VALUE_V0) =>
               trace(s"Down converting message to V0 for fetch request from $clientId")
-              FetchPartitionData(data.error, data.hw, data.records.toMessageFormat(Record.MAGIC_VALUE_V0, TimestampType.NO_TIMESTAMP_TYPE))
+              FetchPartitionData(data.error, data.hw, data.records.downConvert(LogEntry.MAGIC_VALUE_V0))
 
-            case Some((magic, _)) if magic > 1 && versionId <= 3 && !data.records.hasCompatibleMagic(Record.MAGIC_VALUE_V1) =>
+            case Some((magic, _)) if magic > 1 && versionId <= 3 && !data.records.hasCompatibleMagic(LogEntry.MAGIC_VALUE_V1) =>
               trace(s"Down converting message to V1 for fetch request from $clientId")
-              FetchPartitionData(data.error, data.hw, data.records.toMessageFormat(Record.MAGIC_VALUE_V1, TimestampType.NO_TIMESTAMP_TYPE))
+              FetchPartitionData(data.error, data.hw, data.records.downConvert(LogEntry.MAGIC_VALUE_V1))
 
             case _ => data
           }
@@ -657,7 +657,7 @@ class KafkaApis(val requestChannel: RequestChannel,
 
           val found = {
             if (fromConsumer && timestamp == ListOffsetRequest.LATEST_TIMESTAMP)
-              TimestampOffset(Record.NO_TIMESTAMP, localReplica.highWatermark.messageOffset)
+              TimestampOffset(LogEntry.NO_TIMESTAMP, localReplica.highWatermark.messageOffset)
             else {
               def allowed(timestampOffset: TimestampOffset): Boolean =
                 !fromConsumer || timestampOffset.offset <= localReplica.highWatermark.messageOffset
