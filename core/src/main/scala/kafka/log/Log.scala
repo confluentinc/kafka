@@ -27,14 +27,13 @@ import kafka.common._
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.{BrokerTopicStats, FetchDataInfo, LogOffsetMetadata}
 import kafka.utils._
-import org.apache.kafka.common.errors.{CorruptRecordException, OffsetOutOfRangeException, RecordBatchTooLargeException, RecordTooLargeException, UnsupportedForMessageFormatException}
 import org.apache.kafka.common.record.{LogEntry, _}
 import org.apache.kafka.common.requests.ListOffsetRequest
-
 import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.{Time, Utils}
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, NoCompressionCodec}
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.errors.{CorruptRecordException, OffsetOutOfRangeException, RecordBatchTooLargeException, RecordTooLargeException, UnsupportedForMessageFormatException, DuplicateSequenceNumberException, OutOfOrderSequenceException}
 
 import scala.collection.JavaConverters._
 import scala.collection.Seq
@@ -481,28 +480,34 @@ class Log(@volatile var dir: File,
           maxOffsetInMessages = appendInfo.lastOffset)
 
 
-        // verify that the epoch and sequence are correct before appending
-        pidMap.checkSeqAndEpoch(appendInfo.pid, appendInfo.firstSequence, appendInfo.epoch)
+        try {
+          // verify that the epoch and sequence are correct before appending
+          pidMap.checkSeqAndEpoch(appendInfo.pid, appendInfo.firstSequence, appendInfo.epoch)
+          // now append to the log
+          segment.append(firstOffset = appendInfo.firstOffset,
+            largestOffset = appendInfo.lastOffset,
+            largestTimestamp = appendInfo.maxTimestamp,
+            shallowOffsetOfMaxTimestamp = appendInfo.offsetOfMaxTimestamp,
+            records = validRecords)
 
-        // now append to the log
-        segment.append(firstOffset = appendInfo.firstOffset,
-          largestOffset = appendInfo.lastOffset,
-          largestTimestamp = appendInfo.maxTimestamp,
-          shallowOffsetOfMaxTimestamp = appendInfo.offsetOfMaxTimestamp,
-          records = validRecords)
+          // update the PID sequence mapping
+          pidMap.update(appendInfo.pid, appendInfo.lastSequence, appendInfo.epoch, appendInfo.lastOffset)
 
-        // update the PID sequence mapping
-        pidMap.update(appendInfo.pid, appendInfo.lastSequence, appendInfo.epoch, appendInfo.lastOffset)
+          // increment the log end offset
+          updateLogEndOffset(appendInfo.lastOffset + 1)
 
-        // increment the log end offset
-        updateLogEndOffset(appendInfo.lastOffset + 1)
+          trace("Appended message set to log %s with first offset: %d, next offset: %d, and messages: %s"
+            .format(this.name, appendInfo.firstOffset, nextOffsetMetadata.messageOffset, validRecords))
 
-        trace("Appended message set to log %s with first offset: %d, next offset: %d, and messages: %s"
-          .format(this.name, appendInfo.firstOffset, nextOffsetMetadata.messageOffset, validRecords))
+          if (unflushedMessages >= config.flushInterval)
+            flush()
 
-        if (unflushedMessages >= config.flushInterval)
-          flush()
-
+        } catch {
+          case e: DuplicateSequenceNumberException =>
+            // For duplicate sequence numbers, return the offsets of the existing record with the same sequence number.
+            updateAppendInfoForDuplicateEntry(appendInfo)
+            info(s"Received a duplicate of a LogEntry with (firstOffset, lastOffset) => (${appendInfo.firstOffset}, ${appendInfo.lastOffset}). Will drop the incoming record.")
+        }
         appendInfo
       }
     } catch {
@@ -554,7 +559,8 @@ class Log(@volatile var dir: File,
         monotonic = false
 
       if (lastSequence > 0 && lastSequence != entry.baseSequence + 1)
-        throw new IllegalArgumentException("Non-consecutive sequence numbers found in records")
+        throw new OutOfOrderSequenceException("Non-consecutive sequence numbers found in records. " +
+          s"Previous LogEntry's lastSequence : ${lastSequence}. Current LogEntry's firstSequence: ${entry.firstSequence}")
 
       // update the last offset seen
       lastOffset = entry.lastOffset
@@ -798,6 +804,34 @@ class Log(@volatile var dir: File,
     deleteOldSegments(shouldDelete)
   }
 
+  private def updateAppendInfoForDuplicateEntry(appendInfo: LogAppendInfo) : LogAppendInfo = {
+    val segmentIterator = segments.descendingMap().values().iterator()
+    while (segmentIterator.hasNext) {
+      val segment = segmentIterator.next()
+      val firstSequence = getFirstSequence(segment)
+      if (0 <= firstSequence && firstSequence <= appendInfo.firstSequence) {
+        for (entry <- segment.log.entries.asScala) {
+          if (entry.firstSequence.equals(appendInfo.firstSequence)) {
+            appendInfo.firstOffset = entry.baseOffset
+            appendInfo.lastOffset = entry.lastOffset
+            if (entry.timestampType().equals(TimestampType.LOG_APPEND_TIME))
+              appendInfo.logAppendTime = entry.maxTimestamp
+            return appendInfo
+          }
+        }
+      }
+    }
+    null
+  }
+
+  private def getFirstSequence(segment: LogSegment) : Int = {
+    val entriesIterator = segment.log.entries().iterator()
+    if (entriesIterator.hasNext) {
+      val firstEntry = entriesIterator.next()
+      return firstEntry.firstSequence
+    }
+    return -1
+  }
   /**
    * The size of the log in bytes
    */

@@ -23,7 +23,7 @@ import java.util.Properties
 import kafka.log.{LogConfig, ProducerIdMapping}
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, InvalidSequenceNumberException, ProducerFencedException}
+import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, OutOfOrderSequenceException, ProducerFencedException}
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
 import org.scalatest.junit.JUnitSuite
@@ -69,7 +69,7 @@ class ProducerIdMappingTest extends JUnitSuite {
     }
 
     // Invalid sequence number (greater than next expected sequence number)
-    assertThrows[InvalidSequenceNumberException] {
+    assertThrows[OutOfOrderSequenceException] {
       checkAndUpdate(idMapping, pid, 5, 0, 0L)
     }
 
@@ -145,7 +145,7 @@ class ProducerIdMappingTest extends JUnitSuite {
     checkAndUpdate(idMapping, pid, 2, 0, 3L)
     idMapping.maybeTakeSnapshot()
 
-    intercept[InvalidSequenceNumberException] {
+    intercept[OutOfOrderSequenceException] {
       val recoveredMapping = new ProducerIdMapping(partition, config, idMappingDir)
       recoveredMapping.truncateAndReload(1L)
       checkAndUpdate(recoveredMapping, pid2, 1, 0, 4L)

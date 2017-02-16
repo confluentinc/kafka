@@ -23,6 +23,7 @@ import org.apache.kafka.clients.NetworkClient;
 import org.apache.kafka.clients.producer.internals.ProducerInterceptors;
 import org.apache.kafka.clients.producer.internals.RecordAccumulator;
 import org.apache.kafka.clients.producer.internals.Sender;
+import org.apache.kafka.clients.producer.internals.TransactionState;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
@@ -32,6 +33,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.InterruptException;
+import org.apache.kafka.common.errors.OutOfOrderSequenceException;
 import org.apache.kafka.common.errors.RecordTooLargeException;
 import org.apache.kafka.common.errors.SerializationException;
 import org.apache.kafka.common.errors.TimeoutException;
@@ -158,6 +160,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private final long maxBlockTimeMs;
     private final int requestTimeoutMs;
     private final ProducerInterceptors<K, V> interceptors;
+    private final TransactionState transactionState;
 
     /**
      * A producer is instantiated by providing a set of key-value pairs as configuration. Valid configuration strings
@@ -296,6 +299,13 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             } else {
                 this.requestTimeoutMs = config.getInt(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG);
             }
+            boolean idempotenceEnabled = config.getBoolean(ProducerConfig.IDEMPOTENCE_ENABLED_CONFIG);
+
+            if (idempotenceEnabled) {
+                this.transactionState = new TransactionState(idempotenceEnabled);
+            } else {
+                this.transactionState = null;
+            }
 
             ApiVersions apiVersions = new ApiVersions();
 
@@ -306,8 +316,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     retryBackoffMs,
                     metrics,
                     time,
-                    apiVersions);
-
+                    apiVersions,
+                    transactionState);
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(config.getList(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
             this.metadata.update(Cluster.bootstrap(addresses), Collections.<String>emptySet(), time.milliseconds());
             ChannelBuilder channelBuilder = ClientUtils.createChannelBuilder(config);
@@ -334,7 +344,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     this.metrics,
                     Time.SYSTEM,
                     this.requestTimeoutMs,
-                    apiVersions);
+                    apiVersions,
+                    this.transactionState
+            );
             String ioThreadName = "kafka-producer-network-thread" + (clientId.length() > 0 ? " | " + clientId : "");
             this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
             this.ioThread.start();
@@ -456,6 +468,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
         TopicPartition tp = null;
+        if (transactionState != null && !transactionState.isStateValid()) {
+            throw new IllegalStateException("The producer previously received a fatal OutOfOrderSequenceException, which indicates potential data loss. Further messages may not be sent using this producer instance.");
+        }
         try {
             // first make sure the metadata for the topic is available
             ClusterAndWaitTime clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
@@ -830,6 +845,14 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         }
 
         public void onCompletion(RecordMetadata metadata, Exception exception) {
+            if (exception != null && exception.getClass().equals(OutOfOrderSequenceException.class)) {
+                // This is a fatal exception. All future send / sendOffsets / beginTransaction, endTransaction, etc.
+                // should be aborted with an IllegalStateException.
+                if (transactionState == null) {
+                    throw new IllegalStateException("Received OutOfOrderSequenceException when local state for sequence numbers doesn't exist.");
+                }
+                this.transactionState.setStateInvalid();
+            }
             if (this.interceptors != null) {
                 if (metadata == null) {
                     this.interceptors.onAcknowledgement(new RecordMetadata(tp, -1, -1, LogEntry.NO_TIMESTAMP, -1, -1, -1),

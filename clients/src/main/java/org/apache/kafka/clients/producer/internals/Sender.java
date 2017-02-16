@@ -39,6 +39,8 @@ import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Rate;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
+import org.apache.kafka.common.requests.InitPIDResponse;
+import org.apache.kafka.common.requests.InitPidRequest;
 import org.apache.kafka.common.requests.ProduceRequest;
 import org.apache.kafka.common.requests.ProduceResponse;
 import org.apache.kafka.common.utils.Time;
@@ -99,6 +101,9 @@ public class Sender implements Runnable {
     /* current request API versions supported by the known brokers */
     private final ApiVersions apiVersions;
 
+    /* all the state related to transactions, in particular the PID, epoch, and sequence numbers */
+    private final TransactionState transactionState;
+
     public Sender(KafkaClient client,
                   Metadata metadata,
                   RecordAccumulator accumulator,
@@ -109,7 +114,8 @@ public class Sender implements Runnable {
                   Metrics metrics,
                   Time time,
                   int requestTimeout,
-                  ApiVersions apiVersions) {
+                  ApiVersions apiVersions,
+                  TransactionState transactionState) {
         this.client = client;
         this.accumulator = accumulator;
         this.metadata = metadata;
@@ -122,6 +128,7 @@ public class Sender implements Runnable {
         this.sensors = new SenderMetrics(metrics);
         this.requestTimeout = requestTimeout;
         this.apiVersions = apiVersions;
+        this.transactionState = transactionState;
     }
 
     /**
@@ -172,6 +179,13 @@ public class Sender implements Runnable {
      */
     void run(long now) {
         Cluster cluster = metadata.fetch();
+
+        if (transactionState != null) {
+            while (!transactionState.hasPid()) {
+                getPID(requestTimeout);
+            }
+        }
+
         // get the list of partitions with data ready to send
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
@@ -251,6 +265,53 @@ public class Sender implements Runnable {
     public void forceClose() {
         this.forceClose = true;
         initiateClose();
+    }
+
+    private void getPID(long remainingTime) {
+        // Send an InitPIDRequest, wait for the response, retrieve the PID from the response if success. Return it.
+        // Otherwise throw exception.
+        // Pick a random broker to send the initPIDRequest to.
+        metadata.requestUpdate();
+        long start = time.milliseconds();
+        Node node = client.leastLoadedNode(time.milliseconds());
+        while (!client.ready(node, time.milliseconds()) && 0 < remainingTime) {
+            if (client.connectionFailed(node)) {
+                node = client.leastLoadedNode(time.milliseconds());
+                client.ready(node, time.milliseconds());
+            }
+            client.poll(100, time.milliseconds());
+            remainingTime = remainingTime - (time.milliseconds() - start);
+        }
+        if (remainingTime <= 0) {
+            return;
+        }
+
+        String nodeId = node.idString();
+        InitPidRequest.Builder builder = new InitPidRequest.Builder(null);
+        RequestCompletionHandler callback = new RequestCompletionHandler() {
+            public void onComplete(ClientResponse response) {
+                handleInitPidResponse(response);
+            }
+        };
+
+        ClientRequest request = client.newClientRequest(nodeId, builder, time.milliseconds(), true, callback);
+        client.send(request, time.milliseconds());
+        start = time.milliseconds();
+        while (!transactionState.hasPid() && 0 < remainingTime) {
+            client.poll(100, time.milliseconds());
+            remainingTime = remainingTime - (time.milliseconds() - start);
+        }
+        if (remainingTime <= 0) {
+            return;
+        }
+    }
+
+    private void handleInitPidResponse(ClientResponse response) {
+        if (response.hasResponse()) {
+            InitPIDResponse initPidResponse = (InitPIDResponse) response.responseBody();
+            transactionState.setPid(initPidResponse.producerId());
+            transactionState.setEpoch(initPidResponse.epoch());
+        }
     }
 
     /**

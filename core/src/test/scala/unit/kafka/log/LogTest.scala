@@ -119,7 +119,7 @@ class LogTest extends JUnitSuite {
     assertEquals("Appending an empty message set should not roll log even if sufficient time has passed.", numSegments, log.numberOfSegments)
   }
 
-  @Test(expected = classOf[InvalidSequenceNumberException])
+  @Test(expected = classOf[OutOfOrderSequenceException])
   def testNonSequentialAppend(): Unit = {
     val logProps = new Properties()
 
@@ -140,7 +140,7 @@ class LogTest extends JUnitSuite {
     log.append(nextRecords, assignOffsets = true)
   }
 
-  @Test(expected = classOf[DuplicateSequenceNumberException])
+  @Test
   def testDuplicateAppend(): Unit = {
     val logProps = new Properties()
 
@@ -154,11 +154,13 @@ class LogTest extends JUnitSuite {
     val pid = 1L
     val epoch: Short = 0
 
-    val records = TestUtils.records(List(("key".getBytes, "value".getBytes, time.milliseconds)), pid = pid, epoch = epoch, sequence = 0)
-    log.append(records, assignOffsets = true)
+    val records = TestUtils.records(List(("key".getBytes, "value".getBytes, 1L)), pid = pid, epoch = epoch, sequence = 0)
+    val origAppendInfo = log.append(records, assignOffsets = true)
 
-    val nextRecords = TestUtils.records(List(("key".getBytes, "value".getBytes, time.milliseconds)), pid = pid, epoch = epoch, sequence = 0)
-    log.append(nextRecords, assignOffsets = true)
+    val nextRecords = TestUtils.records(List(("key".getBytes, "value".getBytes, 1L)), pid = pid, epoch = epoch, sequence = 0)
+    val newAppendInfo = log.append(nextRecords, assignOffsets = true)
+    assertEquals("Inserted a duplicate record into the log", origAppendInfo.firstOffset, newAppendInfo.firstOffset)
+    assertEquals("Inserted a duplicate record into the log", origAppendInfo.lastOffset, newAppendInfo.lastOffset)
   }
 
   @Test(expected = classOf[ProducerFencedException])

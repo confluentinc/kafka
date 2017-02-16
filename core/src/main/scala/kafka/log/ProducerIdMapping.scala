@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import kafka.common.KafkaException
 import kafka.utils.{Logging, nonthreadsafe}
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, InvalidSequenceNumberException, ProducerFencedException}
+import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, OutOfOrderSequenceException, ProducerFencedException}
 import org.apache.kafka.common.protocol.types._
 import org.apache.kafka.common.utils.Utils
 
@@ -173,6 +173,7 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
     lastSnapshotFile(logEndOffset) match {
       case Some(file) =>
         try {
+          trace("Loading snapshot from file: %s".format(file.toPath))
           loadSnapshot(file, pidMap)
           lastSnapOffset = offsetFromFile(file)
           lastMapOffset = lastSnapOffset
@@ -220,7 +221,7 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
       pidMap.get(pid) match {
         case None =>
           if (seq != 0)
-            throw new InvalidSequenceNumberException(s"Invalid sequence number: $pid (id), $seq (seq. number)")
+            throw new OutOfOrderSequenceException(s"Invalid sequence number: $pid (id), $seq (seq. number)")
 
         case Some(tuple) =>
           // Zombie writer
@@ -228,10 +229,10 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
             throw new ProducerFencedException(s"Invalid epoch (zombie writer): $epoch (request epoch), ${tuple.epoch}")
           if (tuple.epoch < epoch) {
             if (seq != 0)
-              throw new InvalidSequenceNumberException(s"Invalid sequence number for new epoch: $epoch (request epoch), $seq (seq. number)")
+              throw new OutOfOrderSequenceException(s"Invalid sequence number for new epoch: $epoch (request epoch), $seq (seq. number)")
           } else {
             if (seq > tuple.seq + 1L)
-              throw new InvalidSequenceNumberException(s"Invalid sequence number: $pid (id), $seq (seq. number), ${tuple.seq} (expected seq. number)")
+              throw new OutOfOrderSequenceException(s"Invalid sequence number: $pid (id), $seq (seq. number), ${tuple.seq} (expected seq. number)")
             else if (seq <= tuple.seq)
               throw new DuplicateSequenceNumberException(s"Duplicate sequence number: $pid (id), $seq (seq. number), ${tuple.seq} (expected seq. number)")
           }
