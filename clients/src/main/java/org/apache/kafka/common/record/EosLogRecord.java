@@ -150,16 +150,16 @@ public class EosLogRecord implements LogRecord {
 
     public static long writeTo(DataOutputStream out,
                                int offsetDelta,
-                               long timestamp,
+                               long timestampDelta,
                                ByteBuffer key,
                                ByteBuffer value) throws IOException {
-        int sizeInBytes = sizeOfBodyInBytes(offsetDelta, timestamp, key, value);
+        int sizeInBytes = sizeOfBodyInBytes(offsetDelta, timestampDelta, key, value);
         Utils.writeUnsignedVarInt(sizeInBytes, out);
 
         byte attributes = computeAttributes(key, value);
         out.write(attributes);
 
-        Utils.writeVarLong(timestamp, out);
+        Utils.writeVarLong(timestampDelta, out);
         Utils.writeUnsignedVarInt(offsetDelta, out);
 
         if (key != null) {
@@ -171,16 +171,17 @@ public class EosLogRecord implements LogRecord {
         if (value != null)
             out.write(value.array(), value.arrayOffset(), value.remaining());
 
-        return computeChecksum(timestamp, key, value);
+        return computeChecksum(timestampDelta, key, value);
     }
 
     public static long writeTo(ByteBuffer out,
                                int offsetDelta,
-                               long timestamp,
+                               long timestampDelta,
                                ByteBuffer key,
                                ByteBuffer value) {
         try {
-            return writeTo(new DataOutputStream(new ByteBufferOutputStream(out)), offsetDelta, timestamp, key, value);
+            return writeTo(new DataOutputStream(new ByteBufferOutputStream(out)), offsetDelta,
+                    timestampDelta, key, value);
         } catch (IOException e) {
             // cannot actually be raised by ByteBufferOutputStream
             throw new RuntimeException(e);
@@ -225,17 +226,19 @@ public class EosLogRecord implements LogRecord {
 
     public static EosLogRecord readFrom(DataInputStream input,
                                         long baseOffset,
+                                        long baseTimestamp,
                                         int baseSequence,
                                         Long logAppendTime) throws IOException {
         int sizeOfBodyInBytes = Utils.readUnsignedVarInt(input);
         ByteBuffer recordBuffer = ByteBuffer.allocate(sizeOfBodyInBytes);
         input.readFully(recordBuffer.array(), recordBuffer.arrayOffset(), sizeOfBodyInBytes);
         int totalSizeInBytes = Utils.bytesForUnsignedVarIntEncoding(sizeOfBodyInBytes) + sizeOfBodyInBytes;
-        return readFrom(recordBuffer, totalSizeInBytes, baseOffset, baseSequence, logAppendTime);
+        return readFrom(recordBuffer, totalSizeInBytes, baseOffset, baseTimestamp, baseSequence, logAppendTime);
     }
 
     public static EosLogRecord readFrom(ByteBuffer buffer,
                                         long baseOffset,
+                                        long baseTimestamp,
                                         int baseSequence,
                                         Long logAppendTime) {
         ByteBuffer dup = buffer.duplicate();
@@ -245,16 +248,17 @@ public class EosLogRecord implements LogRecord {
 
         int totalSizeInBytes = Utils.bytesForUnsignedVarIntEncoding(sizeOfBodyInBytes) + sizeOfBodyInBytes;
         dup.limit(dup.position() + sizeOfBodyInBytes);
-        return readFrom(dup, totalSizeInBytes, baseOffset, baseSequence, logAppendTime);
+        return readFrom(dup, totalSizeInBytes, baseOffset, baseTimestamp, baseSequence, logAppendTime);
     }
 
     private static EosLogRecord readFrom(ByteBuffer buffer,
                                          int sizeInBytes,
                                          long baseOffset,
+                                         long baseTimestamp,
                                          int baseSequence,
                                          Long logAppendTime) {
         byte attributes = buffer.get();
-        long timestamp = Utils.readVarLong(buffer);
+        long timestamp = baseTimestamp + Utils.readVarLong(buffer);
         if (logAppendTime != null)
             timestamp = logAppendTime;
 
