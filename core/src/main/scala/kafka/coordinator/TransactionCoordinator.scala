@@ -55,6 +55,8 @@ class TransactionCoordinator(val brokerId: Int,
   /* TransactionalId to pid metadata map cache */
   private val pidMetadataCache = new Pool[String, PidMetadata]
 
+  /* Pid to current ongoing transaction status of the producer cache */
+
   def handleInitPid(transactionalId: String,
                     responseCallback: InitPidCallback): Unit = {
     if (transactionalId == null || transactionalId.isEmpty) {
