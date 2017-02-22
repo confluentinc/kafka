@@ -16,12 +16,12 @@
  */
 package org.apache.kafka.common.protocol.types;
 
-import java.nio.ByteBuffer;
-
 import org.apache.kafka.common.record.FileRecords;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.utils.Utils;
+
+import java.nio.ByteBuffer;
 
 /**
  * A serializable type
@@ -442,7 +442,7 @@ public abstract class Type {
         }
 
         @Override
-        public Object read(ByteBuffer buffer) {
+        public Records read(ByteBuffer buffer) {
             ByteBuffer recordsBuffer = (ByteBuffer) NULLABLE_BYTES.read(buffer);
             return MemoryRecords.readableRecords(recordsBuffer);
         }
