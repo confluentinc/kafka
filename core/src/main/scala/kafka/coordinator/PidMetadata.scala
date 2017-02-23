@@ -19,10 +19,9 @@ package kafka.coordinator
 import kafka.utils.nonthreadsafe
 
 @nonthreadsafe
-private[coordinator] class PidMetadata(val pid: Long) {
-
-  /* current epoch number of the PID */
-  var epoch: Short = 0
+private[coordinator] class PidMetadata(val pid: Long,
+                                       var epoch: Short,
+                                       val transactionTimeoutMs: Int) {
 
   override def equals(that: Any): Boolean = that match {
     case other: PidMetadata => pid == other.pid && epoch == other.epoch

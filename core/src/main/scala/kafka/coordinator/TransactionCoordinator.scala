@@ -58,6 +58,7 @@ class TransactionCoordinator(val brokerId: Int,
   /* Pid to current ongoing transaction status of the producer cache */
 
   def handleInitPid(transactionalId: String,
+                    transactionTimeoutMs: Int,
                     responseCallback: InitPidCallback): Unit = {
     if (transactionalId == null || transactionalId.isEmpty) {
       // if the transactional id is not specified, then always blindly accept the request
@@ -73,7 +74,7 @@ class TransactionCoordinator(val brokerId: Int,
       getPidMetadata(transactionalId) match {
         case None =>
           val pid: Long = pidManager.getNewPid()
-          val newMetadata: PidMetadata = new PidMetadata(pid)
+          val newMetadata: PidMetadata = new PidMetadata(pid, epoch = 0, transactionTimeoutMs)
           val metadata = addPidMetadata(transactionalId, newMetadata)
 
           // there might be a concurrent thread that has just updated the mapping

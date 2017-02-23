@@ -17,17 +17,18 @@
 
 package kafka.coordinator
 
+import java.io.PrintStream
 import java.nio.ByteBuffer
 
-import kafka.common.{KafkaException, Topic}
+import kafka.common.{KafkaException, MessageFormatter, Topic}
 import kafka.utils.CoreUtils.inLock
 import kafka.utils.{Logging, ZkUtils}
-import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.protocol.types.Type._
 import org.apache.kafka.common.protocol.types.{ArrayOf, Field, Schema, Struct}
 import org.apache.kafka.common.utils.Utils
 import java.util.concurrent.locks.ReentrantLock
+
+import org.apache.kafka.clients.consumer.ConsumerRecord
 
 import scala.collection.mutable
 
@@ -76,7 +77,7 @@ object TransactionLogManager {
   private val PARTITION_SCHEMA_TOPIC_FIELD = PARTITION_SCHEMA_V0.get(TOPIC_KEY)
   private val PARTITION_SCHEMA_PARTITIONS_FIELD = PARTITION_SCHEMA_V0.get(PARITION_IDS_KEY)
 
-  private val TXN_VALUE_SCHEMA_V0 = new Schema(new Field(EPOCH_KEY, INT16),
+  private val TXN_VALUE_SCHEMA_V0 = new Schema(new Field(EPOCH_KEY, INT16),  // FIXME: remove this field?
                                                new Field(STATUS_KEY, INT8),
                                                new Field(PARTITIONS_KEY, new ArrayOf(PARTITION_SCHEMA_V0)))
   private val TXN_VALUE_EPOCH_FIELD = TXN_VALUE_SCHEMA_V0.get(EPOCH_KEY)
@@ -108,7 +109,7 @@ object TransactionLogManager {
     val schemaOpt = MESSAGE_TYPE_SCHEMAS.get(version)
     schemaOpt match {
       case Some(schema) => schema
-      case _ => throw new KafkaException("Unknown offset schema version " + version)
+      case _ => throw new KafkaException(s"Unknown transaction log key schema version $version")
     }
   }
 
@@ -116,7 +117,7 @@ object TransactionLogManager {
     val schemaOpt = PID_VALUE_SCHEMAS.get(version)
     schemaOpt match {
       case Some(schema) => schema
-      case _ => throw new KafkaException("Unknown offset schema version " + version)
+      case _ => throw new KafkaException(s"Unknown pid mapping message value schema version $version")
     }
   }
 
@@ -124,7 +125,7 @@ object TransactionLogManager {
     val schemaOpt = TXN_VALUE_SCHEMAS.get(version)
     schemaOpt match {
       case Some(schema) => schema
-      case _ => throw new KafkaException("Unknown group metadata version " + version)
+      case _ => throw new KafkaException(s"Unknown transaction status value schema version $version")
     }
   }
 
@@ -159,7 +160,7 @@ object TransactionLogManager {
   }
 
   /**
-    * Generates the payload for transactionalid to pid mapping message
+    * Generates the payload for transactional id to pid mapping message
     *
     * @return value payload bytes
     */
@@ -167,7 +168,7 @@ object TransactionLogManager {
     val value = new Struct(CURRENT_PID_VALUE_SCHEMA)
     value.set(PID_VALUE_SCHEMA_PID_FIELD, pidMetadata.pid)
     value.set(PID_VALUE_SCHEMA_EPOCH_FIELD, pidMetadata.epoch)
-    value.set(PID_VALUE_SCHEMA_TXN_TIMEOUT_FIELD, 5000L) // FIXME
+    value.set(PID_VALUE_SCHEMA_TXN_TIMEOUT_FIELD, pidMetadata.transactionTimeoutMs)
 
     val byteBuffer = ByteBuffer.allocate(2 /* version */ + value.sizeOf)
     byteBuffer.putShort(CURRENT_PID_VALUE_SCHEMA_VERSION)
@@ -183,116 +184,94 @@ object TransactionLogManager {
   private[coordinator] def groupMetadataValue(txnMetadata: TransactionMetadata): Array[Byte] = {
     val value = new Struct(CURRENT_TXN_VALUE_SCHEMA)
 
-    value.set(TXN_VALUE_EPOCH_FIELD, txnMetadata.pidMetadata.epoch)
     value.set(TXN_VALUE_STATUS_FIELD, txnMetadata.state)
 
-    val partitionArray = txnMetadata.topicPartitions.map { topcPartition =>
-      val memberStruct = value.instance(TXN_VALUE_PARTITIONS_FIELD)
-      memberStruct.set(TOPIC_KEY, topcPartition.topic())
-      memberStruct.set(CLIENT_ID_KEY, topcPartition.partition())
-      memberStruct.set(CLIENT_HOST_KEY, memberMetadata.clientHost)
-      memberStruct.set(SESSION_TIMEOUT_KEY, memberMetadata.sessionTimeoutMs)
+    // first group the topic partitions by their topic names
+    val topicAndPartitions = txnMetadata.topicPartitions.groupBy(_.topic())
 
-      if (version > 0)
-        memberStruct.set(REBALANCE_TIMEOUT_KEY, memberMetadata.rebalanceTimeoutMs)
+    val partitionArray = topicAndPartitions.map { topicAndPartitionIds =>
+      val topicPartitionsStruct = value.instance(TXN_VALUE_PARTITIONS_FIELD)
 
-      val metadata = memberMetadata.metadata(groupMetadata.protocol)
-      memberStruct.set(SUBSCRIPTION_KEY, ByteBuffer.wrap(metadata))
+      topicPartitionsStruct.set(TOPIC_KEY, topicAndPartitionIds._1)
+      topicPartitionsStruct.set(PARITION_IDS_KEY, topicAndPartitionIds._2.toArray)
 
-      val memberAssignment = assignment(memberMetadata.memberId)
-      assert(memberAssignment != null)
-
-      memberStruct.set(ASSIGNMENT_KEY, ByteBuffer.wrap(memberAssignment))
-
-      memberStruct
+      topicPartitionsStruct
     }
 
-    value.set(MEMBERS_KEY, memberArray.toArray)
+    value.set(TXN_VALUE_PARTITIONS_FIELD, partitionArray.toArray)
 
     val byteBuffer = ByteBuffer.allocate(2 /* version */ + value.sizeOf)
-    byteBuffer.putShort(CURRENT_TXN_VALUE_SCHEMA)
+    byteBuffer.putShort(CURRENT_TXN_VALUE_SCHEMA_VERSION)
     value.writeTo(byteBuffer)
     byteBuffer.array()
   }
 
   /**
-    * Decodes the offset messages' key
+    * Decodes the transaction log messages' key
     *
-    * @param buffer input byte-buffer
-    * @return an GroupTopicPartition object
+    * @return the key
     */
   def readMessageKey(buffer: ByteBuffer): BaseKey = {
     val version = buffer.getShort
     val keySchema = schemaForKey(version)
     val key = keySchema.read(buffer)
 
-    if (version <= CURRENT_OFFSET_KEY_SCHEMA_VERSION) {
-      // version 0 and 1 refer to offset
-      val group = key.get(OFFSET_KEY_GROUP_FIELD).asInstanceOf[String]
-      val topic = key.get(OFFSET_KEY_TOPIC_FIELD).asInstanceOf[String]
-      val partition = key.get(OFFSET_KEY_PARTITION_FIELD).asInstanceOf[Int]
+    if (version == CURRENT_PID_KEY_SCHEMA_VERSION) {
+      // version 0 refer to pid messages
+      val transactionalId = key.get(PID_KEY_SCHEMA_TXNID_FIELD).asInstanceOf[String]
 
-      OffsetKey(version, GroupTopicPartition(group, new TopicPartition(topic, partition)))
+      PidKey(version, transactionalId)
+    } else if (version == CURRENT_TXN_KEY_SCHEMA_VERSION) {
+      // version 1 refers to txn status messages
+      val pid = key.get(TXN_KEY_SCHEMA_PID_FIELD).asInstanceOf[Long]
 
-    } else if (version == CURRENT_GROUP_KEY_SCHEMA_VERSION) {
-      // version 2 refers to offset
-      val group = key.get(GROUP_KEY_GROUP_FIELD).asInstanceOf[String]
-
-      GroupMetadataKey(version, group)
+      TxnKey(version, pid)
     } else {
-      throw new IllegalStateException("Unknown version " + version + " for group metadata message")
+      throw new IllegalStateException(s"Unknown version $version from the transaction log message")
     }
   }
 
   /**
-    * Decodes the offset messages' payload and retrieves offset and metadata from it
+    * Decodes the pid messages' payload and retrieves pid metadata from it
     *
-    * @param buffer input byte-buffer
-    * @return an offset-metadata object from the message
+    * @return a pid metadata object from the message
     */
-  def readOffsetMessageValue(buffer: ByteBuffer): OffsetAndMetadata = {
+  def readPidValue(buffer: ByteBuffer): PidMetadata = {
     if (buffer == null) { // tombstone
       null
     } else {
       val version = buffer.getShort
-      val valueSchema = schemaForOffset(version)
+      val valueSchema = schemaForPid(version)
       val value = valueSchema.read(buffer)
 
-      if (version == 0) {
-        val offset = value.get(OFFSET_VALUE_OFFSET_FIELD_V0).asInstanceOf[Long]
-        val metadata = value.get(OFFSET_VALUE_METADATA_FIELD_V0).asInstanceOf[String]
-        val timestamp = value.get(OFFSET_VALUE_TIMESTAMP_FIELD_V0).asInstanceOf[Long]
+      if (version == CURRENT_PID_VALUE_SCHEMA_VERSION) {
+        val pid = value.get(PID_VALUE_SCHEMA_PID_FIELD).asInstanceOf[Long]
+        val epoch = value.get(PID_VALUE_SCHEMA_EPOCH_FIELD).asInstanceOf[Short]
+        val timeout = value.get(PID_VALUE_SCHEMA_TXN_TIMEOUT_FIELD).asInstanceOf[Int]
 
-        OffsetAndMetadata(offset, metadata, timestamp)
-      } else if (version == 1) {
-        val offset = value.get(OFFSET_VALUE_OFFSET_FIELD_V1).asInstanceOf[Long]
-        val metadata = value.get(OFFSET_VALUE_METADATA_FIELD_V1).asInstanceOf[String]
-        val commitTimestamp = value.get(OFFSET_VALUE_COMMIT_TIMESTAMP_FIELD_V1).asInstanceOf[Long]
-        val expireTimestamp = value.get(OFFSET_VALUE_EXPIRE_TIMESTAMP_FIELD_V1).asInstanceOf[Long]
-
-        OffsetAndMetadata(offset, metadata, commitTimestamp, expireTimestamp)
+        new PidMetadata(pid, epoch, timeout)
       } else {
-        throw new IllegalStateException("Unknown offset message version")
+        throw new IllegalStateException(s"Unknown version $version from the pid mapping message value")
       }
     }
   }
 
   /**
-    * Decodes the group metadata messages' payload and retrieves its member metadatafrom it
+    * Decodes the txn status messages' payload and retrieves transaction metadata from it
     *
-    * @param buffer input byte-buffer
-    * @return a group metadata object from the message
+    * @return a transaction metadata object from the message
     */
-  def readGroupMessageValue(groupId: String, buffer: ByteBuffer): GroupMetadata = {
+  def readTxnStatusValue(groupId: String, buffer: ByteBuffer): TransactionMetadata = {
     if (buffer == null) { // tombstone
       null
     } else {
       val version = buffer.getShort
-      val valueSchema = schemaForGroup(version)
+      val valueSchema = schemaForTxn(version)
       val value = valueSchema.read(buffer)
 
-      if (version == 0 || version == 1) {
-        val protocolType = value.get(PROTOCOL_TYPE_KEY).asInstanceOf[String]
+      if (version == CURRENT_TXN_VALUE_SCHEMA_VERSION) {
+        val stateByte = value.get(TXN_VALUE_STATUS_FIELD).asInstanceOf[Byte]
+        val state = TransactionMetadata.byteToState(stateByte)
 
         val memberMetadataArray = value.getArray(MEMBERS_KEY)
         val initialState = if (memberMetadataArray.isEmpty) Empty else Stable
@@ -323,7 +302,7 @@ object TransactionLogManager {
 
         group
       } else {
-        throw new IllegalStateException("Unknown group metadata message version")
+        throw new IllegalStateException(s"Unknown version $version from the transaction status message value")
       }
     }
   }
@@ -370,7 +349,16 @@ object TransactionLogManager {
       }
     }
   }
+}
 
+case class PidKey(version: Short, key: String) extends BaseKey {
+
+  override def toString: String = key.toString
+}
+
+case class TxnKey(version: Short, key: Long) extends BaseKey {
+
+  override def toString: String = key.toString
 }
 
 /**

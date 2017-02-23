@@ -59,15 +59,25 @@ private[coordinator] case object CompleteCommit extends TransactionState { val s
   */
 private[coordinator] case object CompleteAbort extends TransactionState { val state: Byte = 5 }
 
+private[coordinator] object TransactionMetadata {
+  def byteToState(byte: Byte): TransactionState = {
+    byte match {
+      case 1 => Ongoing
+      case 2 => PrepareCommit
+      case 3 => PrepareAbort
+      case 4 => CompleteCommit
+      case 5 => CompleteAbort
+      case unknown => throw new IllegalStateException("Unknown transaction state byte " + unknown + " from the transaction status message")
+    }
+  }
+}
+
 @nonthreadsafe
-private[coordinator] class TransactionMetadata(val pidMetadata: PidMetadata,
+private[coordinator] class TransactionMetadata(var state: TransactionState,
                                                val topicPartitions: List[TopicPartition]) {
 
-  /* current state of the transaction */
-  var state: TransactionState = Ongoing
-
   override def equals(that: Any): Boolean = that match {
-    case other: TransactionMetadata => pidMetadata.equals(other) && topicPartitions.equals(other.topicPartitions)
+    case other: TransactionMetadata => state.equals(other.state) && topicPartitions.equals(other.topicPartitions)
     case _ => false
   }
 
