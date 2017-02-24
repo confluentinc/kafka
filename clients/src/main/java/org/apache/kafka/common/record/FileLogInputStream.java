@@ -237,7 +237,6 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
             return underlying.checksum();
         }
 
-
         @Override
         public int sizeInBytes() {
             return LOG_OVERHEAD + entrySize;

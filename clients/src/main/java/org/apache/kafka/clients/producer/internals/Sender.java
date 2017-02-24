@@ -39,8 +39,8 @@ import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Rate;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
-import org.apache.kafka.common.requests.InitPIDResponse;
 import org.apache.kafka.common.requests.InitPidRequest;
+import org.apache.kafka.common.requests.InitPidResponse;
 import org.apache.kafka.common.requests.ProduceRequest;
 import org.apache.kafka.common.requests.ProduceResponse;
 import org.apache.kafka.common.utils.Time;
@@ -301,14 +301,11 @@ public class Sender implements Runnable {
             client.poll(100, time.milliseconds());
             remainingTime = remainingTime - (time.milliseconds() - start);
         }
-        if (remainingTime <= 0) {
-            return;
-        }
     }
 
     private void handleInitPidResponse(ClientResponse response) {
         if (response.hasResponse()) {
-            InitPIDResponse initPidResponse = (InitPIDResponse) response.responseBody();
+            InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
             transactionState.setPid(initPidResponse.producerId());
             transactionState.setEpoch(initPidResponse.epoch());
         }

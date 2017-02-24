@@ -845,7 +845,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         }
 
         public void onCompletion(RecordMetadata metadata, Exception exception) {
-            if (exception != null && exception.getClass().equals(OutOfOrderSequenceException.class)) {
+            if (exception != null && exception instanceof OutOfOrderSequenceException) {
                 // This is a fatal exception. All future send / sendOffsets / beginTransaction, endTransaction, etc.
                 // should be aborted with an IllegalStateException.
                 if (transactionState == null) {
