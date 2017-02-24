@@ -140,6 +140,7 @@ class ProducerBounceTest extends KafkaServerTestHarness {
 
     val producerConfig = new Properties();
     producerConfig.put(ProducerConfig.IDEMPOTENCE_ENABLED_CONFIG, "true")
+    producerConfig.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1")
     val producer = TestUtils.createNewProducer(brokerList, bufferSize = producerBufferSize, retries = 10, props = Some(producerConfig))
 
     override def doWork(): Unit = {

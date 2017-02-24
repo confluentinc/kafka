@@ -558,7 +558,7 @@ class Log(@volatile var dir: File,
       if (lastOffset >= entry.lastOffset)
         monotonic = false
 
-      if (lastSequence > 0 && lastSequence != entry.baseSequence + 1)
+      if (lastSequence > 0 && entry.baseSequence != lastSequence + 1)
         throw new OutOfOrderSequenceException("Non-consecutive sequence numbers found in records. " +
           s"Previous LogEntry's lastSequence : ${lastSequence}. Current LogEntry's firstSequence: ${entry.baseSequence}")
 
@@ -806,31 +806,34 @@ class Log(@volatile var dir: File,
 
   private def updateAppendInfoForDuplicateEntry(appendInfo: LogAppendInfo) : LogAppendInfo = {
     val segmentIterator = segments.descendingMap.values.iterator
-    for (segment <- segments.asScala) {
-      val segment = segmentIterator.next()
-      val firstSequence = getFirstSequence(segment)
-      if (0 <= firstSequence && firstSequence <= appendInfo.firstSequence) {
-        for (entry <- segment.log.entries.asScala) {
-          if (entry.baseSequence == appendInfo.firstSequence) {
-            appendInfo.firstOffset = entry.baseOffset
-            appendInfo.lastOffset = entry.lastOffset
-            if (entry.timestampType == TimestampType.LOG_APPEND_TIME)
-              appendInfo.logAppendTime = entry.maxTimestamp
-            return appendInfo
+    while (segmentIterator.hasNext()) {
+      val logSegment = segmentIterator.next()
+      getFirstSequenceForPid(logSegment, appendInfo.pid) match {
+        case Some(firstSequence) =>
+          if (firstSequence <= appendInfo.firstSequence) {
+            for (entry <- logSegment.log.entries.asScala) {
+              if (entry.pid == appendInfo.pid && entry.baseSequence == appendInfo.firstSequence) {
+                appendInfo.firstOffset = entry.baseOffset
+                appendInfo.lastOffset = entry.lastOffset
+                if (entry.timestampType == TimestampType.LOG_APPEND_TIME)
+                  appendInfo.logAppendTime = entry.maxTimestamp
+                return appendInfo
+              }
+            }
           }
-        }
+        case None =>
+          return null
       }
     }
     null
   }
 
-  private def getFirstSequence(segment: LogSegment) : Int = {
-    val entriesIterator = segment.log.entries().iterator()
-    if (entriesIterator.hasNext) {
-      val firstEntry = entriesIterator.next()
-      return firstEntry.baseSequence
+  private def getFirstSequenceForPid(segment: LogSegment, pid: Long) : Option[Int] = {
+    for (entry <- segment.log.entries.asScala) {
+      if (entry.pid() == pid)
+        return Some(entry.baseSequence)
     }
-    return -1
+    return None
   }
   /**
    * The size of the log in bytes

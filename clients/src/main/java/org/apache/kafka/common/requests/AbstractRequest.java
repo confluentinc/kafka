@@ -160,7 +160,7 @@ public abstract class AbstractRequest extends AbstractRequestResponse {
                 request = new DeleteTopicsRequest(struct, version);
                 break;
             case INIT_PRODUCER_ID:
-                request = InitPidRequest.parse(buffer, versionId);
+                request = new InitPidRequest(struct, version);
                 break;
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `getRequest`, the " +

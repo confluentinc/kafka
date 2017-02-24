@@ -303,6 +303,12 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
             if (idempotenceEnabled) {
                 this.transactionState = new TransactionState(idempotenceEnabled);
+                if (config.getInt(ProducerConfig.RETRIES_CONFIG) == 0) {
+                    throw new ConfigException("Need to set '" + ProducerConfig.RETRIES_CONFIG + "' to greater than zero inorder to use the idempotent producer.");
+                }
+                if (config.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION) != 1) {
+                    throw new ConfigException("Must set '" + ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION + "' to 1 inorder to use the idempotent producer.");
+                }
             } else {
                 this.transactionState = null;
             }

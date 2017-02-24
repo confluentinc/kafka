@@ -37,8 +37,8 @@ import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.ApiVersionsResponse;
 import org.apache.kafka.common.requests.ProduceRequest;
-import org.apache.kafka.common.requests.InitPIDResponse;
 import org.apache.kafka.common.requests.InitPidRequest;
+import org.apache.kafka.common.requests.InitPidResponse;
 import org.apache.kafka.common.requests.ProduceResponse;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.test.TestUtils;
@@ -370,7 +370,7 @@ public class SenderTest {
             public boolean matches(AbstractRequest body) {
                 return body instanceof InitPidRequest;
             }
-        }, new InitPIDResponse(Errors.NONE, producerId, (short) 0));
+        }, new InitPidResponse(Errors.NONE, producerId, (short) 0));
         sender.run(time.milliseconds());
         assertTrue(transactionState.hasPid());
         assertEquals(transactionState.pid(), producerId);

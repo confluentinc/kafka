@@ -92,7 +92,7 @@ public abstract class AbstractResponse extends AbstractRequestResponse {
             case DELETE_TOPICS:
                 return new DeleteTopicsResponse(struct);
             case INIT_PRODUCER_ID:
-                return new InitPIDResponse(struct);
+                return new InitPidResponse(struct);
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `getResponse`, the " +
                         "code should be updated to do so.", apiKey));
