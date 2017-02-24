@@ -1280,7 +1280,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       requestChannel.sendResponse(new RequestChannel.Response(request, responseBody))
     }
 
-    txnCoordinator.handleInitPid(initPidRequest.transactionalId, initPidRequest.transactionTimeoutMs, initPidRequest.sendResponseCallback)
+    txnCoordinator.handleInitPid(initPidRequest.transactionalId, initPidRequest.transactionTimeoutMs, sendResponseCallback)
   }
 
   def handleBeginTransactionRequest(request: RequestChannel.Request): Unit = {

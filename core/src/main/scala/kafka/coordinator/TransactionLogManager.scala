@@ -17,18 +17,19 @@
 
 package kafka.coordinator
 
-import java.io.PrintStream
-import java.nio.ByteBuffer
-
 import kafka.common.{KafkaException, MessageFormatter, Topic}
 import kafka.utils.CoreUtils.inLock
 import kafka.utils.{Logging, ZkUtils}
-import org.apache.kafka.common.protocol.types.Type._
-import org.apache.kafka.common.protocol.types.{ArrayOf, Field, Schema, Struct}
-import org.apache.kafka.common.utils.Utils
-import java.util.concurrent.locks.ReentrantLock
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.protocol.types.Type._
+import org.apache.kafka.common.protocol.types.{ArrayOf, Field, Schema, Struct}
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.utils.Utils
+
+import java.util.concurrent.locks.ReentrantLock
+import java.io.PrintStream
+import java.nio.ByteBuffer
 
 import scala.collection.mutable
 
@@ -42,21 +43,20 @@ import scala.collection.mutable
   *    -> value version 0:                              [pid, epoch, expire_timestamp]
   *
   * key version 1 (producer transaction status):        [pid]
-  *    -> value version 0:                              [epoch, status, [topic [partition] ]
+  *    -> value version 0:                              [status, [topic [partition] ]
   */
 object TransactionLogManager {
 
   private val CURRENT_PID_KEY_SCHEMA_VERSION = 0.toShort
   private val CURRENT_TXN_KEY_SCHEMA_VERSION = 1.toShort
 
-  private val TXN_ID_KEY = "transactional_id"
   private val PID_KEY = "pid"
   private val EPOCH_KEY = "epoch"
   private val STATUS_KEY = "status"
+  private val TXN_ID_KEY = "transactional_id"
   private val TXN_TIMEOUT_KEY = "transaction_timeout"
-  private val TIMESTAMP_KEY = "timestamp"
-  private val PARTITIONS_KEY = "partitions"
   private val TOPIC_KEY = "topic"
+  private val PARTITIONS_KEY = "partitions"
   private val PARITION_IDS_KEY = "partition_ids"
 
   private val PID_KEY_SCHEMA_V0 = new Schema(new Field(TXN_ID_KEY, STRING))
@@ -77,10 +77,8 @@ object TransactionLogManager {
   private val PARTITION_SCHEMA_TOPIC_FIELD = PARTITION_SCHEMA_V0.get(TOPIC_KEY)
   private val PARTITION_SCHEMA_PARTITIONS_FIELD = PARTITION_SCHEMA_V0.get(PARITION_IDS_KEY)
 
-  private val TXN_VALUE_SCHEMA_V0 = new Schema(new Field(EPOCH_KEY, INT16),  // FIXME: remove this field?
-                                               new Field(STATUS_KEY, INT8),
+  private val TXN_VALUE_SCHEMA_V0 = new Schema(new Field(STATUS_KEY, INT8),
                                                new Field(PARTITIONS_KEY, new ArrayOf(PARTITION_SCHEMA_V0)))
-  private val TXN_VALUE_EPOCH_FIELD = TXN_VALUE_SCHEMA_V0.get(EPOCH_KEY)
   private val TXN_VALUE_STATUS_FIELD = TXN_VALUE_SCHEMA_V0.get(STATUS_KEY)
   private val TXN_VALUE_PARTITIONS_FIELD = TXN_VALUE_SCHEMA_V0.get(PARTITIONS_KEY)
 
@@ -150,11 +148,11 @@ object TransactionLogManager {
     * @return key bytes
     */
   private[coordinator] def txnKey(pid: Long): Array[Byte] = {
-    val key = new Struct(CURRENT_TXN_VALUE_SCHEMA)
+    val key = new Struct(CURRENT_TXN_KEY_SCHEMA)
     key.set(TXN_KEY_SCHEMA_PID_FIELD, pid)
 
     val byteBuffer = ByteBuffer.allocate(2 /* version */ + key.sizeOf)
-    byteBuffer.putShort(CURRENT_TXN_VALUE_SCHEMA_VERSION)
+    byteBuffer.putShort(CURRENT_TXN_KEY_SCHEMA_VERSION)
     key.writeTo(byteBuffer)
     byteBuffer.array()
   }
@@ -181,19 +179,21 @@ object TransactionLogManager {
     *
     * @return value payload bytes
     */
-  private[coordinator] def groupMetadataValue(txnMetadata: TransactionMetadata): Array[Byte] = {
+  private[coordinator] def txnValue(txnMetadata: TransactionMetadata): Array[Byte] = {
     val value = new Struct(CURRENT_TXN_VALUE_SCHEMA)
 
-    value.set(TXN_VALUE_STATUS_FIELD, txnMetadata.state)
+    value.set(TXN_VALUE_STATUS_FIELD, txnMetadata.state.byte)
 
     // first group the topic partitions by their topic names
     val topicAndPartitions = txnMetadata.topicPartitions.groupBy(_.topic())
 
     val partitionArray = topicAndPartitions.map { topicAndPartitionIds =>
       val topicPartitionsStruct = value.instance(TXN_VALUE_PARTITIONS_FIELD)
+      val topic: String = topicAndPartitionIds._1
+      val partitionIds: Array[Integer] = topicAndPartitionIds._2.map(topicPartition => Integer.valueOf(topicPartition.partition())).toArray
 
-      topicPartitionsStruct.set(TOPIC_KEY, topicAndPartitionIds._1)
-      topicPartitionsStruct.set(PARITION_IDS_KEY, topicAndPartitionIds._2.toArray)
+      topicPartitionsStruct.set(PARTITION_SCHEMA_TOPIC_FIELD, topic)
+      topicPartitionsStruct.set(PARTITION_SCHEMA_PARTITIONS_FIELD, partitionIds)
 
       topicPartitionsStruct
     }
@@ -261,7 +261,7 @@ object TransactionLogManager {
     *
     * @return a transaction metadata object from the message
     */
-  def readTxnStatusValue(groupId: String, buffer: ByteBuffer): TransactionMetadata = {
+  def readTxnStatusValue(buffer: ByteBuffer): TransactionMetadata = {
     if (buffer == null) { // tombstone
       null
     } else {
@@ -273,77 +273,62 @@ object TransactionLogManager {
         val stateByte = value.get(TXN_VALUE_STATUS_FIELD).asInstanceOf[Byte]
         val state = TransactionMetadata.byteToState(stateByte)
 
-        val memberMetadataArray = value.getArray(MEMBERS_KEY)
-        val initialState = if (memberMetadataArray.isEmpty) Empty else Stable
+        val transactionMetadata = new TransactionMetadata(state)
 
-        val group = new GroupMetadata(groupId, initialState)
+        val topicPartitionArray = value.getArray(TXN_VALUE_PARTITIONS_FIELD)
 
-        group.generationId = value.get(GENERATION_KEY).asInstanceOf[Int]
-        group.leaderId = value.get(LEADER_KEY).asInstanceOf[String]
-        group.protocol = value.get(PROTOCOL_KEY).asInstanceOf[String]
-
-        memberMetadataArray.foreach { memberMetadataObj =>
+        topicPartitionArray.foreach { memberMetadataObj =>
           val memberMetadata = memberMetadataObj.asInstanceOf[Struct]
-          val memberId = memberMetadata.get(MEMBER_ID_KEY).asInstanceOf[String]
-          val clientId = memberMetadata.get(CLIENT_ID_KEY).asInstanceOf[String]
-          val clientHost = memberMetadata.get(CLIENT_HOST_KEY).asInstanceOf[String]
-          val sessionTimeout = memberMetadata.get(SESSION_TIMEOUT_KEY).asInstanceOf[Int]
-          val rebalanceTimeout = if (version == 0) sessionTimeout else memberMetadata.get(REBALANCE_TIMEOUT_KEY).asInstanceOf[Int]
+          val topic = memberMetadata.get(PARTITION_SCHEMA_TOPIC_FIELD).asInstanceOf[String]
+          val partitionIdArray = memberMetadata.getArray(PARTITION_SCHEMA_PARTITIONS_FIELD)
 
-          val subscription = Utils.toArray(memberMetadata.get(SUBSCRIPTION_KEY).asInstanceOf[ByteBuffer])
+          val topicPartitions = partitionIdArray.map { partitionIdObj =>
+            val partitionId = partitionIdObj.asInstanceOf[Integer]
+            new TopicPartition(topic, partitionId)
+          }
 
-          val member = new MemberMetadata(memberId, groupId, clientId, clientHost, rebalanceTimeout, sessionTimeout,
-            protocolType, List((group.protocol, subscription)))
-
-          member.assignment = Utils.toArray(memberMetadata.get(ASSIGNMENT_KEY).asInstanceOf[ByteBuffer])
-
-          group.add(member)
+          transactionMetadata.addPartitions(topicPartitions.toSet)
         }
 
-        group
+        transactionMetadata
       } else {
         throw new IllegalStateException(s"Unknown version $version from the transaction status message value")
       }
     }
   }
 
-  // Formatter for use with tools such as console consumer: Consumer should also set exclude.internal.topics to false.
-  // (specify --formatter "kafka.coordinator.GroupMetadataManager\$OffsetsMessageFormatter" when consuming __consumer_offsets)
-  class OffsetsMessageFormatter extends MessageFormatter {
+  // Formatter for use with tools to read transactional id to pid mapping history
+  class PidMessageFormatter extends MessageFormatter {
     def writeTo(consumerRecord: ConsumerRecord[Array[Byte], Array[Byte]], output: PrintStream) {
-      Option(consumerRecord.key).map(key => GroupMetadataManager.readMessageKey(ByteBuffer.wrap(key))).foreach {
-        // Only print if the message is an offset record.
-        // We ignore the timestamp of the message because GroupMetadataMessage has its own timestamp.
-        case offsetKey: OffsetKey =>
-          val groupTopicPartition = offsetKey.key
+      Option(consumerRecord.key).map(key => readMessageKey(ByteBuffer.wrap(key))).foreach {
+        case pidKey: PidKey =>
+          val transactionalId = pidKey.key
           val value = consumerRecord.value
-          val formattedValue =
+          val pidMetadata =
             if (value == null) "NULL"
-            else GroupMetadataManager.readOffsetMessageValue(ByteBuffer.wrap(value)).toString
-          output.write(groupTopicPartition.toString.getBytes)
+            else readPidValue(ByteBuffer.wrap(value))
+          output.write(transactionalId.getBytes)
           output.write("::".getBytes)
-          output.write(formattedValue.getBytes)
+          output.write(pidMetadata.toString.getBytes)
           output.write("\n".getBytes)
         case _ => // no-op
       }
     }
   }
 
-  // Formatter for use with tools to read group metadata history
-  class GroupMetadataMessageFormatter extends MessageFormatter {
+  // Formatter for use with tools to read transaction status update history
+  class TxnStatusMessageFormatter extends MessageFormatter {
     def writeTo(consumerRecord: ConsumerRecord[Array[Byte], Array[Byte]], output: PrintStream) {
-      Option(consumerRecord.key).map(key => GroupMetadataManager.readMessageKey(ByteBuffer.wrap(key))).foreach {
-        // Only print if the message is a group metadata record.
-        // We ignore the timestamp of the message because GroupMetadataMessage has its own timestamp.
-        case groupMetadataKey: GroupMetadataKey =>
-          val groupId = groupMetadataKey.key
+      Option(consumerRecord.key).map(key => readMessageKey(ByteBuffer.wrap(key))).foreach {
+        case txnKey: TxnKey =>
+          val pid = txnKey.key
           val value = consumerRecord.value
-          val formattedValue =
+          val transactionMetadata =
             if (value == null) "NULL"
-            else GroupMetadataManager.readGroupMessageValue(groupId, ByteBuffer.wrap(value)).toString
-          output.write(groupId.getBytes)
+            else readTxnStatusValue(ByteBuffer.wrap(value))
+          output.write(pid.toString.getBytes)
           output.write("::".getBytes)
-          output.write(formattedValue.getBytes)
+          output.write(transactionMetadata.toString.getBytes)
           output.write("\n".getBytes)
         case _ => // no-op
       }

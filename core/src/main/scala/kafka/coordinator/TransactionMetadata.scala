@@ -19,7 +19,9 @@ package kafka.coordinator
 import kafka.utils.nonthreadsafe
 import org.apache.kafka.common.TopicPartition
 
-private[coordinator] sealed trait TransactionState { def state: Byte }
+import scala.collection.mutable
+
+private[coordinator] sealed trait TransactionState { def byte: Byte }
 
 /**
   * Transaction has started and ongoing
@@ -29,35 +31,35 @@ private[coordinator] sealed trait TransactionState { def state: Byte }
   *             received AddPartitionsToTxnRequest => Ongoing
   *             received AddOffsetsToTxnRequest => Ongoing
   */
-private[coordinator] case object Ongoing extends TransactionState { val state: Byte = 1 }
+private[coordinator] case object Ongoing extends TransactionState { val byte: Byte = 1 }
 
 /**
   * Group is preparing to commit
   *
   * transition: received acks from all partitions => CompleteCommit
   */
-private[coordinator] case object PrepareCommit extends TransactionState { val state: Byte = 2}
+private[coordinator] case object PrepareCommit extends TransactionState { val byte: Byte = 2}
 
 /**
   * Group is preparing to abort
   *
   * transition: received acks from all partitions => CompleteAbort
   */
-private[coordinator] case object PrepareAbort extends TransactionState { val state: Byte = 3 }
+private[coordinator] case object PrepareAbort extends TransactionState { val byte: Byte = 3 }
 
 /**
   * Group has completed commit
   *
   * Will soon be removed from the ongoing transaction cache
   */
-private[coordinator] case object CompleteCommit extends TransactionState { val state: Byte = 4 }
+private[coordinator] case object CompleteCommit extends TransactionState { val byte: Byte = 4 }
 
 /**
   * Group has completed commit
   *
   * Will soon be removed from the ongoing transaction cache
   */
-private[coordinator] case object CompleteAbort extends TransactionState { val state: Byte = 5 }
+private[coordinator] case object CompleteAbort extends TransactionState { val byte: Byte = 5 }
 
 private[coordinator] object TransactionMetadata {
   def byteToState(byte: Byte): TransactionState = {
@@ -73,8 +75,21 @@ private[coordinator] object TransactionMetadata {
 }
 
 @nonthreadsafe
-private[coordinator] class TransactionMetadata(var state: TransactionState,
-                                               val topicPartitions: List[TopicPartition]) {
+private[coordinator] class TransactionMetadata(var state: TransactionState) {
+
+  // participated partitions in this transaction
+  val topicPartitions: mutable.Set[TopicPartition] = mutable.HashSet[TopicPartition]()
+
+  def addPartitions(partitions: Set[TopicPartition]): Unit = {
+    topicPartitions ++= partitions
+  }
+
+  override def toString: String = {
+    val stringBuilder = new StringBuilder
+    stringBuilder.append("(state:" + state)
+    stringBuilder.append(",topicPartitions:" + topicPartitions + ")")
+    stringBuilder.toString()
+  }
 
   override def equals(that: Any): Boolean = that match {
     case other: TransactionMetadata => state.equals(other.state) && topicPartitions.equals(other.topicPartitions)

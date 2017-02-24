@@ -86,22 +86,24 @@ class TransactionCoordinatorTest {
 
   @Test
   def testHandleInitPID() = {
-    coordinator.handleInitPid("", initPIDMockCallback)
+    val transactionTimeoutMs = 1000
+
+    coordinator.handleInitPid("", transactionTimeoutMs, initPIDMockCallback)
     assertEquals(InitPidResult(0L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPid("", initPIDMockCallback)
+    coordinator.handleInitPid("", transactionTimeoutMs, initPIDMockCallback)
     assertEquals(InitPidResult(1L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPid("a", initPIDMockCallback)
+    coordinator.handleInitPid("a", transactionTimeoutMs, initPIDMockCallback)
     assertEquals(InitPidResult(2L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPid("a", initPIDMockCallback)
+    coordinator.handleInitPid("a", transactionTimeoutMs, initPIDMockCallback)
     assertEquals(InitPidResult(2L, 1, Errors.NONE), result)
 
-    coordinator.handleInitPid("c", initPIDMockCallback)
+    coordinator.handleInitPid("c", transactionTimeoutMs, initPIDMockCallback)
     assertEquals(InitPidResult(3L, 0, Errors.NONE), result)
 
-    coordinator.handleInitPid("b", initPIDMockCallback)
+    coordinator.handleInitPid("b", transactionTimeoutMs, initPIDMockCallback)
     assertEquals(InitPidResult(-1L, -1, Errors.NOT_COORDINATOR_FOR_GROUP), result)
   }
 

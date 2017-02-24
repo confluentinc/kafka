@@ -1099,7 +1099,7 @@ case class GroupTopicPartition(group: String, topicPartition: TopicPartition) {
 
 trait BaseKey{
   def version: Short
-  def key: Object
+  def key: Any
 }
 
 case class OffsetKey(version: Short, key: GroupTopicPartition) extends BaseKey {

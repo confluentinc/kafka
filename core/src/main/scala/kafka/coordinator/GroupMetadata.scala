@@ -320,7 +320,7 @@ private[coordinator] class GroupMetadata(val groupId: String, initialState: Grou
         .format(groupId, GroupMetadata.validPreviousStates(targetState).mkString(","), targetState, state))
   }
 
-  override def toString = {
+  override def toString: String = {
     "[%s,%s,%s,%s]".format(groupId, protocolType, currentState.toString, members)
   }
 }
