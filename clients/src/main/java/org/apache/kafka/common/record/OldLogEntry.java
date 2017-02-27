@@ -170,6 +170,11 @@ public abstract class OldLogEntry extends AbstractLogEntry implements LogRecord 
     }
 
     @Override
+    public boolean isTransactional() {
+        return false;
+    }
+
+    @Override
     public boolean isControlRecord() {
         return false;
     }
