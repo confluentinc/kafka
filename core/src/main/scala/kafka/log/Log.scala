@@ -33,15 +33,14 @@ import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.{Time, Utils}
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, NoCompressionCodec}
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.errors.{CorruptRecordException, OffsetOutOfRangeException, RecordBatchTooLargeException, RecordTooLargeException, UnsupportedForMessageFormatException, DuplicateSequenceNumberException, OutOfOrderSequenceException}
+import org.apache.kafka.common.errors.{CorruptRecordException, DuplicateSequenceNumberException, OffsetOutOfRangeException, OutOfOrderSequenceException, RecordBatchTooLargeException, RecordTooLargeException, UnsupportedForMessageFormatException}
 
 import scala.collection.JavaConverters._
-import scala.collection.Seq
+import scala.collection.{Seq, mutable}
 
 object LogAppendInfo {
   val UnknownLogAppendInfo = LogAppendInfo(-1, -1, LogEntry.NO_TIMESTAMP, -1L, LogEntry.NO_TIMESTAMP,
-    NoCompressionCodec, NoCompressionCodec, -1, -1, offsetsMonotonic = false, pid = 0L, epoch = 0,
-    firstSequence = -1, lastSequence = -1)
+    NoCompressionCodec, NoCompressionCodec, -1, -1, offsetsMonotonic = false, Map.empty[Long, (PidEntry, PidEntry)])
 }
 
 /**
@@ -57,6 +56,11 @@ object LogAppendInfo {
  * @param shallowCount The number of shallow messages
  * @param validBytes The number of valid bytes
  * @param offsetsMonotonic Are the offsets in this message set monotonically increasing
+ * @param pidEntryMap A map from a Pid to a pair of PidEntry's. The first PidEntry includes the first offset and first
+ *                   sequence of the first entry for the pid. The second PidEntry contains the last offset and last
+ *                   sequence for the last entry for the  pid. In the replication case, a single record could have multiple LogEntries
+ *                   from multiple pids. For a ProduceRequest to a leader, there will be one LogEntry (and hence one
+ *                   PID) per record.
  */
 case class LogAppendInfo(var firstOffset: Long,
                          var lastOffset: Long,
@@ -68,10 +72,7 @@ case class LogAppendInfo(var firstOffset: Long,
                          shallowCount: Int,
                          validBytes: Int,
                          offsetsMonotonic: Boolean,
-                         pid: Long,
-                         epoch: Short,
-                         firstSequence: Int,
-                         lastSequence: Int)
+                         pidEntryMap : Map[Long, (PidEntry, PidEntry)])
 
 /**
  * An append-only log for storing messages.
@@ -347,7 +348,7 @@ class Log(@volatile var dir: File,
         val startOffset = math.max(segment.baseOffset, pidMap.mapEndOffset)
         val logEntries = segment.read(startOffset, Some(lastOffset), Int.MaxValue).records
         logEntries.entries.asScala.foreach { entry =>
-          pidMap.update(entry.pid, entry.lastSequence, entry.epoch, entry.lastOffset())
+          pidMap.update(entry.pid, entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)
         }
       }
       logStartOffset.foreach(pidMap.cleanFrom)
@@ -478,12 +479,51 @@ class Log(@volatile var dir: File,
         val segment = maybeRoll(messagesSize = validRecords.sizeInBytes,
           maxTimestampInMessages = appendInfo.maxTimestamp,
           maxOffsetInMessages = appendInfo.lastOffset)
+        var isDuplicate = false
+        for ((pid, entry) <- appendInfo.pidEntryMap) {
+          try {
+            // verify that the epoch and sequence are correct before appending. Note that for requests coming from
+            // producer, there will be exactly one LogEntry per Record, and hence one Pid per Record.
+            trace(s"checking sequence for pid: ${pid}, seq: ${entry._1.seq}, end seq: ${entry._2.seq}")
+            pidMap.checkSeqAndEpoch(pid, entry._1.seq, entry._1.epoch)
+          } catch {
+            case e: DuplicateSequenceNumberException =>
+              isDuplicate = true
+              pidMap.entryForPid(pid) match {
+                case Some(pidEntry) =>
+                  if (entry._1.seq < pidEntry.seq) {
+                    // the duplicate is not at the tail of the log. This should never happen, with a properly written client.
+                    // It should also never happen in the replication case.
+                    // Since this is a error situation throw a fatal exception.
+                    throw new IllegalStateException("Detected a duplicate entry in the middle of the log. This suggests a misconfigured or buggy client. Please see __insert_url__ to understand how clients must be configured when running withe enable.idempotence = true");
+                  }
 
+                  if (assignOffsets) {
+                    // The produce request is on the leader of the partition. ie. this append isn't the result of a replication fetch request.
+                    // For duplicate sequence numbers, return the offsets of the existing record with the same sequence number.
+                    val numRecords = appendInfo.lastOffset - appendInfo.firstOffset + 1
+                    appendInfo.firstOffset = appendInfo.firstOffset - numRecords
+                    appendInfo.lastOffset = appendInfo.lastOffset - numRecords
+                    appendInfo.maxTimestamp = pidEntry.timestamp
+                    error(s"Leader received a duplicate for ${topicPartition.topic()}-${topicPartition.partition} with (pid, firstOffset, lastOffset) => (${pid}, ${appendInfo.firstOffset}, ${appendInfo.lastOffset}). Will drop the incoming record.")
+                  } else {
+                    // We detected a duplicate on the follower. This should never happen, and there is nothing we can
+                    // do about it since it means that the leader and follower logs have diverged.
+                    throw new DuplicateSequenceNumberException("Follower received a duplicate message from the leader. This means that the logs have diverged.")
+                  }
+                case None =>
+                  throw new IllegalStateException(s"Detected duplicate sequence without a PidEntry for pid ${pid}. This should be impossible")
+              }
+          }
+        }
+        // If this is a follower and there was a duplicate in the incoming record, a `DuplicateSequenceException` would be thrown and
+        // we would not reach here.
 
-        try {
-          // verify that the epoch and sequence are correct before appending
-          pidMap.checkSeqAndEpoch(appendInfo.pid, appendInfo.firstSequence, appendInfo.epoch)
-          // now append to the log
+        // If this is a leader and a duplicate was detected, we don't append the new entry to the log. The appendInfo
+        // has been updated with the offsets and timestamp of the existing entry with the same sequence. We directly
+        // return the modified appendInfo.
+        if (!isDuplicate) {
+          // The incoming record doesn't have any duplicates. Append it to the local log.
           segment.append(firstOffset = appendInfo.firstOffset,
             largestOffset = appendInfo.lastOffset,
             largestTimestamp = appendInfo.maxTimestamp,
@@ -491,7 +531,10 @@ class Log(@volatile var dir: File,
             records = validRecords)
 
           // update the PID sequence mapping
-          pidMap.update(appendInfo.pid, appendInfo.lastSequence, appendInfo.epoch, appendInfo.lastOffset)
+          for ((pid, entry) <- appendInfo.pidEntryMap) {
+            trace(s"Updating pid with sequence: ${pid} -> ${entry._2.seq}")
+            pidMap.update(pid, entry._2.seq, entry._2.epoch, entry._2.offset, entry._2.timestamp)
+          }
 
           // increment the log end offset
           updateLogEndOffset(appendInfo.lastOffset + 1)
@@ -501,13 +544,8 @@ class Log(@volatile var dir: File,
 
           if (unflushedMessages >= config.flushInterval)
             flush()
-
-        } catch {
-          case e: DuplicateSequenceNumberException =>
-            // For duplicate sequence numbers, return the offsets of the existing record with the same sequence number.
-            updateAppendInfoForDuplicateEntry(appendInfo)
-            info(s"Received a duplicate of a LogEntry with (firstOffset, lastOffset) => (${appendInfo.firstOffset}, ${appendInfo.lastOffset}). Will drop the incoming record.")
         }
+
         appendInfo
       }
     } catch {
@@ -541,30 +579,31 @@ class Log(@volatile var dir: File,
     var monotonic = true
     var maxTimestamp = LogEntry.NO_TIMESTAMP
     var offsetOfMaxTimestamp = -1L
-    var pid = 0L
-    var firstSequence = 0
-    var lastSequence = -1
-    var epoch: Short = 0
+    val pidEntryMap = new mutable.HashMap[Long, (PidEntry, PidEntry)]()
     for (entry <- records.entries.asScala) {
       // update the first offset if on the first message
       if (firstOffset < 0) {
         firstOffset = if (entry.magic >= LogEntry.MAGIC_VALUE_V2) entry.baseOffset else entry.lastOffset
-        firstSequence = entry.baseSequence
-        pid = entry.pid
-        epoch = entry.epoch
       }
 
       // check that offsets are monotonically increasing
       if (lastOffset >= entry.lastOffset)
         monotonic = false
 
-      if (lastSequence > 0 && entry.baseSequence != lastSequence + 1)
-        throw new OutOfOrderSequenceException("Non-consecutive sequence numbers found in records. " +
-          s"Previous LogEntry's lastSequence : ${lastSequence}. Current LogEntry's firstSequence: ${entry.baseSequence}")
-
+      pidEntryMap.get(entry.pid) match {
+        case Some(tuple) =>
+          // If we have seen this pid before, replace the last PidEntry with information from the current LogEntry
+          val pidEntry =
+          pidEntryMap.put(entry.pid, (tuple._1,
+            PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)))
+        case None =>
+          // If this is the first time we are seeing a particular pid, set both the first and the last PidEntry for
+          // this pid to span the first and last offset/sequence of the the current LogEntry.
+          pidEntryMap.put(entry.pid, (PidEntry(entry.baseSequence, entry.epoch, entry.baseOffset, entry.maxTimestamp),
+            PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)))
+      }
       // update the last offset seen
       lastOffset = entry.lastOffset
-      lastSequence = entry.lastSequence
 
       // Check if the message sizes are valid.
       val entrySize = entry.sizeInBytes
@@ -595,7 +634,7 @@ class Log(@volatile var dir: File,
     val targetCodec = BrokerCompressionCodec.getTargetCompressionCodec(config.compressionType, sourceCodec)
 
     LogAppendInfo(firstOffset, lastOffset, maxTimestamp, offsetOfMaxTimestamp, LogEntry.NO_TIMESTAMP, sourceCodec,
-      targetCodec, shallowMessageCount, validBytesCount, monotonic, pid, epoch, firstSequence, lastSequence)
+      targetCodec, shallowMessageCount, validBytesCount, monotonic, pidEntryMap.toMap)
   }
 
   /**
@@ -804,45 +843,14 @@ class Log(@volatile var dir: File,
     deleteOldSegments(shouldDelete)
   }
 
-  private def updateAppendInfoForDuplicateEntry(appendInfo: LogAppendInfo) : LogAppendInfo = {
-    val segmentIterator = segments.descendingMap.values.iterator
-    while (segmentIterator.hasNext()) {
-      val logSegment = segmentIterator.next()
-      getFirstSequenceForPid(logSegment, appendInfo.pid) match {
-        case Some(firstSequence) =>
-          if (firstSequence <= appendInfo.firstSequence) {
-            for (entry <- logSegment.log.entries.asScala) {
-              if (entry.pid == appendInfo.pid && entry.baseSequence == appendInfo.firstSequence) {
-                appendInfo.firstOffset = entry.baseOffset
-                appendInfo.lastOffset = entry.lastOffset
-                if (entry.timestampType == TimestampType.LOG_APPEND_TIME)
-                  appendInfo.logAppendTime = entry.maxTimestamp
-                return appendInfo
-              }
-            }
-          }
-        case None =>
-          return null
-      }
-    }
-    null
-  }
-
-  private def getFirstSequenceForPid(segment: LogSegment, pid: Long) : Option[Int] = {
-    for (entry <- segment.log.entries.asScala) {
-      if (entry.pid() == pid)
-        return Some(entry.baseSequence)
-    }
-    return None
-  }
   /**
-   * The size of the log in bytes
+    * The size of the log in bytes
    */
   def size: Long = logSegments.map(_.size).sum
 
    /**
-   * The earliest message offset in the log
-   */
+    * The earliest message offset in the log
+    */
   def logStartOffset: Option[Long] = logSegments.headOption.map(_.baseOffset)
 
   /**

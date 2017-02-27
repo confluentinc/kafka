@@ -30,7 +30,7 @@ import org.apache.kafka.common.utils.Utils
 
 import scala.collection.{immutable, mutable}
 
-private[log] case class PidEntry(seq: Int, epoch: Short, offset: Long)
+private[log] case class PidEntry(seq: Int, epoch: Short, offset: Long, timestamp: Long)
 private[log] class CorruptSnapshotException(msg: String) extends KafkaException(msg)
 
 object ProducerIdMapping {
@@ -45,6 +45,7 @@ object ProducerIdMapping {
   private val SequenceField = "sequence"
   private val EpochField = "epoch"
   private val OffsetField = "offset"
+  private val TimestampField = "timestamp"
   private val PidEntriesField = "pid_entries"
 
   private val VersionOffset = 0
@@ -55,7 +56,8 @@ object ProducerIdMapping {
     new Field(PidField, Type.INT64, "The producer ID"),
     new Field(EpochField, Type.INT16, "Current epoch of the producer"),
     new Field(SequenceField, Type.INT32, "Last written sequence of the producer"),
-    new Field(OffsetField, Type.INT64, "Last written offset of the producer"))
+    new Field(OffsetField, Type.INT64, "Last written offset of the producer"),
+    new Field(TimestampField, Type.INT64, "Timestamp of the last written entry"))
   val PidSnapshotMapSchema = new Schema(
     new Field(VersionField, Type.INT16, "Version of the snapshot file"),
     new Field(CrcField, Type.UNSIGNED_INT32, "CRC of the snapshot data"),
@@ -79,7 +81,8 @@ object ProducerIdMapping {
       val epoch = pidEntry.getShort(EpochField)
       val seq = pidEntry.getInt(SequenceField)
       val offset = pidEntry.getLong(OffsetField)
-      pidMap.put(pid, PidEntry(seq, epoch, offset))
+      val timestamp = pidEntry.getLong(TimestampField)
+      pidMap.put(pid, PidEntry(seq, epoch, offset, timestamp))
     }
   }
 
@@ -88,12 +91,13 @@ object ProducerIdMapping {
     struct.set(VersionField, PidSnapshotVersion)
     struct.set(CrcField, 0L) // we'll fill this after writing the entries
     val entriesArray = entries.map {
-      case (pid, PidEntry(seq, epoch, offset)) =>
+      case (pid, PidEntry(seq, epoch, offset, timestamp)) =>
         val pidEntryStruct = struct.instance(PidEntriesField)
         pidEntryStruct.set(PidField, pid)
         pidEntryStruct.set(EpochField, epoch)
         pidEntryStruct.set(SequenceField, seq)
         pidEntryStruct.set(OffsetField, offset)
+        pidEntryStruct.set(TimestampField, timestamp)
         pidEntryStruct
     }.toArray
     struct.set(PidEntriesField, entriesArray)
@@ -202,9 +206,9 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
    * @param epoch
    * @param offset
    */
-  def update(pid: Long, seq: Int, epoch: Short, offset: Long) {
+  def update(pid: Long, seq: Int, epoch: Short, offset: Long, timestamp: Long): Unit = {
     if (pid > 0) {
-      pidMap.put(pid, PidEntry(seq, epoch, offset))
+      pidMap.put(pid, PidEntry(seq, epoch, offset, timestamp))
       lastMapOffset = offset
     }
   }
@@ -238,6 +242,10 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
           }
       }
     }
+  }
+
+  def entryForPid(pid: Long): Option[PidEntry] = {
+    pidMap.get(pid)
   }
 
   /**
