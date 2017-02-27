@@ -32,26 +32,31 @@ import static org.apache.kafka.common.utils.Utils.wrapNullable;
  * This class implements the inner record format for magic 2 and above. The schema is as follows:
  *
  * Record =>
- *   Length => uintVar
- *   Attributes => int8
- *   TimestampDelta => longVar
- *   OffsetDelta => uintVar
- *   KeyLen => uintVar [OPTIONAL]
- *   Key => data [OPTIONAL]
- *   Value => data [OPTIONAL]
+ *   Length => VarUint
+ *   Attributes => Int8
+ *   TimestampDelta => VarLong
+ *   OffsetDelta => VarUint
+ *   KeyLen => VarInt
+ *   Key => data
+ *   ValueLen => VarInt
+ *   Value => data
  *
- * The record attributes indicate whether the key and value fields are present. The first bit
- * is used to indicate a null key; if set, the key length and key data will be left out of the
- * message. Similarly, if the second bit is set, the value field will be left out.
+ * The record attributes indicate whether the key and value fields are present. The current attributes
+ * are depicted below:
+ *
+ *  -----------------------------------
+ *  | Unused (1-7) | Control Flag (0) |
+ *  -----------------------------------
+ *
+ * The control flag is used to implement control records (see {@link ControlRecordType}).
  *
  * The offset and timestamp deltas compute the difference relative to the base offset and
  * base timestamp of the log entry that this record is contained in.
  */
 public class EosLogRecord implements LogRecord {
     private static final int MAX_RECORD_OVERHEAD = 21;
-    private static final int NULL_KEY_MASK = 0x01;
-    private static final int NULL_VALUE_MASK = 0x02;
-    private static final int CONTROL_FLAG_MASK = 0x04;
+    private static final int CONTROL_FLAG_MASK = 0x01;
+    private static final int NULL_VALUE_SIZE_BYTES = Utils.bytesForVarIntEncoding(-1);
 
     private final int sizeInBytes;
     private final byte attributes;
@@ -158,20 +163,27 @@ public class EosLogRecord implements LogRecord {
         int sizeInBytes = sizeOfBodyInBytes(offsetDelta, timestampDelta, key, value);
         Utils.writeUnsignedVarInt(sizeInBytes, out);
 
-        byte attributes = computeAttributes(isControlRecord, key, value);
+        byte attributes = computeAttributes(isControlRecord);
         out.write(attributes);
 
         Utils.writeVarLong(timestampDelta, out);
         Utils.writeUnsignedVarInt(offsetDelta, out);
 
-        if (key != null) {
+        if (key == null) {
+            Utils.writeVarInt(-1, out);
+        } else {
             int keySize = key.remaining();
-            Utils.writeUnsignedVarInt(keySize, out);
+            Utils.writeVarInt(keySize, out);
             out.write(key.array(), key.arrayOffset(), keySize);
         }
 
-        if (value != null)
-            out.write(value.array(), value.arrayOffset(), value.remaining());
+        if (value == null) {
+            Utils.writeVarInt(-1, out);
+        } else {
+            int valueSize = value.remaining();
+            Utils.writeVarInt(valueSize, out);
+            out.write(value.array(), value.arrayOffset(), valueSize);
+        }
 
         return computeChecksum(timestampDelta, key, value);
     }
@@ -200,11 +212,8 @@ public class EosLogRecord implements LogRecord {
         Crc32 crc = new Crc32();
         crc.updateLong(timestamp);
 
-        if (key != null) {
-            int size = key.remaining();
-            crc.updateInt(size);
-            crc.update(key.array(), key.arrayOffset(), size);
-        }
+        if (key != null)
+            crc.update(key.array(), key.arrayOffset(), key.remaining());
 
         if (value != null)
             crc.update(value.array(), value.arrayOffset(), value.remaining());
@@ -274,35 +283,31 @@ public class EosLogRecord implements LogRecord {
         long offset = baseOffset + delta;
         int sequence = baseSequence >= 0 ? baseSequence + delta : LogEntry.NO_SEQUENCE;
 
-        ByteBuffer key = null;
-        if (hasKey(attributes)) {
-            int keySizeInBytes = Utils.readUnsignedVarInt(buffer);
+        final ByteBuffer key;
+        int keySize = Utils.readVarInt(buffer);
+        if (keySize < 0) {
+            key = null;
+        } else {
             key = buffer.slice();
-            key.limit(keySizeInBytes);
-            buffer.position(buffer.position() + keySizeInBytes);
+            key.limit(keySize);
+            buffer.position(buffer.position() + keySize);
         }
 
-        ByteBuffer value = null;
-        if (hasValue(attributes))
+        final ByteBuffer value;
+        int valueSize = Utils.readVarInt(buffer);
+        if (valueSize < 0) {
+            value = null;
+        } else {
             value = buffer.slice();
+            value.limit(valueSize);
+            buffer.position(buffer.position() + valueSize);
+        }
+
         return new EosLogRecord(sizeInBytes, attributes, offset, timestamp, sequence, key, value);
     }
 
-    private static byte computeAttributes(boolean isControlRecord, ByteBuffer key, ByteBuffer value) {
-        byte attributes = isControlRecord ? CONTROL_FLAG_MASK : (byte) 0;
-        if (key == null)
-            attributes |= NULL_KEY_MASK;
-        if (value == null)
-            attributes |= NULL_VALUE_MASK;
-        return attributes;
-    }
-
-    private static boolean hasKey(byte attributes) {
-        return (attributes & NULL_KEY_MASK) == 0;
-    }
-
-    private static boolean hasValue(byte attributes) {
-        return (attributes & NULL_VALUE_MASK) == 0;
+    private static byte computeAttributes(boolean isControlRecord) {
+        return isControlRecord ? CONTROL_FLAG_MASK : (byte) 0;
     }
 
     public static int sizeInBytes(int offsetDelta,
@@ -328,24 +333,38 @@ public class EosLogRecord implements LogRecord {
         size += Utils.bytesForUnsignedVarIntEncoding(offsetDelta);
         size += Utils.bytesForVarLongEncoding(timestamp);
 
-        if (key != null) {
+        if (key == null) {
+            size += NULL_VALUE_SIZE_BYTES;
+        } else {
             int keySize = key.remaining();
-            size += Utils.bytesForUnsignedVarIntEncoding(keySize);
+            size += Utils.bytesForVarIntEncoding(keySize);
             size += keySize;
         }
 
-        if (value != null)
-            size += value.remaining();
+        if (value == null) {
+            size += NULL_VALUE_SIZE_BYTES;
+        } else {
+            int valueSize = value.remaining();
+            size += Utils.bytesForVarIntEncoding(valueSize);
+            size += valueSize;
+        }
 
         return size;
     }
 
     static int recordSizeUpperBound(byte[] key, byte[] value) {
         int size = MAX_RECORD_OVERHEAD;
-        if (key != null)
-            size += key.length + Utils.bytesForUnsignedVarIntEncoding(key.length);
-        if (value != null)
-            size += value.length;
+
+        if (key == null)
+            size += NULL_VALUE_SIZE_BYTES;
+        else
+            size += key.length + Utils.bytesForVarIntEncoding(key.length);
+
+        if (value == null)
+            size += NULL_VALUE_SIZE_BYTES;
+        else
+            size += value.length + Utils.bytesForVarIntEncoding(value.length);
+
         return size;
     }
 

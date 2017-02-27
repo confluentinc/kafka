@@ -281,6 +281,28 @@ public class Utils {
      * Google Protocol Buffers</a>. Also update the index to indicate how many bytes
      * were used to encode this integer.
      *
+     * @param buffer The buffer to read from
+     * @return The integer read (MUST BE TREATED WITH SPECIAL CARE TO AVOID SIGNEDNESS)
+     *
+     * @throws IllegalArgumentException if variable-length value does not terminate
+     *                                  after 5 bytes have been read
+     */
+    public static int readVarInt(ByteBuffer buffer) {
+        int raw = readUnsignedVarInt(buffer);
+        // This undoes the trick in writeSignedVarInt()
+        int temp = (((raw << 31) >> 31) ^ raw) >> 1;
+        // This extra step lets us deal with the largest signed values by treating
+        // negative results from read unsigned methods as like unsigned values.
+        // Must re-flip the top bit if the original read value had it set.
+        return temp ^ (raw & (1 << 31));
+    }
+
+    /**
+     * Read an integer stored in variable-length format using Zig-zag decoding from
+     * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html">.
+     * Google Protocol Buffers</a>. Also update the index to indicate how many bytes
+     * were used to encode this integer.
+     *
      * @param in The input to read from
      * @return The integer read (MUST BE TREATED WITH SPECIAL CARE TO AVOID SIGNEDNESS)
      *
