@@ -1075,7 +1075,7 @@ public class Protocol {
             new Field("transactional_id",
                     NULLABLE_STRING,
                     "The transactional id whose pid we want to retrieve or generate."),
-            new Field("timeout",
+            new Field("transaction_timeout",
                     INT32,
                     "The time in ms to wait for any idle transaction sent by this producer before proactively being aborted")
     );

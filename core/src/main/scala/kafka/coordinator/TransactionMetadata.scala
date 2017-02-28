@@ -55,7 +55,7 @@ private[coordinator] case object PrepareAbort extends TransactionState { val byt
 private[coordinator] case object CompleteCommit extends TransactionState { val byte: Byte = 4 }
 
 /**
-  * Group has completed commit
+  * Group has completed abort
   *
   * Will soon be removed from the ongoing transaction cache
   */
@@ -84,12 +84,8 @@ private[coordinator] class TransactionMetadata(var state: TransactionState) {
     topicPartitions ++= partitions
   }
 
-  override def toString: String = {
-    val stringBuilder = new StringBuilder
-    stringBuilder.append("(state:" + state)
-    stringBuilder.append(",topicPartitions:" + topicPartitions + ")")
-    stringBuilder.toString()
-  }
+  override def toString: String =
+    s"(state: $state, topicPartitions: ${topicPartitions.mkString("(",",",")")})"
 
   override def equals(that: Any): Boolean = that match {
     case other: TransactionMetadata => state.equals(other.state) && topicPartitions.equals(other.topicPartitions)

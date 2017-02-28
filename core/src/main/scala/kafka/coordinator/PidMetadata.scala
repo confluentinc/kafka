@@ -23,13 +23,8 @@ private[coordinator] class PidMetadata(val pid: Long,
                                        var epoch: Short,
                                        val transactionTimeoutMs: Int) {
 
-  override def toString: String = {
-    val stringBuilder = new StringBuilder
-    stringBuilder.append("(pid:" + pid)
-    stringBuilder.append(",epoch:" + epoch)
-    stringBuilder.append(",transactionTimeoutMs:" + transactionTimeoutMs + ")")
-    stringBuilder.toString()
-  }
+  override def toString: String =
+    s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $transactionTimeoutMs)"
 
   override def equals(that: Any): Boolean = that match {
     case other: PidMetadata => pid == other.pid && epoch == other.epoch

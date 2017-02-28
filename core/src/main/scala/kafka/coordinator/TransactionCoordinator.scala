@@ -55,8 +55,6 @@ class TransactionCoordinator(val brokerId: Int,
   /* TransactionalId to pid metadata map cache */
   private val pidMetadataCache = new Pool[String, PidMetadata]
 
-  /* Pid to current ongoing transaction status of the producer cache */
-
   def handleInitPid(transactionalId: String,
                     transactionTimeoutMs: Int,
                     responseCallback: InitPidCallback): Unit = {
@@ -74,6 +72,7 @@ class TransactionCoordinator(val brokerId: Int,
       getPidMetadata(transactionalId) match {
         case None =>
           val pid: Long = pidManager.getNewPid()
+          // TODO: check transactionTimeoutMs is not larger than the broker configured maximum allowed value
           val newMetadata: PidMetadata = new PidMetadata(pid, epoch = 0, transactionTimeoutMs)
           val metadata = addPidMetadata(transactionalId, newMetadata)
 

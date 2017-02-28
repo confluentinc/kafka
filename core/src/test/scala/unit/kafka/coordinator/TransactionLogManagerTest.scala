@@ -43,6 +43,7 @@ class TransactionLogManagerTest {
 
     val records = MemoryRecords.withRecords(0, CompressionType.NONE, pidRecords: _*)
 
+    var count = 0
     for (record <- records.records.asScala) {
       val key = TransactionLogManager.readMessageKey(record.key())
 
@@ -55,9 +56,13 @@ class TransactionLogManagerTest {
           assertEquals(epoch, pidMetadata.epoch)
           assertEquals(transactionTimeoutMs, pidMetadata.transactionTimeoutMs)
 
+          count = count + 1
+
         case _ => fail(s"Unexpected transaction topic message key $key")
       }
     }
+
+    assertEquals(pidMappings.size, count)
   }
 
   @Test
@@ -85,6 +90,7 @@ class TransactionLogManagerTest {
 
     val records = MemoryRecords.withRecords(0, CompressionType.NONE, txnRecords: _*)
 
+    var count = 0
     for (record <- records.records.asScala) {
       val key = TransactionLogManager.readMessageKey(record.key())
 
@@ -96,8 +102,12 @@ class TransactionLogManagerTest {
           assertEquals(transactionStates(pid), txnMetadata.state)
           assertEquals(topicPartitions, txnMetadata.topicPartitions)
 
+          count = count + 1
+
         case _ => fail(s"Unexpected transaction topic message key $key")
       }
     }
+
+    assertEquals(transactionStates.size, count)
   }
 }

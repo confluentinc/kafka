@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 
 public class InitPidRequest extends AbstractRequest {
     private static final String TRANSACTIONAL_ID_KEY_NAME = "transactional_id";
-    private static final String TIMEOUT_KEY_NAME = "timeout";
+    private static final String TIMEOUT_KEY_NAME = "transaction_timeout";
 
     private final String transactionalId;
     private final int transactionTimeoutMs;
@@ -35,6 +35,10 @@ public class InitPidRequest extends AbstractRequest {
 
         public Builder(String transactionalId, int transactionTimeoutMs) {
             super(ApiKeys.API_VERSIONS);
+
+            if (transactionTimeoutMs <= 0)
+                throw new IllegalArgumentException("transaction timeout value is not positive: " + transactionTimeoutMs);
+
             this.transactionalId = transactionalId;
             this.transactionTimeoutMs = transactionTimeoutMs;
         }
