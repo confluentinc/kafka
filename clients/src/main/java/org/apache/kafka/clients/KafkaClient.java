@@ -16,11 +16,11 @@
  */
 package org.apache.kafka.clients;
 
-import java.io.Closeable;
-import java.util.List;
-
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.requests.AbstractRequest;
+
+import java.io.Closeable;
+import java.util.List;
 
 /**
  * The interface for {@link NetworkClient}
@@ -140,6 +140,6 @@ public interface KafkaClient extends Closeable {
      * @param callback the callback to invoke when we get a response
      */
     ClientRequest newClientRequest(String nodeId, AbstractRequest.Builder<?> requestBuilder,
-                                          long createdTimeMs, boolean expectResponse,
-                                          RequestCompletionHandler callback);
+                                   long createdTimeMs, boolean expectResponse,
+                                   RequestCompletionHandler callback);
 }
