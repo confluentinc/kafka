@@ -361,7 +361,7 @@ public class SenderTest {
 
     @Test
     public void testInitPidRequest() throws Exception {
-        final Long producerId = 343434L;
+        final long producerId = 343434L;
         TransactionState transactionState = new TransactionState(true);
         setupWithTransactionState(transactionState);
         client.setNode(new Node(1, "localhost", 33343));

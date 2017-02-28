@@ -246,9 +246,8 @@ public final class RecordAccumulator {
         if (last != null) {
             FutureRecordMetadata future = last.tryAppend(timestamp, key, value, callback, time.milliseconds());
             if (future == null) {
-                if (last.close()) {
+                if (last.close() && transactionState != null)
                     transactionState.incrementSequenceNumber(last.topicPartition, last.recordCount);
-                }
             } else {
                 return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false);
             }
@@ -286,6 +285,11 @@ public final class RecordAccumulator {
                             expiredBatches.add(batch);
                             count++;
                             batchIterator.remove();
+                            if (transactionState != null) {
+                                // If we are expiring a batch and idempotence is enabled, we need to expire all future
+                                // batches sent to the same topic partition.
+                                count += expireAllFutureBatches(batchIterator, expiredBatches);
+                            }
                         } else {
                             // Stop at the first batch that has not expired.
                             break;
@@ -305,6 +309,16 @@ public final class RecordAccumulator {
         return expiredBatches;
     }
 
+    private int expireAllFutureBatches(Iterator<RecordBatch> batchIterator, List<RecordBatch> expiredBatches) {
+        int count = 0;
+        while (batchIterator.hasNext()) {
+            RecordBatch batch = batchIterator.next();
+            batchIterator.remove();
+            expiredBatches.add(batch);
+            ++count;
+        }
+        return count;
+    }
     /**
      * Re-enqueue the given record batch in the accumulator to retry
      */
@@ -440,9 +454,8 @@ public final class RecordAccumulator {
                                         break;
                                     } else {
                                         RecordBatch batch = deque.pollFirst();
-                                        if (batch.close()) {
+                                        if (batch.close() && transactionState != null)
                                             transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
-                                        }
                                         size += batch.sizeInBytes();
                                         ready.add(batch);
                                         batch.drainedMs = now;

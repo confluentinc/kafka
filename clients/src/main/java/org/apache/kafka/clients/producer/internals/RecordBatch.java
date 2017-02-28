@@ -184,7 +184,7 @@ public final class RecordBatch {
     /**
      * Returns if the batch is been retried for sending to kafka
      */
-    private boolean inRetry() {
+    public boolean inRetry() {
         return this.retry;
     }
 
@@ -238,5 +238,12 @@ public final class RecordBatch {
 
     public byte magic() {
         return recordsBuilder.magic();
+    }
+
+    /**
+     * Return the producerId (Pid) of the current batch.
+     */
+    public long producerId() {
+        return recordsBuilder.producerId();
     }
 }

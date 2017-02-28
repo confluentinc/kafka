@@ -224,9 +224,23 @@ public class Sender implements Runnable {
         }
 
         List<RecordBatch> expiredBatches = this.accumulator.abortExpiredBatches(this.requestTimeout, now);
-        // update sensors
-        for (RecordBatch expiredBatch : expiredBatches)
+
+        // Reset the PID if an expired batch has previously been sent to the broker. Aloso update the metrcis
+        // for expired batches.
+        boolean resetState = false;
+        for (RecordBatch expiredBatch : expiredBatches) {
+            if (transactionState != null && expiredBatch.inRetry()) {
+                resetState = true;
+            }
             this.sensors.recordErrors(expiredBatch.topicPartition.topic(), expiredBatch.recordCount);
+        }
+
+        if (resetState) {
+            transactionState.reset();
+            while (!transactionState.hasPid()) {
+                getPID(requestTimeout);
+            }
+        }
 
         sensors.updateProduceRequestMetrics(batches);
 
@@ -306,8 +320,7 @@ public class Sender implements Runnable {
     private void handleInitPidResponse(ClientResponse response) {
         if (response.hasResponse()) {
             InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
-            transactionState.setPid(initPidResponse.producerId());
-            transactionState.setEpoch(initPidResponse.epoch());
+            transactionState.setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
         }
     }
 
@@ -361,18 +374,31 @@ public class Sender implements Runnable {
         if (error != Errors.NONE && canRetry(batch, error)) {
             // retry
             log.warn("Got error produce response with correlation id {} on topic-partition {}, retrying ({} attempts left). Error: {}",
-                     correlationId,
-                     batch.topicPartition,
-                     this.retries - batch.attempts - 1,
-                     error);
-            this.accumulator.reenqueue(batch, now);
-            this.sensors.recordRetries(batch.topicPartition.topic(), batch.recordCount);
+                    correlationId,
+                    batch.topicPartition,
+                    this.retries - batch.attempts - 1,
+                    error);
+            if (transactionState == null || (transactionState.pid() == batch.producerId())) {
+                // If idempotence is enabled only retry the request if the current PID is the same as the pid of the
+                // batch.
+                this.accumulator.reenqueue(batch, now);
+                this.sensors.recordRetries(batch.topicPartition.topic(), batch.recordCount);
+            }
         } else {
             RuntimeException exception;
             if (error == Errors.TOPIC_AUTHORIZATION_FAILED)
                 exception = new TopicAuthorizationException(batch.topicPartition.topic());
             else
                 exception = error.exception();
+
+            if (error == Errors.OUT_OF_ORDER_SEQUENCE_NUMBER && batch.producerId() == transactionState.pid()) {
+                // Reset the transactional state and get a new pid, since we can't recover from an out of order
+                // sequence error.
+                transactionState.reset();
+                while (!transactionState.hasPid()) {
+                    getPID(requestTimeout);
+                }
+            }
             // tell the user the result of their request
             batch.done(response.baseOffset, response.logAppendTime, exception);
             this.accumulator.deallocate(batch);

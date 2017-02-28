@@ -171,7 +171,7 @@ public enum Errors {
     UNSUPPORTED_FOR_MESSAGE_FORMAT(43,
         new UnsupportedForMessageFormatException("The message format version on the broker does not support the request.")),
     POLICY_VIOLATION(44, new PolicyViolationException("Request parameters do not satisfy the configured policy.")),
-    INVALID_SEQUENCE_NUMBER(45, new OutOfOrderSequenceException("The broker received an out of order sequence number")),
+    OUT_OF_ORDER_SEQUENCE_NUMBER(45, new OutOfOrderSequenceException("The broker received an out of order sequence number")),
     DUPLICATE_SEQUENCE_NUMBER(46, new DuplicateSequenceNumberException("The broker received a duplicate sequence number")),
     PRODUCER_FENCED(47, new ProducerFencedException("Producer attempted an operation with an old epoch"));
 

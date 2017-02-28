@@ -12,12 +12,14 @@
  */
 package org.apache.kafka.clients.producer.internals;
 
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.config.ConfigException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.apache.kafka.common.requests.InitPidResponse.INVALID_PID;
 
@@ -25,40 +27,79 @@ import static org.apache.kafka.common.requests.InitPidResponse.INVALID_PID;
  * A class which maintains state for transactions. Also keeps the state necessary to ensure idempotent production.
  */
 public class TransactionState {
-    private final String transactionalId;
     private volatile long pid;
     private short epoch;
-    private boolean isStateValid;
     private final boolean idempotenceEnabled;
     private final Map<TopicPartition, Integer> sequenceNumbers;
+    private final Lock pidLock;
+    private final Condition hasPidCondition;
 
+    public static class PidAndEpoch {
+        public long pid;
+        public short epoch;
 
-    public TransactionState(String transactionalId, boolean idempotenceEnabled) {
-        if (transactionalId != null && 0 < transactionalId.length() && !idempotenceEnabled) {
-            throw new ConfigException("Need to set " + ProducerConfig.IDEMPOTENCE_ENABLED_CONFIG
-                    + " to true in order to use transactions.");
+        PidAndEpoch(long pid, short epoch) {
+            this.pid = pid;
+            this.epoch = epoch;
         }
-        this.transactionalId = transactionalId;
-        pid = INVALID_PID;
-        epoch = 0;
-        sequenceNumbers = new HashMap<>();
-        this.isStateValid = true;
-        this.idempotenceEnabled = idempotenceEnabled;
-    }
 
-    public TransactionState() {
-        this(false);
+        public boolean isValid() {
+            return pid != INVALID_PID;
+        }
     }
 
     public TransactionState(boolean idempotenceEnabled) {
-        this(null, idempotenceEnabled);
+        pid = INVALID_PID;
+        epoch = 0;
+        sequenceNumbers = new HashMap<>();
+        this.idempotenceEnabled = idempotenceEnabled;
+
+        this.pidLock = new ReentrantLock();
+        this.hasPidCondition = pidLock.newCondition();
     }
 
     public boolean hasPid() {
         return pid != INVALID_PID;
     }
 
-    public Long pid() {
+    /**
+     * A blocking call to get the pid and epoch for the producer. If the PID and epoch has not been set, this method
+     * will block for at most maxWaitTimeMs. It is expected that this method be called from application thread
+     * contexts (ie. through Producer.send). The PID it self will be retrieved in the background thread.
+     * @param maxWaitTimeMs The maximum time to block.
+     * @return a PidAndEpoch object. Callers must call the 'isValid' method fo the returned object to ensure that a
+     *         valid Pid and epoch is actually returned.
+     */
+    public PidAndEpoch pidAndEpoch(long maxWaitTimeMs) throws InterruptedException {
+        pidLock.lock();
+        try {
+            while (!hasPid()) {
+                hasPidCondition.await(maxWaitTimeMs, TimeUnit.MILLISECONDS);
+            }
+        } finally {
+            pidLock.unlock();
+        }
+        return new PidAndEpoch(pid, epoch);
+    }
+
+
+    /**
+     * Set the pid and epoch atomically. This method will signal any callers blocked on the `pidAndEpoch` method
+     * once the pid is set. This method will be called on the background thread when the broker responds with the pid.
+     */
+    public void setPidAndEpoch(long pid, short epoch) {
+        pidLock.lock();
+        try {
+            this.pid = pid;
+            this.epoch = epoch;
+            if (this.pid != INVALID_PID)
+                hasPidCondition.signalAll();
+        } finally {
+            pidLock.unlock();
+        }
+    }
+
+    public long pid() {
         return pid;
     }
 
@@ -66,34 +107,13 @@ public class TransactionState {
         return epoch;
     }
 
-    public boolean isIdempotenceEnabled() {
-        return idempotenceEnabled;
-    }
-
-    public void setPid(long pid) {
-        if (this.pid == INVALID_PID) {
-            this.pid = pid;
-        } else {
-            throw new IllegalStateException("Cannot set multiple producer ids for a single producer.");
-        }
-    }
-
-    public void setEpoch(short epoch) {
-        if (this.epoch == 0) {
-            this.epoch = epoch;
-        }
-    }
-
-    public void setStateInvalid() {
-        this.isStateValid = false;
-    }
-
-    public boolean isStateValid() {
-        return isStateValid;
-    }
-
-    public String transactionalId() {
-        return transactionalId;
+    /**
+     * This method is used when the producer needs to reset it's internal state because of an irrecoverable exception
+     * from the broker.
+    */
+    public synchronized void reset() {
+        setPidAndEpoch(INVALID_PID, (short) 0);
+        this.sequenceNumbers.clear();
     }
 
     /**

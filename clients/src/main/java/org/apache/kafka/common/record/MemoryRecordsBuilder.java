@@ -503,4 +503,11 @@ public class MemoryRecordsBuilder {
             this.shallowOffsetOfMaxTimestamp = shallowOffsetOfMaxTimestamp;
         }
     }
+
+    /**
+     * Return the ProducerId (Pid) of the LogEntries created by this builder.
+     */
+    public long producerId() {
+        return this.pid;
+    }
 }
