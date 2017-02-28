@@ -83,6 +83,7 @@ public final class RecordAccumulator {
 
     /**
      * Create a new record accumulator
+     *
      * @param batchSize The size to use when allocating {@link MemoryRecords} instances
      * @param totalSize The maximum memory the record accumulator can use.
      * @param compression The compression codec for the records
