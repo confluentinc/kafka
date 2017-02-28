@@ -28,7 +28,7 @@ import static org.apache.kafka.common.requests.InitPidResponse.INVALID_PID;
  */
 public class TransactionState {
     private volatile long pid;
-    private short epoch;
+    private volatile short epoch;
     private final boolean idempotenceEnabled;
     private final Map<TopicPartition, Integer> sequenceNumbers;
     private final Lock pidLock;

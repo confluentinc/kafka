@@ -398,6 +398,9 @@ public class Sender implements Runnable {
                 while (!transactionState.hasPid()) {
                     getPID(requestTimeout);
                 }
+
+                log.error("The broker received an out of order sequence number for topic-partition {} at offset {}. This indicates data loss on the broker, and should be investigated.",
+                        batch.topicPartition, response.baseOffset);
             }
             // tell the user the result of their request
             batch.done(response.baseOffset, response.logAppendTime, exception);
