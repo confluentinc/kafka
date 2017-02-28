@@ -505,7 +505,7 @@ class Log(@volatile var dir: File,
                     appendInfo.firstOffset = appendInfo.firstOffset - numRecords
                     appendInfo.lastOffset = appendInfo.lastOffset - numRecords
                     appendInfo.maxTimestamp = pidEntry.timestamp
-                    error(s"Leader received a duplicate for ${topicPartition.topic()}-${topicPartition.partition} with (pid, firstOffset, lastOffset) => (${pid}, ${appendInfo.firstOffset}, ${appendInfo.lastOffset}). Will drop the incoming record.")
+                    warn(s"Leader received a duplicate for ${topicPartition.topic()}-${topicPartition.partition} with (pid, firstOffset, lastOffset) => (${pid}, ${appendInfo.firstOffset}, ${appendInfo.lastOffset}). Will drop the incoming record.")
                   } else {
                     // We detected a duplicate on the follower. This should never happen, and there is nothing we can
                     // do about it since it means that the leader and follower logs have diverged.

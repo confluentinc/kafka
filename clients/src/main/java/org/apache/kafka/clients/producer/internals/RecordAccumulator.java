@@ -245,10 +245,13 @@ public final class RecordAccumulator {
         RecordBatch last = deque.peekLast();
         if (last != null) {
             FutureRecordMetadata future = last.tryAppend(timestamp, key, value, callback, time.milliseconds());
-            if (future == null)
-                last.close(transactionState);
-            else
+            if (future == null) {
+                if (last.close()) {
+                    transactionState.incrementSequenceNumber(last.topicPartition, last.recordCount);
+                }
+            } else {
                 return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false);
+            }
         }
         return null;
     }
@@ -437,7 +440,9 @@ public final class RecordAccumulator {
                                         break;
                                     } else {
                                         RecordBatch batch = deque.pollFirst();
-                                        batch.close(transactionState);
+                                        if (batch.close()) {
+                                            transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+                                        }
                                         size += batch.sizeInBytes();
                                         ready.add(batch);
                                         batch.drainedMs = now;
@@ -548,7 +553,7 @@ public final class RecordAccumulator {
             Deque<RecordBatch> dq = getDeque(batch.topicPartition);
             // Close the batch before aborting
             synchronized (dq) {
-                batch.close(null);
+                batch.close();
                 dq.remove(batch);
             }
             batch.done(-1L, LogEntry.NO_TIMESTAMP, new IllegalStateException("Producer is closed forcefully."));

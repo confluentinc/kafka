@@ -165,7 +165,7 @@ public final class RecordBatch {
 
         boolean expired = expiryErrorMessage != null;
         if (expired)
-            close(null);
+            close();
         return expired;
     }
 
@@ -210,19 +210,18 @@ public final class RecordBatch {
     public boolean isFull() {
         return recordsBuilder.isFull();
     }
+
     /**
-     * Writes the final metadata in the batch and updates transaction state with the new sequence number for the
-     * TopicPartition
-     * @param transactionState the global transaction state which keeps track of sequence numbers for each TopicPartition.
+     * Close the batch. Returns true if the batch was indeed closed on the current invocation. Returns false if the
+     * batch was already closed.
      */
-    public synchronized void close(TransactionState transactionState) {
+    public synchronized  boolean close() {
         if (!isClosed) {
             recordsBuilder.close();
-            if (transactionState != null) {
-                transactionState.incrementSequenceNumber(topicPartition, this.recordCount);
-            }
             isClosed = true;
+            return true;
         }
+        return false;
     }
 
     public ByteBuffer buffer() {
