@@ -398,7 +398,6 @@ public class Sender implements Runnable {
                 while (!transactionState.hasPid()) {
                     getPID(requestTimeout);
                 }
-
                 log.error("The broker received an out of order sequence number for topic-partition {} at offset {}. This indicates data loss on the broker, and should be investigated.",
                         batch.topicPartition, response.baseOffset);
             }
@@ -414,7 +413,9 @@ public class Sender implements Runnable {
                         "topic/partition may not exist or the user may not have Describe access to it", batch.topicPartition);
             metadata.requestUpdate();
         }
-
+        if (error == Errors.NONE) {
+            transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+        }
         // Unmute the completed partition.
         if (guaranteeMessageOrder)
             this.accumulator.unmutePartition(batch.topicPartition);

@@ -238,19 +238,16 @@ public final class RecordAccumulator {
     }
 
     /**
-     * If `RecordBatch.tryAppend` fails (i.e. the record batch is full), close its memory records to release temporary
-     * resources (like compression streams buffers).
+     *  Try to append to a batch. If it is full, we return null and a new batch is created. If the existing batch is
+     *  full, it will be closed right before send, or if it is expired, or when the producer is closed, whichever
+     *  comes first.
      */
     private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, Callback callback, Deque<RecordBatch> deque) {
         RecordBatch last = deque.peekLast();
         if (last != null) {
             FutureRecordMetadata future = last.tryAppend(timestamp, key, value, callback, time.milliseconds());
-            if (future == null) {
-                if (last.close() && transactionState != null)
-                    transactionState.incrementSequenceNumber(last.topicPartition, last.recordCount);
-            } else {
+            if (future != null)
                 return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false);
-            }
         }
         return null;
     }
@@ -285,12 +282,7 @@ public final class RecordAccumulator {
                             expiredBatches.add(batch);
                             count++;
                             batchIterator.remove();
-                            if (transactionState != null) {
-                                // If we are expiring a batch and idempotence is enabled, we need to expire all future
-                                // batches sent to the same topic partition.
-                                count += expireAllFutureBatches(batchIterator, expiredBatches);
-                            }
-                        } else {
+                       } else {
                             // Stop at the first batch that has not expired.
                             break;
                         }
@@ -309,16 +301,6 @@ public final class RecordAccumulator {
         return expiredBatches;
     }
 
-    private int expireAllFutureBatches(Iterator<RecordBatch> batchIterator, List<RecordBatch> expiredBatches) {
-        int count = 0;
-        while (batchIterator.hasNext()) {
-            RecordBatch batch = batchIterator.next();
-            batchIterator.remove();
-            expiredBatches.add(batch);
-            ++count;
-        }
-        return count;
-    }
     /**
      * Re-enqueue the given record batch in the accumulator to retry
      */
@@ -454,8 +436,10 @@ public final class RecordAccumulator {
                                         break;
                                     } else {
                                         RecordBatch batch = deque.pollFirst();
-                                        if (batch.close() && transactionState != null)
-                                            transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+                                        if (transactionState != null)
+                                            batch.closeWithSequence(transactionState.sequenceNumber(batch.topicPartition));
+                                        else
+                                            batch.close();
                                         size += batch.sizeInBytes();
                                         ready.add(batch);
                                         batch.drainedMs = now;

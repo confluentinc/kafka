@@ -193,6 +193,15 @@ public class MemoryRecordsBuilder {
             return new RecordsInfo(maxTimestamp, compressionType == CompressionType.NONE ? offsetOfMaxTimestamp : lastOffset);
     }
 
+    /**
+     * We set the sequence of the batch just before it is about to be sent out.
+     * @param baseSequence
+     */
+    public void closeWithSequence(int baseSequence) {
+        this.baseSequence = baseSequence;
+        close();
+    }
+
     public void close() {
         if (builtRecords != null)
             return;

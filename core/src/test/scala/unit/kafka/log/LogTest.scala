@@ -163,6 +163,27 @@ class LogTest extends JUnitSuite {
     assertEquals("Inserted a duplicate record into the log", origAppendInfo.lastOffset, newAppendInfo.lastOffset)
   }
 
+
+  @Test
+  def testMulitplePidsPerMemoryRecord() : Unit = {
+    val logProps = new Properties()
+
+    // create a log
+    val log = new Log(logDir,
+      LogConfig(logProps),
+      recoveryPoint = 0L,
+      scheduler = time.scheduler,
+      time = time)
+
+    val epoch: Short = 0
+
+    val records : TestUtils.records(List(
+      ("key1".getBytes, "value1".getBytes,
+    )
+
+
+  }
+
   @Test(expected = classOf[ProducerFencedException])
   def testOldProducerEpoch(): Unit = {
     val logProps = new Properties()

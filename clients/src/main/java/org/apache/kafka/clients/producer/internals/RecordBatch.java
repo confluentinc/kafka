@@ -211,17 +211,17 @@ public final class RecordBatch {
         return recordsBuilder.isFull();
     }
 
+    public void closeWithSequence(int baseSequence) {
+        recordsBuilder.closeWithSequence(baseSequence);
+    }
+
+
     /**
      * Close the batch. Returns true if the batch was indeed closed on the current invocation. Returns false if the
      * batch was already closed.
      */
-    public synchronized  boolean close() {
-        if (!isClosed) {
-            recordsBuilder.close();
-            isClosed = true;
-            return true;
-        }
-        return false;
+    public void close() {
+        recordsBuilder.close();
     }
 
     public ByteBuffer buffer() {
