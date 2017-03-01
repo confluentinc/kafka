@@ -47,7 +47,6 @@ public final class RecordBatch {
 
     private final List<Thunk> thunks = new ArrayList<>();
     private final MemoryRecordsBuilder recordsBuilder;
-    private boolean isClosed;
 
     volatile int attempts;
     int recordCount;
@@ -58,6 +57,7 @@ public final class RecordBatch {
     private String expiryErrorMessage;
     private AtomicBoolean completed;
     private boolean retry;
+    private boolean isWritable;
 
     public RecordBatch(TopicPartition tp, MemoryRecordsBuilder recordsBuilder, long now) {
         this.createdMs = now;
@@ -68,7 +68,8 @@ public final class RecordBatch {
         this.produceFuture = new ProduceRequestResult(topicPartition);
         this.completed = new AtomicBoolean();
         this.retry = false;
-        this.isClosed = false;
+        this.isWritable = true;
+
     }
 
     /**
@@ -77,7 +78,8 @@ public final class RecordBatch {
      * @return The RecordSend corresponding to this record or null if there isn't sufficient room.
      */
     public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Callback callback, long now) {
-        if (!recordsBuilder.hasRoomFor(timestamp, key, value)) {
+        if (!isWritable || !recordsBuilder.hasRoomFor(timestamp, key, value)) {
+            this.isWritable = false;
             return null;
         } else {
             long checksum = this.recordsBuilder.append(timestamp, key, value);
@@ -208,20 +210,17 @@ public final class RecordBatch {
     }
 
     public boolean isFull() {
-        return recordsBuilder.isFull();
+        return !isWritable || recordsBuilder.isFull();
     }
 
     public void closeWithSequence(int baseSequence) {
         recordsBuilder.closeWithSequence(baseSequence);
+        isWritable = false;
     }
 
-
-    /**
-     * Close the batch. Returns true if the batch was indeed closed on the current invocation. Returns false if the
-     * batch was already closed.
-     */
     public void close() {
         recordsBuilder.close();
+        isWritable = false;
     }
 
     public ByteBuffer buffer() {
@@ -233,7 +232,7 @@ public final class RecordBatch {
     }
 
     public boolean isWritable() {
-        return !recordsBuilder.isClosed();
+        return isWritable && !recordsBuilder.isClosed();
     }
 
     public byte magic() {

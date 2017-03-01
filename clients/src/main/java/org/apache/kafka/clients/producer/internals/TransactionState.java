@@ -141,5 +141,4 @@ public class TransactionState {
         currentSequenceNumber += increment;
         sequenceNumbers.put(topicPartition, currentSequenceNumber);
     }
-
 }

@@ -282,7 +282,7 @@ public final class RecordAccumulator {
                             expiredBatches.add(batch);
                             count++;
                             batchIterator.remove();
-                       } else {
+                        } else {
                             // Stop at the first batch that has not expired.
                             break;
                         }

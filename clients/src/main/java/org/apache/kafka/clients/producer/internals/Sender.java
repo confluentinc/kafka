@@ -414,7 +414,8 @@ public class Sender implements Runnable {
             metadata.requestUpdate();
         }
         if (error == Errors.NONE) {
-            transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+            if (transactionState != null)
+                transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
         }
         // Unmute the completed partition.
         if (guaranteeMessageOrder)

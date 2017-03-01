@@ -590,26 +590,30 @@ class Log(@volatile var dir: File,
       if (lastOffset >= entry.lastOffset)
         monotonic = false
 
-      pidEntryMap.get(entry.pid) match {
-        case Some(tuple) =>
-          // Check that the sequence number of the new entry is in order.
-          if (tuple._2.seq + 1 != entry.baseSequence) {
-            if (tuple._2.seq <= entry.baseSequence) {
-              throw new DuplicateSequenceNumberException("Mulitple entries in the same MemoryRecord were duplicates of each other. This suggests that the logs on the followers have diverged from the leader.")
-            } else {
-              throw new OutOfOrderSequenceException("Entries inside a single MemoryRecord were out of order. This means that the logs on the follower have diverged from those of the leader.")
+      if (0 < entry.pid) {
+        pidEntryMap.get(entry.pid) match {
+          case Some(tuple) =>
+            // Check that the sequence number of the new entry is in order.
+            if (tuple._2.seq + 1 != entry.baseSequence) {
+              if (tuple._2.seq <= entry.baseSequence) {
+                throw new DuplicateSequenceNumberException("Multiple entries in the same MemoryRecord were duplicates " +
+                  "of each other. This suggests that the logs on the followers have diverged from the leader.")
+              } else {
+                throw new OutOfOrderSequenceException("Entries inside a single MemoryRecord were out of order. This " +
+                  "means that the logs on the follower have diverged from those of the leader.")
+              }
             }
-          }
-          // If we have seen this pid before, replace the last PidEntry with information from the current LogEntry
-          val pidEntry = pidEntryMap.put(entry.pid, (tuple._1, PidEntry(entry.lastSequence, entry.epoch,
-            entry.lastOffset, entry.maxTimestamp)))
-        case None =>
-          // If this is the first time we are seeing a particular pid, set both the first and the last PidEntry for
-          // this pid to span the first and last offset/sequence of the the current LogEntry.
-          pidEntryMap.put(entry.pid, (PidEntry(entry.baseSequence, entry.epoch, entry.baseOffset, entry.maxTimestamp),
-            PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)))
+            // If we have seen this pid before, replace the last PidEntry with information from the current LogEntry
+            pidEntryMap.put(entry.pid, (tuple._1, PidEntry(entry.lastSequence, entry.epoch,  entry.lastOffset,
+              entry.maxTimestamp)))
+          case None =>
+            // If this is the first time we are seeing a particular pid, set both the first and the last PidEntry for
+            // this pid to span the first and last offset/sequence of the the current LogEntry.
+            pidEntryMap.put(entry.pid, (PidEntry(entry.baseSequence, entry.epoch, entry.baseOffset, entry.maxTimestamp),
+              PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)))
+        }
       }
-      // update the last offset seen
+     // update the last offset seen
       lastOffset = entry.lastOffset
 
       // Check if the message sizes are valid.
