@@ -177,12 +177,90 @@ class LogTest extends JUnitSuite {
 
     val epoch: Short = 0
 
-    val records : TestUtils.records(List(
-      ("key1".getBytes, "value1".getBytes,
-    )
+    val buffer = ByteBuffer.allocate(512)
 
+    var builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 0L, time.milliseconds(), 1L, epoch, 0)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
 
+    // Append a record with other pids.
+    builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 1L, time.milliseconds(), 2L, epoch, 0)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    // Append a record with other pids.
+    builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 2L, time.milliseconds(), 3L, epoch, 0)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    // Append a record with other pids.
+    builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 3L, time.milliseconds(), 4L, epoch, 0)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    buffer.flip()
+    val memoryRecords = MemoryRecords.readableRecords(buffer)
+
+    log.append(MemoryRecords.readableRecords(buffer), false)
+    log.flush()
+
+    val fetchedData = log.read(0, Int.MaxValue)
+
+    val origIterator = memoryRecords.entries().iterator()
+    for (entry <- fetchedData.records.entries().asScala) {
+      assertTrue(origIterator.hasNext)
+      val origEntry = origIterator.next()
+      assertEquals(origEntry.pid(), entry.pid())
+      assertEquals(origEntry.baseOffset(), entry.baseOffset())
+      assertEquals(origEntry.baseSequence(), entry.baseSequence())
+    }
   }
+
+  @Test(expected = classOf[DuplicateSequenceNumberException])
+  def testMultiplePidsWithDuplicates() : Unit = {
+    val logProps = new Properties()
+
+    // create a log
+    val log = new Log(logDir,
+      LogConfig(logProps),
+      recoveryPoint = 0L,
+      scheduler = time.scheduler,
+      time = time)
+
+    val epoch: Short = 0
+
+    val buffer = ByteBuffer.allocate(512)
+
+    var builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 0L, time.milliseconds(), 1L, epoch, 0)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    // Append a record with other pids.
+    builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 1L, time.milliseconds(), 2L, epoch, 0)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    // Append a record with other pids.
+    builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 2L, time.milliseconds(), 1L, epoch, 1)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 3L, time.milliseconds(), 2L, epoch, 1)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    builder = MemoryRecords.builder(buffer, LogEntry.MAGIC_VALUE_V2, CompressionType.NONE, TimestampType.LOG_APPEND_TIME, 4L, time.milliseconds(), 1L, epoch, 1)
+    builder.append(new KafkaRecord("key".getBytes, "value".getBytes))
+    builder.close()
+
+    buffer.flip()
+    val memoryRecords = MemoryRecords.readableRecords(buffer)
+
+    log.append(MemoryRecords.readableRecords(buffer), false)
+    // Should throw a duplicate seqeuence exception here.
+    assertFalse("should have thrown a DuplicateSequenceNumberException.", true)
+  }
+
 
   @Test(expected = classOf[ProducerFencedException])
   def testOldProducerEpoch(): Unit = {
