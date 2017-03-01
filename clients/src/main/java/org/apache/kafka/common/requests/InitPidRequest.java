@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 
 public class InitPidRequest extends AbstractRequest {
     private static final String TRANSACTIONAL_ID_KEY_NAME = "transactional_id";
-    private static final String TIMEOUT_KEY_NAME = "transaction_timeout";
+    private static final String TRANSACTION_TIMEOUT_KEY_NAME = "transaction_timeout";
 
     private final String transactionalId;
     private final int transactionTimeoutMs;
@@ -57,7 +57,7 @@ public class InitPidRequest extends AbstractRequest {
     public InitPidRequest(Struct struct, short version) {
         super(version);
         this.transactionalId = struct.getString(TRANSACTIONAL_ID_KEY_NAME);
-        this.transactionTimeoutMs = struct.getInt(TIMEOUT_KEY_NAME);
+        this.transactionTimeoutMs = struct.getInt(TRANSACTION_TIMEOUT_KEY_NAME);
     }
 
     private InitPidRequest(short version, String transactionalId, int transactionTimeoutMs) {
@@ -87,7 +87,7 @@ public class InitPidRequest extends AbstractRequest {
     protected Struct toStruct() {
         Struct struct = new Struct(ApiKeys.INIT_PRODUCER_ID.requestSchema(version()));
         struct.set(TRANSACTIONAL_ID_KEY_NAME, transactionalId);
-        struct.set(TIMEOUT_KEY_NAME, transactionTimeoutMs);
+        struct.set(TRANSACTION_TIMEOUT_KEY_NAME, transactionTimeoutMs);
         return struct;
     }
 

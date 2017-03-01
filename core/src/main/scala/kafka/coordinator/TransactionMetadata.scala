@@ -87,7 +87,7 @@ private[coordinator] object TransactionMetadata {
 private[coordinator] class TransactionMetadata(var state: TransactionState) {
 
   // participated partitions in this transaction
-  val topicPartitions: mutable.Set[TopicPartition] = mutable.HashSet[TopicPartition]()
+  val topicPartitions = mutable.Set.empty[TopicPartition]
 
   def addPartitions(partitions: Set[TopicPartition]): Unit = {
     topicPartitions ++= partitions
