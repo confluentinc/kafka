@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 
 public class InitPidRequest extends AbstractRequest {
     private static final String TRANSACTIONAL_ID_KEY_NAME = "transactional_id";
-    private static final String TRANSACTION_TIMEOUT_KEY_NAME = "transaction_timeout";
+    private static final String TRANSACTION_TIMEOUT_KEY_NAME = "transaction_timeout_ms";
 
     private final String transactionalId;
     private final int transactionTimeoutMs;

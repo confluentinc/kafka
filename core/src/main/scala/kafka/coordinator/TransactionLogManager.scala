@@ -1,31 +1,19 @@
-/**
-  * Licensed to the Apache Software Foundation (ASF) under one or more
-  * contributor license agreements.  See the NOTICE file distributed with
-  * this work for additional information regarding copyright ownership.
-  * The ASF licenses this file to You under the Apache License, Version 2.0
-  * (the "License"); you may not use this file except in compliance with
-  * the License.  You may obtain a copy of the License at
-  *
-  *    http://www.apache.org/licenses/LICENSE-2.0
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
-/**
-  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE
-  * file distributed with this work for additional information regarding copyright ownership. The ASF licenses this file
-  * to You under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at
-  *
-  * http://www.apache.org/licenses/LICENSE-2.0
-  *
-  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-  * specific language governing permissions and limitations under the License.
-  */
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package kafka.coordinator
 
 import kafka.common.{KafkaException, MessageFormatter, Topic}
@@ -44,14 +32,14 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable
 
-/**
-  * Messages stored for the transaction topic represent the pid and transactional status of the corresponding
-  * transactional id, which have versions for both the key and value fields. Key and value
-  * versions are used to evolve the message formats:
-  *
-  * key version 0:               [transactionalId]
-  *    -> value version 0:       [pid, epoch, expire_timestamp, status, [topic [partition] ]
-  */
+/*
+ * Messages stored for the transaction topic represent the pid and transactional status of the corresponding
+ * transactional id, which have versions for both the key and value fields. Key and value
+ * versions are used to evolve the message formats:
+ *
+ * key version 0:               [transactionalId]
+ *    -> value version 0:       [pid, epoch, expire_timestamp, status, [topic [partition] ]
+ */
 object TransactionLogManager {
 
   private val TXN_ID_KEY = "transactional_id"
@@ -76,7 +64,7 @@ object TransactionLogManager {
                                            new Field(EPOCH_KEY, INT16),
                                            new Field(TXN_TIMEOUT_KEY, INT32),
                                            new Field(TXN_STATUS_KEY, INT8),
-                                           new Field(TXN_PARTITIONS_KEY, new ArrayOf(VALUE_PARTITIONS_SCHEMA)) )
+                                           new Field(TXN_PARTITIONS_KEY, ArrayOf.nullable(VALUE_PARTITIONS_SCHEMA)) )
   private val VALUE_SCHEMA_PID_FIELD = VALUE_SCHEMA_V0.get(PID_KEY)
   private val VALUE_SCHEMA_EPOCH_FIELD = VALUE_SCHEMA_V0.get(EPOCH_KEY)
   private val VALUE_SCHEMA_TXN_TIMEOUT_FIELD = VALUE_SCHEMA_V0.get(TXN_TIMEOUT_KEY)
@@ -141,7 +129,7 @@ object TransactionLogManager {
 
     if (pidMetadata.txnMetadata.state.equals(NotExist)) {
       if (pidMetadata.txnMetadata.topicPartitions.nonEmpty)
-        throw new IllegalStateException(s"Transaction status ${pidMetadata.txnMetadata} is not valid")
+        throw new IllegalStateException(s"Transaction is not expected to have any partitions since its state is ${pidMetadata.txnMetadata.state}: ${pidMetadata.txnMetadata}")
 
       value.set(VALUE_SCHEMA_TXN_PARTITIONS_FIELD, null)
     } else {
@@ -258,10 +246,10 @@ case class TxnKey(version: Short, key: String) extends BaseKey {
   override def toString: String = key.toString
 }
 
-/**
-  * Transaction log manager is part of the transaction coordinator that manages the transaction log, which is
-  * a special internal topic.
-  */
+/*
+ * Transaction log manager is part of the transaction coordinator that manages the transaction log, which is
+ * a special internal topic.
+ */
 class TransactionLogManager(val brokerId: Int,
                             val zkUtils: ZkUtils) extends Logging {
 
