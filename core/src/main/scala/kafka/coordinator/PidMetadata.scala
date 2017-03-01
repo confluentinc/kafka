@@ -21,10 +21,13 @@ import kafka.utils.nonthreadsafe
 @nonthreadsafe
 private[coordinator] class PidMetadata(val pid: Long,
                                        var epoch: Short,
-                                       val transactionTimeoutMs: Int) {
+                                       val txnTimeoutMs: Int,
+                                       val txnMetadata: TransactionMetadata) {
+
+  def this(pid: Long, epoch: Short, txnTimeoutMs: Int) = this(pid, epoch, txnTimeoutMs, new TransactionMetadata(NotExist))
 
   override def toString: String =
-    s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $transactionTimeoutMs)"
+    s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $txnTimeoutMs, transactionStatus: $txnMetadata)"
 
   override def equals(that: Any): Boolean = that match {
     case other: PidMetadata => pid == other.pid && epoch == other.epoch

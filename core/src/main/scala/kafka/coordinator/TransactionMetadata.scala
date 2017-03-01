@@ -24,6 +24,14 @@ import scala.collection.mutable
 private[coordinator] sealed trait TransactionState { def byte: Byte }
 
 /**
+  * Transaction has not existed yet
+  *
+  * transition: received AddPartitionsToTxnRequest => Ongoing
+  *             received AddOffsetsToTxnRequest => Ongoing
+  */
+private[coordinator] case object NotExist extends TransactionState { val byte: Byte = 0 }
+
+/**
   * Transaction has started and ongoing
   *
   * transition: received EndTxnRequest with commit => PrepareCommit
@@ -64,6 +72,7 @@ private[coordinator] case object CompleteAbort extends TransactionState { val by
 private[coordinator] object TransactionMetadata {
   def byteToState(byte: Byte): TransactionState = {
     byte match {
+      case 0 => NotExist
       case 1 => Ongoing
       case 2 => PrepareCommit
       case 3 => PrepareAbort

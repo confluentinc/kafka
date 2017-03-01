@@ -19,42 +19,84 @@ package kafka.coordinator
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, KafkaRecord, MemoryRecords}
 
+import org.junit.Test
+import org.junit.Assert.assertEquals
+import org.scalatest.junit.JUnitSuite
+
 import scala.collection.JavaConverters._
 
-import org.junit.Test
-import org.junit.Assert.{assertEquals, fail}
-
-class TransactionLogManagerTest {
+class TransactionLogManagerTest extends JUnitSuite {
 
   val epoch: Short = 0
   val transactionTimeoutMs: Int = 1000
 
-  @Test
-  def shouldReadWritePidMessages() {
-    // generate pid mapping messages
-    val pidMappings = Map[String, Long]("one" -> 1L, "two" -> 2L, "three" -> 3L)
+  val topicPartitions: Set[TopicPartition] = Set[TopicPartition](new TopicPartition("topic1", 0),
+    new TopicPartition("topic1", 1),
+    new TopicPartition("topic2", 0),
+    new TopicPartition("topic2", 1),
+    new TopicPartition("topic2", 2))
 
-    val pidRecords = pidMappings.map { case (transactionalId, pid) =>
-      val pidMetadata = new PidMetadata(pid, epoch, transactionTimeoutMs)
-      val pidKey = TransactionLogManager.pidKey(transactionalId)
-      val pidValue = TransactionLogManager.pidValue(pidMetadata)
-      new KafkaRecord(pidKey, pidValue)
+  @Test
+  def shouldThrowExceptionWriteInvalidTxn() {
+    val txnMetadata = new TransactionMetadata(NotExist)
+    txnMetadata.addPartitions(topicPartitions)
+
+    val pidMetadata = new PidMetadata(0L, epoch, transactionTimeoutMs, txnMetadata)
+
+    intercept[IllegalStateException] {
+      TransactionLogManager.valueToBytes(pidMetadata)
+    }
+  }
+
+  @Test
+  def shouldReadWriteMessages() {
+    val pidMappings = Map[String, Long]("zero" -> 0L,
+      "one" -> 1L,
+      "two" -> 2L,
+      "three" -> 3L,
+      "four" -> 4L,
+      "five" -> 5L)
+
+    val transactionStates = Map[Long, TransactionState](0L -> NotExist,
+      1L -> Ongoing,
+      2L -> PrepareCommit,
+      3L -> CompleteCommit,
+      4L -> PrepareAbort,
+      5L -> CompleteAbort)
+
+    // generate transaction log messages
+
+    val txnRecords = pidMappings.map { case (transactionalId, pid) =>
+      val txnMetadata = new TransactionMetadata(transactionStates(pid))
+      txnMetadata.addPartitions(topicPartitions)
+
+      val pidMetadata = new PidMetadata(pid, epoch, transactionTimeoutMs, txnMetadata)
+
+      val keyBytes = TransactionLogManager.keyToBytes(transactionalId)
+      val valueBytes = TransactionLogManager.valueToBytes(pidMetadata)
+
+      new KafkaRecord(keyBytes, valueBytes)
     }.toSeq
 
-    val records = MemoryRecords.withRecords(0, CompressionType.NONE, pidRecords: _*)
+    val records = MemoryRecords.withRecords(0, CompressionType.NONE, txnRecords: _*)
 
     var count = 0
     for (record <- records.records.asScala) {
       val key = TransactionLogManager.readMessageKey(record.key())
 
       key match {
-        case pidKey: PidKey =>
+        case pidKey: TxnKey =>
           val transactionalId = pidKey.key
-          val pidMetadata = TransactionLogManager.readPidValue(record.value())
+          val pidMetadata = TransactionLogManager.readMessageValue(record.value())
 
           assertEquals(pidMappings(transactionalId), pidMetadata.pid)
           assertEquals(epoch, pidMetadata.epoch)
-          assertEquals(transactionTimeoutMs, pidMetadata.transactionTimeoutMs)
+          assertEquals(transactionTimeoutMs, pidMetadata.txnTimeoutMs)
+
+          val txnMetadata = pidMetadata.txnMetadata
+
+          assertEquals(transactionStates(pidMetadata.pid), txnMetadata.state)
+          assertEquals(topicPartitions, txnMetadata.topicPartitions)
 
           count = count + 1
 
@@ -65,49 +107,4 @@ class TransactionLogManagerTest {
     assertEquals(pidMappings.size, count)
   }
 
-  @Test
-  def shouldReadWriteTxnStatusMessages() {
-    // generate pid mapping messages
-    val topicPartitions = Set[TopicPartition](new TopicPartition("topic1", 0),
-                                              new TopicPartition("topic1", 1),
-                                              new TopicPartition("topic2", 0),
-                                              new TopicPartition("topic2", 1),
-                                              new TopicPartition("topic2", 2))
-
-    val transactionStates = Map[Long, TransactionState](1L ->  Ongoing,
-                                                        2L ->  PrepareCommit,
-                                                        3L ->  PrepareAbort,
-                                                        4L ->  CompleteCommit,
-                                                        5L ->  CompleteAbort)
-
-    val txnRecords = transactionStates.map { case (pid, state) =>
-      val txnMetadata = new TransactionMetadata(state)
-      txnMetadata.addPartitions(topicPartitions)
-      val txnKey = TransactionLogManager.txnKey(pid)
-      val txnValue = TransactionLogManager.txnValue(txnMetadata)
-      new KafkaRecord(txnKey, txnValue)
-    }.toSeq
-
-    val records = MemoryRecords.withRecords(0, CompressionType.NONE, txnRecords: _*)
-
-    var count = 0
-    for (record <- records.records.asScala) {
-      val key = TransactionLogManager.readMessageKey(record.key())
-
-      key match {
-        case txnKey: TxnKey =>
-          val pid = txnKey.key
-          val txnMetadata = TransactionLogManager.readTxnStatusValue(record.value())
-
-          assertEquals(transactionStates(pid), txnMetadata.state)
-          assertEquals(topicPartitions, txnMetadata.topicPartitions)
-
-          count = count + 1
-
-        case _ => fail(s"Unexpected transaction topic message key $key")
-      }
-    }
-
-    assertEquals(transactionStates.size, count)
-  }
 }
