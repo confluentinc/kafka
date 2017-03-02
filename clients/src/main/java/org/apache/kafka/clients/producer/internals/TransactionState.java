@@ -140,9 +140,7 @@ public class TransactionState {
         } finally {
             pidLock.unlock();
         }
-
     }
-
 
     void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
         pidLock.lock();
@@ -159,5 +157,5 @@ public class TransactionState {
         } finally {
             pidLock.unlock();
         }
-   }
+    }
 }
