@@ -58,7 +58,7 @@ public class TransactionState {
         this.hasPidCondition = pidLock.newCondition();
     }
 
-    public boolean hasPid() {
+    boolean hasPid() {
         return pid != INVALID_PID;
     }
 
@@ -76,18 +76,29 @@ public class TransactionState {
             while (!hasPid()) {
                 hasPidCondition.await(maxWaitTimeMs, TimeUnit.MILLISECONDS);
             }
+            return new PidAndEpoch(pid, epoch);
         } finally {
             pidLock.unlock();
         }
-        return new PidAndEpoch(pid, epoch);
     }
 
+    PidAndEpoch pidAndEpoch() {
+        PidAndEpoch pidAndEpoch = null;
+        while (pidAndEpoch == null) {
+            try {
+                pidAndEpoch = pidAndEpoch(Long.MAX_VALUE);
+            } catch (InterruptedException e) {
+                // swallow
+            }
+        }
+        return pidAndEpoch;
+    }
 
     /**
      * Set the pid and epoch atomically. This method will signal any callers blocked on the `pidAndEpoch` method
      * once the pid is set. This method will be called on the background thread when the broker responds with the pid.
      */
-    public void setPidAndEpoch(long pid, short epoch) {
+    void setPidAndEpoch(long pid, short epoch) {
         pidLock.lock();
         try {
             this.pid = pid;
@@ -99,46 +110,54 @@ public class TransactionState {
         }
     }
 
-    public long pid() {
-        return pid;
-    }
-
-    public short epoch() {
-        return epoch;
-    }
-
     /**
      * This method is used when the producer needs to reset it's internal state because of an irrecoverable exception
      * from the broker.
     */
-    public synchronized void reset() {
-        setPidAndEpoch(INVALID_PID, (short) 0);
-        this.sequenceNumbers.clear();
-    }
+    public void reset() {
+        pidLock.lock();
+        try {
+            setPidAndEpoch(INVALID_PID, (short) 0);
+            this.sequenceNumbers.clear();
+        } finally {
+            pidLock.unlock();
+        }
+   }
 
     /**
      * Returns the next sequence number to be written to the given TopicPartition.
      */
-    public synchronized Integer sequenceNumber(TopicPartition topicPartition) {
-        if (!idempotenceEnabled) {
-            throw new IllegalStateException("Attempting to access sequence numbers when idempotence is disabled");
+    Integer sequenceNumber(TopicPartition topicPartition) {
+        pidLock.lock();
+        try {
+            if (!idempotenceEnabled) {
+                throw new IllegalStateException("Attempting to access sequence numbers when idempotence is disabled");
+            }
+            if (!sequenceNumbers.containsKey(topicPartition)) {
+                sequenceNumbers.put(topicPartition, 0);
+            }
+            return sequenceNumbers.get(topicPartition);
+        } finally {
+            pidLock.unlock();
         }
-        if (!sequenceNumbers.containsKey(topicPartition)) {
-            sequenceNumbers.put(topicPartition, 0);
-        }
-        return sequenceNumbers.get(topicPartition);
+
     }
 
 
-    public synchronized void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
-        if (!idempotenceEnabled) {
-            throw new IllegalStateException("Attempt to modify sequence numbers when idempotence is disabled");
+    void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
+        pidLock.lock();
+        try {
+            if (!idempotenceEnabled) {
+                throw new IllegalStateException("Attempt to modify sequence numbers when idempotence is disabled");
+            }
+            if (!sequenceNumbers.containsKey(topicPartition)) {
+                sequenceNumbers.put(topicPartition, 0);
+            }
+            int currentSequenceNumber = sequenceNumbers.get(topicPartition);
+            currentSequenceNumber += increment;
+            sequenceNumbers.put(topicPartition, currentSequenceNumber);
+        } finally {
+            pidLock.unlock();
         }
-        if (!sequenceNumbers.containsKey(topicPartition)) {
-            sequenceNumbers.put(topicPartition, 0);
-        }
-        int currentSequenceNumber = sequenceNumbers.get(topicPartition);
-        currentSequenceNumber += increment;
-        sequenceNumbers.put(topicPartition, currentSequenceNumber);
-    }
+   }
 }

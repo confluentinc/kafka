@@ -231,7 +231,7 @@ public final class RecordAccumulator {
                 throw new IllegalStateException("Attempting to use idempotence with an incompatible version of the message format");
             }
             return MemoryRecords.builder(buffer, maxUsableMagic, compression, TimestampType.CREATE_TIME,
-                    0L, time.milliseconds(), transactionState.pid(), transactionState.epoch(),
+                    0L, time.milliseconds(), transactionState.pidAndEpoch().pid, transactionState.pidAndEpoch().epoch,
                     transactionState.sequenceNumber(topicPartition));
         }
         return MemoryRecords.builder(buffer, maxUsableMagic, compression, TimestampType.CREATE_TIME, this.batchSize);

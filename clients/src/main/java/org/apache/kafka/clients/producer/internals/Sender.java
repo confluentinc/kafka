@@ -391,7 +391,7 @@ public class Sender implements Runnable {
                     batch.topicPartition,
                     this.retries - batch.attempts - 1,
                     error);
-            if (transactionState == null || (transactionState.pid() == batch.pid())) {
+            if (transactionState == null || (transactionState.pidAndEpoch().pid == batch.pid())) {
                 // If idempotence is enabled only retry the request if the current PID is the same as the pid of the
                 // batch.
                 this.accumulator.reenqueue(batch, now);
@@ -409,7 +409,7 @@ public class Sender implements Runnable {
             else
                 exception = error.exception();
 
-            if (error == Errors.OUT_OF_ORDER_SEQUENCE_NUMBER && batch.pid() == transactionState.pid()) {
+            if (error == Errors.OUT_OF_ORDER_SEQUENCE_NUMBER && batch.pid() == transactionState.pidAndEpoch().pid) {
                 // Reset the transactional state and get a new pid, since we can't recover from an out of order
                 // sequence error.
                 log.error("The broker received an out of order sequence number for topic-partition {} at offset {}. " +

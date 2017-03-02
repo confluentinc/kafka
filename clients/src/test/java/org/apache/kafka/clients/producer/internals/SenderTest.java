@@ -372,7 +372,7 @@ public class SenderTest {
         }, new InitPidResponse(Errors.NONE, producerId, (short) 0));
         sender.run(time.milliseconds());
         assertTrue(transactionState.hasPid());
-        assertEquals(transactionState.pid(), producerId);
+        assertEquals(transactionState.pidAndEpoch().pid, producerId);
     }
 
     private void completedWithError(Future<RecordMetadata> future, Errors error) throws Exception {
