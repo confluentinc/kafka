@@ -219,7 +219,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             Map<String, Object> userProvidedConfigs = config.originals();
             this.producerConfig = config;
             this.time = Time.SYSTEM;
-
             clientId = config.getString(ProducerConfig.CLIENT_ID_CONFIG);
             if (clientId.length() <= 0)
                 clientId = "producer-" + PRODUCER_CLIENT_ID_SEQUENCE.getAndIncrement();
@@ -256,7 +255,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             List<ProducerInterceptor<K, V>> interceptorList = (List) (new ProducerConfig(userProvidedConfigs, false)).getConfiguredInstances(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG,
                     ProducerInterceptor.class);
             this.interceptors = interceptorList.isEmpty() ? null : new ProducerInterceptors<>(interceptorList);
-
             ClusterResourceListeners clusterResourceListeners = configureClusterResourceListeners(keySerializer, valueSerializer, interceptorList, reporters);
             this.metadata = new Metadata(retryBackoffMs, config.getLong(ProducerConfig.METADATA_MAX_AGE_CONFIG), true, clusterResourceListeners);
             this.maxRequestSize = config.getInt(ProducerConfig.MAX_REQUEST_SIZE_CONFIG);
@@ -355,16 +353,12 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             String ioThreadName = "kafka-producer-network-thread" + (clientId.length() > 0 ? " | " + clientId : "");
             this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
             this.ioThread.start();
-
             this.errors = this.metrics.sensor("errors");
-
-
             config.logUnused();
             AppInfoParser.registerAppInfo(JMX_PREFIX, clientId);
             log.debug("Kafka producer started");
         } catch (Throwable t) {
-            // call close methods if internal objects are already constructed
-            // this is to prevent resource leak. see KAFKA-2121
+            // call close methods if internal objects are already constructed this is to prevent resource leak. see KAFKA-2121
             close(0, TimeUnit.MILLISECONDS, true);
             // now propagate the exception
             throw new KafkaException("Failed to construct kafka producer", t);

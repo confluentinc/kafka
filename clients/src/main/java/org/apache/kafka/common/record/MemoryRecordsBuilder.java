@@ -58,7 +58,7 @@ public class MemoryRecordsBuilder {
     private final long logAppendTime;
     private final long pid;
     private final short epoch;
-    private final int baseSequence;
+    private int baseSequence;
     private final boolean isTransactional;
     private final int partitionLeaderEpoch;
     private final int writeLimit;
