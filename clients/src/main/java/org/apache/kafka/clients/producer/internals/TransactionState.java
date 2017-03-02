@@ -57,7 +57,7 @@ public class TransactionState {
     }
 
     boolean hasPid() {
-        return pidAndEpoch.pid != INVALID_PID;
+        return pidAndEpoch.isValid();
     }
 
     /**
