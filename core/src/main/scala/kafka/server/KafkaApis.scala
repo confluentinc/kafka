@@ -28,7 +28,9 @@ import kafka.cluster.Partition
 import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
 import kafka.common._
 import kafka.controller.KafkaController
-import kafka.coordinator.{GroupCoordinator, InitPidResult, JoinGroupResult, TransactionCoordinator}
+import kafka.coordinator.group.{GroupCoordinator, JoinGroupResult}
+import kafka.coordinator.transaction.{InitPidResult, TransactionCoordinator}
+import kafka.coordinator.{InitPidResult, JoinGroupResult}
 import kafka.log._
 import kafka.network._
 import kafka.network.RequestChannel.{Request, Response, Session}
@@ -150,8 +152,8 @@ class KafkaApis(val requestChannel: RequestChannel,
             groupCoordinator.handleGroupImmigration(partition.partitionId)
           if (partition.topic == Topic.TransactionStateTopicName)
             txnCoordinator.handleTxnImmigration(partition.partitionId)
-
         }
+
         updatedFollowers.foreach { partition =>
           if (partition.topic == Topic.GroupMetadataTopicName)
             groupCoordinator.handleGroupEmigration(partition.partitionId)

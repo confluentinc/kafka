@@ -22,7 +22,7 @@ import java.util.Properties
 import kafka.api.{ApiVersion, KAFKA_0_10_0_IV1}
 import kafka.cluster.EndPoint
 import kafka.consumer.ConsumerConfig
-import kafka.coordinator.OffsetConfig
+import kafka.coordinator.group.OffsetConfig
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, Message, MessageSet}
 import kafka.utils.CoreUtils
 import org.apache.kafka.clients.CommonClientConfigs
@@ -325,6 +325,16 @@ object KafkaConfig {
   val OffsetsRetentionCheckIntervalMsProp = "offsets.retention.check.interval.ms"
   val OffsetCommitTimeoutMsProp = "offsets.commit.timeout.ms"
   val OffsetCommitRequiredAcksProp = "offsets.commit.required.acks"
+  /** ********* Transaction management configuration ***********/
+  val TransactionsLoadBufferSizeProp = "transactions.load.buffer.size"
+  val TransactionsTopicReplicationFactorProp = "transactions.topic.replication.factor"
+  val TransactionsTopicPartitionsProp = "transactions.topic.num.partitions"
+  val TransactionsTopicSegmentBytesProp = "transactions.topic.segment.bytes"
+  val TransactionsTopicCompressionCodecProp = "transactions.topic.compression.codec"
+  val TransactionsRetentionMinutesProp = "transactions.retention.minutes"
+  val TransactionsRetentionCheckIntervalMsProp = "transactions.retention.check.interval.ms"
+  val TransactionsCommitTimeoutMsProp = "transactions.update.timeout.ms"
+  val TransactionsCommitRequiredAcksProp = "transactions.update.required.acks"
   /** ********* Quota Configuration ***********/
   val ProducerQuotaBytesPerSecondDefaultProp = "quota.producer.default"
   val ConsumerQuotaBytesPerSecondDefaultProp = "quota.consumer.default"

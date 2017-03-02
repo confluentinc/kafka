@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package kafka.coordinator
+package kafka.coordinator.transaction
 
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -33,10 +33,11 @@ import org.apache.kafka.common.utils.Time
  */
 object TransactionCoordinator {
 
-  def apply(config: KafkaConfig, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
+  def apply(config: KafkaConfig, replicaManager: ReplicaManager, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
 
     val pidManager = new PidManager(config.brokerId, zkUtils)
-    val logManager = new TransactionLogManager(config.brokerId, zkUtils)
+    val logManager = new TransactionLogManager(config.brokerId, replicaManager, zkUtils, time)
+
     new TransactionCoordinator(config.brokerId, pidManager, logManager)
   }
 }
@@ -107,8 +108,10 @@ class TransactionCoordinator(val brokerId: Int,
   /**
     * Startup logic executed at the same time when the server starts up.
     */
-  def startup() {
+  def startup(enablePidExpiration: Boolean = true) {
     info("Starting up.")
+    if (enablePidExpiration)
+      logManager.enablePidExpiration()
     isActive.set(true)
     info("Startup complete.")
   }
@@ -121,6 +124,7 @@ class TransactionCoordinator(val brokerId: Int,
     info("Shutting down.")
     isActive.set(false)
     pidManager.shutdown()
+    logManager.shutdown()
     info("Shutdown complete.")
   }
 

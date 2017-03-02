@@ -14,15 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package kafka.coordinator
+package kafka.coordinator.transaction
 
 import kafka.common.Topic
 import kafka.utils.ZkUtils
+
 import org.apache.kafka.common.protocol.Errors
-import org.apache.zookeeper.data.ACL
+
 import org.easymock.{Capture, EasyMock, IAnswer}
-import org.junit.{After, Before, Test}
 import org.junit.Assert._
+import org.junit.{After, Before, Test}
 
 class TransactionCoordinatorTest {
 

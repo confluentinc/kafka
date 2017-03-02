@@ -14,13 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package kafka.coordinator
+package kafka.coordinator.transaction
+
 
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, SimpleRecord, MemoryRecords}
 
-import org.junit.Test
 import org.junit.Assert.assertEquals
+import org.junit.Test
 import org.scalatest.junit.JUnitSuite
 
 import scala.collection.JavaConverters._

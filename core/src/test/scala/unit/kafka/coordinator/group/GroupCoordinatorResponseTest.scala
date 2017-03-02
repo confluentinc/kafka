@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package kafka.coordinator
+package kafka.coordinator.group
 
 import java.util.concurrent.TimeUnit
 
 import kafka.common.{OffsetAndMetadata, Topic}
+import kafka.coordinator.group.{GroupCoordinator, GroupOverview, JoinGroupResult}
 import kafka.server.{DelayedOperationPurgatory, KafkaConfig, ReplicaManager}
 import kafka.utils._
 import kafka.utils.timer.MockTimer
