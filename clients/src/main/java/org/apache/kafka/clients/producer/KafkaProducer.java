@@ -347,8 +347,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     this.metrics,
                     Time.SYSTEM,
                     this.requestTimeoutMs,
-                    apiVersions,
-                    this.transactionState
+                    config.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG),
+                    this.transactionState,
+                    apiVersions
             );
             String ioThreadName = "kafka-producer-network-thread" + (clientId.length() > 0 ? " | " + clientId : "");
             this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
@@ -598,7 +599,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         }
         TransactionState.PidAndEpoch pidAndEpoch = transactionState.pidAndEpoch(maxWaitMs);
         if (!pidAndEpoch.isValid()) {
-            throw new TimeoutException("Could not retrieve a producerId within " + maxWaitMs + " ms");
+            throw new TimeoutException("Could not retrieve a pid within " + maxWaitMs + " ms");
         }
     }
 

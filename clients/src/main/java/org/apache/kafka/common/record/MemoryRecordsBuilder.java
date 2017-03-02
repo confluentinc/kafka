@@ -516,7 +516,7 @@ public class MemoryRecordsBuilder {
     /**
      * Return the ProducerId (Pid) of the LogEntries created by this builder.
      */
-    public long producerId() {
+    public long pid() {
         return this.pid;
     }
 }

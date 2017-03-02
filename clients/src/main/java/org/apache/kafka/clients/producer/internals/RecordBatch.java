@@ -240,9 +240,9 @@ public final class RecordBatch {
     }
 
     /**
-     * Return the producerId (Pid) of the current batch.
+     * Return the ProducerId (Pid) of the current batch.
      */
-    public long producerId() {
-        return recordsBuilder.producerId();
+    public long pid() {
+        return recordsBuilder.pid();
     }
 }

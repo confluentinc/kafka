@@ -98,6 +98,9 @@ public class Sender implements Runnable {
     /* the max time to wait for the server to respond to the request*/
     private final int requestTimeout;
 
+    /* The max time to wait before retrying a request which has failed */
+    private final long retryBackoffMs;
+
     /* current request API versions supported by the known brokers */
     private final ApiVersions apiVersions;
 
@@ -114,8 +117,9 @@ public class Sender implements Runnable {
                   Metrics metrics,
                   Time time,
                   int requestTimeout,
-                  ApiVersions apiVersions,
-                  TransactionState transactionState) {
+                  long retryBackoffMs,
+                  TransactionState transactionState,
+                  ApiVersions apiVersions) {
         this.client = client;
         this.accumulator = accumulator;
         this.metadata = metadata;
@@ -127,6 +131,7 @@ public class Sender implements Runnable {
         this.time = time;
         this.sensors = new SenderMetrics(metrics);
         this.requestTimeout = requestTimeout;
+        this.retryBackoffMs = retryBackoffMs;
         this.apiVersions = apiVersions;
         this.transactionState = transactionState;
     }
@@ -181,9 +186,7 @@ public class Sender implements Runnable {
         Cluster cluster = metadata.fetch();
 
         if (transactionState != null) {
-            while (!transactionState.hasPid()) {
-                getPID(requestTimeout);
-            }
+            waitIndefinitelyForPid();
         }
 
         // get the list of partitions with data ready to send
@@ -237,10 +240,8 @@ public class Sender implements Runnable {
 
         if (resetState) {
             transactionState.reset();
-            while (!transactionState.hasPid()) {
-                getPID(requestTimeout);
-            }
-        }
+            waitIndefinitelyForPid();
+       }
 
         sensors.updateProduceRequestMetrics(batches);
 
@@ -290,8 +291,7 @@ public class Sender implements Runnable {
         Node node = client.leastLoadedNode(time.milliseconds());
         while (!client.ready(node, time.milliseconds()) && 0 < remainingTime) {
             if (client.connectionFailed(node)) {
-                node = client.leastLoadedNode(time.milliseconds());
-                client.ready(node, time.milliseconds());
+                return;
             }
             client.poll(100, time.milliseconds());
             remainingTime = remainingTime - (time.milliseconds() - start);
@@ -311,10 +311,23 @@ public class Sender implements Runnable {
         ClientRequest request = client.newClientRequest(nodeId, builder, time.milliseconds(), true, callback);
         client.send(request, time.milliseconds());
         start = time.milliseconds();
-        while (!transactionState.hasPid() && 0 < remainingTime) {
-            client.poll(100, time.milliseconds());
+        boolean isDisconnected = false;
+        while (!transactionState.hasPid() && !isDisconnected && 0 <= remainingTime) {
+            client.poll(retryBackoffMs, time.milliseconds());
+            isDisconnected = client.connectionFailed(node);
             remainingTime = remainingTime - (time.milliseconds() - start);
         }
+    }
+
+    private void waitIndefinitelyForPid() {
+        while (!transactionState.hasPid()) {
+            try {
+                getPID(requestTimeout);
+                Thread.sleep(retryBackoffMs);
+            } catch (InterruptedException e) {
+                // Swallow this.
+            }
+       }
     }
 
     private void handleInitPidResponse(ClientResponse response) {
@@ -378,11 +391,16 @@ public class Sender implements Runnable {
                     batch.topicPartition,
                     this.retries - batch.attempts - 1,
                     error);
-            if (transactionState == null || (transactionState.pid() == batch.producerId())) {
+            if (transactionState == null || (transactionState.pid() == batch.pid())) {
                 // If idempotence is enabled only retry the request if the current PID is the same as the pid of the
                 // batch.
                 this.accumulator.reenqueue(batch, now);
                 this.sensors.recordRetries(batch.topicPartition.topic(), batch.recordCount);
+            } else {
+                errorOutBatch(batch,
+                        response,
+                        new RuntimeException("Tried to retry a batch but the producer id has changed in the meantime. This batch will be dropped."));
+                this.sensors.recordErrors(batch.topicPartition.topic(), batch.recordCount);
             }
         } else {
             RuntimeException exception;
@@ -391,19 +409,16 @@ public class Sender implements Runnable {
             else
                 exception = error.exception();
 
-            if (error == Errors.OUT_OF_ORDER_SEQUENCE_NUMBER && batch.producerId() == transactionState.pid()) {
+            if (error == Errors.OUT_OF_ORDER_SEQUENCE_NUMBER && batch.pid() == transactionState.pid()) {
                 // Reset the transactional state and get a new pid, since we can't recover from an out of order
                 // sequence error.
-                transactionState.reset();
-                while (!transactionState.hasPid()) {
-                    getPID(requestTimeout);
-                }
-                log.error("The broker received an out of order sequence number for topic-partition {} at offset {}. This indicates data loss on the broker, and should be investigated.",
+                log.error("The broker received an out of order sequence number for topic-partition {} at offset {}. " +
+                                "This indicates data loss on the broker, and should be investigated.",
                         batch.topicPartition, response.baseOffset);
+                transactionState.reset();
             }
             // tell the user the result of their request
-            batch.done(response.baseOffset, response.logAppendTime, exception);
-            this.accumulator.deallocate(batch);
+            errorOutBatch(batch, response, exception);
             if (error != Errors.NONE)
                 this.sensors.recordErrors(batch.topicPartition.topic(), batch.recordCount);
         }
@@ -420,6 +435,11 @@ public class Sender implements Runnable {
         // Unmute the completed partition.
         if (guaranteeMessageOrder)
             this.accumulator.unmutePartition(batch.topicPartition);
+    }
+
+    private void errorOutBatch(RecordBatch batch, ProduceResponse.PartitionResponse response, RuntimeException exception) {
+        batch.done(response.baseOffset, response.logAppendTime, exception);
+        this.accumulator.deallocate(batch);
     }
 
     /**

@@ -30,7 +30,8 @@ import org.apache.kafka.common.utils.Utils
 
 import scala.collection.{immutable, mutable}
 
-private[log] case class PidEntry(seq: Int, epoch: Short, offset: Long, timestamp: Long)
+case class PidEntry(seq: Int, epoch: Short, offset: Long, timestamp: Long)
+private[log] case class PidEntryTuple(first: PidEntry, last: PidEntry)
 private[log] class CorruptSnapshotException(msg: String) extends KafkaException(msg)
 
 object ProducerIdMapping {
@@ -201,15 +202,11 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
 
   /**
    * Update the mapping to the given epoch and sequence number.
-   * @param pid
-   * @param seq
-   * @param epoch
-   * @param offset
    */
-  def update(pid: Long, seq: Int, epoch: Short, offset: Long, timestamp: Long): Unit = {
+  def update(pid: Long, pidEntry: PidEntry): Unit = {
     if (pid > 0) {
-      pidMap.put(pid, PidEntry(seq, epoch, offset, timestamp))
-      lastMapOffset = offset
+      pidMap.put(pid, pidEntry)
+      lastMapOffset = pidEntry.offset
     }
   }
 

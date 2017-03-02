@@ -40,7 +40,7 @@ import scala.collection.{Seq, mutable}
 
 object LogAppendInfo {
   val UnknownLogAppendInfo = LogAppendInfo(-1, -1, LogEntry.NO_TIMESTAMP, -1L, LogEntry.NO_TIMESTAMP,
-    NoCompressionCodec, NoCompressionCodec, -1, -1, offsetsMonotonic = false, Map.empty[Long, (PidEntry, PidEntry)])
+    NoCompressionCodec, NoCompressionCodec, -1, -1, offsetsMonotonic = false, Map.empty[Long, PidEntryTuple])
 }
 
 /**
@@ -72,7 +72,7 @@ case class LogAppendInfo(var firstOffset: Long,
                          shallowCount: Int,
                          validBytes: Int,
                          offsetsMonotonic: Boolean,
-                         pidEntryMap : Map[Long, (PidEntry, PidEntry)])
+                         pidEntryMap : Map[Long, PidEntryTuple])
 
 /**
  * An append-only log for storing messages.
@@ -348,7 +348,7 @@ class Log(@volatile var dir: File,
         val startOffset = math.max(segment.baseOffset, pidMap.mapEndOffset)
         val logEntries = segment.read(startOffset, Some(lastOffset), Int.MaxValue).records
         logEntries.entries.asScala.foreach { entry =>
-          pidMap.update(entry.pid, entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)
+          pidMap.update(entry.pid, PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp))
         }
       }
       logStartOffset.foreach(pidMap.cleanFrom)
@@ -484,18 +484,20 @@ class Log(@volatile var dir: File,
           try {
             // verify that the epoch and sequence are correct before appending. Note that for requests coming from
             // producer, there will be exactly one LogEntry per Record, and hence one Pid per Record.
-            trace(s"checking sequence for pid: ${pid}, seq: ${entry._1.seq}, end seq: ${entry._2.seq}")
-            pidMap.checkSeqAndEpoch(pid, entry._1.seq, entry._1.epoch)
+            trace(s"checking sequence for pid: ${pid}, seq: ${entry.first.seq}, end seq: ${entry.last.seq}")
+            pidMap.checkSeqAndEpoch(pid, entry.first.seq, entry.first.epoch)
           } catch {
             case e: DuplicateSequenceNumberException =>
               isDuplicate = true
               pidMap.entryForPid(pid) match {
                 case Some(pidEntry) =>
-                  if (entry._1.seq < pidEntry.seq) {
+                  if (entry.first.seq < pidEntry.seq) {
                     // the duplicate is not at the tail of the log. This should never happen, with a properly written client.
                     // It should also never happen in the replication case.
                     // Since this is a error situation throw a fatal exception.
-                    throw new IllegalStateException("Detected a duplicate entry in the middle of the log. This suggests a misconfigured or buggy client. Please see __insert_url__ to understand how clients must be configured when running withe enable.idempotence = true");
+                    throw new OutOfOrderSequenceException("Detected a duplicate entry in the middle of the log. " +
+                      "This suggests a misconfigured or buggy client. Please see __insert_url__ to understand how " + "" +
+                      "clients must be configured when running withe enable.idempotence = true");
                   }
 
                   if (assignOffsets) {
@@ -532,8 +534,8 @@ class Log(@volatile var dir: File,
 
           // update the PID sequence mapping
           for ((pid, entry) <- appendInfo.pidEntryMap) {
-            trace(s"Updating pid with sequence: ${pid} -> ${entry._2.seq}")
-            pidMap.update(pid, entry._2.seq, entry._2.epoch, entry._2.offset, entry._2.timestamp)
+            trace(s"Updating pid with sequence: ${pid} -> ${entry.last.seq}")
+            pidMap.update(pid, PidEntry(entry.last.seq, entry.last.epoch, entry.last.offset, entry.last.timestamp))
           }
 
           // increment the log end offset
@@ -579,7 +581,7 @@ class Log(@volatile var dir: File,
     var monotonic = true
     var maxTimestamp = LogEntry.NO_TIMESTAMP
     var offsetOfMaxTimestamp = -1L
-    val pidEntryMap = new mutable.HashMap[Long, (PidEntry, PidEntry)]()
+    val pidEntryMap = new mutable.HashMap[Long, PidEntryTuple]()
     for (entry <- records.entries.asScala) {
       // update the first offset if on the first message
       if (firstOffset < 0) {
@@ -594,8 +596,8 @@ class Log(@volatile var dir: File,
         pidEntryMap.get(entry.pid) match {
           case Some(tuple) =>
             // Check that the sequence number of the new entry is in order.
-            if (tuple._2.seq + 1 != entry.baseSequence) {
-              if (tuple._2.seq <= entry.baseSequence) {
+            if (tuple.last.seq + 1 != entry.baseSequence) {
+              if (tuple.last.seq <= entry.baseSequence) {
                 throw new DuplicateSequenceNumberException("Multiple entries in the same MemoryRecord were duplicates " +
                   "of each other. This suggests that the logs on the followers have diverged from the leader.")
               } else {
@@ -604,12 +606,12 @@ class Log(@volatile var dir: File,
               }
             }
             // If we have seen this pid before, replace the last PidEntry with information from the current LogEntry
-            pidEntryMap.put(entry.pid, (tuple._1, PidEntry(entry.lastSequence, entry.epoch,  entry.lastOffset,
+            pidEntryMap.put(entry.pid, PidEntryTuple(tuple.first, PidEntry(entry.lastSequence, entry.epoch,  entry.lastOffset,
               entry.maxTimestamp)))
           case None =>
             // If this is the first time we are seeing a particular pid, set both the first and the last PidEntry for
             // this pid to span the first and last offset/sequence of the the current LogEntry.
-            pidEntryMap.put(entry.pid, (PidEntry(entry.baseSequence, entry.epoch, entry.baseOffset, entry.maxTimestamp),
+            pidEntryMap.put(entry.pid, PidEntryTuple(PidEntry(entry.baseSequence, entry.epoch, entry.baseOffset, entry.maxTimestamp),
               PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)))
         }
       }
@@ -855,7 +857,7 @@ class Log(@volatile var dir: File,
   }
 
   /**
-    * The size of the log in bytes
+   * The size of the log in bytes
    */
   def size: Long = logSegments.map(_.size).sum
 

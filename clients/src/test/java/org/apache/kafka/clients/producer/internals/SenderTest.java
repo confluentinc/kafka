@@ -236,8 +236,7 @@ public class SenderTest {
                                        m,
                                        time,
                                        REQUEST_TIMEOUT,
-                                       apiVersions,
-                                       null
+                    50, null, apiVersions
             );
             // do a successful retry
             Future<RecordMetadata> future = accumulator.append(tp0, 0L, "key".getBytes(), "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
@@ -291,8 +290,8 @@ public class SenderTest {
                 m,
                 time,
                 REQUEST_TIMEOUT,
-                apiVersions,
-                null);
+                    50, null, apiVersions
+            );
             // Create a two broker cluster, with partition 0 on broker 0 and partition 1 on broker 1
             Cluster cluster1 = TestUtils.clusterWith(2, "test", 2);
             metadata.update(cluster1, Collections.<String>emptySet(), time.milliseconds());
@@ -407,9 +406,9 @@ public class SenderTest {
                 MAX_RETRIES,
                 this.metrics,
                 this.time,
-                REQUEST_TIMEOUT, 
-                apiVersions, 
-                transactionState);
+                REQUEST_TIMEOUT,
+                50, transactionState, apiVersions
+        );
 
         this.metadata.update(this.cluster, time.milliseconds());
 

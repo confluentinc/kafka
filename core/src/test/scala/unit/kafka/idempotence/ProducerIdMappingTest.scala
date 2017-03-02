@@ -20,7 +20,7 @@ package unit.kafka.idempotence
 import java.io.File
 import java.util.Properties
 
-import kafka.log.{LogConfig, ProducerIdMapping}
+import kafka.log.{LogConfig, PidEntry, ProducerIdMapping}
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, OutOfOrderSequenceException, ProducerFencedException}
@@ -169,6 +169,6 @@ class ProducerIdMappingTest extends JUnitSuite {
                              lastOffset: Long,
                              timestamp: Long): Unit = {
     mapping.checkSeqAndEpoch(pid, firstSeq, epoch)
-    mapping.update(pid, lastSeq, epoch, lastOffset, timestamp)
+    mapping.update(pid, PidEntry(lastSeq, epoch, lastOffset, timestamp))
   }
 }
