@@ -301,10 +301,12 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             if (idempotenceEnabled) {
                 this.transactionState = new TransactionState(idempotenceEnabled);
                 if (config.getInt(ProducerConfig.RETRIES_CONFIG) == 0) {
-                    throw new ConfigException("Need to set '" + ProducerConfig.RETRIES_CONFIG + "' to greater than zero inorder to use the idempotent producer.");
+                    throw new ConfigException("Need to set '" + ProducerConfig.RETRIES_CONFIG
+                            + "' to greater than zero in order to use the idempotent producer.");
                 }
                 if (config.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION) != 1) {
-                    throw new ConfigException("Must set '" + ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION + "' to 1 inorder to use the idempotent producer.");
+                    throw new ConfigException("Must set '" + ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION
+                            + "' to 1 inorder to use the idempotent producer.");
                 }
             } else {
                 this.transactionState = null;
@@ -471,8 +473,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         try {
             // first make sure the metadata for the topic is available
             ClusterAndWaitTime clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
-            waitOnPid(maxBlockTimeMs);
             long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
+            remainingWaitMs = waitOnPid(remainingWaitMs);
             Cluster cluster = clusterAndWaitTime.cluster;
             byte[] serializedKey;
             try {
@@ -593,14 +595,16 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         return new ClusterAndWaitTime(cluster, elapsed);
     }
 
-    private void waitOnPid(long maxWaitMs) throws InterruptedException {
+    private long waitOnPid(long maxWaitMs) throws InterruptedException {
         if (transactionState == null) {
-            return;
+            return maxWaitMs;
         }
+        long start = time.milliseconds();
         TransactionState.PidAndEpoch pidAndEpoch = transactionState.pidAndEpoch(maxWaitMs);
         if (!pidAndEpoch.isValid()) {
             throw new TimeoutException("Could not retrieve a pid within " + maxWaitMs + " ms");
         }
+        return Math.max(0, maxWaitMs - (time.milliseconds() - start));
     }
 
     /**

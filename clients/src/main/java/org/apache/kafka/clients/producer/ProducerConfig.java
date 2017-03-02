@@ -227,8 +227,7 @@ public class ProducerConfig extends AbstractConfig {
     /** <code>enable.idempotence</code> */
     public static final String IDEMPOTENCE_ENABLED_CONFIG = "enable.idempotence";
     public static final String IDEMPOTENCE_ENABLED_DOC = "When set to 'true', the producer will ensure that exactly one copy of each message is written in the stream. If 'false', producer "
-                                                        + "retries due to broker failures, etc., may write duplicates of the retried message in the stream. This is set to 'false' by default. "
-                                                        + "When set to 'true', message loss on the broker will become a fatal exception whose only remedy is the instantiation of a new producer instance.";
+                                                        + "retries due to broker failures, etc., may write duplicates of the retried message in the stream. This is set to 'false' by default. ";
     static {
         CONFIG = new ConfigDef().define(BOOTSTRAP_SERVERS_CONFIG, Type.LIST, Importance.HIGH, CommonClientConfigs.BOOTSTRAP_SERVERS_DOC)
                                 .define(BUFFER_MEMORY_CONFIG, Type.LONG, 32 * 1024 * 1024L, atLeast(0L), Importance.HIGH, BUFFER_MEMORY_DOC)

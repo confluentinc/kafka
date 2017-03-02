@@ -289,7 +289,7 @@ public class Sender implements Runnable {
         metadata.requestUpdate();
         long start = time.milliseconds();
         Node node = client.leastLoadedNode(time.milliseconds());
-        while (!client.ready(node, time.milliseconds()) && 0 < remainingTime) {
+        while (!client.ready(node, time.milliseconds()) && 0 <= remainingTime) {
             if (client.connectionFailed(node)) {
                 return;
             }
