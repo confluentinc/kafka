@@ -27,16 +27,15 @@ import static org.apache.kafka.common.requests.InitPidResponse.INVALID_PID;
  * A class which maintains state for transactions. Also keeps the state necessary to ensure idempotent production.
  */
 public class TransactionState {
-    private volatile long pid;
-    private volatile short epoch;
+    private final PidAndEpoch pidAndEpoch;
     private final boolean idempotenceEnabled;
     private final Map<TopicPartition, Integer> sequenceNumbers;
     private final Lock pidLock;
     private final Condition hasPidCondition;
 
     public static class PidAndEpoch {
-        public long pid;
-        public short epoch;
+        public volatile long pid;
+        public volatile short epoch;
 
         PidAndEpoch(long pid, short epoch) {
             this.pid = pid;
@@ -49,8 +48,7 @@ public class TransactionState {
     }
 
     public TransactionState(boolean idempotenceEnabled) {
-        pid = INVALID_PID;
-        epoch = 0;
+        pidAndEpoch = new PidAndEpoch(INVALID_PID, (short) 0);
         sequenceNumbers = new HashMap<>();
         this.idempotenceEnabled = idempotenceEnabled;
 
@@ -59,7 +57,7 @@ public class TransactionState {
     }
 
     boolean hasPid() {
-        return pid != INVALID_PID;
+        return pidAndEpoch.pid != INVALID_PID;
     }
 
     /**
@@ -76,7 +74,7 @@ public class TransactionState {
             while (!hasPid()) {
                 hasPidCondition.await(maxWaitTimeMs, TimeUnit.MILLISECONDS);
             }
-            return new PidAndEpoch(pid, epoch);
+            return new PidAndEpoch(pidAndEpoch.pid, pidAndEpoch.epoch);
         } finally {
             pidLock.unlock();
         }
@@ -101,9 +99,9 @@ public class TransactionState {
     void setPidAndEpoch(long pid, short epoch) {
         pidLock.lock();
         try {
-            this.pid = pid;
-            this.epoch = epoch;
-            if (this.pid != INVALID_PID)
+            this.pidAndEpoch.pid = pid;
+            this.pidAndEpoch.epoch = epoch;
+            if (this.pidAndEpoch.isValid())
                 hasPidCondition.signalAll();
         } finally {
             pidLock.unlock();

@@ -323,7 +323,8 @@ public class Sender implements Runnable {
         while (!transactionState.hasPid()) {
             try {
                 getPID(requestTimeout);
-                Thread.sleep(retryBackoffMs);
+                if (!transactionState.hasPid())
+                        Thread.sleep(retryBackoffMs);
             } catch (InterruptedException e) {
                 // Swallow this.
             }
