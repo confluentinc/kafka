@@ -141,7 +141,7 @@ class TransactionManager(brokerId: Int,
               TransactionLog.readMessageKey(record.key) match {
 
                 case txnKey: TxnKey =>
-                  // load offset
+                  // load pid metadata along with transaction state
                   val transactionalId: String = txnKey.key
                   if (record.hasNullValue) {
                     loadedPids.remove(transactionalId)
@@ -226,16 +226,21 @@ class TransactionManager(brokerId: Int,
     * When this broker becomes a follower for a transaction log partition, clear out the cache for corresponding transactional ids
     * that belong to that partition.
     */
-  def removePartitionOwnership(partition: Int) {
+  def removeTransactionsForPartition(partition: Int) {
     val topicPartition = new TopicPartition(Topic.TransactionStateTopicName, partition)
 
     def removePidAndTransactions() {
       var numPidsRemoved = 0
 
       inLock(partitionLock) {
-        // we need to guard the group removal in cache in the loading partition lock
-        // to prevent coordinator's check-and-get-group race condition
-        ownedPartitions.remove(partition)
+        if (!ownedPartitions.contains(partition)) {
+          // with background scheduler containing one thread, this should never happen,
+          // but just in case we change it in the future.
+          info(s"Partition $topicPartition has already been removed.")
+          return
+        } else {
+          ownedPartitions.remove(partition)
+        }
 
         for (transactionalId <- pidMetadataCache.keys) {
           if (partitionFor(transactionalId) == partition) {
@@ -245,12 +250,12 @@ class TransactionManager(brokerId: Int,
             numPidsRemoved += 1
           }
         }
+
+        if (numPidsRemoved > 0)
+          info(s"Removed $numPidsRemoved cached pid metadata for $topicPartition on follower transition")
       }
 
       scheduler.schedule(topicPartition.toString, removePidAndTransactions)
-
-      if (numPidsRemoved > 0)
-        info(s"Removed $numPidsRemoved cached pid metadata for $topicPartition on follower transition")
     }
   }
 
@@ -259,7 +264,11 @@ class TransactionManager(brokerId: Int,
     if (scheduler.isStarted)
       scheduler.shutdown()
 
+    pidMetadataCache.clear()
+
     ownedPartitions.clear()
+    loadingPartitions.clear()
+    corruptedPartitions.clear()
 
     info("Shutdown complete")
   }

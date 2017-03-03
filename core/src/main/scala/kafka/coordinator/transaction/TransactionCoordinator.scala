@@ -97,7 +97,7 @@ class TransactionCoordinator(val brokerId: Int,
   }
 
   def handleTxnEmigration(transactionStateTopicPartitionId: Int) {
-    txnManager.removePartitionOwnership(transactionStateTopicPartitionId)
+    txnManager.removeTransactionsForPartition(transactionStateTopicPartitionId)
   }
 
   /**
