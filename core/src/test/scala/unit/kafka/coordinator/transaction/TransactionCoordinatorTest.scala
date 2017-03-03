@@ -66,7 +66,7 @@ class TransactionCoordinatorTest {
   EasyMock.replay(zkUtils)
 
   val pIDManager: PidManager = new PidManager(0, zkUtils)
-  val logManager: TransactionLogManager = new TransactionLogManager(0, zkUtils)
+  val logManager: TransactionManager = new TransactionManager(0, zkUtils)
   val coordinator: TransactionCoordinator = new TransactionCoordinator(0, pIDManager, logManager)
 
   var result: InitPidResult = null

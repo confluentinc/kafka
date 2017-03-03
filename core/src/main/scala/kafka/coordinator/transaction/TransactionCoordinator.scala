@@ -19,7 +19,7 @@ package kafka.coordinator.transaction
 import java.util.concurrent.atomic.AtomicBoolean
 
 import kafka.server.{KafkaConfig, ReplicaManager}
-import kafka.utils.{Logging, Pool, ZkUtils}
+import kafka.utils.{Logging, ZkUtils}
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.utils.Time
 
@@ -36,7 +36,7 @@ object TransactionCoordinator {
   def apply(config: KafkaConfig, replicaManager: ReplicaManager, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
 
     val pidManager = new PidManager(config.brokerId, zkUtils)
-    val logManager = new TransactionLogManager(config.brokerId, replicaManager, zkUtils, time)
+    val logManager = new TransactionManager(config.brokerId, zkUtils, replicaManager, time)
 
     new TransactionCoordinator(config.brokerId, pidManager, logManager)
   }
@@ -44,18 +44,13 @@ object TransactionCoordinator {
 
 class TransactionCoordinator(val brokerId: Int,
                              val pidManager: PidManager,
-                             val logManager: TransactionLogManager) extends Logging {
+                             val txnManager: TransactionManager) extends Logging {
   this.logIdent = "[Transaction Coordinator " + brokerId + "]: "
 
   type InitPidCallback = InitPidResult => Unit
 
   /* Active flag of the coordinator */
   private val isActive = new AtomicBoolean(false)
-
-  /* TransactionalId to pid metadata map cache */
-  private val pidMetadataCache = new Pool[String, PidMetadata]
-
-  def partitionFor(transactionalId: String): Int = logManager.partitionFor(transactionalId)
 
   def handleInitPid(transactionalId: String,
                     transactionTimeoutMs: Int,
@@ -66,17 +61,17 @@ class TransactionCoordinator(val brokerId: Int,
       val pid: Long = pidManager.getNewPid()
 
       responseCallback(InitPidResult(pid, epoch = 0, Errors.NONE))
-    } else if(!logManager.isCoordinatorFor(transactionalId)) {
+    } else if(!txnManager.isCoordinatorFor(transactionalId)) {
       // check if it is the assigned coordinator for the transactional id
       responseCallback(initPidError(Errors.NOT_COORDINATOR))
     } else {
       // only try to get a new pid and update the cache if the transactional id is unknown
-      getPidMetadata(transactionalId) match {
+      txnManager.getPid(transactionalId) match {
         case None =>
           val pid: Long = pidManager.getNewPid()
           // TODO: check transactionTimeoutMs is not larger than the broker configured maximum allowed value
           val newMetadata: PidMetadata = new PidMetadata(pid, epoch = 0, transactionTimeoutMs)
-          val metadata = addPidMetadata(transactionalId, newMetadata)
+          val metadata = txnManager.addPid(transactionalId, newMetadata)
 
           // there might be a concurrent thread that has just updated the mapping
           // with the transactional id at the same time; in this case we will
@@ -98,11 +93,11 @@ class TransactionCoordinator(val brokerId: Int,
   }
 
   def handleTxnImmigration(transactionStateTopicPartitionId: Int) {
-    logManager.addPartitionOwnership(transactionStateTopicPartitionId)
+    txnManager.loadTransactionsForPartition(transactionStateTopicPartitionId)
   }
 
   def handleTxnEmigration(transactionStateTopicPartitionId: Int) {
-    logManager.removePartitionOwnership(transactionStateTopicPartitionId)
+    txnManager.removePartitionOwnership(transactionStateTopicPartitionId)
   }
 
   /**
@@ -111,7 +106,7 @@ class TransactionCoordinator(val brokerId: Int,
   def startup(enablePidExpiration: Boolean = true) {
     info("Starting up.")
     if (enablePidExpiration)
-      logManager.enablePidExpiration()
+      txnManager.enablePidExpiration()
     isActive.set(true)
     info("Startup complete.")
   }
@@ -124,21 +119,8 @@ class TransactionCoordinator(val brokerId: Int,
     info("Shutting down.")
     isActive.set(false)
     pidManager.shutdown()
-    logManager.shutdown()
+    txnManager.shutdown()
     info("Shutdown complete.")
-  }
-
-  private def getPidMetadata(transactionalId: String): Option[PidMetadata] = {
-    Option(pidMetadataCache.get(transactionalId))
-  }
-
-  private def addPidMetadata(transactionalId: String, pidMetadata: PidMetadata): PidMetadata = {
-    val currentMetadata = pidMetadataCache.putIfNotExists(transactionalId, pidMetadata)
-    if (currentMetadata != null) {
-      currentMetadata
-    } else {
-      pidMetadata
-    }
   }
 
   private def initPidError(error: Errors): InitPidResult = {

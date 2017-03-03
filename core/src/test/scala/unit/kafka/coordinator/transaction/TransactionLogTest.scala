@@ -26,7 +26,7 @@ import org.scalatest.junit.JUnitSuite
 
 import scala.collection.JavaConverters._
 
-class TransactionLogManagerTest extends JUnitSuite {
+class TransactionLogTest extends JUnitSuite {
 
   val epoch: Short = 0
   val transactionTimeoutMs: Int = 1000
@@ -45,7 +45,7 @@ class TransactionLogManagerTest extends JUnitSuite {
     val pidMetadata = new PidMetadata(0L, epoch, transactionTimeoutMs, txnMetadata)
 
     intercept[IllegalStateException] {
-      TransactionLogManager.valueToBytes(pidMetadata)
+      TransactionLog.valueToBytes(pidMetadata)
     }
   }
 
@@ -75,8 +75,8 @@ class TransactionLogManagerTest extends JUnitSuite {
 
       val pidMetadata = new PidMetadata(pid, epoch, transactionTimeoutMs, txnMetadata)
 
-      val keyBytes = TransactionLogManager.keyToBytes(transactionalId)
-      val valueBytes = TransactionLogManager.valueToBytes(pidMetadata)
+      val keyBytes = TransactionLog.keyToBytes(transactionalId)
+      val valueBytes = TransactionLog.valueToBytes(pidMetadata)
 
       new SimpleRecord(keyBytes, valueBytes)
     }.toSeq
@@ -85,12 +85,12 @@ class TransactionLogManagerTest extends JUnitSuite {
 
     var count = 0
     for (record <- records.records.asScala) {
-      val key = TransactionLogManager.readMessageKey(record.key())
+      val key = TransactionLog.readMessageKey(record.key())
 
       key match {
         case pidKey: TxnKey =>
           val transactionalId = pidKey.key
-          val pidMetadata = TransactionLogManager.readMessageValue(record.value())
+          val pidMetadata = TransactionLog.readMessageValue(record.value())
 
           assertEquals(pidMappings(transactionalId), pidMetadata.pid)
           assertEquals(epoch, pidMetadata.epoch)

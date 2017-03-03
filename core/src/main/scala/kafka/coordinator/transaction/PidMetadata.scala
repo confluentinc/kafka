@@ -30,7 +30,11 @@ private[coordinator] class PidMetadata(val pid: Long,
     s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $txnTimeoutMs, transactionStatus: $txnMetadata)"
 
   override def equals(that: Any): Boolean = that match {
-    case other: PidMetadata => pid == other.pid && epoch == other.epoch
+    case other: PidMetadata =>
+      pid == other.pid &&
+      epoch == other.epoch &&
+      txnTimeoutMs == other.txnTimeoutMs &&
+      txnMetadata.equals(other.txnMetadata)
     case _ => false
   }
 }
