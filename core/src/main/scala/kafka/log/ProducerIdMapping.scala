@@ -26,6 +26,7 @@ import kafka.utils.{Logging, nonthreadsafe}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, OutOfOrderSequenceException, ProducerFencedException}
 import org.apache.kafka.common.protocol.types._
+import org.apache.kafka.common.record.LogEntry
 import org.apache.kafka.common.utils.Utils
 
 import scala.collection.{immutable, mutable}
@@ -236,7 +237,7 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
    * Update the mapping to the given epoch and sequence number.
    */
   def update(pid: Long, pidEntry: PidEntry): Unit = {
-    if (pid > 0) {
+    if (pid != LogEntry.NO_PID) {
       pidMap.put(pid, pidEntry)
       lastMapOffset = pidEntry.lastOffset
     }
@@ -248,7 +249,7 @@ class ProducerIdMapping(val topicPartition: TopicPartition,
    * @param pid
    */
   def checkSeqAndEpoch(pid: Long, incomingEntry: PidEntry) {
-    if (pid > 0) {
+    if (pid != LogEntry.NO_PID) {
       pidMap.get(pid) match {
         case None =>
           if (incomingEntry.firstSeq != 0)

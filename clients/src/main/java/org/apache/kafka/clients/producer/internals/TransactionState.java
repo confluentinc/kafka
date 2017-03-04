@@ -21,7 +21,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static org.apache.kafka.common.requests.InitPidResponse.INVALID_PID;
+import static org.apache.kafka.common.record.LogEntry.NO_PID;
 
 /**
  * A class which maintains state for transactions. Also keeps the state necessary to ensure idempotent production.
@@ -43,12 +43,12 @@ public class TransactionState {
         }
 
         public boolean isValid() {
-            return pid != INVALID_PID;
+            return pid != NO_PID;
         }
     }
 
     public TransactionState(boolean idempotenceEnabled) {
-        pidAndEpoch = new PidAndEpoch(INVALID_PID, (short) 0);
+        pidAndEpoch = new PidAndEpoch(NO_PID, (short) 0);
         sequenceNumbers = new HashMap<>();
         this.idempotenceEnabled = idempotenceEnabled;
 
@@ -115,7 +115,7 @@ public class TransactionState {
     public void reset() {
         pidLock.lock();
         try {
-            setPidAndEpoch(INVALID_PID, (short) 0);
+            setPidAndEpoch(NO_PID, (short) 0);
             this.sequenceNumbers.clear();
         } finally {
             pidLock.unlock();

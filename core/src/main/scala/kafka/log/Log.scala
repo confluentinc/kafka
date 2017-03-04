@@ -609,7 +609,7 @@ class Log(@volatile var dir: File,
 
       val numRecordsInEntry: Int = (entry.lastOffset - entry.baseOffset + 1).toInt
       val currentPidEntry = PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, numRecordsInEntry, entry.maxTimestamp)
-      if (0 < entry.pid) {
+      if (entry.pid != LogEntry.NO_PID) {
         pidEntryMap.get(entry.pid) match {
           case Some(tuple) =>
             ProducerIdMapping.validatePidEntries(entry.pid, tuple.lastEntry, currentPidEntry)
@@ -621,6 +621,7 @@ class Log(@volatile var dir: File,
             pidEntryMap.put(entry.pid, PidEntryTuple(currentPidEntry, currentPidEntry))
         }
       }
+
      // update the last offset seen
       lastOffset = entry.lastOffset
 
