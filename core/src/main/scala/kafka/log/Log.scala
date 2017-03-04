@@ -348,7 +348,8 @@ class Log(@volatile var dir: File,
         val startOffset = math.max(segment.baseOffset, pidMap.mapEndOffset)
         val logEntries = segment.read(startOffset, Some(lastOffset), Int.MaxValue).records
         logEntries.entries.asScala.foreach { entry =>
-          pidMap.update(entry.pid, PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp))
+          pidMap.update(entry.pid, PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset,
+            (entry.lastOffset - entry.baseOffset + 1).toInt, entry.maxTimestamp))
         }
       }
       logStartOffset.foreach(pidMap.cleanFrom)
@@ -480,34 +481,42 @@ class Log(@volatile var dir: File,
           maxTimestampInMessages = appendInfo.maxTimestamp,
           maxOffsetInMessages = appendInfo.lastOffset)
         var isDuplicate = false
-        for ((pid, entry) <- appendInfo.pidEntryMap) {
+        for ((pid, incomingRecord) <- appendInfo.pidEntryMap) {
           try {
             // verify that the epoch and sequence are correct before appending. Note that for requests coming from
             // producer, there will be exactly one LogEntry per Record, and hence one Pid per Record.
-            trace(s"checking sequence for pid: ${pid}, seq: ${entry.first.seq}, end seq: ${entry.last.seq}")
-            pidMap.checkSeqAndEpoch(pid, entry.first.seq, entry.first.epoch)
+            trace(s"checking sequence for pid: ${pid}, seq: ${incomingRecord.firstEntry.lastSeq}, end seq: ${incomingRecord.lastEntry.lastSeq}")
+            pidMap.checkSeqAndEpoch(pid, incomingRecord.firstEntry)
           } catch {
             case e: DuplicateSequenceNumberException =>
               isDuplicate = true
               pidMap.entryForPid(pid) match {
-                case Some(pidEntry) =>
-                  if (entry.first.seq < pidEntry.seq) {
-                    // the duplicate is not at the tail of the log. This should never happen, with a properly written client.
-                    // It should also never happen in the replication case.
-                    // Since this is a error situation throw a fatal exception.
-                    throw new OutOfOrderSequenceException("Detected a duplicate entry in the middle of the log. " +
-                      "This suggests a misconfigured or buggy client. Please see __insert_url__ to understand how " + "" +
-                      "clients must be configured when running withe enable.idempotence = true");
-                  }
-
+                case Some(lastAppendedEntry) =>
                   if (assignOffsets) {
-                    // The produce request is on the leader of the partition. ie. this append isn't the result of a replication fetch request.
-                    // For duplicate sequence numbers, return the offsets of the existing record with the same sequence number.
-                    val numRecords = appendInfo.lastOffset - appendInfo.firstOffset + 1
-                    appendInfo.firstOffset = appendInfo.firstOffset - numRecords
-                    appendInfo.lastOffset = appendInfo.lastOffset - numRecords
-                    appendInfo.maxTimestamp = pidEntry.timestamp
-                    warn(s"Leader received a duplicate for ${topicPartition.topic()}-${topicPartition.partition} with (pid, firstOffset, lastOffset) => (${pid}, ${appendInfo.firstOffset}, ${appendInfo.lastOffset}). Will drop the incoming record.")
+                    // This request is coming straight from the client.
+                    if (!incomingRecord.firstEntry.equals(incomingRecord.lastEntry)) {
+                      throw new InvalidRecordException("Got multiple LogEntries in a single ProduceRequest. This indicates a bad client.")
+                    }
+                    val incomingEntry = incomingRecord.firstEntry
+                    if (incomingEntry.firstSeq != lastAppendedEntry.firstSeq
+                      && incomingEntry.lastSeq != lastAppendedEntry.lastSeq) {
+                      // the duplicate is not at the tail of the log. This should never happen, with a properly written client.
+                      // It should also never happen in the replication case.
+                      // Since this is a error situation throw a fatal exception.
+                      throw new OutOfOrderSequenceException(s"Received a duplicate record at offset "
+                        + s"${appendInfo.firstOffset} and sequence ${incomingEntry.firstSeq} which does not match the record "
+                        + "at the tail of the log. Rejecting this record.")
+                    }
+                    // Since this is a duplicate sequence on the tail of the log from a producer, return the information
+                    // about the existing entry.
+                    appendInfo.firstOffset = lastAppendedEntry.lastOffset
+                    appendInfo.lastOffset =  lastAppendedEntry.firstOffset
+                    appendInfo.maxTimestamp = lastAppendedEntry.timestamp
+                    // TODO(apurva) : Make this log line trace or debug. I am leaving it on error level now so that these
+                    // messages don't get lost in the crowd during this stabilization phase.
+                    error(s"Leader received a duplicate for ${topicPartition.topic()}-${topicPartition.partition} with " +
+                      s"(pid, firstOffset, lastOffset) => (${pid}, ${appendInfo.firstOffset}, ${appendInfo.lastOffset}). " +
+                      "Will drop the incoming record.")
                   } else {
                     // We detected a duplicate on the follower. This should never happen, and there is nothing we can
                     // do about it since it means that the leader and follower logs have diverged.
@@ -533,9 +542,15 @@ class Log(@volatile var dir: File,
             records = validRecords)
 
           // update the PID sequence mapping
-          for ((pid, entry) <- appendInfo.pidEntryMap) {
-            trace(s"Updating pid with sequence: ${pid} -> ${entry.last.seq}")
-            pidMap.update(pid, PidEntry(entry.last.seq, entry.last.epoch, entry.last.offset, entry.last.timestamp))
+          for ((pid, incomingRecord) <- appendInfo.pidEntryMap) {
+            trace(s"Updating pid with sequence: ${pid} -> ${incomingRecord.lastEntry.lastSeq}")
+            val newPidEntry =  if (assignOffsets) {
+              PidEntry(incomingRecord.lastEntry.lastSeq, incomingRecord.lastEntry.epoch, appendInfo.lastOffset,
+                incomingRecord.lastEntry.numRecords, incomingRecord.lastEntry.timestamp)
+            } else {
+              incomingRecord.lastEntry
+            }
+            pidMap.update(pid, newPidEntry)
           }
 
           // increment the log end offset
@@ -592,27 +607,18 @@ class Log(@volatile var dir: File,
       if (lastOffset >= entry.lastOffset)
         monotonic = false
 
+      val numRecordsInEntry: Int = (entry.lastOffset - entry.baseOffset + 1).toInt
+      val currentPidEntry = PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, numRecordsInEntry, entry.maxTimestamp)
       if (0 < entry.pid) {
         pidEntryMap.get(entry.pid) match {
           case Some(tuple) =>
-            // Check that the sequence number of the new entry is in order.
-            if (tuple.last.seq + 1 != entry.baseSequence) {
-              if (tuple.last.seq <= entry.baseSequence) {
-                throw new DuplicateSequenceNumberException("Multiple entries in the same MemoryRecord were duplicates " +
-                  "of each other. This suggests that the logs on the followers have diverged from the leader.")
-              } else {
-                throw new OutOfOrderSequenceException("Entries inside a single MemoryRecord were out of order. This " +
-                  "means that the logs on the follower have diverged from those of the leader.")
-              }
-            }
-            // If we have seen this pid before, replace the last PidEntry with information from the current LogEntry
-            pidEntryMap.put(entry.pid, PidEntryTuple(tuple.first, PidEntry(entry.lastSequence, entry.epoch,  entry.lastOffset,
-              entry.maxTimestamp)))
+            ProducerIdMapping.validatePidEntries(entry.pid, tuple.lastEntry, currentPidEntry)
+           // If we have seen this pid before, replace the last PidEntry with information from the current LogEntry
+            pidEntryMap.put(entry.pid, PidEntryTuple(tuple.firstEntry, currentPidEntry))
           case None =>
             // If this is the first time we are seeing a particular pid, set both the first and the last PidEntry for
             // this pid to span the first and last offset/sequence of the the current LogEntry.
-            pidEntryMap.put(entry.pid, PidEntryTuple(PidEntry(entry.baseSequence, entry.epoch, entry.baseOffset, entry.maxTimestamp),
-              PidEntry(entry.lastSequence, entry.epoch, entry.lastOffset, entry.maxTimestamp)))
+            pidEntryMap.put(entry.pid, PidEntryTuple(currentPidEntry, currentPidEntry))
         }
       }
      // update the last offset seen

@@ -340,7 +340,7 @@ object TestUtils extends Logging {
     val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, 0L,
       System.currentTimeMillis, pid, epoch, sequence)
     records.foreach { case (key, value, timestamp) =>
-      builder.appendWithOffset(0, timestamp, key, value)
+      builder.append(timestamp, key, value)
     }
     builder.build()
   }

@@ -120,7 +120,7 @@ public class TransactionState {
         } finally {
             pidLock.unlock();
         }
-   }
+    }
 
     /**
      * Returns the next sequence number to be written to the given TopicPartition.

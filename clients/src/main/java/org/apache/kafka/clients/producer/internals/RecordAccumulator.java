@@ -230,6 +230,7 @@ public final class RecordAccumulator {
             if (maxUsableMagic < LogEntry.MAGIC_VALUE_V2) {
                 throw new IllegalStateException("Attempting to use idempotence with an incompatible version of the message format");
             }
+            // TODO(apurva): Change the builder method to _not_ take the pid, epoch, and sequence. Set these at during close, so it happens only once.
             return MemoryRecords.builder(buffer, maxUsableMagic, compression, TimestampType.CREATE_TIME,
                     0L, time.milliseconds(), transactionState.pidAndEpoch().pid, transactionState.pidAndEpoch().epoch,
                     transactionState.sequenceNumber(topicPartition));
@@ -421,7 +422,7 @@ public final class RecordAccumulator {
                 TopicPartition tp = new TopicPartition(part.topic(), part.partition());
                 // Only proceed if the partition has no in-flight batches.
                 if (!muted.contains(tp)) {
-                    Deque<RecordBatch> deque = getDeque(new TopicPartition(part.topic(), part.partition()));
+                    Deque<RecordBatch> deque = getDeque(tp);
                     if (deque != null) {
                         synchronized (deque) {
                             RecordBatch first = deque.peekFirst();
@@ -436,10 +437,14 @@ public final class RecordAccumulator {
                                         break;
                                     } else {
                                         RecordBatch batch = deque.pollFirst();
-                                        if (transactionState != null)
+                                        if (transactionState != null) {
+                                            log.debug("Dest: {} : Assigning sequence for {}-{} : {}", node,
+                                                    batch.topicPartition.topic(), batch.topicPartition.partition(),
+                                                    transactionState.sequenceNumber(batch.topicPartition));
                                             batch.closeWithSequence(transactionState.sequenceNumber(batch.topicPartition));
-                                        else
+                                        } else {
                                             batch.close();
+                                        }
                                         size += batch.sizeInBytes();
                                         ready.add(batch);
                                         batch.drainedMs = now;

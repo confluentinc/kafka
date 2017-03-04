@@ -602,6 +602,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         long start = time.milliseconds();
         TransactionState.PidAndEpoch pidAndEpoch = transactionState.pidAndEpoch(maxWaitMs);
         if (!pidAndEpoch.isValid()) {
+            // TODO(apurva): Is this the best exception to throw here?
             throw new TimeoutException("Could not retrieve a pid within " + maxWaitMs + " ms");
         }
         return Math.max(0, maxWaitMs - (time.milliseconds() - start));

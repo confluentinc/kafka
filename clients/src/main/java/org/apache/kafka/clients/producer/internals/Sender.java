@@ -23,6 +23,7 @@ import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.RequestCompletionHandler;
 import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
@@ -53,6 +54,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The background thread that handles the sending of produce requests to the Kafka cluster. This thread makes metadata
@@ -241,7 +243,7 @@ public class Sender implements Runnable {
         if (resetState) {
             transactionState.reset();
             waitIndefinitelyForPid();
-       }
+        }
 
         sensors.updateProduceRequestMetrics(batches);
 
@@ -300,10 +302,13 @@ public class Sender implements Runnable {
             return;
         }
 
+        final AtomicBoolean initPidRequestCompleted = new AtomicBoolean(false);
+
         String nodeId = node.idString();
         InitPidRequest.Builder builder = new InitPidRequest.Builder(null);
         RequestCompletionHandler callback = new RequestCompletionHandler() {
             public void onComplete(ClientResponse response) {
+                initPidRequestCompleted.set(true);
                 handleInitPidResponse(response);
             }
         };
@@ -312,7 +317,7 @@ public class Sender implements Runnable {
         client.send(request, time.milliseconds());
         start = time.milliseconds();
         boolean isDisconnected = false;
-        while (!transactionState.hasPid() && !isDisconnected && 0 <= remainingTime) {
+        while (!initPidRequestCompleted.get() && !isDisconnected && 0 <= remainingTime) {
             client.poll(retryBackoffMs, time.milliseconds());
             isDisconnected = client.connectionFailed(node);
             remainingTime = remainingTime - (time.milliseconds() - start);
@@ -328,7 +333,7 @@ public class Sender implements Runnable {
             } catch (InterruptedException e) {
                 // Swallow this.
             }
-       }
+        }
     }
 
     private void handleInitPidResponse(ClientResponse response) {
@@ -395,12 +400,16 @@ public class Sender implements Runnable {
             if (transactionState == null || (transactionState.pidAndEpoch().pid == batch.pid())) {
                 // If idempotence is enabled only retry the request if the current PID is the same as the pid of the
                 // batch.
+                if (transactionState != null) {
+                    log.debug("Retrying batch to {}-{}. Sequence number : {}", batch.topicPartition.topic(), batch.topicPartition.partition(), transactionState.sequenceNumber(batch.topicPartition));
+                }
                 this.accumulator.reenqueue(batch, now);
                 this.sensors.recordRetries(batch.topicPartition.topic(), batch.recordCount);
             } else {
+                // TODO(apurva): Is 'KafkaException' the best one to throw here? What would be more appropriate?
                 errorOutBatch(batch,
                         response,
-                        new RuntimeException("Tried to retry a batch but the producer id has changed in the meantime. This batch will be dropped."));
+                        new KafkaException("Tried to retry a batch but the producer id has changed in the meantime. This batch will be dropped."));
                 this.sensors.recordErrors(batch.topicPartition.topic(), batch.recordCount);
             }
         } else {
@@ -430,8 +439,12 @@ public class Sender implements Runnable {
             metadata.requestUpdate();
         }
         if (error == Errors.NONE) {
-            if (transactionState != null)
+            if (transactionState != null) {
                 transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+                log.info("Incremented sequence number for {}-{} to {}", batch.topicPartition.topic(),
+                        batch.topicPartition.partition(), transactionState.sequenceNumber(batch.topicPartition));
+            }
+
         }
         // Unmute the completed partition.
         if (guaranteeMessageOrder)
