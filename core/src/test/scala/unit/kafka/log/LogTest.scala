@@ -141,7 +141,7 @@ class LogTest extends JUnitSuite {
   }
 
   @Test
-  def testDuplicateAppend(): Unit = {
+  def testDuplicateAppends(): Unit = {
     val logProps = new Properties()
 
     // create a log
@@ -157,9 +157,9 @@ class LogTest extends JUnitSuite {
     var seq = 0
     // Pad the beginning of the log.
     for (i <- 0 to 5) {
-      val record = TestUtils.records(List((s"key-${seq}".getBytes, s"value-${seq}".getBytes, time.milliseconds)), pid = pid, epoch = epoch, sequence = seq)
+      val record = TestUtils.records(List((s"key-${seq}".getBytes, s"value-${seq}".getBytes, time.milliseconds)),
+        pid = pid, epoch = epoch, sequence = seq)
       log.append(record, assignOffsets = true)
-      log.flush()
       seq = seq + 1
     }
     // Append an entry with multiple log records.
@@ -168,26 +168,47 @@ class LogTest extends JUnitSuite {
       (s"key-${seq}".getBytes, s"value-${seq}".getBytes, time.milliseconds),
       (s"key-${seq}".getBytes, s"value-${seq}".getBytes, time.milliseconds)
     ), pid = pid, epoch = epoch, sequence = seq)
-    log.append(record, assignOffsets = true)
-    log.flush()
+    val multiEntryAppendInfo = log.append(record, assignOffsets = true)
+    assertEquals("should have appended 3 entries", multiEntryAppendInfo.lastOffset - multiEntryAppendInfo.firstOffset + 1, 3)
     seq = seq + 3
 
-    // Append a duplicate of some entry in the middle of the log. This is not allowed.
+    // Append a Duplicate of the tail, when the entry at the tail has multiple records.
+    val dupMultiEntryAppendInfo = log.append(record, assignOffsets = true)
+    assertEquals("Somehow appended a duplicate entry with multiple log records to the tail",
+      multiEntryAppendInfo.firstOffset, dupMultiEntryAppendInfo.firstOffset)
+    assertEquals("Somehow appended a duplicate entry with multiple log records to the tail",
+      multiEntryAppendInfo.lastOffset, dupMultiEntryAppendInfo.lastOffset)
+
+    // Append a partial duplicate of the tail. This is not allowed.
     try {
-      record = TestUtils.records(List((s"key-${seq}".getBytes, s"value-${seq}".getBytes, time.milliseconds)), pid = pid, epoch = epoch, sequence = seq - 2)
+      record = TestUtils.records(
+        List((s"key-${seq}".getBytes, s"value-${seq}".getBytes, time.milliseconds),
+          (s"key-${seq}".getBytes, s"value-${seq}".getBytes, time.milliseconds)),
+        pid = pid, epoch = epoch, sequence = seq - 2)
       log.append(record, assignOffsets = true)
-      log.flush()
       fail ("Should have received an OutOfOrderSequenceException since we attempted to append a duplicate of a record " +
         "in the middle of the log.")
     } catch {
       case e: OutOfOrderSequenceException => // Good!
     }
 
-    // Append a duplicate at the tail of the log. This should return the appendInfo of the original entry.
-    val records = TestUtils.records(List(("key".getBytes, "value".getBytes, time.milliseconds)), pid = pid, epoch = epoch, sequence = seq)
-    val origAppendInfo = log.append(records, assignOffsets = true)
-    val nextRecords = TestUtils.records(List(("key".getBytes, "value".getBytes, time.milliseconds)), pid = pid, epoch = epoch, sequence = seq)
-    val newAppendInfo = log.append(nextRecords, assignOffsets = true)
+    // Append a Duplicate of an entry in the middle of the log. This is not allowed.
+     try {
+      record = TestUtils.records(
+        List((s"key-1".getBytes, s"value-1".getBytes, time.milliseconds)),
+        pid = pid, epoch = epoch, sequence = 1)
+      log.append(record, assignOffsets = true)
+      fail ("Should have received an OutOfOrderSequenceException since we attempted to append a duplicate of a record " +
+        "in the middle of the log.")
+    } catch {
+      case e: OutOfOrderSequenceException => // Good!
+    }
+
+    // Append a duplicate entry with a single record at the tail of the log. This should return the appendInfo of the original entry.
+    record = TestUtils.records(List(("key".getBytes, "value".getBytes, time.milliseconds)),
+      pid = pid, epoch = epoch, sequence = seq)
+    val origAppendInfo = log.append(record, assignOffsets = true)
+    val newAppendInfo = log.append(record, assignOffsets = true)
     assertEquals("Inserted a duplicate record into the log", origAppendInfo.firstOffset, newAppendInfo.firstOffset)
     assertEquals("Inserted a duplicate record into the log", origAppendInfo.lastOffset, newAppendInfo.lastOffset)
   }

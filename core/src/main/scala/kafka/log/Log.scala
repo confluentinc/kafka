@@ -498,8 +498,8 @@ class Log(@volatile var dir: File,
                       throw new InvalidRecordException("Got multiple LogEntries in a single ProduceRequest. This indicates a bad client.")
                     }
                     val incomingEntry = incomingRecord.firstEntry
-                    if (incomingEntry.firstSeq != lastAppendedEntry.firstSeq
-                      && incomingEntry.lastSeq != lastAppendedEntry.lastSeq) {
+                    if (!(incomingEntry.firstSeq == lastAppendedEntry.firstSeq
+                      && incomingEntry.lastSeq == lastAppendedEntry.lastSeq)) {
                       // the duplicate is not at the tail of the log. This should never happen, with a properly written client.
                       // It should also never happen in the replication case.
                       // Since this is a error situation throw a fatal exception.
@@ -509,8 +509,8 @@ class Log(@volatile var dir: File,
                     }
                     // Since this is a duplicate sequence on the tail of the log from a producer, return the information
                     // about the existing entry.
-                    appendInfo.firstOffset = lastAppendedEntry.lastOffset
-                    appendInfo.lastOffset =  lastAppendedEntry.firstOffset
+                    appendInfo.firstOffset = lastAppendedEntry.firstOffset
+                    appendInfo.lastOffset =  lastAppendedEntry.lastOffset
                     appendInfo.maxTimestamp = lastAppendedEntry.timestamp
                     // TODO(apurva) : Make this log line trace or debug. I am leaving it on error level now so that these
                     // messages don't get lost in the crowd during this stabilization phase.

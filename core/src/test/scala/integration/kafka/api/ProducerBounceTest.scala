@@ -14,6 +14,7 @@
 package kafka.api
 
 import java.util.Properties
+import java.util.concurrent.Future
 
 import kafka.consumer.SimpleConsumer
 import kafka.integration.KafkaServerTestHarness
@@ -24,8 +25,10 @@ import org.apache.kafka.clients.producer.internals.ErrorLoggingCallback
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
 
+import scala.collection.mutable.ArrayBuffer
+
 class ProducerBounceTest extends KafkaServerTestHarness {
-  private val producerBufferSize = 30000
+  private val producerBufferSize =  65536
   private val serverMessageMaxBytes =  producerBufferSize/2
 
   val numServers = 4
@@ -53,27 +56,15 @@ class ProducerBounceTest extends KafkaServerTestHarness {
       .map(KafkaConfig.fromProps(_, overridingProps))
   }
 
-  private var producer1: KafkaProducer[Array[Byte],Array[Byte]] = null
-  private var producer2: KafkaProducer[Array[Byte],Array[Byte]] = null
-  private var producer3: KafkaProducer[Array[Byte],Array[Byte]] = null
-
   private val topic1 = "topic-1"
 
   @Before
   override def setUp() {
     super.setUp()
-
-    //producer1 = TestUtils.createNewProducer(brokerList, acks = 0, bufferSize = producerBufferSize)
-    //producer2 = TestUtils.createNewProducer(brokerList, acks = 1, bufferSize = producerBufferSize)
-    //producer3 = TestUtils.createNewProducer(brokerList, acks = -1, bufferSize = producerBufferSize)
   }
 
   @After
   override def tearDown() {
-    if (producer1 != null) producer1.close
-    if (producer2 != null) producer2.close
-    if (producer3 != null) producer3.close
-
     super.tearDown()
   }
 
@@ -129,6 +120,7 @@ class ProducerBounceTest extends KafkaServerTestHarness {
     val messages = fetchResponses.flatMap(r => r.iterator.toList.map(_.message))
     val uniqueMessages = messages.toSet
     val uniqueMessageSize = uniqueMessages.size
+    info(s"number of unique messages sent: ${uniqueMessageSize}")
     assertEquals(s"Found ${messages.size - uniqueMessageSize} duplicate messages.", uniqueMessageSize, messages.size)
     assertEquals("Should have fetched " + scheduler.sent + " unique messages", scheduler.sent, messages.size)
   }
@@ -141,20 +133,32 @@ class ProducerBounceTest extends KafkaServerTestHarness {
     val producerConfig = new Properties();
     producerConfig.put(ProducerConfig.IDEMPOTENCE_ENABLED_CONFIG, "true")
     producerConfig.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1")
-    val producer = TestUtils.createNewProducer(brokerList, bufferSize = producerBufferSize, retries = 10, props = Some(producerConfig))
+    val producers = List(
+      TestUtils.createNewProducer(brokerList, bufferSize = producerBufferSize / 4, retries = 10, props = Some(producerConfig)),
+      TestUtils.createNewProducer(brokerList, bufferSize = producerBufferSize / 2, retries = 10, lingerMs = 5000, props = Some(producerConfig)),
+      TestUtils.createNewProducer(brokerList, bufferSize = producerBufferSize, retries = 10, lingerMs = 10000, props = Some(producerConfig))
+    )
 
     override def doWork(): Unit = {
       info("Starting to send messages..")
-      val responses =
-        for (i <- sent+1 to sent+numRecords)
-        yield producer.send(new ProducerRecord[Array[Byte],Array[Byte]](topic1, null, null, i.toString.getBytes),
-                            new ErrorLoggingCallback(topic1, null, null, true))
-      val futures = responses.toList
-      info("sent " + numRecords + " messages")
+      var producerId = 0
+      val responses = new ArrayBuffer[IndexedSeq[Future[RecordMetadata]]]()
+      for (producer <- producers) {
+        val response =
+          for (i <- sent+1 to sent+numRecords)
+            yield producer.send(new ProducerRecord[Array[Byte],Array[Byte]](topic1, null, null, ((producerId + 1) * i).toString.getBytes),
+              new ErrorLoggingCallback(topic1, null, null, true))
+        responses.append(response)
+        producerId += 1
+      }
 
       try {
-        futures.map(_.get)
-        sent += numRecords
+        for (response <- responses) {
+          val futures = response.toList
+          futures.map(_.get)
+          sent += numRecords
+        }
+        info(s"Sent $sent records")
       } catch {
         case e : Exception =>
           error(s"Got exception ${e.getMessage}")
@@ -165,7 +169,9 @@ class ProducerBounceTest extends KafkaServerTestHarness {
 
     override def shutdown(){
       super.shutdown()
-      producer.close
+      for (producer <- producers) {
+        producer.close()
+      }
     }
   }
 }
