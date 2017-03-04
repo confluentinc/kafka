@@ -69,7 +69,6 @@ public final class RecordBatch {
         this.completed = new AtomicBoolean();
         this.retry = false;
         this.isWritable = true;
-
     }
 
     /**

@@ -188,7 +188,7 @@ public class Sender implements Runnable {
         Cluster cluster = metadata.fetch();
 
         if (transactionState != null) {
-            waitIndefinitelyForPid();
+            maybeWaitForPid();
         }
 
         // get the list of partitions with data ready to send
@@ -242,7 +242,7 @@ public class Sender implements Runnable {
 
         if (resetState) {
             transactionState.reset();
-            waitIndefinitelyForPid();
+            maybeWaitForPid();
         }
 
         sensors.updateProduceRequestMetrics(batches);
@@ -324,7 +324,7 @@ public class Sender implements Runnable {
         }
     }
 
-    private void waitIndefinitelyForPid() {
+    private void maybeWaitForPid() {
         while (!transactionState.hasPid()) {
             try {
                 getPID(requestTimeout);
@@ -407,7 +407,7 @@ public class Sender implements Runnable {
                 this.sensors.recordRetries(batch.topicPartition.topic(), batch.recordCount);
             } else {
                 // TODO(apurva): Is 'KafkaException' the best one to throw here? What would be more appropriate?
-                errorOutBatch(batch,
+                failRecordBatch(batch,
                         response,
                         new KafkaException("Tried to retry a batch but the producer id has changed in the meantime. This batch will be dropped."));
                 this.sensors.recordErrors(batch.topicPartition.topic(), batch.recordCount);
@@ -428,7 +428,7 @@ public class Sender implements Runnable {
                 transactionState.reset();
             }
             // tell the user the result of their request
-            errorOutBatch(batch, response, exception);
+            failRecordBatch(batch, response, exception);
             if (error != Errors.NONE)
                 this.sensors.recordErrors(batch.topicPartition.topic(), batch.recordCount);
         }
@@ -451,7 +451,7 @@ public class Sender implements Runnable {
             this.accumulator.unmutePartition(batch.topicPartition);
     }
 
-    private void errorOutBatch(RecordBatch batch, ProduceResponse.PartitionResponse response, RuntimeException exception) {
+    private void failRecordBatch(RecordBatch batch, ProduceResponse.PartitionResponse response, RuntimeException exception) {
         batch.done(response.baseOffset, response.logAppendTime, exception);
         this.accumulator.deallocate(batch);
     }

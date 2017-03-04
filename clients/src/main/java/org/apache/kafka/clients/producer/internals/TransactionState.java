@@ -27,15 +27,15 @@ import static org.apache.kafka.common.record.LogEntry.NO_PID;
  * A class which maintains state for transactions. Also keeps the state necessary to ensure idempotent production.
  */
 public class TransactionState {
-    private final PidAndEpoch pidAndEpoch;
+    private volatile PidAndEpoch pidAndEpoch;
     private final boolean idempotenceEnabled;
     private final Map<TopicPartition, Integer> sequenceNumbers;
     private final Lock pidLock;
     private final Condition hasPidCondition;
 
     public static class PidAndEpoch {
-        public volatile long pid;
-        public volatile short epoch;
+        public final long pid;
+        public final short epoch;
 
         PidAndEpoch(long pid, short epoch) {
             this.pid = pid;
@@ -74,7 +74,7 @@ public class TransactionState {
             while (!hasPid()) {
                 hasPidCondition.await(maxWaitTimeMs, TimeUnit.MILLISECONDS);
             }
-            return new PidAndEpoch(pidAndEpoch.pid, pidAndEpoch.epoch);
+            return pidAndEpoch;
         } finally {
             pidLock.unlock();
         }
@@ -99,8 +99,7 @@ public class TransactionState {
     void setPidAndEpoch(long pid, short epoch) {
         pidLock.lock();
         try {
-            this.pidAndEpoch.pid = pid;
-            this.pidAndEpoch.epoch = epoch;
+            this.pidAndEpoch = new PidAndEpoch(pid, epoch);
             if (this.pidAndEpoch.isValid())
                 hasPidCondition.signalAll();
         } finally {

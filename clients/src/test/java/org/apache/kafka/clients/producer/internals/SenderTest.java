@@ -407,11 +407,10 @@ public class SenderTest {
                 this.metrics,
                 this.time,
                 REQUEST_TIMEOUT,
-                50, transactionState, apiVersions
-        );
-
-        this.metadata.update(this.cluster, time.milliseconds());
-
+                50,
+                transactionState,
+                apiVersions);
+        this.metadata.update(this.cluster, Collections.<String>emptySet(), time.milliseconds());
     }
 
 }
