@@ -56,8 +56,8 @@ public class MemoryRecordsBuilder {
     private final int initPos;
     private final long baseOffset;
     private final long logAppendTime;
-    private final long pid;
-    private final short epoch;
+    private long pid;
+    private short epoch;
     private int baseSequence;
     private final boolean isTransactional;
     private final int partitionLeaderEpoch;
@@ -194,13 +194,26 @@ public class MemoryRecordsBuilder {
     }
 
     /**
-     * We set the sequence of the batch just before it is about to be sent out.
-     * @param baseSequence
+     * We set the pid, epoch, and sequence of the batch just before it is about to be sent out.
      */
-    public void closeWithSequence(int baseSequence) {
-        this.baseSequence = baseSequence;
-        close();
-    }
+    public void closeWithTransactionState(long pid, short epoch, int baseSequence) {
+        if (isClosed() && (this.pid != pid || this.epoch != epoch || this.baseSequence != baseSequence)) {
+            // Sequence numbers are assigned when the batch is closed while the accumulator is being drained.
+            // If the resulting ProduceRequest to the partition leader failed for a retriable error, the batch will
+            // be re queued. When it is drained again, we expect it to receive the same sequence number as before.
+            // If this does not happen, it means that some other batch was written in the intervening period, which
+            // should not happen with a correctly configured producer (in particular for a producer which has
+            // max.in.light.requests == 1).
+            throw new IllegalStateException("Attempting to close the same batch with a different base sequence. "
+                    + "Being in this situation indicates data corruption is afoot.");
+        }
+        if (!isClosed()) {
+            this.pid = pid;
+            this.epoch = epoch;
+            this.baseSequence = baseSequence;
+            close();
+        }
+   }
 
     public void close() {
         if (builtRecords != null)

@@ -212,10 +212,8 @@ public final class RecordBatch {
         return !isWritable || recordsBuilder.isFull();
     }
 
-    public void closeWithSequence(int baseSequence) {
-        // TODO(apurva): if the batch is already closed, make sure that the existing sequence is the same as the
-        // incoming sequence. We will take the pid and epoch here also, and should validate those as well.
-        recordsBuilder.closeWithSequence(baseSequence);
+    public void closeWithTransactionState(long pid, short epoch, int baseSequence) {
+        recordsBuilder.closeWithTransactionState(pid, epoch, baseSequence);
         isWritable = false;
     }
 

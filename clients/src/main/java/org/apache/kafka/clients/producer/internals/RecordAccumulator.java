@@ -231,10 +231,6 @@ public final class RecordAccumulator {
             if (maxUsableMagic < LogEntry.MAGIC_VALUE_V2) {
                 throw new IllegalStateException("Attempting to use idempotence with an incompatible version of the message format");
             }
-            // TODO(apurva): Change the builder method to _not_ take the pid, epoch, and sequence. Set these at during close, so it happens only once.
-            return MemoryRecords.builder(buffer, maxUsableMagic, compression, TimestampType.CREATE_TIME,
-                    0L, time.milliseconds(), transactionState.pidAndEpoch().pid, transactionState.pidAndEpoch().epoch,
-                    transactionState.sequenceNumber(topicPartition));
         }
         return MemoryRecords.builder(buffer, maxUsableMagic, compression, TimestampType.CREATE_TIME, this.batchSize);
     }
@@ -439,10 +435,13 @@ public final class RecordAccumulator {
                                     } else {
                                         RecordBatch batch = deque.pollFirst();
                                         if (transactionState != null) {
-                                            log.debug("Dest: {} : Assigning sequence for {}-{} : {}", node,
+                                            log.debug("Dest: {} : pid: {}, epoch: {}, Assigning sequence for {}-{} : {}", node,
+                                                    transactionState.pidAndEpoch().pid, transactionState.pidAndEpoch().epoch,
                                                     batch.topicPartition.topic(), batch.topicPartition.partition(),
                                                     transactionState.sequenceNumber(batch.topicPartition));
-                                            batch.closeWithSequence(transactionState.sequenceNumber(batch.topicPartition));
+                                            batch.closeWithTransactionState(transactionState.pidAndEpoch().pid,
+                                                    transactionState.pidAndEpoch().epoch,
+                                                    transactionState.sequenceNumber(batch.topicPartition));
                                         } else {
                                             batch.close();
                                         }

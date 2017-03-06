@@ -422,9 +422,9 @@ public class Sender implements Runnable {
             if (error == Errors.OUT_OF_ORDER_SEQUENCE_NUMBER && batch.pid() == transactionState.pidAndEpoch().pid) {
                 // Reset the transactional state and get a new pid, since we can't recover from an out of order
                 // sequence error.
-                log.error("The broker received an out of order sequence number for topic-partition {} at offset {}. " +
+                log.error("The broker received an out of order sequence number for correlation id {}, topic-partition {} at offset {}. " +
                                 "This indicates data loss on the broker, and should be investigated.",
-                        batch.topicPartition, response.baseOffset);
+                        correlationId, batch.topicPartition, response.baseOffset);
                 transactionState.reset();
             }
             // tell the user the result of their request
@@ -441,10 +441,9 @@ public class Sender implements Runnable {
         if (error == Errors.NONE) {
             if (transactionState != null) {
                 transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
-                log.info("Incremented sequence number for {}-{} to {}", batch.topicPartition.topic(),
+                log.debug("Incremented sequence number for {}-{} to {}", batch.topicPartition.topic(),
                         batch.topicPartition.partition(), transactionState.sequenceNumber(batch.topicPartition));
             }
-
         }
         // Unmute the completed partition.
         if (guaranteeMessageOrder)

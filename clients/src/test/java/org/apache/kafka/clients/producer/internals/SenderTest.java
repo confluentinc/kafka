@@ -227,16 +227,18 @@ public class SenderTest {
         Metrics m = new Metrics();
         try {
             Sender sender = new Sender(client,
-                                       metadata,
-                                       this.accumulator,
-                                       false,
-                                       MAX_REQUEST_SIZE,
-                                       ACKS_ALL,
-                                       maxRetries,
-                                       m,
-                                       time,
-                                       REQUEST_TIMEOUT,
-                    50, null, apiVersions
+                    metadata,
+                    this.accumulator,
+                    false,
+                    MAX_REQUEST_SIZE,
+                    ACKS_ALL,
+                    maxRetries,
+                    m,
+                    time,
+                    REQUEST_TIMEOUT,
+                    50,
+                    null,
+                    apiVersions
             );
             // do a successful retry
             Future<RecordMetadata> future = accumulator.append(tp0, 0L, "key".getBytes(), "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
@@ -281,16 +283,18 @@ public class SenderTest {
         Metrics m = new Metrics();
         try {
             Sender sender = new Sender(client,
-                metadata,
-                this.accumulator,
-                true,
-                MAX_REQUEST_SIZE,
-                ACKS_ALL,
-                maxRetries,
-                m,
-                time,
-                REQUEST_TIMEOUT,
-                    50, null, apiVersions
+                    metadata,
+                    this.accumulator,
+                    true,
+                    MAX_REQUEST_SIZE,
+                    ACKS_ALL,
+                    maxRetries,
+                    m,
+                    time,
+                    REQUEST_TIMEOUT,
+                    50,
+                    null,
+                    apiVersions
             );
             // Create a two broker cluster, with partition 0 on broker 0 and partition 1 on broker 1
             Cluster cluster1 = TestUtils.clusterWith(2, "test", 2);
@@ -373,6 +377,133 @@ public class SenderTest {
         sender.run(time.milliseconds());
         assertTrue(transactionState.hasPid());
         assertEquals(transactionState.pidAndEpoch().pid, producerId);
+    }
+
+    @Test
+    public void testSequenceNumberIncrement() throws InterruptedException {
+        final long producerId = 343434L;
+        TransactionState transactionState = new TransactionState(true);
+        transactionState.setPidAndEpoch(producerId, (short) 0);
+        setupWithTransactionState(transactionState);
+        client.setNode(new Node(1, "localhost", 33343));
+
+        int maxRetries = 10;
+        Metrics m = new Metrics();
+        Sender sender = new Sender(client,
+                metadata,
+                this.accumulator,
+                true,
+                MAX_REQUEST_SIZE,
+                ACKS_ALL,
+                maxRetries,
+                m,
+                time,
+                REQUEST_TIMEOUT,
+                50,
+                transactionState,
+                apiVersions
+        );
+
+        Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(), "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
+        sender.run(time.milliseconds());  // connect.
+        sender.run(time.milliseconds());  // send.
+
+        assertEquals(1, client.inFlightRequestCount());
+        assertEquals("Expected no sequence number before receiving a response", (long) transactionState.sequenceNumber(tp0), 0L);
+
+        client.respond(produceResponse(tp0, 0, Errors.NONE, 0));
+
+        sender.run(time.milliseconds());
+        assertTrue(responseFuture.isDone());
+        assertEquals((long) transactionState.sequenceNumber(tp0), 1L);
+
+    }
+
+    @Test
+    public void testAbortWhenPidChanges() throws InterruptedException {
+        final long producerId = 343434L;
+        TransactionState transactionState = new TransactionState(true);
+        transactionState.setPidAndEpoch(producerId, (short) 0);
+        setupWithTransactionState(transactionState);
+        client.setNode(new Node(1, "localhost", 33343));
+
+        int maxRetries = 10;
+        Metrics m = new Metrics();
+        Sender sender = new Sender(client,
+                metadata,
+                this.accumulator,
+                true,
+                MAX_REQUEST_SIZE,
+                ACKS_ALL,
+                maxRetries,
+                m,
+                time,
+                REQUEST_TIMEOUT,
+                50,
+                transactionState,
+                apiVersions
+        );
+
+        Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(), "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
+        sender.run(time.milliseconds());  // connect.
+        sender.run(time.milliseconds());  // send.
+        String id = client.requests().peek().destination();
+        Node node = new Node(Integer.valueOf(id), "localhost", 0);
+        assertEquals(1, client.inFlightRequestCount());
+        assertTrue("Client ready status should be true", client.isReady(node, 0L));
+        client.disconnect(id);
+        assertEquals(0, client.inFlightRequestCount());
+        assertFalse("Client ready status should be false", client.isReady(node, 0L));
+
+        transactionState.setPidAndEpoch(producerId + 1, (short) 0);
+        sender.run(time.milliseconds()); // receive error
+        sender.run(time.milliseconds()); // reconnect
+        sender.run(time.milliseconds()); // nothing to do, since the pid has changed. We should check the metrics for errors.
+        assertEquals("Expected requests to be aborted after pid change", 0, client.inFlightRequestCount());
+
+        KafkaMetric recordErrors = m.metrics().get(m.metricName("record-error-rate", METRIC_GROUP, ""));
+        assertTrue("Expected non-zero value for record send errors", recordErrors.value() > 0);
+
+        assertTrue(responseFuture.isDone());
+        assertEquals((long) transactionState.sequenceNumber(tp0), 0L);
+    }
+
+    @Test
+    public void testResetWhenOutOfOrderSequenceReceived() throws InterruptedException {
+        final long producerId = 343434L;
+        TransactionState transactionState = new TransactionState(true);
+        transactionState.setPidAndEpoch(producerId, (short) 0);
+        setupWithTransactionState(transactionState);
+        client.setNode(new Node(1, "localhost", 33343));
+
+        int maxRetries = 10;
+        Metrics m = new Metrics();
+        Sender sender = new Sender(client,
+                metadata,
+                this.accumulator,
+                true,
+                MAX_REQUEST_SIZE,
+                ACKS_ALL,
+                maxRetries,
+                m,
+                time,
+                REQUEST_TIMEOUT,
+                50,
+                transactionState,
+                apiVersions
+        );
+
+        Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(), "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
+        sender.run(time.milliseconds());  // connect.
+        sender.run(time.milliseconds());  // send.
+
+        assertEquals(1, client.inFlightRequestCount());
+
+        client.respond(produceResponse(tp0, 0, Errors.OUT_OF_ORDER_SEQUENCE_NUMBER, 0));
+
+        sender.run(time.milliseconds());
+        assertTrue(responseFuture.isDone());
+        assertFalse("Expected transaction state to be reset upon receiving an OutOfOrderSequenceException", transactionState.hasPid());
     }
 
     private void completedWithError(Future<RecordMetadata> future, Errors error) throws Exception {
