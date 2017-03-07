@@ -296,10 +296,10 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             } else {
                 this.requestTimeoutMs = config.getInt(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG);
             }
-            boolean idempotenceEnabled = config.getBoolean(ProducerConfig.IDEMPOTENCE_ENABLED_CONFIG);
+            boolean idempotenceEnabled = config.getBoolean(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG);
 
             if (idempotenceEnabled) {
-                this.transactionState = new TransactionState(idempotenceEnabled);
+                this.transactionState = new TransactionState(idempotenceEnabled, time);
                 if (config.getInt(ProducerConfig.RETRIES_CONFIG) == 0) {
                     throw new ConfigException("Need to set '" + ProducerConfig.RETRIES_CONFIG
                             + "' to greater than zero in order to use the idempotent producer.");
@@ -351,8 +351,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     this.requestTimeoutMs,
                     config.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG),
                     this.transactionState,
-                    apiVersions
-            );
+                    apiVersions);
             String ioThreadName = "kafka-producer-network-thread" + (clientId.length() > 0 ? " | " + clientId : "");
             this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
             this.ioThread.start();
@@ -474,7 +473,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             // first make sure the metadata for the topic is available
             ClusterAndWaitTime clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
             long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
-            remainingWaitMs = waitOnPid(remainingWaitMs);
+            remainingWaitMs = maybeWaitOnPid(remainingWaitMs);
             Cluster cluster = clusterAndWaitTime.cluster;
             byte[] serializedKey;
             try {
@@ -595,14 +594,13 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         return new ClusterAndWaitTime(cluster, elapsed);
     }
 
-    private long waitOnPid(long maxWaitMs) throws InterruptedException {
+    private long maybeWaitOnPid(long maxWaitMs) throws InterruptedException {
         if (transactionState == null) {
             return maxWaitMs;
         }
         long start = time.milliseconds();
         TransactionState.PidAndEpoch pidAndEpoch = transactionState.pidAndEpoch(maxWaitMs);
         if (!pidAndEpoch.isValid()) {
-            // TODO(apurva): Is this the best exception to throw here?
             throw new TimeoutException("Could not retrieve a pid within " + maxWaitMs + " ms");
         }
         return Math.max(0, maxWaitMs - (time.milliseconds() - start));

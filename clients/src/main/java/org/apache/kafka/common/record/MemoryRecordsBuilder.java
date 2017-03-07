@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.common.record;
 
+import org.apache.kafka.clients.producer.internals.TransactionState;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.protocol.types.Struct;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
@@ -193,11 +194,8 @@ public class MemoryRecordsBuilder {
             return new RecordsInfo(maxTimestamp, compressionType == CompressionType.NONE ? offsetOfMaxTimestamp : lastOffset);
     }
 
-    /**
-     * We set the pid, epoch, and sequence of the batch just before it is about to be sent out.
-     */
-    public void closeWithTransactionState(long pid, short epoch, int baseSequence) {
-        if (isClosed() && (this.pid != pid || this.epoch != epoch || this.baseSequence != baseSequence)) {
+    public void setProducerState(TransactionState.PidAndEpoch pidAndEpoch, int baseSequence) {
+        if (isClosed() && (this.pid != pidAndEpoch.pid || this.epoch != pidAndEpoch.epoch || this.baseSequence != baseSequence)) {
             // Sequence numbers are assigned when the batch is closed while the accumulator is being drained.
             // If the resulting ProduceRequest to the partition leader failed for a retriable error, the batch will
             // be re queued. When it is drained again, we expect it to receive the same sequence number as before.
@@ -207,12 +205,9 @@ public class MemoryRecordsBuilder {
             throw new IllegalStateException("Attempting to close the same batch with a different base sequence. "
                     + "Being in this situation indicates data corruption is afoot.");
         }
-        if (!isClosed()) {
-            this.pid = pid;
-            this.epoch = epoch;
-            this.baseSequence = baseSequence;
-            close();
-        }
+        this.pid = pidAndEpoch.pid;
+        this.epoch = pidAndEpoch.epoch;
+        this.baseSequence = baseSequence;
    }
 
     public void close() {

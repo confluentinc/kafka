@@ -13,13 +13,10 @@
 package org.apache.kafka.clients.producer.internals;
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.utils.Time;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static org.apache.kafka.common.record.LogEntry.NO_PID;
 
@@ -30,8 +27,7 @@ public class TransactionState {
     private volatile PidAndEpoch pidAndEpoch;
     private final boolean idempotenceEnabled;
     private final Map<TopicPartition, Integer> sequenceNumbers;
-    private final Lock pidLock;
-    private final Condition hasPidCondition;
+    private final Time time;
 
     public static class PidAndEpoch {
         public final long pid;
@@ -47,13 +43,11 @@ public class TransactionState {
         }
     }
 
-    public TransactionState(boolean idempotenceEnabled) {
+    public TransactionState(boolean idempotenceEnabled, Time time) {
         pidAndEpoch = new PidAndEpoch(NO_PID, (short) 0);
         sequenceNumbers = new HashMap<>();
         this.idempotenceEnabled = idempotenceEnabled;
-
-        this.pidLock = new ReentrantLock();
-        this.hasPidCondition = pidLock.newCondition();
+        this.time = time;
     }
 
     boolean hasPid() {
@@ -68,16 +62,13 @@ public class TransactionState {
      * @return a PidAndEpoch object. Callers must call the 'isValid' method fo the returned object to ensure that a
      *         valid Pid and epoch is actually returned.
      */
-    public PidAndEpoch pidAndEpoch(long maxWaitTimeMs) throws InterruptedException {
-        pidLock.lock();
-        try {
-            while (!hasPid()) {
-                hasPidCondition.await(maxWaitTimeMs, TimeUnit.MILLISECONDS);
-            }
-            return pidAndEpoch;
-        } finally {
-            pidLock.unlock();
+    public synchronized PidAndEpoch pidAndEpoch(long maxWaitTimeMs) throws InterruptedException {
+        while (!hasPid() && 0 < maxWaitTimeMs) {
+            long start = time.milliseconds();
+            wait(maxWaitTimeMs);
+            maxWaitTimeMs = maxWaitTimeMs - (time.milliseconds() - start);
         }
+        return pidAndEpoch;
     }
 
     PidAndEpoch pidAndEpoch() {
@@ -96,63 +87,43 @@ public class TransactionState {
      * Set the pid and epoch atomically. This method will signal any callers blocked on the `pidAndEpoch` method
      * once the pid is set. This method will be called on the background thread when the broker responds with the pid.
      */
-    void setPidAndEpoch(long pid, short epoch) {
-        pidLock.lock();
-        try {
-            this.pidAndEpoch = new PidAndEpoch(pid, epoch);
-            if (this.pidAndEpoch.isValid())
-                hasPidCondition.signalAll();
-        } finally {
-            pidLock.unlock();
-        }
+    synchronized void setPidAndEpoch(long pid, short epoch) {
+        this.pidAndEpoch = new PidAndEpoch(pid, epoch);
+        if (this.pidAndEpoch.isValid())
+            notifyAll();
     }
 
     /**
      * This method is used when the producer needs to reset it's internal state because of an irrecoverable exception
      * from the broker.
     */
-    public void reset() {
-        pidLock.lock();
-        try {
-            setPidAndEpoch(NO_PID, (short) 0);
-            this.sequenceNumbers.clear();
-        } finally {
-            pidLock.unlock();
-        }
+    public synchronized void reset() {
+        setPidAndEpoch(NO_PID, (short) 0);
+        this.sequenceNumbers.clear();
     }
 
     /**
      * Returns the next sequence number to be written to the given TopicPartition.
      */
-    Integer sequenceNumber(TopicPartition topicPartition) {
-        pidLock.lock();
-        try {
-            if (!idempotenceEnabled) {
-                throw new IllegalStateException("Attempting to access sequence numbers when idempotence is disabled");
-            }
-            if (!sequenceNumbers.containsKey(topicPartition)) {
-                sequenceNumbers.put(topicPartition, 0);
-            }
-            return sequenceNumbers.get(topicPartition);
-        } finally {
-            pidLock.unlock();
+    synchronized Integer sequenceNumber(TopicPartition topicPartition) {
+        if (!idempotenceEnabled) {
+            throw new IllegalStateException("Attempting to access sequence numbers when idempotence is disabled");
         }
+        if (!sequenceNumbers.containsKey(topicPartition)) {
+            sequenceNumbers.put(topicPartition, 0);
+        }
+        return sequenceNumbers.get(topicPartition);
     }
 
-    void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
-        pidLock.lock();
-        try {
-            if (!idempotenceEnabled) {
-                throw new IllegalStateException("Attempt to modify sequence numbers when idempotence is disabled");
-            }
-            if (!sequenceNumbers.containsKey(topicPartition)) {
-                sequenceNumbers.put(topicPartition, 0);
-            }
-            int currentSequenceNumber = sequenceNumbers.get(topicPartition);
-            currentSequenceNumber += increment;
-            sequenceNumbers.put(topicPartition, currentSequenceNumber);
-        } finally {
-            pidLock.unlock();
+    synchronized void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
+        if (!idempotenceEnabled) {
+            throw new IllegalStateException("Attempt to modify sequence numbers when idempotence is disabled");
         }
+        if (!sequenceNumbers.containsKey(topicPartition)) {
+            sequenceNumbers.put(topicPartition, 0);
+        }
+        int currentSequenceNumber = sequenceNumbers.get(topicPartition);
+        currentSequenceNumber += increment;
+        sequenceNumbers.put(topicPartition, currentSequenceNumber);
     }
 }

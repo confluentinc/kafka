@@ -14,6 +14,7 @@ package org.apache.kafka.clients.producer.internals;
 
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.utils.MockTime;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -30,7 +31,7 @@ public class TransactionStateTest {
 
     @Test
     public void testBasicSequenceIncrement() {
-        TransactionState transactionState = new TransactionState(true);
+        TransactionState transactionState = new TransactionState(true, new MockTime());
         transactionState.incrementSequenceNumber(topicPartition, 3333);
 
         assertEquals((int) transactionState.sequenceNumber(topicPartition), 3333);
@@ -40,7 +41,7 @@ public class TransactionStateTest {
 
     @Test
     public void testDefaultSequenceNumber() {
-        TransactionState transactionState = new TransactionState(true);
+        TransactionState transactionState = new TransactionState(true, new MockTime());
         assertEquals((int) transactionState.sequenceNumber(topicPartition), 0);
         transactionState.incrementSequenceNumber(topicPartition, 3);
         assertEquals((int) transactionState.sequenceNumber(topicPartition), 3);

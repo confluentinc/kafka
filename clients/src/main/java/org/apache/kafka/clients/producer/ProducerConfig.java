@@ -225,8 +225,8 @@ public class ProducerConfig extends AbstractConfig {
                                                         + "received by the producer before they are published to the Kafka cluster. By default, there are no interceptors.";
 
     /** <code>enable.idempotence</code> */
-    public static final String IDEMPOTENCE_ENABLED_CONFIG = "enable.idempotence";
-    public static final String IDEMPOTENCE_ENABLED_DOC = "When set to 'true', the producer will ensure that exactly one copy of each message is written in the stream. If 'false', producer "
+    public static final String ENABLE_IDEMPOTENCE_CONFIG = "enable.idempotence";
+    public static final String ENABLE_IDEMPOTENCE_DOC = "When set to 'true', the producer will ensure that exactly one copy of each message is written in the stream. If 'false', producer "
                                                         + "retries due to broker failures, etc., may write duplicates of the retried message in the stream. This is set to 'false' by default. ";
     static {
         CONFIG = new ConfigDef().define(BOOTSTRAP_SERVERS_CONFIG, Type.LIST, Importance.HIGH, CommonClientConfigs.BOOTSTRAP_SERVERS_DOC)
@@ -318,11 +318,11 @@ public class ProducerConfig extends AbstractConfig {
                                         CommonClientConfigs.SECURITY_PROTOCOL_DOC)
                                 .withClientSslSupport()
                                 .withClientSaslSupport()
-                                .define(IDEMPOTENCE_ENABLED_CONFIG,
+                                .define(ENABLE_IDEMPOTENCE_CONFIG,
                                         Type.BOOLEAN,
                                         false,
                                         Importance.LOW,
-                                        IDEMPOTENCE_ENABLED_DOC);
+                                        ENABLE_IDEMPOTENCE_DOC);
     }
 
     public static Map<String, Object> addSerializerToConfig(Map<String, Object> configs,

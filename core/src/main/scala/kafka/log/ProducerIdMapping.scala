@@ -45,7 +45,7 @@ case class PidEntry(lastSeq: Int,
     lastOffset - numRecords + 1
   }
 }
-private[log] case class PidEntryTuple(firstEntry: PidEntry, lastEntry: PidEntry)
+private[log] case class PidEntryRange(firstEntry: PidEntry, lastEntry: PidEntry)
 private[log] class CorruptSnapshotException(msg: String) extends KafkaException(msg)
 
 object ProducerIdMapping {

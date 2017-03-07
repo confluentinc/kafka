@@ -232,17 +232,17 @@ public class Sender implements Runnable {
 
         // Reset the PID if an expired batch has previously been sent to the broker. Aloso update the metrcis
         // for expired batches.
-        boolean resetState = false;
+        boolean needsTransactionStateReset = false;
         for (RecordBatch expiredBatch : expiredBatches) {
             if (transactionState != null && expiredBatch.inRetry()) {
-                resetState = true;
+                needsTransactionStateReset = true;
             }
             this.sensors.recordErrors(expiredBatch.topicPartition.topic(), expiredBatch.recordCount);
         }
 
-        if (resetState) {
+        if (needsTransactionStateReset) {
             transactionState.reset();
-            maybeWaitForPid();
+            return;
         }
 
         sensors.updateProduceRequestMetrics(batches);
@@ -288,7 +288,6 @@ public class Sender implements Runnable {
         // Send an InitPIDRequest, wait for the response, retrieve the PID from the response if success. Return it.
         // Otherwise throw exception.
         // Pick a random broker to send the initPIDRequest to.
-        metadata.requestUpdate();
         long start = time.milliseconds();
         Node node = client.leastLoadedNode(time.milliseconds());
         while (!client.ready(node, time.milliseconds()) && 0 <= remainingTime) {
@@ -330,6 +329,7 @@ public class Sender implements Runnable {
                 getPID(requestTimeout);
                 if (!transactionState.hasPid())
                     Thread.sleep(retryBackoffMs);
+                metadata.requestUpdate();
             } catch (InterruptedException e) {
                 // Swallow this.
             }
@@ -337,6 +337,7 @@ public class Sender implements Runnable {
     }
 
     private void handleInitPidResponse(ClientResponse response) {
+        // TODO(apurva): Do we have to check for a version mismatch here?
         if (response.hasResponse()) {
             InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
             transactionState.setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
@@ -438,12 +439,10 @@ public class Sender implements Runnable {
                         "topic/partition may not exist or the user may not have Describe access to it", batch.topicPartition);
             metadata.requestUpdate();
         }
-        if (error == Errors.NONE) {
-            if (transactionState != null) {
-                transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
-                log.debug("Incremented sequence number for {}-{} to {}", batch.topicPartition.topic(),
-                        batch.topicPartition.partition(), transactionState.sequenceNumber(batch.topicPartition));
-            }
+        if (error == Errors.NONE && transactionState != null && transactionState.pidAndEpoch().pid == batch.pid()) {
+            transactionState.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+            log.debug("Incremented sequence number for {}-{} to {}", batch.topicPartition.topic(),
+                    batch.topicPartition.partition(), transactionState.sequenceNumber(batch.topicPartition));
         }
         // Unmute the completed partition.
         if (guaranteeMessageOrder)

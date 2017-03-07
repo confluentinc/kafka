@@ -365,7 +365,7 @@ public class SenderTest {
     @Test
     public void testInitPidRequest() throws Exception {
         final long producerId = 343434L;
-        TransactionState transactionState = new TransactionState(true);
+        TransactionState transactionState = new TransactionState(true, new MockTime());
         setupWithTransactionState(transactionState);
         client.setNode(new Node(1, "localhost", 33343));
         client.prepareResponse(new MockClient.RequestMatcher() {
@@ -382,7 +382,7 @@ public class SenderTest {
     @Test
     public void testSequenceNumberIncrement() throws InterruptedException {
         final long producerId = 343434L;
-        TransactionState transactionState = new TransactionState(true);
+        TransactionState transactionState = new TransactionState(true, new MockTime());
         transactionState.setPidAndEpoch(producerId, (short) 0);
         setupWithTransactionState(transactionState);
         client.setNode(new Node(1, "localhost", 33343));
@@ -422,7 +422,7 @@ public class SenderTest {
     @Test
     public void testAbortWhenPidChanges() throws InterruptedException {
         final long producerId = 343434L;
-        TransactionState transactionState = new TransactionState(true);
+        TransactionState transactionState = new TransactionState(true, new MockTime());
         transactionState.setPidAndEpoch(producerId, (short) 0);
         setupWithTransactionState(transactionState);
         client.setNode(new Node(1, "localhost", 33343));
@@ -471,7 +471,7 @@ public class SenderTest {
     @Test
     public void testResetWhenOutOfOrderSequenceReceived() throws InterruptedException {
         final long producerId = 343434L;
-        TransactionState transactionState = new TransactionState(true);
+        TransactionState transactionState = new TransactionState(true, new MockTime());
         transactionState.setPidAndEpoch(producerId, (short) 0);
         setupWithTransactionState(transactionState);
         client.setNode(new Node(1, "localhost", 33343));
@@ -543,5 +543,4 @@ public class SenderTest {
                 apiVersions);
         this.metadata.update(this.cluster, Collections.<String>emptySet(), time.milliseconds());
     }
-
 }

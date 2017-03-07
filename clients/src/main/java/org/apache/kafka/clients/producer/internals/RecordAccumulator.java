@@ -227,10 +227,8 @@ public final class RecordAccumulator {
     }
 
     private MemoryRecordsBuilder getRecordsBuilder(ByteBuffer buffer, byte maxUsableMagic, TopicPartition topicPartition) {
-        if (transactionState != null) {
-            if (maxUsableMagic < LogEntry.MAGIC_VALUE_V2) {
-                throw new IllegalStateException("Attempting to use idempotence with an incompatible version of the message format");
-            }
+        if (transactionState != null && maxUsableMagic < LogEntry.MAGIC_VALUE_V2) {
+            throw new IllegalStateException("Attempting to use idempotence with an incompatible version of the message format");
         }
         return MemoryRecords.builder(buffer, maxUsableMagic, compression, TimestampType.CREATE_TIME, this.batchSize);
     }
@@ -435,16 +433,15 @@ public final class RecordAccumulator {
                                     } else {
                                         RecordBatch batch = deque.pollFirst();
                                         if (transactionState != null) {
+                                            int sequenceNumber = transactionState.sequenceNumber(batch.topicPartition);
+                                            TransactionState.PidAndEpoch pidAndEpoch = transactionState.pidAndEpoch();
                                             log.debug("Dest: {} : pid: {}, epoch: {}, Assigning sequence for {}-{} : {}", node,
-                                                    transactionState.pidAndEpoch().pid, transactionState.pidAndEpoch().epoch,
+                                                    pidAndEpoch.pid, pidAndEpoch.epoch,
                                                     batch.topicPartition.topic(), batch.topicPartition.partition(),
-                                                    transactionState.sequenceNumber(batch.topicPartition));
-                                            batch.closeWithTransactionState(transactionState.pidAndEpoch().pid,
-                                                    transactionState.pidAndEpoch().epoch,
-                                                    transactionState.sequenceNumber(batch.topicPartition));
-                                        } else {
-                                            batch.close();
+                                                    sequenceNumber);
+                                            batch.setProducerState(pidAndEpoch, sequenceNumber);
                                         }
+                                        batch.close();
                                         size += batch.sizeInBytes();
                                         ready.add(batch);
                                         batch.drainedMs = now;

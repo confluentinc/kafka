@@ -212,9 +212,8 @@ public final class RecordBatch {
         return !isWritable || recordsBuilder.isFull();
     }
 
-    public void closeWithTransactionState(long pid, short epoch, int baseSequence) {
-        recordsBuilder.closeWithTransactionState(pid, epoch, baseSequence);
-        isWritable = false;
+    public void setProducerState(TransactionState.PidAndEpoch pidAndEpoch, int baseSequence) {
+        recordsBuilder.setProducerState(pidAndEpoch, baseSequence);
     }
 
     public void close() {
