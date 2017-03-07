@@ -289,7 +289,7 @@ public class MemoryRecordsTest {
 
     private static class RetainNonNullKeysFilter implements MemoryRecords.LogRecordFilter {
         @Override
-        public boolean shouldRetain(LogRecord record) {
+        public boolean shouldRetain(LogEntry entry, LogRecord record) {
             return record.hasKey();
         }
     }

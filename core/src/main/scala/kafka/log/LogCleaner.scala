@@ -27,7 +27,7 @@ import kafka.common._
 import kafka.metrics.KafkaMetricsGroup
 import kafka.utils._
 import org.apache.kafka.common.record.MemoryRecords.LogRecordFilter
-import org.apache.kafka.common.record.{FileRecords, LogRecord, MemoryRecords}
+import org.apache.kafka.common.record.{FileRecords, LogEntry, LogRecord, MemoryRecords}
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.common.TopicPartition
 
@@ -219,8 +219,7 @@ class LogCleaner(val config: CleanerConfig,
     override def doWork() {
       cleanOrSleep()
     }
-    
-    
+
     override def shutdown() = {
     	 initiateShutdown()
     	 backOffWaitLatch.countDown()
@@ -402,7 +401,7 @@ private[log] class Cleaner(val id: Int,
         val retainDeletes = old.lastModified > deleteHorizonMs
         info("Cleaning segment %s in log %s (largest timestamp %s) into %s, %s deletes."
             .format(old.baseOffset, log.name, new Date(old.largestTimestamp), cleaned.baseOffset, if(retainDeletes) "retaining" else "discarding"))
-        cleanInto(log.topicPartition, old, cleaned, map, retainDeletes, log.config.maxMessageSize, stats)
+        cleanInto(log.topicPartition, old, cleaned, map, retainDeletes, log.config.maxMessageSize, log.activePids, stats)
       }
 
       // trim excess index
@@ -449,9 +448,15 @@ private[log] class Cleaner(val id: Int,
                              map: OffsetMap,
                              retainDeletes: Boolean,
                              maxLogMessageSize: Int,
+                             activePids: Map[Long, PidEntry],
                              stats: CleanerStats) {
     val logCleanerFilter = new LogRecordFilter {
-      def shouldRetain(record: LogRecord): Boolean = shouldRetainMessage(source, map, retainDeletes, record, stats)
+      def shouldRetain(entry: LogEntry, record: LogRecord): Boolean = {
+        // retain the entry if it is the last one produced by an active idempotent producer to ensure that
+        // the PID is not removed from the log before it has been expired
+        val isLastEntryForPid = entry.pid != LogEntry.NO_PID && activePids.get(entry.pid).exists(_.offset == record.offset)
+        isLastEntryForPid || shouldRetainMessage(source, map, retainDeletes, record, stats)
+      }
     }
 
     var position = 0
@@ -497,7 +502,6 @@ private[log] class Cleaner(val id: Int,
     val pastLatestOffset = entry.offset > map.latestOffset
     if (pastLatestOffset)
       return true
-
 
     if (entry.hasKey) {
       val key = entry.key
