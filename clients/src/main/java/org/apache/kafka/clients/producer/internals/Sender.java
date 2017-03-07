@@ -22,6 +22,7 @@ import org.apache.kafka.clients.ClientResponse;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.RequestCompletionHandler;
+import org.apache.kafka.clients.consumer.internals.NoAvailableBrokersException;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.MetricName;
@@ -54,7 +55,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The background thread that handles the sending of produce requests to the Kafka cluster. This thread makes metadata
@@ -284,54 +284,46 @@ public class Sender implements Runnable {
         initiateClose();
     }
 
-    private void getPID(long remainingTime) {
-        // Send an InitPIDRequest, wait for the response, retrieve the PID from the response if success. Return it.
-        // Otherwise throw exception.
-        // Pick a random broker to send the initPIDRequest to.
-        long start = time.milliseconds();
-        Node node = client.leastLoadedNode(time.milliseconds());
-        while (!client.ready(node, time.milliseconds()) && 0 <= remainingTime) {
-            if (client.connectionFailed(node)) {
-                return;
-            }
-            client.poll(100, time.milliseconds());
-            remainingTime = remainingTime - (time.milliseconds() - start);
-        }
-        if (remainingTime <= 0) {
-            return;
-        }
-
-        final AtomicBoolean initPidRequestCompleted = new AtomicBoolean(false);
-
+    private void sendInitPidRequest(Node node) {
         String nodeId = node.idString();
         InitPidRequest.Builder builder = new InitPidRequest.Builder(null);
         RequestCompletionHandler callback = new RequestCompletionHandler() {
             public void onComplete(ClientResponse response) {
-                initPidRequestCompleted.set(true);
                 handleInitPidResponse(response);
             }
         };
-
         ClientRequest request = client.newClientRequest(nodeId, builder, time.milliseconds(), true, callback);
         client.send(request, time.milliseconds());
-        start = time.milliseconds();
-        boolean isDisconnected = false;
-        while (!initPidRequestCompleted.get() && !isDisconnected && 0 <= remainingTime) {
-            client.poll(retryBackoffMs, time.milliseconds());
-            isDisconnected = client.connectionFailed(node);
-            remainingTime = remainingTime - (time.milliseconds() - start);
+    }
+
+    private Node getReadyNode(long remainingTimeMs) {
+        Node node = client.leastLoadedNode(time.milliseconds());
+        if (node == null) {
+            return null;
         }
+        client.ready(node, time.milliseconds());
+        if (client.connectionFailed(node))
+            return null;
+        client.poll(remainingTimeMs, time.milliseconds());
+        if (client.isReady(node, time.milliseconds()))
+            return node;
+        return null;
     }
 
     private void maybeWaitForPid() {
         while (!transactionState.hasPid()) {
             try {
-                getPID(requestTimeout);
-                if (!transactionState.hasPid())
-                    Thread.sleep(retryBackoffMs);
+                Node node = getReadyNode(requestTimeout);
+                if (node == null) {
+                    log.warn("Could not find an available node while trying to get a producer id.");
+                    throw new NoAvailableBrokersException();
+                }
+                sendInitPidRequest(node);
+                client.poll(requestTimeout, time.milliseconds());
+            } catch (Exception e) {
+                log.warn("Received an exception {} while trying to get a pid. Will back off and retry.", e.getMessage());
+                time.sleep(retryBackoffMs);
                 metadata.requestUpdate();
-            } catch (InterruptedException e) {
-                // Swallow this.
             }
         }
     }
