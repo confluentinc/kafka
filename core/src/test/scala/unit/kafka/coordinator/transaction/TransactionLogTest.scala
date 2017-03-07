@@ -66,7 +66,6 @@ class TransactionLogTest extends JUnitSuite {
       5L -> CompleteAbort)
 
     // generate transaction log messages
-
     val txnRecords = pidMappings.map { case (transactionalId, pid) =>
       val txnMetadata = new TransactionMetadata(transactionStates(pid))
 

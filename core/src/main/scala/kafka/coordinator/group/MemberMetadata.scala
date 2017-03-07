@@ -19,7 +19,6 @@ package kafka.coordinator.group
 
 import java.util
 
-import JoinGroupResult
 import kafka.utils.nonthreadsafe
 import org.apache.kafka.common.protocol.Errors
 

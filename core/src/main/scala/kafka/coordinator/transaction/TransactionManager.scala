@@ -254,9 +254,9 @@ class TransactionManager(brokerId: Int,
         if (numPidsRemoved > 0)
           info(s"Removed $numPidsRemoved cached pid metadata for $topicPartition on follower transition")
       }
-
-      scheduler.schedule(topicPartition.toString, removePidAndTransactions)
     }
+
+    scheduler.schedule(topicPartition.toString, removePidAndTransactions)
   }
 
   def shutdown() {

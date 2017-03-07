@@ -92,6 +92,8 @@ class TransactionCoordinator(val brokerId: Int,
     }
   }
 
+  def partitionFor(transactionalId: String): Int = txnManager.partitionFor(transactionalId)
+
   def handleTxnImmigration(transactionStateTopicPartitionId: Int) {
     txnManager.loadTransactionsForPartition(transactionStateTopicPartitionId)
   }

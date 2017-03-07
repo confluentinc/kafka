@@ -81,6 +81,10 @@ private[coordinator] object TransactionMetadata {
       case unknown => throw new IllegalStateException("Unknown transaction state byte " + unknown + " from the transaction status message")
     }
   }
+
+  def byteToTxnMetadata(byte: Byte): TransactionMetadata = new TransactionMetadata(byteToState(byte))
+
+  def stateToTxnMetadata(state: TransactionState): TransactionMetadata = new TransactionMetadata(state)
 }
 
 @nonthreadsafe
