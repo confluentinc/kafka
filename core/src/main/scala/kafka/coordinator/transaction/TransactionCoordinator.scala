@@ -16,10 +16,11 @@
  */
 package kafka.coordinator.transaction
 
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
 import kafka.server.{KafkaConfig, ReplicaManager}
-import kafka.utils.{Logging, ZkUtils}
+import kafka.utils.{Logging, Scheduler, ZkUtils}
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.utils.Time
 
@@ -33,18 +34,24 @@ import org.apache.kafka.common.utils.Time
  */
 object TransactionCoordinator {
 
-  def apply(config: KafkaConfig, replicaManager: ReplicaManager, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
+  def apply(config: KafkaConfig, replicaManager: ReplicaManager, scheduler: Scheduler, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
+
+    val txnConfig = TransactionConfig(config.transactionTopicPartitions,
+      config.transactionTopicReplicationFactor,
+      config.transactionTopicSegmentBytes,
+      config.transactionsLoadBufferSize,
+      config.transactionTopicMinISR)
 
     val pidManager = new PidManager(config.brokerId, zkUtils)
-    val logManager = new TransactionManager(config.brokerId, zkUtils, replicaManager, time)
+    val logManager = new TransactionManager(config.brokerId, zkUtils, scheduler, replicaManager, txnConfig, time)
 
     new TransactionCoordinator(config.brokerId, pidManager, logManager)
   }
 }
 
-class TransactionCoordinator(val brokerId: Int,
-                             val pidManager: PidManager,
-                             val txnManager: TransactionManager) extends Logging {
+class TransactionCoordinator(brokerId: Int,
+                             pidManager: PidManager,
+                             txnManager: TransactionManager) extends Logging {
   this.logIdent = "[Transaction Coordinator " + brokerId + "]: "
 
   type InitPidCallback = InitPidResult => Unit
@@ -91,6 +98,8 @@ class TransactionCoordinator(val brokerId: Int,
       }
     }
   }
+
+  def transactionTopicConfigs: Properties = txnManager.transactionTopicConfigs
 
   def partitionFor(transactionalId: String): Int = txnManager.partitionFor(transactionalId)
 

@@ -21,14 +21,13 @@ import java.nio.ByteBuffer
 import kafka.common.Topic.TransactionStateTopicName
 import kafka.log.Log
 import kafka.server.{FetchDataInfo, LogOffsetMetadata, ReplicaManager}
-import kafka.utils.ZkUtils
+import kafka.utils.{MockScheduler, ZkUtils}
 import kafka.utils.TestUtils.fail
-
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, FileRecords, KafkaRecord, MemoryRecords}
 import org.apache.kafka.common.utils.MockTime
 
-import org.junit.Assert.assertEquals
+import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.junit.{Before, Test}
 import org.easymock.EasyMock
 
@@ -38,6 +37,7 @@ import scala.collection.JavaConverters._
 class TransactionManagerTest {
 
   val partitionId = 0
+  val numPartitions = 2
 
   val transactionTimeoutMs: Int = 1000
 
@@ -48,7 +48,7 @@ class TransactionManagerTest {
   val zkUtils: ZkUtils = EasyMock.createNiceMock(classOf[ZkUtils])
 
   EasyMock.expect(zkUtils.getTopicPartitionCount(TransactionStateTopicName))
-    .andReturn(Some(2))
+    .andReturn(Some(numPartitions))
     .once()
 
   EasyMock.replay(zkUtils)
@@ -57,7 +57,9 @@ class TransactionManagerTest {
 
   val time = new MockTime()
 
-  val transactionManager: TransactionManager = new TransactionManager(0, zkUtils, replicaManager, time)
+  val scheduler = new MockScheduler(time)
+
+  val transactionManager: TransactionManager = new TransactionManager(0, zkUtils, scheduler, replicaManager, TransactionConfig(), time)
 
   val txnId1: String = "one"
   val txnId2: String = "two"
@@ -71,6 +73,21 @@ class TransactionManagerTest {
 
   @Before
   def setUp(): Unit = {
+    // make sure the transactional id hashes to the assigning partition id
+    assertEquals(partitionId, transactionManager.partitionFor(txnId1))
+    assertEquals(partitionId, transactionManager.partitionFor(txnId2))
+  }
+
+  @Test
+  def testAddGetPids() {
+    assertEquals(None, transactionManager.getPid(txnId1))
+    assertEquals(pidMetadata1, transactionManager.addPid(txnId1, pidMetadata1))
+    assertEquals(Some(pidMetadata1), transactionManager.getPid(txnId1))
+    assertEquals(pidMetadata1, transactionManager.addPid(txnId1, pidMetadata2))
+  }
+
+  @Test
+  def testLoadAndRemoveTransactionsForPartition() {
     // generate transaction log messages for two pids traces:
 
     // pid1's transaction started with two partitions
@@ -115,18 +132,22 @@ class TransactionManagerTest {
     txnMetadata2.topicPartitions.clear()
 
     txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(pidMetadata2))
-  }
 
-  @Test
-  def testLoadOffsetsAndGroup() {
-    val startOffset = 15L   // just check it should work for any start offset
+    val startOffset = 15L   // it should work for any start offset
     val records = MemoryRecords.withRecords(startOffset, CompressionType.NONE, txnRecords: _*)
 
     prepareTxnLog(topicPartition, startOffset, records)
 
     EasyMock.replay(replicaManager)
 
-    transactionManager.loadPidMetadata(topicPartition)
+    // this partition should not be part of the owned partitions
+    assertFalse(transactionManager.isCoordinatorFor(txnId1))
+    assertFalse(transactionManager.isCoordinatorFor(txnId2))
+
+    transactionManager.loadTransactionsForPartition(partitionId)
+
+    // let the time advance to trigger the background thread loading
+    scheduler.tick()
 
     val cachedPidMetadata1 = transactionManager.getPid(txnId1).getOrElse(fail(txnId1 + "'s transaction state was not loaded into the cache"))
     val cachedPidMetadata2 = transactionManager.getPid(txnId2).getOrElse(fail(txnId2 + "'s transaction state was not loaded into the cache"))
@@ -134,6 +155,21 @@ class TransactionManagerTest {
     // they should be equal to the latest status of the transaction
     assertEquals(pidMetadata1, cachedPidMetadata1)
     assertEquals(pidMetadata2, cachedPidMetadata2)
+
+    // this partition should now be part of the owned partitions
+    assertTrue(transactionManager.isCoordinatorFor(txnId1))
+    assertTrue(transactionManager.isCoordinatorFor(txnId2))
+
+    transactionManager.removeTransactionsForPartition(partitionId)
+
+    // let the time advance to trigger the background thread removing
+    scheduler.tick()
+
+    assertFalse(transactionManager.isCoordinatorFor(txnId1))
+    assertFalse(transactionManager.isCoordinatorFor(txnId2))
+
+    assertEquals(None, transactionManager.getPid(txnId1))
+    assertEquals(None, transactionManager.getPid(txnId2))
   }
 
   private def prepareTxnLog(topicPartition: TopicPartition,

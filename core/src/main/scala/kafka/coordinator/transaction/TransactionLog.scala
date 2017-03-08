@@ -17,14 +17,16 @@
 package kafka.coordinator.transaction
 
 import kafka.common.{KafkaException, MessageFormatter}
-
+import kafka.message.{CompressionCodec, NoCompressionCodec}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.types.Type._
 import org.apache.kafka.common.protocol.types.{ArrayOf, Field, Schema, Struct}
-
 import java.io.PrintStream
 import java.nio.ByteBuffer
+
+import kafka.log.LogConfig
+
 
 /*
  * Messages stored for the transaction topic represent the pid and transactional status of the corresponding
@@ -36,6 +38,24 @@ import java.nio.ByteBuffer
  */
 object TransactionLog {
 
+  // log-level config default values and enforced values
+  val DefaultNumPartitions: Int = 50
+  val DefaultSegmentBytes: Int = 100 * 1024 * 1024
+  val DefaultReplicationFactor: Short = 3.toShort
+  val DefaultMinInSyncReplicas: Int = 3
+  val DefaultLoadBufferSize: Int = 5 * 1024 * 1024
+
+  // enforce always using
+  //  1. cleanup policy = compact
+  //  2. compression = none
+  //  3. unclean leader election = disabled
+  //  4. required acks = -1 when writing
+  val EnforcedCompressionCodec: CompressionCodec = NoCompressionCodec
+  val EnforcedUncleanLeaderElectionEnable: Boolean = false
+  val EnforcedCleanupPolicy: String = LogConfig.Compact
+  val EnforcedRequiredAcks: Short = (-1).toShort
+
+  // log message formats
   private val TXN_ID_KEY = "transactional_id"
 
   private val PID_KEY = "pid"

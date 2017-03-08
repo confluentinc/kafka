@@ -17,14 +17,15 @@
 package kafka.coordinator.transaction
 
 import java.nio.ByteBuffer
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 
 import kafka.common.Topic
+import kafka.log.LogConfig
 import kafka.server.ReplicaManager
 import kafka.utils.CoreUtils.inLock
-import kafka.utils.{KafkaScheduler, Logging, Pool, ZkUtils}
-
+import kafka.utils.{Logging, Pool, Scheduler, ZkUtils}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{FileRecords, MemoryRecords}
 import org.apache.kafka.common.utils.{Time, Utils}
@@ -42,7 +43,9 @@ import scala.collection.JavaConverters._
  */
 class TransactionManager(brokerId: Int,
                          zkUtils: ZkUtils,
+                         scheduler: Scheduler,
                          replicaManager: ReplicaManager,
+                         config: TransactionConfig,
                          time: Time) extends Logging {
 
   this.logIdent = "[Transaction Log Manager " + brokerId + "]: "
@@ -61,9 +64,6 @@ class TransactionManager(brokerId: Int,
 
   /* partitions of transaction topic that are corrupted; should always be an empty set under normal operations */
   private val corruptedPartitions: mutable.Set[Int] = mutable.Set()
-
-  /* single-thread scheduler to handle offset/group metadata cache loading and unloading */
-  private val scheduler = new KafkaScheduler(threads = 1, threadNamePrefix = "transaction-log-manager-")
 
   /* Pid metadata cache indexed by transactional id, including ongoing transaction status */
   private val pidMetadataCache = new Pool[String, PidMetadata]
@@ -96,6 +96,19 @@ class TransactionManager(brokerId: Int,
     }
   }
 
+  def transactionTopicConfigs: Properties = {
+    val props = new Properties
+
+    props.put(LogConfig.UncleanLeaderElectionEnableProp, TransactionLog.EnforcedUncleanLeaderElectionEnable.toString)
+    props.put(LogConfig.CompressionTypeProp, TransactionLog.EnforcedCompressionCodec)
+    props.put(LogConfig.CleanupPolicyProp, TransactionLog.EnforcedCleanupPolicy)
+
+    props.put(LogConfig.MinInSyncReplicasProp, config.minInsyncReplicas.toString)
+    props.put(LogConfig.SegmentBytesProp, config.segmentBytes.toString)
+
+    props
+  }
+
   def partitionFor(transactionalId: String): Int = Utils.abs(transactionalId.hashCode) % transactionTopicPartitionCount
 
   def isCoordinatorFor(transactionalId: String): Boolean = inLock(partitionLock) {
@@ -110,10 +123,10 @@ class TransactionManager(brokerId: Int,
     * If the topic does not exist, the default partition count is returned.
     */
   private def getTransactionTopicPartitionCount: Int = {
-    zkUtils.getTopicPartitionCount(Topic.TransactionStateTopicName).getOrElse(50)  // TODO: need a config for this
+    zkUtils.getTopicPartitionCount(Topic.TransactionStateTopicName).getOrElse(config.numPartitions)
   }
 
-  private[coordinator] def loadPidMetadata(topicPartition: TopicPartition) {
+  private def loadPidMetadata(topicPartition: TopicPartition) {
     def highWaterMark = replicaManager.getHighWatermark(topicPartition).getOrElse(-1L)
 
     val startMs = time.milliseconds()
@@ -122,7 +135,7 @@ class TransactionManager(brokerId: Int,
         warn(s"Attempted to load offsets and group metadata from $topicPartition, but found no log")
 
       case Some(log) =>
-        val buffer = ByteBuffer.allocate(5 * 1024 * 1024)   // TODO: need a config for this
+        val buffer = ByteBuffer.allocate(config.loadBufferSize)
 
         val loadedPids = mutable.Map.empty[String, PidMetadata]
         val removedPids = mutable.Set.empty[String]
@@ -131,7 +144,7 @@ class TransactionManager(brokerId: Int,
         var currOffset = log.logStartOffset.getOrElse(throw new IllegalStateException(s"Could not find log start offset for $topicPartition"))
         while (currOffset < highWaterMark && !shuttingDown.get()) {
           buffer.clear()
-          val fileRecords = log.read(currOffset, 5 * 1024 * 1024, maxOffset = None, minOneMessage = true)
+          val fileRecords = log.read(currOffset, config.loadBufferSize, maxOffset = None, minOneMessage = true)
             .records.asInstanceOf[FileRecords]
           val bufferRead = fileRecords.readInto(buffer, 0)
 
@@ -274,3 +287,8 @@ class TransactionManager(brokerId: Int,
   }
 }
 
+private case class TransactionConfig(numPartitions: Int = TransactionLog.DefaultNumPartitions,
+                                     replicationFactor: Short = TransactionLog.DefaultReplicationFactor,
+                                     segmentBytes: Int = TransactionLog.DefaultSegmentBytes,
+                                     loadBufferSize: Int = TransactionLog.DefaultLoadBufferSize,
+                                     minInsyncReplicas: Int = TransactionLog.DefaultMinInSyncReplicas)

@@ -808,6 +808,17 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
   }
 
+  private def createTransactionStateTopic(): MetadataResponse.TopicMetadata = {
+    val aliveBrokers = metadataCache.getAliveBrokers
+    if (aliveBrokers.size < config.transactionTopicReplicationFactor) {
+      new MetadataResponse.TopicMetadata(Errors.COORDINATOR_NOT_AVAILABLE, TransactionStateTopicName, true,
+        java.util.Collections.emptyList())
+    } else {
+      createTopic(TransactionStateTopicName, config.transactionTopicPartitions,
+        config.transactionTopicReplicationFactor.toInt, txnCoordinator.transactionTopicConfigs)
+    }
+  }
+
   private def getOrCreateGroupMetadataTopic(listenerName: ListenerName): MetadataResponse.TopicMetadata = {
     val topicMetadata = metadataCache.getTopicMetadata(Set(GroupMetadataTopicName), listenerName)
     topicMetadata.headOption.getOrElse(createGroupMetadataTopic())
@@ -815,7 +826,7 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   private def getOrCreateTransactionStateTopic(listenerName: ListenerName): MetadataResponse.TopicMetadata = {
     val topicMetadata = metadataCache.getTopicMetadata(Set(TransactionStateTopicName), listenerName)
-    topicMetadata.headOption.getOrElse(throw new IllegalStateException("Automatic creation of transaction state topic is not yet supported"))
+    topicMetadata.headOption.getOrElse(createTransactionStateTopic())
   }
 
   private def getTopicMetadata(topics: Set[String], listenerName: ListenerName, errorUnavailableEndpoints: Boolean): Seq[MetadataResponse.TopicMetadata] = {
@@ -827,10 +838,16 @@ class KafkaApis(val requestChannel: RequestChannel,
       val responsesForNonExistentTopics = nonExistentTopics.map { topic =>
         if (topic == GroupMetadataTopicName) {
           val topicMetadata = createGroupMetadataTopic()
-          if (topicMetadata.error == Errors.COORDINATOR_NOT_AVAILABLE) {
-            new MetadataResponse.TopicMetadata(Errors.INVALID_REPLICATION_FACTOR, topic, isInternal(topic),
-              java.util.Collections.emptyList())
-          } else topicMetadata
+          if (topicMetadata.error == Errors.COORDINATOR_NOT_AVAILABLE)
+            new MetadataResponse.TopicMetadata(Errors.INVALID_REPLICATION_FACTOR, topic, isInternal(topic), java.util.Collections.emptyList())
+          else
+            topicMetadata
+        } else if (topic == TransactionStateTopicName) {
+          val topicMetadata = createTransactionStateTopic()
+          if (topicMetadata.error == Errors.COORDINATOR_NOT_AVAILABLE)
+            new MetadataResponse.TopicMetadata(Errors.INVALID_REPLICATION_FACTOR, topic, isInternal(topic), java.util.Collections.emptyList())
+          else
+            topicMetadata
         } else if (config.autoCreateTopicsEnable) {
           createTopic(topic, config.numPartitions, config.defaultReplicationFactor)
         } else {
