@@ -182,7 +182,10 @@ public enum Errors {
     INVALID_TXN_STATE(48,
             new InvalidTxnStateException("The producer attempted a transactional operation in an invalid state")),
     INVALID_PID_MAPPING(49,
-            new InvalidPidMappingException("The PID mapping is invalid"));
+            new InvalidPidMappingException("The PID mapping is invalid")),
+    INVALID_TRANSACTION_TIMEOUT(50,
+            new InvalidSessionTimeoutException("The transaction timeout is larger than the maximum value allowed by the broker " +
+                    "(as configured by max.transaction.timeout.ms)."));
 
     private static final Logger log = LoggerFactory.getLogger(Errors.class);
 

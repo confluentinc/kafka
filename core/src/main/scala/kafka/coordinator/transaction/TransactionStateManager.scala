@@ -24,7 +24,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kafka.common.{KafkaException, Topic}
 import kafka.log.LogConfig
 import kafka.message.NoCompressionCodec
-import kafka.server.{Defaults, ReplicaManager}
+import kafka.server.ReplicaManager
 import kafka.utils.CoreUtils.inLock
 import kafka.utils.{Logging, Pool, Scheduler, ZkUtils}
 import org.apache.kafka.common.TopicPartition
@@ -33,6 +33,13 @@ import org.apache.kafka.common.utils.{Time, Utils}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
+
+
+object TransactionManager {
+  // default transaction management config values
+  val DefaultTransactionalIdExpirationMs = 604800000 // 7 days
+  val DefaultTransactionsMaxTimeoutMs = 900000 // 15 min
+}
 
 /*
  * Transaction manager is part of the transaction coordinator, it manages:
@@ -96,7 +103,8 @@ class TransactionStateManager(brokerId: Int,
   /**
     * Validate the given pid metadata
     */
-  def validateTransactionTimeoutMs(txnTimeoutMs: Int): Boolean = txnTimeoutMs <= config.transactionMaxTimeoutMs
+  def validateTransactionTimeoutMs(txnTimeoutMs: Int): Boolean =
+    txnTimeoutMs <= config.transactionMaxTimeoutMs && txnTimeoutMs > 0
 
   def transactionTopicConfigs: Properties = {
     val props = new Properties
@@ -307,10 +315,10 @@ class TransactionStateManager(brokerId: Int,
   }
 }
 
-private case class TransactionConfig(transactionalIdExpirationMs: Int = Defaults.TransactionalIdExpirationMs,
-                                     transactionMaxTimeoutMs: Int = Defaults.TransactionsMaxTimeoutMs,
-                                     transactionLogNumPartitions: Int = TransactionLog.DefaultNumPartitions,
-                                     transactionLogReplicationFactor: Short = TransactionLog.DefaultReplicationFactor,
-                                     transactionLogSegmentBytes: Int = TransactionLog.DefaultSegmentBytes,
-                                     transactionLogLoadBufferSize: Int = TransactionLog.DefaultLoadBufferSize,
-                                     transactionLogMinInsyncReplicas: Int = TransactionLog.DefaultMinInSyncReplicas)
+private[transaction] case class TransactionConfig(transactionalIdExpirationMs: Int = TransactionManager.DefaultTransactionalIdExpirationMs,
+                                                  transactionMaxTimeoutMs: Int = TransactionManager.DefaultTransactionsMaxTimeoutMs,
+                                                  transactionLogNumPartitions: Int = TransactionLog.DefaultNumPartitions,
+                                                  transactionLogReplicationFactor: Short = TransactionLog.DefaultReplicationFactor,
+                                                  transactionLogSegmentBytes: Int = TransactionLog.DefaultSegmentBytes,
+                                                  transactionLogLoadBufferSize: Int = TransactionLog.DefaultLoadBufferSize,
+                                                  transactionLogMinInsyncReplicas: Int = TransactionLog.DefaultMinInSyncReplicas)

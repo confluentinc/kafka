@@ -78,6 +78,9 @@ class TransactionCoordinator(brokerId: Int,
       responseCallback(initTransactionError(Errors.NOT_COORDINATOR))
     } else if (txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
       responseCallback(initTransactionError(Errors.COORDINATOR_LOAD_IN_PROGRESS))
+    } else if (!txnManager.validateTransactionTimeoutMs(transactionTimeoutMs)) {
+      // check transactionTimeoutMs is not larger than the broker configured maximum allowed value
+      responseCallback(initTransactionError(Errors.INVALID_TRANSACTION_TIMEOUT))
     } else {
       // only try to get a new pid and update the cache if the transactional id is unknown
       txnManager.getTransaction(transactionalId) match {

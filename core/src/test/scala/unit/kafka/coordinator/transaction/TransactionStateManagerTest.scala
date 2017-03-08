@@ -53,7 +53,8 @@ class TransactionStateManagerTest {
 
   EasyMock.replay(zkUtils)
 
-  val transactionManager: TransactionStateManager = new TransactionStateManager(0, zkUtils, scheduler, replicaManager, TransactionConfig(), time)
+  val txnConfig = TransactionConfig()
+  val transactionManager: TransactionStateManager = new TransactionStateManager(0, zkUtils, scheduler, replicaManager, txnConfig, time)
 
   val txnId1: String = "one"
   val txnId2: String = "two"
@@ -74,6 +75,15 @@ class TransactionStateManagerTest {
   def tearDown() {
     EasyMock.reset(zkUtils, replicaManager)
     transactionManager.shutdown()
+  }
+
+  @Test
+  def testValidateTransactionTimeout() {
+    assertTrue(transactionManager.validateTransactionTimeoutMs(1))
+    assertFalse(transactionManager.validateTransactionTimeoutMs(-1))
+    assertFalse(transactionManager.validateTransactionTimeoutMs(0))
+    assertTrue(transactionManager.validateTransactionTimeoutMs(txnConfig.transactionMaxTimeoutMs))
+    assertFalse(transactionManager.validateTransactionTimeoutMs(txnConfig.transactionMaxTimeoutMs + 1))
   }
 
   @Test
