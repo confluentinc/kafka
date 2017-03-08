@@ -93,6 +93,11 @@ class TransactionStateManager(brokerId: Int,
     }
   }
 
+  /**
+    * Validate the given pid metadata
+    */
+  def validateTransactionTimeoutMs(txnTimeoutMs: Int): Boolean = txnTimeoutMs <= config.transactionMaxTimeoutMs
+
   def transactionTopicConfigs: Properties = {
     val props = new Properties
 
