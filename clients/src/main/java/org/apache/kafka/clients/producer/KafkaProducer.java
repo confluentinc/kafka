@@ -299,14 +299,16 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             boolean idempotenceEnabled = config.getBoolean(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG);
 
             if (idempotenceEnabled) {
-                this.transactionState = new TransactionState(idempotenceEnabled, time);
+                this.transactionState = new TransactionState(time);
                 if (config.getInt(ProducerConfig.RETRIES_CONFIG) == 0) {
                     throw new ConfigException("Need to set '" + ProducerConfig.RETRIES_CONFIG
-                            + "' to greater than zero in order to use the idempotent producer.");
+                            + "' to greater than zero in order to use the idempotent producer. With idempotence " +
+                            "enabled, the producer tracks additional metadata to ensure that messages are deduplicated " +
+                            "on the broker. Without retries, there will never be duplicates to begin with.");
                 }
                 if (config.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION) != 1) {
                     throw new ConfigException("Must set '" + ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION
-                            + "' to 1 inorder to use the idempotent producer.");
+                            + "' to 1 inorder to use the idempotent producer, otherwise we cannot guarantee idempotence.");
                 }
             } else {
                 this.transactionState = null;

@@ -25,7 +25,6 @@ import static org.apache.kafka.common.record.LogEntry.NO_PID;
  */
 public class TransactionState {
     private volatile PidAndEpoch pidAndEpoch;
-    private final boolean idempotenceEnabled;
     private final Map<TopicPartition, Integer> sequenceNumbers;
     private final Time time;
 
@@ -43,10 +42,9 @@ public class TransactionState {
         }
     }
 
-    public TransactionState(boolean idempotenceEnabled, Time time) {
+    public TransactionState(Time time) {
         pidAndEpoch = new PidAndEpoch(NO_PID, (short) 0);
         sequenceNumbers = new HashMap<>();
-        this.idempotenceEnabled = idempotenceEnabled;
         this.time = time;
     }
 
@@ -106,9 +104,6 @@ public class TransactionState {
      * Returns the next sequence number to be written to the given TopicPartition.
      */
     synchronized Integer sequenceNumber(TopicPartition topicPartition) {
-        if (!idempotenceEnabled) {
-            throw new IllegalStateException("Attempting to access sequence numbers when idempotence is disabled");
-        }
         if (!sequenceNumbers.containsKey(topicPartition)) {
             sequenceNumbers.put(topicPartition, 0);
         }
@@ -116,9 +111,6 @@ public class TransactionState {
     }
 
     synchronized void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
-        if (!idempotenceEnabled) {
-            throw new IllegalStateException("Attempt to modify sequence numbers when idempotence is disabled");
-        }
         if (!sequenceNumbers.containsKey(topicPartition)) {
             sequenceNumbers.put(topicPartition, 0);
         }

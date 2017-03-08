@@ -15,12 +15,11 @@
   * limitations under the License.
   */
 
-package unit.kafka.idempotence
+package kafka.log
 
 import java.io.File
 import java.util.Properties
 
-import kafka.log.{LogConfig, PidEntry, ProducerIdMapping}
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.{DuplicateSequenceNumberException, OutOfOrderSequenceException, ProducerFencedException}

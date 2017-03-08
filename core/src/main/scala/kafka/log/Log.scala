@@ -525,12 +525,12 @@ class Log(@volatile var dir: File,
 
   def validatePidEntries(appendInfo: LogAppendInfo, assignOffsets: Boolean): Boolean = {
     var isDuplicate = false
-    for ((pid, incomingRecord) <- appendInfo.pidEntryMap) {
+    for ((pid, incomingEntries) <- appendInfo.pidEntryMap) {
       try {
         // verify that the epoch and sequence are correct before appending. Note that for requests coming from
         // producer, there will be exactly one LogEntry per Record, and hence one Pid per Record.
-        trace(s"checking sequence for pid: $pid, seq: ${incomingRecord.firstEntry.lastSeq}, end seq: ${incomingRecord.lastEntry.lastSeq}")
-        pidMap.checkSeqAndEpoch(pid, incomingRecord.firstEntry)
+        trace(s"checking sequence for pid: $pid, seq: ${incomingEntries.firstEntry.lastSeq}, end seq: ${incomingEntries.lastEntry.lastSeq}")
+        pidMap.checkSeqAndEpoch(pid, incomingEntries.firstEntry)
       } catch {
         case e: DuplicateSequenceNumberException =>
           isDuplicate = true
@@ -538,10 +538,10 @@ class Log(@volatile var dir: File,
             case Some(lastAppendedEntry) =>
               if (assignOffsets) {
                 // This request is coming straight from the client.
-                if (incomingRecord.firstEntry != incomingRecord.lastEntry) {
+                if (incomingEntries.firstEntry != incomingEntries.lastEntry) {
                   throw new InvalidRecordException("Got multiple LogEntries in a single ProduceRequest. This indicates a bad client.")
                 }
-                val incomingEntryInfo = incomingRecord.firstEntry
+                val incomingEntryInfo = incomingEntries.firstEntry
                 if (!(incomingEntryInfo.firstSeq == lastAppendedEntry.firstSeq
                   && incomingEntryInfo.lastSeq == lastAppendedEntry.lastSeq)) {
                   // the duplicate is not at the tail of the log. This should never happen, with a properly written client.
@@ -571,7 +571,7 @@ class Log(@volatile var dir: File,
           }
       }
     }
-    return isDuplicate
+    isDuplicate
   }
 
   /**
@@ -626,7 +626,7 @@ class Log(@volatile var dir: File,
         }
       }
 
-     // update the last offset seen
+      // update the last offset seen
       lastOffset = entry.lastOffset
 
       // Check if the message sizes are valid.

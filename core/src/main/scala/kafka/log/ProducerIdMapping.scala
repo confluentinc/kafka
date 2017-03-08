@@ -31,7 +31,7 @@ import org.apache.kafka.common.utils.Utils
 
 import scala.collection.{immutable, mutable}
 
-case class PidEntry(lastSeq: Int,
+private[log] case class PidEntry(lastSeq: Int,
                     epoch: Short,
                     lastOffset: Long,
                     numRecords: Int,

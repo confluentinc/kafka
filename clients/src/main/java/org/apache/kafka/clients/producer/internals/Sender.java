@@ -29,6 +29,7 @@ import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InvalidMetadataException;
+import org.apache.kafka.common.errors.OutOfOrderSequenceException;
 import org.apache.kafka.common.errors.RetriableException;
 import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
@@ -39,6 +40,7 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Rate;
+import org.apache.kafka.common.network.BlockingNetworkClient;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.InitPidRequest;
@@ -50,6 +52,7 @@ import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -109,6 +112,9 @@ public class Sender implements Runnable {
     /* all the state related to transactions, in particular the PID, epoch, and sequence numbers */
     private final TransactionState transactionState;
 
+    /* A blocking version of the network client to be used for the new blocking RPCs for the idempotent producer */
+    private final BlockingNetworkClient blockingNetworkClient;
+
     public Sender(KafkaClient client,
                   Metadata metadata,
                   RecordAccumulator accumulator,
@@ -136,6 +142,7 @@ public class Sender implements Runnable {
         this.retryBackoffMs = retryBackoffMs;
         this.apiVersions = apiVersions;
         this.transactionState = transactionState;
+        this.blockingNetworkClient = new BlockingNetworkClient(client);
     }
 
     /**
@@ -230,7 +237,7 @@ public class Sender implements Runnable {
 
         List<RecordBatch> expiredBatches = this.accumulator.abortExpiredBatches(this.requestTimeout, now);
 
-        // Reset the PID if an expired batch has previously been sent to the broker. Aloso update the metrcis
+        // Reset the PID if an expired batch has previously been sent to the broker. Also update the metrics
         // for expired batches.
         boolean needsTransactionStateReset = false;
         for (RecordBatch expiredBatch : expiredBatches) {
@@ -284,29 +291,18 @@ public class Sender implements Runnable {
         initiateClose();
     }
 
-    private void sendInitPidRequest(Node node) {
+    private ClientResponse sendInitPidRequest(Node node) throws IOException {
         String nodeId = node.idString();
         InitPidRequest.Builder builder = new InitPidRequest.Builder(null);
-        RequestCompletionHandler callback = new RequestCompletionHandler() {
-            public void onComplete(ClientResponse response) {
-                handleInitPidResponse(response);
-            }
-        };
-        ClientRequest request = client.newClientRequest(nodeId, builder, time.milliseconds(), true, callback);
-        client.send(request, time.milliseconds());
+        ClientRequest request = client.newClientRequest(nodeId, builder, time.milliseconds(), true, null);
+        return blockingNetworkClient.sendAndReceive(request, time);
     }
 
-    private Node getReadyNode(long remainingTimeMs) {
+    private Node getReadyNode(long remainingTimeMs) throws IOException {
         Node node = client.leastLoadedNode(time.milliseconds());
-        if (node == null) {
-            return null;
-        }
-        client.ready(node, time.milliseconds());
-        if (client.connectionFailed(node))
-            return null;
-        client.poll(remainingTimeMs, time.milliseconds());
-        if (client.isReady(node, time.milliseconds()))
+        if (blockingNetworkClient.isReady(node, time, remainingTimeMs)) {
             return node;
+        }
         return null;
     }
 
@@ -318,21 +314,19 @@ public class Sender implements Runnable {
                     log.warn("Could not find an available node while trying to get a producer id.");
                     throw new NoAvailableBrokersException();
                 }
-                sendInitPidRequest(node);
-                client.poll(requestTimeout, time.milliseconds());
+                ClientResponse response = sendInitPidRequest(node);
+                if (response.hasResponse() && (response.responseBody() instanceof  InitPidResponse)) {
+                    InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
+                    transactionState.setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
+                } else {
+                    log.error("Received an unexpected response type for an InitPidRequest. We will probably be retrying forever.");
+                }
             } catch (Exception e) {
                 log.warn("Received an exception {} while trying to get a pid. Will back off and retry.", e.getMessage());
-                time.sleep(retryBackoffMs);
-                metadata.requestUpdate();
             }
-        }
-    }
-
-    private void handleInitPidResponse(ClientResponse response) {
-        // TODO(apurva): Do we have to check for a version mismatch here?
-        if (response.hasResponse()) {
-            InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
-            transactionState.setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
+            log.info("Going to retry getting a pid in {}ms.", retryBackoffMs);
+            time.sleep(retryBackoffMs);
+            metadata.requestUpdate();
         }
     }
 
@@ -399,10 +393,9 @@ public class Sender implements Runnable {
                 this.accumulator.reenqueue(batch, now);
                 this.sensors.recordRetries(batch.topicPartition.topic(), batch.recordCount);
             } else {
-                // TODO(apurva): Is 'KafkaException' the best one to throw here? What would be more appropriate?
                 failRecordBatch(batch,
                         response,
-                        new KafkaException("Tried to retry a batch but the producer id has changed in the meantime. This batch will be dropped."));
+                        new OutOfOrderSequenceException("Tried to retry a batch but the producer id has changed in the meantime. This batch will be dropped."));
                 this.sensors.recordErrors(batch.topicPartition.topic(), batch.recordCount);
             }
         } else {

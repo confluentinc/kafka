@@ -31,7 +31,7 @@ public class TransactionStateTest {
 
     @Test
     public void testBasicSequenceIncrement() {
-        TransactionState transactionState = new TransactionState(true, new MockTime());
+        TransactionState transactionState = new TransactionState(new MockTime());
         transactionState.incrementSequenceNumber(topicPartition, 3333);
 
         assertEquals((int) transactionState.sequenceNumber(topicPartition), 3333);
@@ -41,7 +41,7 @@ public class TransactionStateTest {
 
     @Test
     public void testDefaultSequenceNumber() {
-        TransactionState transactionState = new TransactionState(true, new MockTime());
+        TransactionState transactionState = new TransactionState(new MockTime());
         assertEquals((int) transactionState.sequenceNumber(topicPartition), 0);
         transactionState.incrementSequenceNumber(topicPartition, 3);
         assertEquals((int) transactionState.sequenceNumber(topicPartition), 3);
