@@ -24,7 +24,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kafka.common.{KafkaException, Topic}
 import kafka.log.LogConfig
 import kafka.message.NoCompressionCodec
-import kafka.server.ReplicaManager
+import kafka.server.{Defaults, ReplicaManager}
 import kafka.utils.CoreUtils.inLock
 import kafka.utils.{Logging, Pool, Scheduler, ZkUtils}
 import org.apache.kafka.common.TopicPartition
@@ -101,8 +101,8 @@ class TransactionStateManager(brokerId: Int,
     props.put(LogConfig.CompressionTypeProp, NoCompressionCodec)
     props.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
 
-    props.put(LogConfig.MinInSyncReplicasProp, config.minInsyncReplicas.toString)
-    props.put(LogConfig.SegmentBytesProp, config.segmentBytes.toString)
+    props.put(LogConfig.MinInSyncReplicasProp, config.transactionLogMinInsyncReplicas.toString)
+    props.put(LogConfig.SegmentBytesProp, config.transactionLogSegmentBytes.toString)
 
     props
   }
@@ -127,7 +127,7 @@ class TransactionStateManager(brokerId: Int,
     * If the topic does not exist, the default partition count is returned.
     */
   private def getTransactionTopicPartitionCount: Int = {
-    zkUtils.getTopicPartitionCount(Topic.TransactionStateTopicName).getOrElse(config.numPartitions)
+    zkUtils.getTopicPartitionCount(Topic.TransactionStateTopicName).getOrElse(config.transactionLogNumPartitions)
   }
 
   private def loadTransactionMetadata(topicPartition: TopicPartition) {
@@ -139,7 +139,7 @@ class TransactionStateManager(brokerId: Int,
         warn(s"Attempted to load offsets and group metadata from $topicPartition, but found no log")
 
       case Some(log) =>
-        val buffer = ByteBuffer.allocate(config.loadBufferSize)
+        val buffer = ByteBuffer.allocate(config.transactionLogLoadBufferSize)
 
         val loadedTransactions = mutable.Map.empty[String, TransactionMetadata]
         val removedTransactionalIds = mutable.Set.empty[String]
@@ -148,7 +148,7 @@ class TransactionStateManager(brokerId: Int,
         var currOffset = log.logStartOffset.getOrElse(throw new IllegalStateException(s"Could not find log start offset for $topicPartition"))
         while (currOffset < highWaterMark && !shuttingDown.get()) {
           buffer.clear()
-          val fileRecords = log.read(currOffset, config.loadBufferSize, maxOffset = None, minOneMessage = true)
+          val fileRecords = log.read(currOffset, config.transactionLogLoadBufferSize, maxOffset = None, minOneMessage = true)
             .records.asInstanceOf[FileRecords]
           val bufferRead = fileRecords.readInto(buffer, 0)
 
@@ -302,8 +302,10 @@ class TransactionStateManager(brokerId: Int,
   }
 }
 
-private case class TransactionConfig(numPartitions: Int = TransactionLog.DefaultNumPartitions,
-                                     replicationFactor: Short = TransactionLog.DefaultReplicationFactor,
-                                     segmentBytes: Int = TransactionLog.DefaultSegmentBytes,
-                                     loadBufferSize: Int = TransactionLog.DefaultLoadBufferSize,
-                                     minInsyncReplicas: Int = TransactionLog.DefaultMinInSyncReplicas)
+private case class TransactionConfig(transactionalIdExpirationMs: Int = Defaults.TransactionalIdExpirationMs,
+                                     transactionMaxTimeoutMs: Int = Defaults.TransactionsMaxTimeoutMs,
+                                     transactionLogNumPartitions: Int = TransactionLog.DefaultNumPartitions,
+                                     transactionLogReplicationFactor: Short = TransactionLog.DefaultReplicationFactor,
+                                     transactionLogSegmentBytes: Int = TransactionLog.DefaultSegmentBytes,
+                                     transactionLogLoadBufferSize: Int = TransactionLog.DefaultLoadBufferSize,
+                                     transactionLogMinInsyncReplicas: Int = TransactionLog.DefaultMinInSyncReplicas)

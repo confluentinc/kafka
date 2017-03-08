@@ -39,7 +39,9 @@ object TransactionCoordinator {
 
   def apply(config: KafkaConfig, replicaManager: ReplicaManager, scheduler: Scheduler, zkUtils: ZkUtils, time: Time): TransactionCoordinator = {
 
-    val txnConfig = TransactionConfig(config.transactionTopicPartitions,
+    val txnConfig = TransactionConfig(config.transactionalIdExpirationMs,
+      config.transactionMaxTimeoutMs,
+      config.transactionTopicPartitions,
       config.transactionTopicReplicationFactor,
       config.transactionTopicSegmentBytes,
       config.transactionsLoadBufferSize,
