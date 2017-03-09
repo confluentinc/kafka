@@ -797,36 +797,28 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
   }
 
-  private def createGroupMetadataTopic(): MetadataResponse.TopicMetadata = {
+  private def createInternalTopic(topic: String): MetadataResponse.TopicMetadata = {
     val aliveBrokers = metadataCache.getAliveBrokers
-    if (aliveBrokers.size < config.offsetsTopicReplicationFactor) {
-      new MetadataResponse.TopicMetadata(Errors.COORDINATOR_NOT_AVAILABLE, GroupMetadataTopicName, true,
-        java.util.Collections.emptyList())
+    val requiredReplicas = if (topic == GroupMetadataTopicName)
+      config.offsetsTopicReplicationFactor
+    else
+      config.transactionTopicReplicationFactor
+
+    if (aliveBrokers.size < requiredReplicas) {
+      new MetadataResponse.TopicMetadata(Errors.COORDINATOR_NOT_AVAILABLE, topic, true, java.util.Collections.emptyList())
     } else {
-      createTopic(GroupMetadataTopicName, config.offsetsTopicPartitions,
-        config.offsetsTopicReplicationFactor.toInt, groupCoordinator.offsetsTopicConfigs)
+      if (topic == GroupMetadataTopicName)
+        createTopic(topic, config.offsetsTopicPartitions,
+          config.offsetsTopicReplicationFactor.toInt, groupCoordinator.offsetsTopicConfigs)
+      else
+        createTopic(topic, config.transactionTopicPartitions,
+          config.transactionTopicReplicationFactor.toInt, txnCoordinator.transactionTopicConfigs)
     }
   }
 
-  private def createTransactionStateTopic(): MetadataResponse.TopicMetadata = {
-    val aliveBrokers = metadataCache.getAliveBrokers
-    if (aliveBrokers.size < config.transactionTopicReplicationFactor) {
-      new MetadataResponse.TopicMetadata(Errors.COORDINATOR_NOT_AVAILABLE, TransactionStateTopicName, true,
-        java.util.Collections.emptyList())
-    } else {
-      createTopic(TransactionStateTopicName, config.transactionTopicPartitions,
-        config.transactionTopicReplicationFactor.toInt, txnCoordinator.transactionTopicConfigs)
-    }
-  }
-
-  private def getOrCreateGroupMetadataTopic(listenerName: ListenerName): MetadataResponse.TopicMetadata = {
-    val topicMetadata = metadataCache.getTopicMetadata(Set(GroupMetadataTopicName), listenerName)
-    topicMetadata.headOption.getOrElse(createGroupMetadataTopic())
-  }
-
-  private def getOrCreateTransactionStateTopic(listenerName: ListenerName): MetadataResponse.TopicMetadata = {
-    val topicMetadata = metadataCache.getTopicMetadata(Set(TransactionStateTopicName), listenerName)
-    topicMetadata.headOption.getOrElse(createTransactionStateTopic())
+  private def getOrCreateInternalTopic(topic: String, listenerName: ListenerName): MetadataResponse.TopicMetadata = {
+    val topicMetadata = metadataCache.getTopicMetadata(Set(topic), listenerName)
+    topicMetadata.headOption.getOrElse(createInternalTopic(topic))
   }
 
   private def getTopicMetadata(topics: Set[String], listenerName: ListenerName, errorUnavailableEndpoints: Boolean): Seq[MetadataResponse.TopicMetadata] = {
@@ -836,23 +828,16 @@ class KafkaApis(val requestChannel: RequestChannel,
     } else {
       val nonExistentTopics = topics -- topicResponses.map(_.topic).toSet
       val responsesForNonExistentTopics = nonExistentTopics.map { topic =>
-        if (topic == GroupMetadataTopicName) {
-          val topicMetadata = createGroupMetadataTopic()
+        if (isInternal(topic)) {
+          val topicMetadata = createInternalTopic(topic)
           if (topicMetadata.error == Errors.COORDINATOR_NOT_AVAILABLE)
-            new MetadataResponse.TopicMetadata(Errors.INVALID_REPLICATION_FACTOR, topic, isInternal(topic), java.util.Collections.emptyList())
-          else
-            topicMetadata
-        } else if (topic == TransactionStateTopicName) {
-          val topicMetadata = createTransactionStateTopic()
-          if (topicMetadata.error == Errors.COORDINATOR_NOT_AVAILABLE)
-            new MetadataResponse.TopicMetadata(Errors.INVALID_REPLICATION_FACTOR, topic, isInternal(topic), java.util.Collections.emptyList())
+            new MetadataResponse.TopicMetadata(Errors.INVALID_REPLICATION_FACTOR, topic, true, java.util.Collections.emptyList())
           else
             topicMetadata
         } else if (config.autoCreateTopicsEnable) {
           createTopic(topic, config.numPartitions, config.defaultReplicationFactor)
         } else {
-          new MetadataResponse.TopicMetadata(Errors.UNKNOWN_TOPIC_OR_PARTITION, topic, false,
-            java.util.Collections.emptyList())
+          new MetadataResponse.TopicMetadata(Errors.UNKNOWN_TOPIC_OR_PARTITION, topic, false, java.util.Collections.emptyList())
         }
       }
       topicResponses ++ responsesForNonExistentTopics
@@ -1022,12 +1007,12 @@ class KafkaApis(val requestChannel: RequestChannel,
       val (partition, topicMetadata) = findCoordinatorRequest.coordinatorType match {
         case FindCoordinatorRequest.CoordinatorType.GROUP =>
           val partition = groupCoordinator.partitionFor(findCoordinatorRequest.coordinatorKey)
-          val metadata = getOrCreateGroupMetadataTopic(request.listenerName)
+          val metadata = getOrCreateInternalTopic(GroupMetadataTopicName, request.listenerName)
           (partition, metadata)
 
         case FindCoordinatorRequest.CoordinatorType.TRANSACTION =>
           val partition = txnCoordinator.partitionFor(findCoordinatorRequest.coordinatorKey)
-          val metadata = getOrCreateTransactionStateTopic(request.listenerName)
+          val metadata = getOrCreateInternalTopic(TransactionStateTopicName, request.listenerName)
           (partition, metadata)
 
         case _ =>

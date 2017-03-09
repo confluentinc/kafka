@@ -118,6 +118,12 @@ class TransactionManager(brokerId: Int,
     ownedPartitions.contains(partitionId) && !corruptedPartitions.contains(partitionId)
   }
 
+  def isCoordinatorLoadingInProgress(transactionalId: String): Boolean = inLock(partitionLock) {
+    val partitionId = partitionFor(transactionalId)
+
+    loadingPartitions.contains(partitionId)
+  }
+
   /**
     * Gets the partition count of the transaction log topic from ZooKeeper.
     * If the topic does not exist, the default partition count is returned.
@@ -150,7 +156,7 @@ class TransactionManager(brokerId: Int,
 
           MemoryRecords.readableRecords(bufferRead).entries.asScala.foreach { entry =>
             for (record <- entry.asScala) {
-              require(record.hasKey, "Group metadata/offset entry key should not be null")
+              require(record.hasKey, "Transaction state log's key should not be null")
               TransactionLog.readMessageKey(record.key) match {
 
                 case txnKey: TxnKey =>

@@ -68,9 +68,11 @@ class TransactionCoordinator(brokerId: Int,
       val pid: Long = pidManager.getNewPid()
 
       responseCallback(InitPidResult(pid, epoch = 0, Errors.NONE))
-    } else if(!txnManager.isCoordinatorFor(transactionalId)) {
+    } else if (!txnManager.isCoordinatorFor(transactionalId)) {
       // check if it is the assigned coordinator for the transactional id
       responseCallback(initPidError(Errors.NOT_COORDINATOR))
+    } else if (!txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
+      responseCallback(initPidError(Errors.COORDINATOR_LOAD_IN_PROGRESS))
     } else {
       // only try to get a new pid and update the cache if the transactional id is unknown
       txnManager.getPid(transactionalId) match {

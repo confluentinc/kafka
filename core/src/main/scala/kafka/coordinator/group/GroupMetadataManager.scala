@@ -1,19 +1,19 @@
-/**
-  * Licensed to the Apache Software Foundation (ASF) under one or more
-  * contributor license agreements.  See the NOTICE file distributed with
-  * this work for additional information regarding copyright ownership.
-  * The ASF licenses this file to You under the Apache License, Version 2.0
-  * (the "License"); you may not use this file except in compliance with
-  * the License.  You may obtain a copy of the License at
-  *
-  *    http://www.apache.org/licenses/LICENSE-2.0
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package kafka.coordinator.group
 
@@ -114,15 +114,15 @@ class GroupMetadataManager(brokerId: Int,
   def isLoading(): Boolean = inLock(partitionLock) { loadingPartitions.nonEmpty }
 
   /**
-    * Get the group associated with the given groupId, or null if not found
-    */
+   * Get the group associated with the given groupId, or null if not found
+   */
   def getGroup(groupId: String): Option[GroupMetadata] = {
     Option(groupMetadataCache.get(groupId))
   }
 
   /**
-    * Add a group or get the group associated with the given groupId if it already exists
-    */
+   * Add a group or get the group associated with the given groupId if it already exists
+   */
   def addGroup(group: GroupMetadata): GroupMetadata = {
     val currentGroup = groupMetadataCache.putIfNotExists(group.groupId, group)
     if (currentGroup != null) {
@@ -230,8 +230,8 @@ class GroupMetadataManager(brokerId: Int,
   }
 
   /**
-    * Store offsets by appending it to the replicated log and then inserting to cache
-    */
+   * Store offsets by appending it to the replicated log and then inserting to cache
+   */
   def prepareStoreOffsets(group: GroupMetadata,
                           consumerId: String,
                           generationId: Int,
@@ -344,9 +344,9 @@ class GroupMetadataManager(brokerId: Int,
   }
 
   /**
-    * The most important guarantee that this API provides is that it should never return a stale offset. i.e., it either
-    * returns the current offset or it begins to sync the cache from the log (and returns an error code).
-    */
+   * The most important guarantee that this API provides is that it should never return a stale offset. i.e., it either
+   * returns the current offset or it begins to sync the cache from the log (and returns an error code).
+   */
   def getOffsets(groupId: String, topicPartitionsOpt: Option[Seq[TopicPartition]]): Map[TopicPartition, OffsetFetchResponse.PartitionData] = {
     trace("Getting offsets of %s for group %s.".format(topicPartitionsOpt.getOrElse("all partitions"), groupId))
     val group = groupMetadataCache.get(groupId)
@@ -386,8 +386,8 @@ class GroupMetadataManager(brokerId: Int,
   }
 
   /**
-    * Asynchronously read the partition from the offsets topic and populate the cache
-    */
+   * Asynchronously read the partition from the offsets topic and populate the cache
+   */
   def loadGroupsForPartition(offsetsPartition: Int, onGroupLoaded: GroupMetadata => Unit) {
     val topicPartition = new TopicPartition(Topic.GroupMetadataTopicName, offsetsPartition)
 
@@ -535,11 +535,11 @@ class GroupMetadataManager(brokerId: Int,
   }
 
   /**
-    * When this broker becomes a follower for an offsets topic partition clear out the cache for groups that belong to
-    * that partition.
-    *
-    * @param offsetsPartition Groups belonging to this partition of the offsets topic will be deleted from the cache.
-    */
+   * When this broker becomes a follower for an offsets topic partition clear out the cache for groups that belong to
+   * that partition.
+   *
+   * @param offsetsPartition Groups belonging to this partition of the offsets topic will be deleted from the cache.
+   */
   def removeGroupsForPartition(offsetsPartition: Int,
                                onGroupUnloaded: GroupMetadata => Unit) {
     val topicPartition = new TopicPartition(Topic.GroupMetadataTopicName, offsetsPartition)
@@ -667,9 +667,9 @@ class GroupMetadataManager(brokerId: Int,
   }
 
   /**
-    * Gets the partition count of the group metadata topic from ZooKeeper.
-    * If the topic does not exist, the configured partition count is returned.
-    */
+   * Gets the partition count of the group metadata topic from ZooKeeper.
+   * If the topic does not exist, the configured partition count is returned.
+   */
   private def getGroupMetadataTopicPartitionCount: Int = {
     zkUtils.getTopicPartitionCount(Topic.GroupMetadataTopicName).getOrElse(config.offsetsTopicNumPartitions)
   }
@@ -684,10 +684,10 @@ class GroupMetadataManager(brokerId: Int,
     replicaManager.getMagic(new TopicPartition(Topic.GroupMetadataTopicName, partition))
 
   /**
-    * Add the partition into the owned list
-    *
-    * NOTE: this is for test only
-    */
+   * Add the partition into the owned list
+   *
+   * NOTE: this is for test only
+   */
   def addPartitionOwnership(partition: Int) {
     inLock(partitionLock) {
       ownedPartitions.add(partition)
@@ -696,20 +696,20 @@ class GroupMetadataManager(brokerId: Int,
 }
 
 /**
-  * Messages stored for the group topic has versions for both the key and value fields. Key
-  * version is used to indicate the type of the message (also to differentiate different types
-  * of messages from being compacted together if they have the same field values); and value
-  * version is used to evolve the messages within their data types:
-  *
-  * key version 0:       group consumption offset
-  *    -> value version 0:       [offset, metadata, timestamp]
-  *
-  * key version 1:       group consumption offset
-  *    -> value version 1:       [offset, metadata, commit_timestamp, expire_timestamp]
-  *
-  * key version 2:       group metadata
-  *     -> value version 0:       [protocol_type, generation, protocol, leader, members]
-  */
+ * Messages stored for the group topic has versions for both the key and value fields. Key
+ * version is used to indicate the type of the message (also to differentiate different types
+ * of messages from being compacted together if they have the same field values); and value
+ * version is used to evolve the messages within their data types:
+ *
+ * key version 0:       group consumption offset
+ *    -> value version 0:       [offset, metadata, timestamp]
+ *
+ * key version 1:       group consumption offset
+ *    -> value version 1:       [offset, metadata, commit_timestamp, expire_timestamp]
+ *
+ * key version 2:       group metadata
+ *     -> value version 0:       [protocol_type, generation, protocol, leader, members]
+ */
 object GroupMetadataManager {
 
   private val CURRENT_OFFSET_KEY_SCHEMA_VERSION = 1.toShort
@@ -836,10 +836,10 @@ object GroupMetadataManager {
   }
 
   /**
-    * Generates the key for offset commit message for given (group, topic, partition)
-    *
-    * @return key for offset commit message
-    */
+   * Generates the key for offset commit message for given (group, topic, partition)
+   *
+   * @return key for offset commit message
+   */
   private[group] def offsetCommitKey(group: String, topicPartition: TopicPartition,
                                            versionId: Short = 0): Array[Byte] = {
     val key = new Struct(CURRENT_OFFSET_KEY_SCHEMA)
@@ -854,10 +854,10 @@ object GroupMetadataManager {
   }
 
   /**
-    * Generates the key for group metadata message for given group
-    *
-    * @return key bytes for group metadata message
-    */
+   * Generates the key for group metadata message for given group
+   *
+   * @return key bytes for group metadata message
+   */
   private[group] def groupMetadataKey(group: String): Array[Byte] = {
     val key = new Struct(CURRENT_GROUP_KEY_SCHEMA)
     key.set(GROUP_KEY_GROUP_FIELD, group)
@@ -869,11 +869,11 @@ object GroupMetadataManager {
   }
 
   /**
-    * Generates the payload for offset commit message from given offset and metadata
-    *
-    * @param offsetAndMetadata consumer's current offset and metadata
-    * @return payload for offset commit message
-    */
+   * Generates the payload for offset commit message from given offset and metadata
+   *
+   * @param offsetAndMetadata consumer's current offset and metadata
+   * @return payload for offset commit message
+   */
   private[group] def offsetCommitValue(offsetAndMetadata: OffsetAndMetadata): Array[Byte] = {
     // generate commit value with schema version 1
     val value = new Struct(CURRENT_OFFSET_VALUE_SCHEMA)
@@ -888,14 +888,14 @@ object GroupMetadataManager {
   }
 
   /**
-    * Generates the payload for group metadata message from given offset and metadata
-    * assuming the generation id, selected protocol, leader and member assignment are all available
-    *
-    * @param groupMetadata current group metadata
-    * @param assignment the assignment for the rebalancing generation
-    * @param version the version of the value message to use
-    * @return payload for offset commit message
-    */
+   * Generates the payload for group metadata message from given offset and metadata
+   * assuming the generation id, selected protocol, leader and member assignment are all available
+   *
+   * @param groupMetadata current group metadata
+   * @param assignment the assignment for the rebalancing generation
+   * @param version the version of the value message to use
+   * @return payload for offset commit message
+   */
   private[group] def groupMetadataValue(groupMetadata: GroupMetadata,
                                         assignment: Map[String, Array[Byte]],
                                         version: Short = 0): Array[Byte] = {
@@ -936,11 +936,11 @@ object GroupMetadataManager {
   }
 
   /**
-    * Decodes the offset messages' key
-    *
-    * @param buffer input byte-buffer
-    * @return an GroupTopicPartition object
-    */
+   * Decodes the offset messages' key
+   *
+   * @param buffer input byte-buffer
+   * @return an GroupTopicPartition object
+   */
   def readMessageKey(buffer: ByteBuffer): BaseKey = {
     val version = buffer.getShort
     val keySchema = schemaForKey(version)
@@ -965,11 +965,11 @@ object GroupMetadataManager {
   }
 
   /**
-    * Decodes the offset messages' payload and retrieves offset and metadata from it
-    *
-    * @param buffer input byte-buffer
-    * @return an offset-metadata object from the message
-    */
+   * Decodes the offset messages' payload and retrieves offset and metadata from it
+   *
+   * @param buffer input byte-buffer
+   * @return an offset-metadata object from the message
+   */
   def readOffsetMessageValue(buffer: ByteBuffer): OffsetAndMetadata = {
     if (buffer == null) { // tombstone
       null
@@ -998,11 +998,11 @@ object GroupMetadataManager {
   }
 
   /**
-    * Decodes the group metadata messages' payload and retrieves its member metadatafrom it
-    *
-    * @param buffer input byte-buffer
-    * @return a group metadata object from the message
-    */
+   * Decodes the group metadata messages' payload and retrieves its member metadatafrom it
+   *
+   * @param buffer input byte-buffer
+   * @return a group metadata object from the message
+   */
   def readGroupMessageValue(groupId: String, buffer: ByteBuffer): GroupMetadata = {
     if (buffer == null) { // tombstone
       null
