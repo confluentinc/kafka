@@ -91,7 +91,7 @@ public class NetworkClientUtils {
             for (ClientResponse response : responses) {
                 if (response.requestHeader().correlationId() == request.correlationId()) {
                     if (response.wasDisconnected()) {
-                        throw new IOException("Connection to {} " + response.destination() + " was disconnected before there response was read");
+                        throw new IOException("Connection to {} " + response.destination() + " was disconnected before the response was read");
                     }
                     if (response.versionMismatch() != null) {
                         throw response.versionMismatch();
