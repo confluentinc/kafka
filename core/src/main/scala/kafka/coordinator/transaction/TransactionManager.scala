@@ -65,8 +65,8 @@ class TransactionManager(brokerId: Int,
   /* partitions of transaction topic that are corrupted; should always be an empty set under normal operations */
   private val corruptedPartitions: mutable.Set[Int] = mutable.Set()
 
-  /* Pid metadata cache indexed by transactional id, including ongoing transaction status */
-  private val pidMetadataCache = new Pool[String, PidMetadata]
+  /* transaction metadata cache indexed by transactional id */
+  private val transactionMetadataCache = new Pool[String, TransactionMetadata]
 
   /* shutting down flag */
   private val shuttingDown = new AtomicBoolean(false)
@@ -80,19 +80,19 @@ class TransactionManager(brokerId: Int,
   /**
     * Get the pid metadata associated with the given groupId, or null if not found
     */
-  def getPid(groupId: String): Option[PidMetadata] = {
-    Option(pidMetadataCache.get(groupId))
+  def getTransaction(groupId: String): Option[TransactionMetadata] = {
+    Option(transactionMetadataCache.get(groupId))
   }
 
   /**
     * Add a new pid metadata, or retrieve the metadata if it already exists with the associated transactional id
     */
-  def addPid(transactionalId: String, pidMetadata: PidMetadata): PidMetadata = {
-    val currentPidMetadata = pidMetadataCache.putIfNotExists(transactionalId, pidMetadata)
+  def addTransaction(transactionalId: String, txnMetadata: TransactionMetadata): TransactionMetadata = {
+    val currentPidMetadata = transactionMetadataCache.putIfNotExists(transactionalId, txnMetadata)
     if (currentPidMetadata != null) {
       currentPidMetadata
     } else {
-      pidMetadata
+      txnMetadata
     }
   }
 
@@ -132,7 +132,7 @@ class TransactionManager(brokerId: Int,
     zkUtils.getTopicPartitionCount(Topic.TransactionStateTopicName).getOrElse(config.numPartitions)
   }
 
-  private def loadPidMetadata(topicPartition: TopicPartition) {
+  private def loadTransactionMetadata(topicPartition: TopicPartition) {
     def highWaterMark = replicaManager.getHighWatermark(topicPartition).getOrElse(-1L)
 
     val startMs = time.milliseconds()
@@ -143,7 +143,7 @@ class TransactionManager(brokerId: Int,
       case Some(log) =>
         val buffer = ByteBuffer.allocate(config.loadBufferSize)
 
-        val loadedPids = mutable.Map.empty[String, PidMetadata]
+        val loadedPids = mutable.Map.empty[String, TransactionMetadata]
         val removedPids = mutable.Set.empty[String]
 
         // loop breaks if leader changes at any time during the load, since getHighWatermark is -1
@@ -166,8 +166,8 @@ class TransactionManager(brokerId: Int,
                     loadedPids.remove(transactionalId)
                     removedPids.add(transactionalId)
                   } else {
-                    val pidMetadata = TransactionLog.readMessageValue(record.value)
-                    loadedPids.put(transactionalId, pidMetadata)
+                    val txnMetadata = TransactionLog.readMessageValue(record.value)
+                    loadedPids.put(transactionalId, txnMetadata)
                     removedPids.remove(transactionalId)
                   }
 
@@ -180,12 +180,12 @@ class TransactionManager(brokerId: Int,
           }
 
           loadedPids.foreach {
-            case (transactionalId, pidMetadata) =>
-              val currentPidMetadata = addPid(transactionalId, pidMetadata)
-              if (!pidMetadata.equals(currentPidMetadata)) {
+            case (transactionalId, txnMetadata) =>
+              val currentTxnMetadata = addTransaction(transactionalId, txnMetadata)
+              if (!txnMetadata.equals(currentTxnMetadata)) {
                 // treat this as a fatal failure as this should never happen
-                fatal(s"Attempt to load $transactionalId's pid metadata $pidMetadata failed " +
-                  s"because there is already a different cached pid metadata $currentPidMetadata; " +
+                fatal(s"Attempt to load $transactionalId's metadata $txnMetadata failed " +
+                  s"because there is already a different cached pid metadata $currentTxnMetadata; " +
                   s"all future client requests with transactional ids related to this partition will result in an error code, " +
                   s"and this partition of the log will be effectively disabled.")
 
@@ -195,7 +195,7 @@ class TransactionManager(brokerId: Int,
 
           removedPids.foreach { transactionalId =>
             // if the cache already contains a pid which should be removed, raise an error.
-            if (pidMetadataCache.contains(transactionalId))
+            if (transactionMetadataCache.contains(transactionalId))
               throw new IllegalStateException(s"Unexpected unload of $transactionalId's pid metadata while " +
                 s"loading partition $topicPartition")
           }
@@ -227,7 +227,7 @@ class TransactionManager(brokerId: Int,
       }
 
       try {
-        loadPidMetadata(topicPartition)
+        loadTransactionMetadata(topicPartition)
       } catch {
         case t: Throwable => error(s"Error loading offsets from $topicPartition", t)
       } finally {
@@ -261,11 +261,11 @@ class TransactionManager(brokerId: Int,
           ownedPartitions.remove(partition)
         }
 
-        for (transactionalId <- pidMetadataCache.keys) {
+        for (transactionalId <- transactionMetadataCache.keys) {
           if (partitionFor(transactionalId) == partition) {
             // we do not need to worry about whether the pid has any ongoing transaction or not since
             // the new leader will handle it
-            pidMetadataCache.remove(transactionalId)
+            transactionMetadataCache.remove(transactionalId)
             numPidsRemoved += 1
           }
         }
@@ -283,7 +283,7 @@ class TransactionManager(brokerId: Int,
     if (scheduler.isStarted)
       scheduler.shutdown()
 
-    pidMetadataCache.clear()
+    transactionMetadataCache.clear()
 
     ownedPartitions.clear()
     loadingPartitions.clear()

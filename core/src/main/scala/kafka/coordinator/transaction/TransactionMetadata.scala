@@ -81,14 +81,15 @@ private[coordinator] object TransactionMetadata {
       case unknown => throw new IllegalStateException("Unknown transaction state byte " + unknown + " from the transaction status message")
     }
   }
-
-  def byteToTxnMetadata(byte: Byte): TransactionMetadata = new TransactionMetadata(byteToState(byte))
-
-  def stateToTxnMetadata(state: TransactionState): TransactionMetadata = new TransactionMetadata(state)
 }
 
 @nonthreadsafe
-private[coordinator] class TransactionMetadata(var state: TransactionState) {
+private[coordinator] class TransactionMetadata(val pid: Long,
+                                               var epoch: Short,
+                                               val txnTimeoutMs: Int,
+                                               var state: TransactionState) {
+
+  def this(pid: Long, epoch: Short, txnTimeoutMs: Int) = this(pid, epoch, txnTimeoutMs, NotExist)
 
   // participated partitions in this transaction
   val topicPartitions = mutable.Set.empty[TopicPartition]
@@ -98,10 +99,15 @@ private[coordinator] class TransactionMetadata(var state: TransactionState) {
   }
 
   override def toString: String =
-    s"(state: $state, topicPartitions: ${topicPartitions.mkString("(",",",")")})"
+    s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $txnTimeoutMs, transactionState: $state, topicPartitions: ${topicPartitions.mkString("(",",",")")})"
 
   override def equals(that: Any): Boolean = that match {
-    case other: TransactionMetadata => state.equals(other.state) && topicPartitions.equals(other.topicPartitions)
+    case other: TransactionMetadata =>
+      pid == other.pid &&
+      epoch == other.epoch &&
+      txnTimeoutMs == other.txnTimeoutMs &&
+      state.equals(other.state) &&
+      topicPartitions.equals(other.topicPartitions)
     case _ => false
   }
 

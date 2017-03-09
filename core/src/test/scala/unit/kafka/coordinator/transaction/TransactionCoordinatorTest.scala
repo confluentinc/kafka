@@ -47,19 +47,19 @@ class TransactionCoordinatorTest {
     .andReturn(false)
     .anyTimes()
 
-  val capturedAPid: Capture[PidMetadata] = EasyMock.newCapture()
-  EasyMock.expect(transactionManager.addPid(EasyMock.eq("a"), EasyMock.capture(capturedAPid)))
-    .andAnswer(new IAnswer[PidMetadata] {
-      override def answer(): PidMetadata = {
-        capturedAPid.getValue
+  val capturedTxn: Capture[TransactionMetadata] = EasyMock.newCapture()
+  EasyMock.expect(transactionManager.addTransaction(EasyMock.eq("a"), EasyMock.capture(capturedTxn)))
+    .andAnswer(new IAnswer[TransactionMetadata] {
+      override def answer(): TransactionMetadata = {
+        capturedTxn.getValue
       }
     })
     .once()
-  EasyMock.expect(transactionManager.getPid(EasyMock.eq("a")))
-    .andAnswer(new IAnswer[Option[PidMetadata]] {
-      override def answer(): Option[PidMetadata] = {
-        if (capturedAPid.hasCaptured) {
-          Some(capturedAPid.getValue)
+  EasyMock.expect(transactionManager.getTransaction(EasyMock.eq("a")))
+    .andAnswer(new IAnswer[Option[TransactionMetadata]] {
+      override def answer(): Option[TransactionMetadata] = {
+        if (capturedTxn.hasCaptured) {
+          Some(capturedTxn.getValue)
         } else {
           None
         }

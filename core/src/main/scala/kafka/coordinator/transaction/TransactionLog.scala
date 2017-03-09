@@ -134,21 +134,21 @@ object TransactionLog {
     *
     * @return value payload bytes
     */
-  private[coordinator] def valueToBytes(pidMetadata: PidMetadata): Array[Byte] = {
+  private[coordinator] def valueToBytes(txnMetadata: TransactionMetadata): Array[Byte] = {
     val value = new Struct(CURRENT_VALUE_SCHEMA)
-    value.set(VALUE_SCHEMA_PID_FIELD, pidMetadata.pid)
-    value.set(VALUE_SCHEMA_EPOCH_FIELD, pidMetadata.epoch)
-    value.set(VALUE_SCHEMA_TXN_TIMEOUT_FIELD, pidMetadata.txnTimeoutMs)
-    value.set(VALUE_SCHEMA_TXN_STATUS_FIELD, pidMetadata.txnMetadata.state.byte)
+    value.set(VALUE_SCHEMA_PID_FIELD, txnMetadata.pid)
+    value.set(VALUE_SCHEMA_EPOCH_FIELD, txnMetadata.epoch)
+    value.set(VALUE_SCHEMA_TXN_TIMEOUT_FIELD, txnMetadata.txnTimeoutMs)
+    value.set(VALUE_SCHEMA_TXN_STATUS_FIELD, txnMetadata.state.byte)
 
-    if (pidMetadata.txnMetadata.state.equals(NotExist)) {
-      if (pidMetadata.txnMetadata.topicPartitions.nonEmpty)
-        throw new IllegalStateException(s"Transaction is not expected to have any partitions since its state is ${pidMetadata.txnMetadata.state}: ${pidMetadata.txnMetadata}")
+    if (txnMetadata.state.equals(NotExist)) {
+      if (txnMetadata.topicPartitions.nonEmpty)
+        throw new IllegalStateException(s"Transaction is not expected to have any partitions since its state is ${txnMetadata.state}: ${txnMetadata}")
 
       value.set(VALUE_SCHEMA_TXN_PARTITIONS_FIELD, null)
     } else {
       // first group the topic partitions by their topic names
-      val topicAndPartitions = pidMetadata.txnMetadata.topicPartitions.groupBy(_.topic())
+      val topicAndPartitions = txnMetadata.topicPartitions.groupBy(_.topic())
 
       val partitionArray = topicAndPartitions.map { topicAndPartitionIds =>
         val topicPartitionsStruct = value.instance(VALUE_SCHEMA_TXN_PARTITIONS_FIELD)
@@ -193,7 +193,7 @@ object TransactionLog {
     *
     * @return a pid metadata object from the message
     */
-  def readMessageValue(buffer: ByteBuffer): PidMetadata = {
+  def readMessageValue(buffer: ByteBuffer): TransactionMetadata = {
     if (buffer == null) { // tombstone
       null
     } else {
@@ -209,7 +209,7 @@ object TransactionLog {
         val stateByte = value.getByte(VALUE_SCHEMA_TXN_STATUS_FIELD)
         val state = TransactionMetadata.byteToState(stateByte)
 
-        val transactionMetadata = new TransactionMetadata(state)
+        val transactionMetadata = new TransactionMetadata(pid, epoch, timeout, state)
 
         if (!state.equals(NotExist)) {
           val topicPartitionArray = value.getArray(VALUE_SCHEMA_TXN_PARTITIONS_FIELD)
@@ -228,7 +228,7 @@ object TransactionLog {
           }
         }
 
-        new PidMetadata(pid, epoch, timeout, transactionMetadata)
+        transactionMetadata
       } else {
         throw new IllegalStateException(s"Unknown version $version from the pid mapping message value")
       }

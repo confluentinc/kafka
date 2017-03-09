@@ -66,10 +66,8 @@ class TransactionManagerTest {
   val txnMessageKeyBytes1: Array[Byte] = TransactionLog.keyToBytes(txnId1)
   val txnMessageKeyBytes2: Array[Byte] = TransactionLog.keyToBytes(txnId2)
   val pidMappings: Map[String, Long] = Map[String, Long](txnId1 -> 1L, txnId2 -> 2L)
-  val txnMetadata1: TransactionMetadata = TransactionMetadata.stateToTxnMetadata(NotExist)
-  val txnMetadata2: TransactionMetadata = TransactionMetadata.stateToTxnMetadata(NotExist)
-  var pidMetadata1: PidMetadata = new PidMetadata(pidMappings(txnId1), 1, transactionTimeoutMs, txnMetadata1)
-  var pidMetadata2: PidMetadata = new PidMetadata(pidMappings(txnId2), 1, transactionTimeoutMs, txnMetadata2)
+  var txnMetadata1: TransactionMetadata = new TransactionMetadata(pidMappings(txnId1), 1, transactionTimeoutMs)
+  var txnMetadata2: TransactionMetadata = new TransactionMetadata(pidMappings(txnId2), 1, transactionTimeoutMs)
 
   @Before
   def setUp(): Unit = {
@@ -80,10 +78,10 @@ class TransactionManagerTest {
 
   @Test
   def testAddGetPids() {
-    assertEquals(None, transactionManager.getPid(txnId1))
-    assertEquals(pidMetadata1, transactionManager.addPid(txnId1, pidMetadata1))
-    assertEquals(Some(pidMetadata1), transactionManager.getPid(txnId1))
-    assertEquals(pidMetadata1, transactionManager.addPid(txnId1, pidMetadata2))
+    assertEquals(None, transactionManager.getTransaction(txnId1))
+    assertEquals(txnMetadata1, transactionManager.addTransaction(txnId1, txnMetadata1))
+    assertEquals(Some(txnMetadata1), transactionManager.getTransaction(txnId1))
+    assertEquals(txnMetadata1, transactionManager.addTransaction(txnId1, txnMetadata2))
   }
 
   @Test
@@ -95,19 +93,19 @@ class TransactionManagerTest {
     txnMetadata1.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
       new TopicPartition("topic1", 1)))
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(pidMetadata1))
+    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
 
     // pid1's transaction adds three more partitions
     txnMetadata1.addPartitions(Set[TopicPartition](new TopicPartition("topic2", 0),
       new TopicPartition("topic2", 1),
       new TopicPartition("topic2", 2)))
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(pidMetadata1))
+    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
 
     // pid1's transaction is preparing to commit
     txnMetadata1.state = PrepareCommit
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(pidMetadata1))
+    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
 
     // pid2's transaction started with three partitions
     txnMetadata2.state = Ongoing
@@ -115,23 +113,23 @@ class TransactionManagerTest {
       new TopicPartition("topic3", 1),
       new TopicPartition("topic3", 2)))
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(pidMetadata2))
+    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     // pid2's transaction is preparing to abort
     txnMetadata2.state = PrepareAbort
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(pidMetadata2))
+    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     // pid2's transaction has aborted
     txnMetadata2.state = CompleteAbort
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(pidMetadata2))
+    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     // pid2's epoch has advanced, with no ongoing transaction yet
     txnMetadata2.state = NotExist
     txnMetadata2.topicPartitions.clear()
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(pidMetadata2))
+    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     val startOffset = 15L   // it should work for any start offset
     val records = MemoryRecords.withRecords(startOffset, CompressionType.NONE, txnRecords: _*)
@@ -149,12 +147,12 @@ class TransactionManagerTest {
     // let the time advance to trigger the background thread loading
     scheduler.tick()
 
-    val cachedPidMetadata1 = transactionManager.getPid(txnId1).getOrElse(fail(txnId1 + "'s transaction state was not loaded into the cache"))
-    val cachedPidMetadata2 = transactionManager.getPid(txnId2).getOrElse(fail(txnId2 + "'s transaction state was not loaded into the cache"))
+    val cachedPidMetadata1 = transactionManager.getTransaction(txnId1).getOrElse(fail(txnId1 + "'s transaction state was not loaded into the cache"))
+    val cachedPidMetadata2 = transactionManager.getTransaction(txnId2).getOrElse(fail(txnId2 + "'s transaction state was not loaded into the cache"))
 
     // they should be equal to the latest status of the transaction
-    assertEquals(pidMetadata1, cachedPidMetadata1)
-    assertEquals(pidMetadata2, cachedPidMetadata2)
+    assertEquals(txnMetadata1, cachedPidMetadata1)
+    assertEquals(txnMetadata2, cachedPidMetadata2)
 
     // this partition should now be part of the owned partitions
     assertTrue(transactionManager.isCoordinatorFor(txnId1))
@@ -168,8 +166,8 @@ class TransactionManagerTest {
     assertFalse(transactionManager.isCoordinatorFor(txnId1))
     assertFalse(transactionManager.isCoordinatorFor(txnId2))
 
-    assertEquals(None, transactionManager.getPid(txnId1))
-    assertEquals(None, transactionManager.getPid(txnId2))
+    assertEquals(None, transactionManager.getTransaction(txnId1))
+    assertEquals(None, transactionManager.getTransaction(txnId2))
   }
 
   private def prepareTxnLog(topicPartition: TopicPartition,

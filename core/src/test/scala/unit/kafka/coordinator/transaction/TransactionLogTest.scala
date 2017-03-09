@@ -39,13 +39,11 @@ class TransactionLogTest extends JUnitSuite {
 
   @Test
   def shouldThrowExceptionWriteInvalidTxn() {
-    val txnMetadata = new TransactionMetadata(NotExist)
+    val txnMetadata = new TransactionMetadata(0L, epoch, transactionTimeoutMs)
     txnMetadata.addPartitions(topicPartitions)
 
-    val pidMetadata = new PidMetadata(0L, epoch, transactionTimeoutMs, txnMetadata)
-
     intercept[IllegalStateException] {
-      TransactionLog.valueToBytes(pidMetadata)
+      TransactionLog.valueToBytes(txnMetadata)
     }
   }
 
@@ -67,15 +65,13 @@ class TransactionLogTest extends JUnitSuite {
 
     // generate transaction log messages
     val txnRecords = pidMappings.map { case (transactionalId, pid) =>
-      val txnMetadata = new TransactionMetadata(transactionStates(pid))
+      val txnMetadata = new TransactionMetadata(pid, epoch, transactionTimeoutMs, transactionStates(pid))
 
       if (!txnMetadata.state.equals(NotExist))
         txnMetadata.addPartitions(topicPartitions)
 
-      val pidMetadata = new PidMetadata(pid, epoch, transactionTimeoutMs, txnMetadata)
-
       val keyBytes = TransactionLog.keyToBytes(transactionalId)
-      val valueBytes = TransactionLog.valueToBytes(pidMetadata)
+      val valueBytes = TransactionLog.valueToBytes(txnMetadata)
 
       new SimpleRecord(keyBytes, valueBytes)
     }.toSeq
@@ -89,15 +85,12 @@ class TransactionLogTest extends JUnitSuite {
       key match {
         case pidKey: TxnKey =>
           val transactionalId = pidKey.key
-          val pidMetadata = TransactionLog.readMessageValue(record.value())
+          val txnMetadata = TransactionLog.readMessageValue(record.value())
 
-          assertEquals(pidMappings(transactionalId), pidMetadata.pid)
-          assertEquals(epoch, pidMetadata.epoch)
-          assertEquals(transactionTimeoutMs, pidMetadata.txnTimeoutMs)
-
-          val txnMetadata = pidMetadata.txnMetadata
-
-          assertEquals(transactionStates(pidMetadata.pid), txnMetadata.state)
+          assertEquals(pidMappings(transactionalId), txnMetadata.pid)
+          assertEquals(epoch, txnMetadata.epoch)
+          assertEquals(transactionTimeoutMs, txnMetadata.txnTimeoutMs)
+          assertEquals(transactionStates(txnMetadata.pid), txnMetadata.state)
 
           if (txnMetadata.state.equals(NotExist))
             assertEquals(Set.empty[TopicPartition], txnMetadata.topicPartitions)

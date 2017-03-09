@@ -70,17 +70,17 @@ class TransactionCoordinator(brokerId: Int,
       responseCallback(InitPidResult(pid, epoch = 0, Errors.NONE))
     } else if (!txnManager.isCoordinatorFor(transactionalId)) {
       // check if it is the assigned coordinator for the transactional id
-      responseCallback(initPidError(Errors.NOT_COORDINATOR))
+      responseCallback(initTransactionError(Errors.NOT_COORDINATOR))
     } else if (!txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
-      responseCallback(initPidError(Errors.COORDINATOR_LOAD_IN_PROGRESS))
+      responseCallback(initTransactionError(Errors.COORDINATOR_LOAD_IN_PROGRESS))
     } else {
       // only try to get a new pid and update the cache if the transactional id is unknown
-      txnManager.getPid(transactionalId) match {
+      txnManager.getTransaction(transactionalId) match {
         case None =>
           val pid: Long = pidManager.getNewPid()
           // TODO: check transactionTimeoutMs is not larger than the broker configured maximum allowed value
-          val newMetadata: PidMetadata = new PidMetadata(pid, epoch = 0, transactionTimeoutMs)
-          val metadata = txnManager.addPid(transactionalId, newMetadata)
+          val newMetadata: TransactionMetadata = new TransactionMetadata(pid, epoch = 0, transactionTimeoutMs)
+          val metadata = txnManager.addTransaction(transactionalId, newMetadata)
 
           // there might be a concurrent thread that has just updated the mapping
           // with the transactional id at the same time; in this case we will
@@ -90,13 +90,13 @@ class TransactionCoordinator(brokerId: Int,
               metadata.epoch = (metadata.epoch + 1).toShort
           }
 
-          responseCallback(initPidMetadata(metadata))
+          responseCallback(initTransactionMetadata(metadata))
 
         case Some(metadata) =>
           metadata synchronized {
             metadata.epoch = (metadata.epoch + 1).toShort
           }
-          responseCallback(initPidMetadata(metadata))
+          responseCallback(initTransactionMetadata(metadata))
       }
     }
   }
@@ -136,12 +136,12 @@ class TransactionCoordinator(brokerId: Int,
     info("Shutdown complete.")
   }
 
-  private def initPidError(error: Errors): InitPidResult = {
+  private def initTransactionError(error: Errors): InitPidResult = {
     InitPidResult(pid = -1L, epoch = -1, error)
   }
 
-  private def initPidMetadata(pidMetadata: PidMetadata): InitPidResult = {
-    InitPidResult(pidMetadata.pid, pidMetadata.epoch, Errors.NONE)
+  private def initTransactionMetadata(txnMetadata: TransactionMetadata): InitPidResult = {
+    InitPidResult(txnMetadata.pid, txnMetadata.epoch, Errors.NONE)
   }
 }
 
