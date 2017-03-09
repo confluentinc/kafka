@@ -95,10 +95,7 @@
     </module>
 
     <!-- code quality -->
-    <module name="MethodLength">
-      <!-- default is 150 -->
-      <property name="max" value="155"/>
-    </module>
+    <module name="MethodLength"/>
     <module name="ParameterNumber">
       <!-- default is 8 -->
       <property name="max" value="13"/>

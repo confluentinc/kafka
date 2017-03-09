@@ -98,6 +98,7 @@
       <allow pkg="org.apache.kafka.common.protocol" />
       <allow pkg="org.apache.kafka.common.protocol.types" />
       <allow pkg="org.apache.kafka.common.errors" />
+      <!-- MemoryRecordsBuilder needs to access TransactionState, which seems to naturally belong in the Producer -->
       <allow pkg="org.apache.kafka.clients.producer" />
     </subpackage>
 
@@ -127,8 +128,6 @@
     <subpackage name="producer">
       <allow pkg="org.apache.kafka.clients.producer" />
     </subpackage>
-
-
   </subpackage>
 
   <subpackage name="server">
