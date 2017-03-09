@@ -16,7 +16,7 @@
  */
 package org.apache.kafka.common.record;
 
-import org.apache.kafka.clients.producer.internals.TransactionState;
+import org.apache.kafka.clients.producer.TransactionState;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.protocol.types.Struct;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
@@ -208,7 +208,7 @@ public class MemoryRecordsBuilder {
         this.pid = pidAndEpoch.pid;
         this.epoch = pidAndEpoch.epoch;
         this.baseSequence = baseSequence;
-   }
+    }
 
     public void close() {
         if (builtRecords != null)

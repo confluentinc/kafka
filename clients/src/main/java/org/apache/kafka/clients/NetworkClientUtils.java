@@ -15,11 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.kafka.common.network;
+package org.apache.kafka.clients;
 
-import org.apache.kafka.clients.ClientRequest;
-import org.apache.kafka.clients.ClientResponse;
-import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.utils.Time;
 
@@ -36,8 +33,8 @@ public class NetworkClientUtils {
      * to tell whether the latter completed a new connection.
      */
     private static boolean isReady(KafkaClient client, Node node, long currentTime) {
-       client.poll(0, currentTime);
-       return client.isReady(node, currentTime);
+        client.poll(0, currentTime);
+        return client.isReady(node, currentTime);
     }
 
     /**

@@ -22,7 +22,7 @@ import org.apache.kafka.clients.ClientResponse;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.RequestCompletionHandler;
-import org.apache.kafka.clients.consumer.internals.NoAvailableBrokersException;
+import org.apache.kafka.clients.producer.TransactionState;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Node;
@@ -39,7 +39,7 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Rate;
-import org.apache.kafka.common.network.NetworkClientUtils;
+import org.apache.kafka.clients.NetworkClientUtils;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.InitPidRequest;
@@ -189,9 +189,7 @@ public class Sender implements Runnable {
     void run(long now) {
         Cluster cluster = metadata.fetch();
 
-        if (transactionState != null) {
-            maybeWaitForPid();
-        }
+        maybeWaitForPid();
 
         // get the list of partitions with data ready to send
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
@@ -302,19 +300,22 @@ public class Sender implements Runnable {
     }
 
     private void maybeWaitForPid() {
+        if (transactionState == null)
+            return;
+
         while (!transactionState.hasPid()) {
             try {
                 Node node = getReadyNode(requestTimeout);
-                if (node == null) {
-                    log.warn("Could not find an available node while trying to get a producer id.");
-                    throw new NoAvailableBrokersException();
-                }
-                ClientResponse response = sendInitPidRequest(node);
-                if (response.hasResponse() && (response.responseBody() instanceof InitPidResponse)) {
-                    InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
-                    transactionState.setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
+                if (node != null) {
+                    ClientResponse response = sendInitPidRequest(node);
+                    if (response.hasResponse() && (response.responseBody() instanceof InitPidResponse)) {
+                        InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
+                        transactionState.setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
+                    } else {
+                        log.error("Received an unexpected response type for an InitPidRequest. We will try again.");
+                    }
                 } else {
-                    log.error("Received an unexpected response type for an InitPidRequest. We will probably be retrying forever.");
+                    log.warn("Could not find an available broker to send an initPidRequest to.");
                 }
             } catch (Exception e) {
                 log.warn("Received an exception {} while trying to get a pid. Will back off and retry.", e.getMessage());

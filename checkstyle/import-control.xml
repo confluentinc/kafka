@@ -98,6 +98,7 @@
       <allow pkg="org.apache.kafka.common.protocol" />
       <allow pkg="org.apache.kafka.common.protocol.types" />
       <allow pkg="org.apache.kafka.common.errors" />
+      <allow pkg="org.apache.kafka.clients.producer" />
     </subpackage>
 
     <subpackage name="requests">
@@ -126,6 +127,8 @@
     <subpackage name="producer">
       <allow pkg="org.apache.kafka.clients.producer" />
     </subpackage>
+
+
   </subpackage>
 
   <subpackage name="server">

@@ -454,7 +454,7 @@ private[log] class Cleaner(val id: Int,
       def shouldRetain(entry: LogEntry, record: LogRecord): Boolean = {
         // retain the entry if it is the last one produced by an active idempotent producer to ensure that
         // the PID is not removed from the log before it has been expired
-        val isLastEntryForPid = entry.pid != LogEntry.NO_PID && activePids.get(entry.pid).exists(_.offset == record.offset)
+        val isLastEntryForPid = entry.pid != LogEntry.NO_PID && activePids.get(entry.pid).exists(_.lastOffset == record.offset)
         isLastEntryForPid || shouldRetainMessage(source, map, retainDeletes, record, stats)
       }
     }

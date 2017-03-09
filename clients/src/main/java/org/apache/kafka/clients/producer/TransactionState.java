@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.clients.producer.internals;
+package org.apache.kafka.clients.producer;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
@@ -52,7 +52,7 @@ public class TransactionState {
         this.time = time;
     }
 
-    boolean hasPid() {
+    public boolean hasPid() {
         return pidAndEpoch.isValid();
     }
 
@@ -73,7 +73,7 @@ public class TransactionState {
         return pidAndEpoch;
     }
 
-    PidAndEpoch pidAndEpoch() {
+    public PidAndEpoch pidAndEpoch() {
         PidAndEpoch pidAndEpoch = null;
         while (pidAndEpoch == null) {
             try {
@@ -89,7 +89,7 @@ public class TransactionState {
      * Set the pid and epoch atomically. This method will signal any callers blocked on the `pidAndEpoch` method
      * once the pid is set. This method will be called on the background thread when the broker responds with the pid.
      */
-    synchronized void setPidAndEpoch(long pid, short epoch) {
+    public synchronized void setPidAndEpoch(long pid, short epoch) {
         this.pidAndEpoch = new PidAndEpoch(pid, epoch);
         if (this.pidAndEpoch.isValid())
             notifyAll();
@@ -107,14 +107,14 @@ public class TransactionState {
     /**
      * Returns the next sequence number to be written to the given TopicPartition.
      */
-    synchronized Integer sequenceNumber(TopicPartition topicPartition) {
+    public synchronized Integer sequenceNumber(TopicPartition topicPartition) {
         if (!sequenceNumbers.containsKey(topicPartition)) {
             sequenceNumbers.put(topicPartition, 0);
         }
         return sequenceNumbers.get(topicPartition);
     }
 
-    synchronized void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
+    public synchronized void incrementSequenceNumber(TopicPartition topicPartition, int increment) {
         if (!sequenceNumbers.containsKey(topicPartition)) {
             sequenceNumbers.put(topicPartition, 0);
         }
