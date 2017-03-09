@@ -26,12 +26,7 @@ import org.apache.kafka.common.utils.Time;
 import java.io.IOException;
 import java.util.List;
 
-public class BlockingNetworkClient {
-    private final KafkaClient client;
-
-    public BlockingNetworkClient(KafkaClient client) {
-        this.client = client;
-    }
+public class NetworkClientUtils {
 
     /**
      * Checks whether the node is currently connected, first calling `client.poll` to ensure that any pending
@@ -40,36 +35,36 @@ public class BlockingNetworkClient {
      * This method can be used to check the status of a connection prior to calling the blocking version to be able
      * to tell whether the latter completed a new connection.
      */
-    private boolean isReady(Node node, long currentTime) {
+    private static boolean isReady(KafkaClient client, Node node, long currentTime) {
        client.poll(0, currentTime);
        return client.isReady(node, currentTime);
     }
 
     /**
      * Invokes `client.poll` to discard pending disconnects, followed by `client.ready` and 0 or more `client.poll`
-     * invocations until the connection to `node` is ready, the timeout expires or the connection fails.
+     * invocations until the connection to `node` is ready, the timeoutMs expires or the connection fails.
      *
-     * It returns `true` if the call completes normally or `false` if the timeout expires. If the connection fails,
+     * It returns `true` if the call completes normally or `false` if the timeoutMs expires. If the connection fails,
      * an `IOException` is thrown instead. Note that if the `NetworkClient` has been configured with a positive
-     * connection timeout, it is possible for this method to raise an `IOException` for a previous connection which
+     * connection timeoutMs, it is possible for this method to raise an `IOException` for a previous connection which
      * has recently disconnected.
      *
      * This method is useful for implementing blocking behaviour on top of the non-blocking `NetworkClient`, use it with
      * care.
      */
-    public boolean isReady(Node node, Time time, long timeout) throws IOException {
-        if (timeout < 0) {
+    public static boolean awaitReady(KafkaClient client, Node node, Time time, long timeoutMs) throws IOException {
+        if (timeoutMs < 0) {
             throw new IllegalArgumentException("Timeout needs to be greater than 0");
         }
         long startTime = time.milliseconds();
-        long expiryTime = startTime + timeout;
+        long expiryTime = startTime + timeoutMs;
 
-        long attemptStartTime = startTime;
+        if (!isReady(client, node, startTime))
+            client.ready(node, startTime);
 
-        if (!isReady(node, time.milliseconds()))
-            client.ready(node, time.milliseconds());
+        long attemptStartTime = time.milliseconds();
 
-        while (!client.isReady(node, time.milliseconds()) && attemptStartTime < expiryTime) {
+        while (!client.isReady(node, attemptStartTime) && attemptStartTime < expiryTime) {
             if (client.connectionFailed(node)) {
                 throw new IOException("Connection to " + node + " failed.");
             }
@@ -89,14 +84,14 @@ public class BlockingNetworkClient {
      * This method is useful for implementing blocking behaviour on top of the non-blocking `NetworkClient`, use it with
      * care.
      */
-    public ClientResponse sendAndReceive(ClientRequest request, Time time) throws IOException {
+    public static ClientResponse sendAndReceive(KafkaClient client, ClientRequest request, Time time) throws IOException {
         client.send(request, time.milliseconds());
         while (true) {
             List<ClientResponse> responses = client.poll(Long.MAX_VALUE, time.milliseconds());
             for (ClientResponse response : responses) {
                 if (response.requestHeader().correlationId() == request.correlationId()) {
                     if (response.wasDisconnected()) {
-                        throw new IOException("Connection to {} " + response.destination() + " was disconnected before ther response was read");
+                        throw new IOException("Connection to {} " + response.destination() + " was disconnected before there response was read");
                     }
                     if (response.versionMismatch() != null) {
                         throw response.versionMismatch();

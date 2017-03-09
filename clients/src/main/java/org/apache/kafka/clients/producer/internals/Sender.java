@@ -24,7 +24,6 @@ import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.RequestCompletionHandler;
 import org.apache.kafka.clients.consumer.internals.NoAvailableBrokersException;
 import org.apache.kafka.common.Cluster;
-import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
@@ -40,7 +39,7 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Rate;
-import org.apache.kafka.common.network.BlockingNetworkClient;
+import org.apache.kafka.common.network.NetworkClientUtils;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.InitPidRequest;
@@ -112,9 +111,6 @@ public class Sender implements Runnable {
     /* all the state related to transactions, in particular the PID, epoch, and sequence numbers */
     private final TransactionState transactionState;
 
-    /* A blocking version of the network client to be used for the new blocking RPCs for the idempotent producer */
-    private final BlockingNetworkClient blockingNetworkClient;
-
     public Sender(KafkaClient client,
                   Metadata metadata,
                   RecordAccumulator accumulator,
@@ -142,7 +138,6 @@ public class Sender implements Runnable {
         this.retryBackoffMs = retryBackoffMs;
         this.apiVersions = apiVersions;
         this.transactionState = transactionState;
-        this.blockingNetworkClient = new BlockingNetworkClient(client);
     }
 
     /**
@@ -295,12 +290,12 @@ public class Sender implements Runnable {
         String nodeId = node.idString();
         InitPidRequest.Builder builder = new InitPidRequest.Builder(null);
         ClientRequest request = client.newClientRequest(nodeId, builder, time.milliseconds(), true, null);
-        return blockingNetworkClient.sendAndReceive(request, time);
+        return NetworkClientUtils.sendAndReceive(client, request, time);
     }
 
     private Node getReadyNode(long remainingTimeMs) throws IOException {
         Node node = client.leastLoadedNode(time.milliseconds());
-        if (blockingNetworkClient.isReady(node, time, remainingTimeMs)) {
+        if (NetworkClientUtils.awaitReady(client, node, time, remainingTimeMs)) {
             return node;
         }
         return null;
@@ -315,7 +310,7 @@ public class Sender implements Runnable {
                     throw new NoAvailableBrokersException();
                 }
                 ClientResponse response = sendInitPidRequest(node);
-                if (response.hasResponse() && (response.responseBody() instanceof  InitPidResponse)) {
+                if (response.hasResponse() && (response.responseBody() instanceof InitPidResponse)) {
                     InitPidResponse initPidResponse = (InitPidResponse) response.responseBody();
                     transactionState.setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
                 } else {
