@@ -48,7 +48,6 @@ public enum ApiKeys {
     DELETE_TOPICS(20, "DeleteTopics"),
     INIT_PRODUCER_ID(21, "InitProducerId");
 
-
     // TODO: Add the following requests for transactions:
     // AddOffsetCommitsToTxnRequest
 //   TxnOffsetCommitRequest
