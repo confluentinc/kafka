@@ -70,6 +70,10 @@ private[coordinator] case object CompleteCommit extends TransactionState { val b
 private[coordinator] case object CompleteAbort extends TransactionState { val byte: Byte = 5 }
 
 private[coordinator] object TransactionMetadata {
+  def apply(pid: Long, epoch: Short, txnTimeoutMs: Int) = new TransactionMetadata(pid, epoch, txnTimeoutMs, Empty, collection.mutable.Set.empty[TopicPartition])
+
+  def apply(pid: Long, epoch: Short, txnTimeoutMs: Int, state: TransactionState) = new TransactionMetadata(pid, epoch, txnTimeoutMs, state, collection.mutable.Set.empty[TopicPartition])
+
   def byteToState(byte: Byte): TransactionState = {
     byte match {
       case 0 => Empty
@@ -81,22 +85,38 @@ private[coordinator] object TransactionMetadata {
       case unknown => throw new IllegalStateException("Unknown transaction state byte " + unknown + " from the transaction status message")
     }
   }
+
+  private val validPreviousStates: Map[TransactionState, Set[TransactionState]] =
+    Map(Empty -> Set(),
+      Ongoing -> Set(Ongoing, Empty, CompleteCommit, CompleteAbort),
+      PrepareCommit -> Set(Ongoing),
+      PrepareAbort -> Set(Ongoing),
+      CompleteCommit -> Set(PrepareCommit),
+      CompleteAbort -> Set(PrepareAbort))
 }
 
 @nonthreadsafe
 private[coordinator] class TransactionMetadata(val pid: Long,
                                                var epoch: Short,
                                                val txnTimeoutMs: Int,
-                                               var state: TransactionState) {
+                                               var state: TransactionState,
+                                               val topicPartitions: mutable.Set[TopicPartition]) {
 
-  def this(pid: Long, epoch: Short, txnTimeoutMs: Int) = this(pid, epoch, txnTimeoutMs, Empty)
 
-  // participated partitions in this transaction
-  val topicPartitions = mutable.Set.empty[TopicPartition]
-
-  def addPartitions(partitions: Set[TopicPartition]): Unit = {
+  def addPartitions(partitions: collection.Set[TopicPartition]): Unit = {
     topicPartitions ++= partitions
   }
+
+  def transitionTo(newState: TransactionState): Boolean = {
+    if (!TransactionMetadata.validPreviousStates(newState).contains(state)) {
+      false
+    } else {
+      state = newState
+      true
+    }
+  }
+
+  override def clone(): TransactionMetadata = new TransactionMetadata(pid, epoch, txnTimeoutMs, state, topicPartitions)
 
   override def toString: String =
     s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $txnTimeoutMs, transactionState: $state, topicPartitions: ${topicPartitions.mkString("(",",",")")})"
@@ -110,5 +130,4 @@ private[coordinator] class TransactionMetadata(val pid: Long,
       topicPartitions.equals(other.topicPartitions)
     case _ => false
   }
-
 }

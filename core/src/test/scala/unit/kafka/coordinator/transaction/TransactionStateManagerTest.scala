@@ -61,8 +61,8 @@ class TransactionStateManagerTest {
   val txnMessageKeyBytes1: Array[Byte] = TransactionLog.keyToBytes(txnId1)
   val txnMessageKeyBytes2: Array[Byte] = TransactionLog.keyToBytes(txnId2)
   val pidMappings: Map[String, Long] = Map[String, Long](txnId1 -> 1L, txnId2 -> 2L)
-  var txnMetadata1: TransactionMetadata = new TransactionMetadata(pidMappings(txnId1), 1, transactionTimeoutMs)
-  var txnMetadata2: TransactionMetadata = new TransactionMetadata(pidMappings(txnId2), 1, transactionTimeoutMs)
+  var txnMetadata1: TransactionMetadata = TransactionMetadata(pidMappings(txnId1), 1, transactionTimeoutMs)
+  var txnMetadata2: TransactionMetadata = TransactionMetadata(pidMappings(txnId2), 1, transactionTimeoutMs)
 
   @Before
   def setUp() {

@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import kafka.server.{KafkaConfig, ReplicaManager}
 import kafka.utils.{Logging, Scheduler, ZkUtils}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.record.RecordBatch
 import org.apache.kafka.common.utils.Time
@@ -58,6 +59,7 @@ class TransactionCoordinator(brokerId: Int,
   this.logIdent = "[Transaction Coordinator " + brokerId + "]: "
 
   type InitPidCallback = InitPidResult => Unit
+  type AddPartitionsToTxnCallback = Errors => Unit
 
   /* Active flag of the coordinator */
   private val isActive = new AtomicBoolean(false)
@@ -83,7 +85,7 @@ class TransactionCoordinator(brokerId: Int,
       txnManager.getTransaction(transactionalId) match {
         case None =>
           val pid = pidManager.nextPid()
-          val newMetadata = new TransactionMetadata(pid, epoch = 0, transactionTimeoutMs)
+          val newMetadata: TransactionMetadata = new TransactionMetadata(pid, 0, transactionTimeoutMs, Empty, collection.mutable.Set.empty[TopicPartition])
           val metadata = txnManager.addTransaction(transactionalId, newMetadata)
 
           // there might be a concurrent thread that has just updated the mapping
@@ -101,6 +103,51 @@ class TransactionCoordinator(brokerId: Int,
             metadata.epoch = (metadata.epoch + 1).toShort
           }
           responseCallback(initTransactionMetadata(metadata))
+      }
+    }
+  }
+
+  def handleAddPartitionsToTransaction(transactionalId: String,
+                                       pid: Long,
+                                       epoch: Short,
+                                       partitions: collection.Set[TopicPartition],
+                                       responseCallback: AddPartitionsToTxnCallback): Unit = {
+    if (transactionalId == null || transactionalId.isEmpty) {
+      // first check that transactional id is specified
+      responseCallback(Errors.INVALID_REQUEST)
+    } else if (!txnManager.isCoordinatorFor(transactionalId)) {
+      // check if it is the assigned coordinator for the transactional id
+      responseCallback(Errors.NOT_COORDINATOR)
+    } else if (!txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
+      // check if the corresponding partition is still being loaded
+      responseCallback(Errors.COORDINATOR_LOAD_IN_PROGRESS)
+    } else {
+      // only try to get a new pid and update the cache if the transactional id is unknown
+      txnManager.getTransaction(transactionalId) match {
+        case None =>
+          responseCallback(Errors.INVALID_PID_MAPPING)
+
+        case Some(metadata) =>
+          var errorCode: Errors = Errors.NONE
+          val newMetadata = metadata synchronized {
+            if (metadata.pid != pid) {
+              errorCode = Errors.INVALID_PID_MAPPING
+              null
+            } else if (metadata.epoch != epoch) {
+              errorCode = Errors.PRODUCER_FENCED
+              null
+            } else {
+              metadata.clone()
+            }
+          }
+
+          if (newMetadata != null) {
+            // create the new transaction metadata to be appended
+            newMetadata.addPartitions(partitions)
+            txnManager.appendTransactionToLog(transactionalId, newMetadata, responseCallback)
+          } else {
+            responseCallback(errorCode)
+          }
       }
     }
   }

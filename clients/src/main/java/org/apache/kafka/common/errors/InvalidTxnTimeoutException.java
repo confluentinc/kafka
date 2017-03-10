@@ -26,4 +26,8 @@ public class InvalidTxnTimeoutException extends ApiException {
     public InvalidTxnTimeoutException(String message) {
         super(message);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b83cde5... handling add offsets to txn
