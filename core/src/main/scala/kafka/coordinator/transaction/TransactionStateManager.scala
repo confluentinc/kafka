@@ -59,8 +59,8 @@ class TransactionStateManager(brokerId: Int,
 
   this.logIdent = "[Transaction Log Manager " + brokerId + "]: "
 
-  /* number of partitions for the transaction log topic */
-  private val transactionTopicPartitionCount = getTransactionTopicPartitionCount
+  /* shutting down flag */
+  private val shuttingDown = new AtomicBoolean(false)
 
   /* lock protecting access to loading and owned partition sets */
   private val partitionLock = new ReentrantLock()
@@ -74,8 +74,8 @@ class TransactionStateManager(brokerId: Int,
   /* transaction metadata cache indexed by transactional id */
   private val transactionMetadataCache = new Pool[String, TransactionMetadata]
 
-  /* shutting down flag */
-  private val shuttingDown = new AtomicBoolean(false)
+  /* number of partitions for the transaction log topic */
+  private val transactionTopicPartitionCount = getTransactionTopicPartitionCount
 
   def enablePidExpiration() {
     scheduler.startup()

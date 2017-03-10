@@ -18,17 +18,20 @@ package kafka.coordinator.transaction
 
 import java.nio.ByteBuffer
 
+import kafka.common.Topic
 import kafka.common.Topic.TransactionStateTopicName
 import kafka.log.Log
 import kafka.server.{FetchDataInfo, LogOffsetMetadata, ReplicaManager}
 import kafka.utils.{MockScheduler, ZkUtils}
 import kafka.utils.TestUtils.fail
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.record.{CompressionType, FileRecords, MemoryRecords, SimpleRecord}
+import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.record._
+import org.apache.kafka.common.requests.ProduceResponse.PartitionResponse
 import org.apache.kafka.common.utils.MockTime
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.junit.{After, Before, Test}
-import org.easymock.EasyMock
+import org.easymock.{Capture, EasyMock, IAnswer}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -198,5 +201,23 @@ class TransactionStateManagerTest {
       .andReturn(records.buffer)
 
     EasyMock.replay(logMock, fileRecordsMock)
+  }
+
+  private def prepareForTxnMessageAppend(error: Errors): Unit = {
+    val capturedArgument: Capture[Map[TopicPartition, PartitionResponse] => Unit] = EasyMock.newCapture()
+    EasyMock.expect(replicaManager.appendRecords(EasyMock.anyLong(),
+      EasyMock.anyShort(),
+      EasyMock.anyBoolean(),
+      EasyMock.anyObject().asInstanceOf[Map[TopicPartition, MemoryRecords]],
+      EasyMock.capture(capturedArgument))).andAnswer(new IAnswer[Unit] {
+      override def answer = capturedArgument.getValue.apply(
+        Map(new TopicPartition(Topic.GroupMetadataTopicName, groupPartitionId) ->
+          new PartitionResponse(error, 0L, LogEntry.NO_TIMESTAMP)
+        )
+      )})
+    EasyMock.expect(replicaManager.getMagic(EasyMock.anyObject()))
+      .andStubReturn(Some(RecordBatch.MAGIC_VALUE_V1))
+
+    EasyMock.replay(logMock)
   }
 }
