@@ -28,12 +28,11 @@ import org.apache.kafka.common.utils.MockTime
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.junit.{After, Before, Test}
 import org.easymock.EasyMock
-import org.scalatest.junit.JUnitSuite
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-class TransactionStateManagerTest extends JUnitSuite {
+class TransactionStateManagerTest {
 
   val partitionId = 0
   val numPartitions = 2
