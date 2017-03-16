@@ -22,42 +22,36 @@ import kafka.common.Topic.TransactionStateTopicName
 import kafka.log.Log
 import kafka.server.{FetchDataInfo, LogOffsetMetadata, ReplicaManager}
 import kafka.utils.{MockScheduler, ZkUtils}
-import kafka.utils.TestUtils.fail
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.record.{CompressionType, FileRecords, SimpleRecord, MemoryRecords}
+import org.apache.kafka.common.record.{CompressionType, FileRecords, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.utils.MockTime
-
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
-import org.junit.{Before, Test}
+import org.junit.{After, Before, Test}
 import org.easymock.EasyMock
+import org.scalatest.junit.JUnitSuite
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-class TransactionStateManagerTest {
+class TransactionStateManagerTest extends JUnitSuite {
 
   val partitionId = 0
   val numPartitions = 2
-
   val transactionTimeoutMs: Int = 1000
-
   val topicPartition = new TopicPartition(TransactionStateTopicName, partitionId)
 
   val txnRecords: mutable.ArrayBuffer[SimpleRecord] = mutable.ArrayBuffer[SimpleRecord]()
 
+  val time = new MockTime()
+  val scheduler = new MockScheduler(time)
   val zkUtils: ZkUtils = EasyMock.createNiceMock(classOf[ZkUtils])
+  val replicaManager: ReplicaManager = EasyMock.createNiceMock(classOf[ReplicaManager])
 
   EasyMock.expect(zkUtils.getTopicPartitionCount(TransactionStateTopicName))
     .andReturn(Some(numPartitions))
-    .once()
+    .anyTimes()
 
   EasyMock.replay(zkUtils)
-
-  val replicaManager: ReplicaManager = EasyMock.createNiceMock(classOf[ReplicaManager])
-
-  val time = new MockTime()
-
-  val scheduler = new MockScheduler(time)
 
   val transactionManager: TransactionStateManager = new TransactionStateManager(0, zkUtils, scheduler, replicaManager, TransactionConfig(), time)
 
@@ -70,10 +64,16 @@ class TransactionStateManagerTest {
   var txnMetadata2: TransactionMetadata = new TransactionMetadata(pidMappings(txnId2), 1, transactionTimeoutMs)
 
   @Before
-  def setUp(): Unit = {
+  def setUp() {
     // make sure the transactional id hashes to the assigning partition id
     assertEquals(partitionId, transactionManager.partitionFor(txnId1))
     assertEquals(partitionId, transactionManager.partitionFor(txnId2))
+  }
+
+  @After
+  def tearDown() {
+    EasyMock.reset(zkUtils, replicaManager)
+    transactionManager.shutdown()
   }
 
   @Test

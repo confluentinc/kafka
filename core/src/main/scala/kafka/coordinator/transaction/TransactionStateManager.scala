@@ -23,6 +23,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 import kafka.common.{KafkaException, Topic}
 import kafka.log.LogConfig
+import kafka.message.NoCompressionCodec
 import kafka.server.ReplicaManager
 import kafka.utils.CoreUtils.inLock
 import kafka.utils.{Logging, Pool, Scheduler, ZkUtils}
@@ -62,9 +63,6 @@ class TransactionStateManager(brokerId: Int,
   /* partitions of transaction topic that are being loaded, partition lock should be called BEFORE accessing this set */
   private val loadingPartitions: mutable.Set[Int] = mutable.Set()
 
-  /* partitions of transaction topic that are corrupted; should always be an empty set under normal operations */
-  private val corruptedPartitions: mutable.Set[Int] = mutable.Set()
-
   /* transaction metadata cache indexed by transactional id */
   private val transactionMetadataCache = new Pool[String, TransactionMetadata]
 
@@ -100,9 +98,9 @@ class TransactionStateManager(brokerId: Int,
     val props = new Properties
 
     // enforce disabled unclean leader election, no compression types, and compact cleanup policy
-    props.put(LogConfig.UncleanLeaderElectionEnableProp, TransactionLog.EnforcedUncleanLeaderElectionEnable.toString)
-    props.put(LogConfig.CompressionTypeProp, TransactionLog.EnforcedCompressionCodec)
-    props.put(LogConfig.CleanupPolicyProp, TransactionLog.EnforcedCleanupPolicy)
+    props.put(LogConfig.UncleanLeaderElectionEnableProp, "false")
+    props.put(LogConfig.CompressionTypeProp, NoCompressionCodec)
+    props.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
 
     props.put(LogConfig.MinInSyncReplicasProp, config.minInsyncReplicas.toString)
     props.put(LogConfig.SegmentBytesProp, config.segmentBytes.toString)
@@ -116,7 +114,7 @@ class TransactionStateManager(brokerId: Int,
     val partitionId = partitionFor(transactionalId)
 
     // partition id should be within the owned list and NOT in the corrupted list
-    ownedPartitions.contains(partitionId) && !corruptedPartitions.contains(partitionId)
+    ownedPartitions.contains(partitionId)
   }
 
   def isCoordinatorLoadingInProgress(transactionalId: String): Boolean = inLock(partitionLock) {
@@ -186,11 +184,9 @@ class TransactionStateManager(brokerId: Int,
               if (!txnMetadata.equals(currentTxnMetadata)) {
                 // treat this as a fatal failure as this should never happen
                 fatal(s"Attempt to load $transactionalId's metadata $txnMetadata failed " +
-                  s"because there is already a different cached pid metadata $currentTxnMetadata; " +
-                  s"all future client requests with transactional ids related to this partition will result in an error code, " +
-                  s"and this partition of the log will be effectively disabled.")
+                  s"because there is already a different cached pid metadata $currentTxnMetadata.")
 
-                corruptedPartitions.add(topicPartition.partition)
+                throw new KafkaException("Loading transaction topic partition failed.")
               }
           }
 
@@ -298,7 +294,6 @@ class TransactionStateManager(brokerId: Int,
 
     ownedPartitions.clear()
     loadingPartitions.clear()
-    corruptedPartitions.clear()
 
     info("Shutdown complete")
   }

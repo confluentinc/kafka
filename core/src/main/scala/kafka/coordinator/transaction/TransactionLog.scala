@@ -44,16 +44,6 @@ object TransactionLog {
   val DefaultMinInSyncReplicas: Int = 3
   val DefaultLoadBufferSize: Int = 5 * 1024 * 1024
 
-  // enforce always using
-  //  1. cleanup policy = compact
-  //  2. compression = none
-  //  3. unclean leader election = disabled
-  //  4. required acks = -1 when writing
-  val EnforcedCompressionCodec: CompressionCodec = NoCompressionCodec
-  val EnforcedUncleanLeaderElectionEnable: Boolean = false
-  val EnforcedCleanupPolicy: String = LogConfig.Compact
-  val EnforcedRequiredAcks: Short = (-1).toShort
-
   // log message formats
   private val TXN_ID_KEY = "transactional_id"
 

@@ -74,7 +74,7 @@ class TransactionCoordinator(brokerId: Int,
     } else if (!txnManager.isCoordinatorFor(transactionalId)) {
       // check if it is the assigned coordinator for the transactional id
       responseCallback(initTransactionError(Errors.NOT_COORDINATOR))
-    } else if (!txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
+    } else if (txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
       responseCallback(initTransactionError(Errors.COORDINATOR_LOAD_IN_PROGRESS))
     } else {
       // only try to get a new pid and update the cache if the transactional id is unknown
