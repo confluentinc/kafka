@@ -22,6 +22,7 @@ import kafka.common.Topic.TransactionStateTopicName
 import kafka.log.Log
 import kafka.server.{FetchDataInfo, LogOffsetMetadata, ReplicaManager}
 import kafka.utils.{MockScheduler, ZkUtils}
+import kafka.utils.TestUtils.fail
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, FileRecords, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.utils.MockTime
