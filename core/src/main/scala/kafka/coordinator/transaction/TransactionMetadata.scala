@@ -29,7 +29,7 @@ private[coordinator] sealed trait TransactionState { def byte: Byte }
   * transition: received AddPartitionsToTxnRequest => Ongoing
   *             received AddOffsetsToTxnRequest => Ongoing
   */
-private[coordinator] case object NotExist extends TransactionState { val byte: Byte = 0 }
+private[coordinator] case object Empty extends TransactionState { val byte: Byte = 0 }
 
 /**
   * Transaction has started and ongoing
@@ -72,7 +72,7 @@ private[coordinator] case object CompleteAbort extends TransactionState { val by
 private[coordinator] object TransactionMetadata {
   def byteToState(byte: Byte): TransactionState = {
     byte match {
-      case 0 => NotExist
+      case 0 => Empty
       case 1 => Ongoing
       case 2 => PrepareCommit
       case 3 => PrepareAbort
@@ -89,7 +89,7 @@ private[coordinator] class TransactionMetadata(val pid: Long,
                                                val txnTimeoutMs: Int,
                                                var state: TransactionState) {
 
-  def this(pid: Long, epoch: Short, txnTimeoutMs: Int) = this(pid, epoch, txnTimeoutMs, NotExist)
+  def this(pid: Long, epoch: Short, txnTimeoutMs: Int) = this(pid, epoch, txnTimeoutMs, Empty)
 
   // participated partitions in this transaction
   val topicPartitions = mutable.Set.empty[TopicPartition]

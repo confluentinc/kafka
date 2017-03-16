@@ -56,7 +56,7 @@ class TransactionLogTest extends JUnitSuite {
       "four" -> 4L,
       "five" -> 5L)
 
-    val transactionStates = Map[Long, TransactionState](0L -> NotExist,
+    val transactionStates = Map[Long, TransactionState](0L -> Empty,
       1L -> Ongoing,
       2L -> PrepareCommit,
       3L -> CompleteCommit,
@@ -67,7 +67,7 @@ class TransactionLogTest extends JUnitSuite {
     val txnRecords = pidMappings.map { case (transactionalId, pid) =>
       val txnMetadata = new TransactionMetadata(pid, epoch, transactionTimeoutMs, transactionStates(pid))
 
-      if (!txnMetadata.state.equals(NotExist))
+      if (!txnMetadata.state.equals(Empty))
         txnMetadata.addPartitions(topicPartitions)
 
       val keyBytes = TransactionLog.keyToBytes(transactionalId)
@@ -92,7 +92,7 @@ class TransactionLogTest extends JUnitSuite {
           assertEquals(transactionTimeoutMs, txnMetadata.txnTimeoutMs)
           assertEquals(transactionStates(txnMetadata.pid), txnMetadata.state)
 
-          if (txnMetadata.state.equals(NotExist))
+          if (txnMetadata.state.equals(Empty))
             assertEquals(Set.empty[TopicPartition], txnMetadata.topicPartitions)
           else
             assertEquals(topicPartitions, txnMetadata.topicPartitions)

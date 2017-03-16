@@ -24,7 +24,7 @@ import kafka.server.{FetchDataInfo, LogOffsetMetadata, ReplicaManager}
 import kafka.utils.{MockScheduler, ZkUtils}
 import kafka.utils.TestUtils.fail
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.record.{CompressionType, FileRecords, KafkaRecord, MemoryRecords}
+import org.apache.kafka.common.record.{CompressionType, FileRecords, SimpleRecord, MemoryRecords}
 import org.apache.kafka.common.utils.MockTime
 
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
@@ -34,7 +34,7 @@ import org.easymock.EasyMock
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-class TransactionManagerTest {
+class TransactionStateManagerTest {
 
   val partitionId = 0
   val numPartitions = 2
@@ -43,7 +43,7 @@ class TransactionManagerTest {
 
   val topicPartition = new TopicPartition(TransactionStateTopicName, partitionId)
 
-  val txnRecords: mutable.ArrayBuffer[KafkaRecord] = mutable.ArrayBuffer[KafkaRecord]()
+  val txnRecords: mutable.ArrayBuffer[SimpleRecord] = mutable.ArrayBuffer[SimpleRecord]()
 
   val zkUtils: ZkUtils = EasyMock.createNiceMock(classOf[ZkUtils])
 
@@ -59,7 +59,7 @@ class TransactionManagerTest {
 
   val scheduler = new MockScheduler(time)
 
-  val transactionManager: TransactionManager = new TransactionManager(0, zkUtils, scheduler, replicaManager, TransactionConfig(), time)
+  val transactionManager: TransactionStateManager = new TransactionStateManager(0, zkUtils, scheduler, replicaManager, TransactionConfig(), time)
 
   val txnId1: String = "one"
   val txnId2: String = "two"
@@ -93,19 +93,19 @@ class TransactionManagerTest {
     txnMetadata1.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
       new TopicPartition("topic1", 1)))
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
+    txnRecords += new SimpleRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
 
     // pid1's transaction adds three more partitions
     txnMetadata1.addPartitions(Set[TopicPartition](new TopicPartition("topic2", 0),
       new TopicPartition("topic2", 1),
       new TopicPartition("topic2", 2)))
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
+    txnRecords += new SimpleRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
 
     // pid1's transaction is preparing to commit
     txnMetadata1.state = PrepareCommit
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
+    txnRecords += new SimpleRecord(txnMessageKeyBytes1, TransactionLog.valueToBytes(txnMetadata1))
 
     // pid2's transaction started with three partitions
     txnMetadata2.state = Ongoing
@@ -113,23 +113,23 @@ class TransactionManagerTest {
       new TopicPartition("topic3", 1),
       new TopicPartition("topic3", 2)))
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
+    txnRecords += new SimpleRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     // pid2's transaction is preparing to abort
     txnMetadata2.state = PrepareAbort
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
+    txnRecords += new SimpleRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     // pid2's transaction has aborted
     txnMetadata2.state = CompleteAbort
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
+    txnRecords += new SimpleRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     // pid2's epoch has advanced, with no ongoing transaction yet
-    txnMetadata2.state = NotExist
+    txnMetadata2.state = Empty
     txnMetadata2.topicPartitions.clear()
 
-    txnRecords += new KafkaRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
+    txnRecords += new SimpleRecord(txnMessageKeyBytes2, TransactionLog.valueToBytes(txnMetadata2))
 
     val startOffset = 15L   // it should work for any start offset
     val records = MemoryRecords.withRecords(startOffset, CompressionType.NONE, txnRecords: _*)

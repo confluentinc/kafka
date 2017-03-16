@@ -22,7 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kafka.server.{KafkaConfig, ReplicaManager}
 import kafka.utils.{Logging, Scheduler, ZkUtils}
 import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.record.RecordBatch
 import org.apache.kafka.common.utils.Time
+
+
 
 /*
  * Transaction coordinator handles message transactions sent by producers and communicate with brokers
@@ -43,7 +46,7 @@ object TransactionCoordinator {
       config.transactionTopicMinISR)
 
     val pidManager = new PidManager(config.brokerId, zkUtils)
-    val logManager = new TransactionManager(config.brokerId, zkUtils, scheduler, replicaManager, txnConfig, time)
+    val logManager = new TransactionStateManager(config.brokerId, zkUtils, scheduler, replicaManager, txnConfig, time)
 
     new TransactionCoordinator(config.brokerId, pidManager, logManager)
   }
@@ -51,7 +54,7 @@ object TransactionCoordinator {
 
 class TransactionCoordinator(brokerId: Int,
                              pidManager: PidManager,
-                             txnManager: TransactionManager) extends Logging {
+                             txnManager: TransactionStateManager) extends Logging {
   this.logIdent = "[Transaction Coordinator " + brokerId + "]: "
 
   type InitPidCallback = InitPidResult => Unit
@@ -79,7 +82,7 @@ class TransactionCoordinator(brokerId: Int,
         case None =>
           val pid: Long = pidManager.getNewPid()
           // TODO: check transactionTimeoutMs is not larger than the broker configured maximum allowed value
-          val newMetadata: TransactionMetadata = new TransactionMetadata(pid, epoch = 0, transactionTimeoutMs)
+          val newMetadata = new TransactionMetadata(pid, epoch = 0, transactionTimeoutMs)
           val metadata = txnManager.addTransaction(transactionalId, newMetadata)
 
           // there might be a concurrent thread that has just updated the mapping
@@ -137,7 +140,7 @@ class TransactionCoordinator(brokerId: Int,
   }
 
   private def initTransactionError(error: Errors): InitPidResult = {
-    InitPidResult(pid = -1L, epoch = -1, error)
+    InitPidResult(RecordBatch.NO_PID, RecordBatch.NO_EPOCH, error)
   }
 
   private def initTransactionMetadata(txnMetadata: TransactionMetadata): InitPidResult = {

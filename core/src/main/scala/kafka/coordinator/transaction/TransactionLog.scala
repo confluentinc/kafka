@@ -27,7 +27,6 @@ import java.nio.ByteBuffer
 
 import kafka.log.LogConfig
 
-
 /*
  * Messages stored for the transaction topic represent the pid and transactional status of the corresponding
  * transactional id, which have versions for both the key and value fields. Key and value
@@ -141,7 +140,7 @@ object TransactionLog {
     value.set(VALUE_SCHEMA_TXN_TIMEOUT_FIELD, txnMetadata.txnTimeoutMs)
     value.set(VALUE_SCHEMA_TXN_STATUS_FIELD, txnMetadata.state.byte)
 
-    if (txnMetadata.state.equals(NotExist)) {
+    if (txnMetadata.state == Empty) {
       if (txnMetadata.topicPartitions.nonEmpty)
         throw new IllegalStateException(s"Transaction is not expected to have any partitions since its state is ${txnMetadata.state}: ${txnMetadata}")
 
@@ -211,7 +210,7 @@ object TransactionLog {
 
         val transactionMetadata = new TransactionMetadata(pid, epoch, timeout, state)
 
-        if (!state.equals(NotExist)) {
+        if (!state.equals(Empty)) {
           val topicPartitionArray = value.getArray(VALUE_SCHEMA_TXN_PARTITIONS_FIELD)
 
           topicPartitionArray.foreach { memberMetadataObj =>

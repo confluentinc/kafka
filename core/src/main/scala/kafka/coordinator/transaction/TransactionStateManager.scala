@@ -21,7 +21,7 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 
-import kafka.common.Topic
+import kafka.common.{KafkaException, Topic}
 import kafka.log.LogConfig
 import kafka.server.ReplicaManager
 import kafka.utils.CoreUtils.inLock
@@ -41,12 +41,12 @@ import scala.collection.JavaConverters._
  * 3. the background expiration of the transaction as well as the transactional id to pid mapping.
  *
  */
-class TransactionManager(brokerId: Int,
-                         zkUtils: ZkUtils,
-                         scheduler: Scheduler,
-                         replicaManager: ReplicaManager,
-                         config: TransactionConfig,
-                         time: Time) extends Logging {
+class TransactionStateManager(brokerId: Int,
+                              zkUtils: ZkUtils,
+                              scheduler: Scheduler,
+                              replicaManager: ReplicaManager,
+                              config: TransactionConfig,
+                              time: Time) extends Logging {
 
   this.logIdent = "[Transaction Log Manager " + brokerId + "]: "
 
@@ -99,6 +99,7 @@ class TransactionManager(brokerId: Int,
   def transactionTopicConfigs: Properties = {
     val props = new Properties
 
+    // enforce disabled unclean leader election, no compression types, and compact cleanup policy
     props.put(LogConfig.UncleanLeaderElectionEnableProp, TransactionLog.EnforcedUncleanLeaderElectionEnable.toString)
     props.put(LogConfig.CompressionTypeProp, TransactionLog.EnforcedCompressionCodec)
     props.put(LogConfig.CleanupPolicyProp, TransactionLog.EnforcedCleanupPolicy)
@@ -154,7 +155,7 @@ class TransactionManager(brokerId: Int,
             .records.asInstanceOf[FileRecords]
           val bufferRead = fileRecords.readInto(buffer, 0)
 
-          MemoryRecords.readableRecords(bufferRead).entries.asScala.foreach { entry =>
+          MemoryRecords.readableRecords(bufferRead).batches.asScala.foreach { entry =>
             for (record <- entry.asScala) {
               require(record.hasKey, "Transaction state log's key should not be null")
               TransactionLog.readMessageKey(record.key) match {
@@ -162,7 +163,7 @@ class TransactionManager(brokerId: Int,
                 case txnKey: TxnKey =>
                   // load pid metadata along with transaction state
                   val transactionalId: String = txnKey.key
-                  if (record.hasNullValue) {
+                  if (!record.hasValue) {
                     loadedPids.remove(transactionalId)
                     removedPids.add(transactionalId)
                   } else {
@@ -210,6 +211,8 @@ class TransactionManager(brokerId: Int,
     * populate the pid metadata cache with the transactional ids.
     */
   def loadTransactionsForPartition(partition: Int) {
+    validateTransactionTopicPartitionCountIsStable()
+
     val topicPartition = new TopicPartition(Topic.TransactionStateTopicName, partition)
 
     def loadPidAndTransactions() {
@@ -246,6 +249,8 @@ class TransactionManager(brokerId: Int,
     * that belong to that partition.
     */
   def removeTransactionsForPartition(partition: Int) {
+    validateTransactionTopicPartitionCountIsStable()
+
     val topicPartition = new TopicPartition(Topic.TransactionStateTopicName, partition)
 
     def removePidAndTransactions() {
@@ -276,6 +281,12 @@ class TransactionManager(brokerId: Int,
     }
 
     scheduler.schedule(topicPartition.toString, removePidAndTransactions)
+  }
+
+  private def validateTransactionTopicPartitionCountIsStable(): Unit = {
+    val curTransactionTopicPartitionCount = getTransactionTopicPartitionCount
+    if (transactionTopicPartitionCount != curTransactionTopicPartitionCount)
+      throw new KafkaException(s"Transaction topic number of partitions has changed from $transactionTopicPartitionCount to $curTransactionTopicPartitionCount")
   }
 
   def shutdown() {

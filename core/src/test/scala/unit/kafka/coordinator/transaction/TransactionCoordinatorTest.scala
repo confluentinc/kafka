@@ -38,7 +38,7 @@ class TransactionCoordinatorTest {
     })
     .anyTimes()
 
-  val transactionManager: TransactionManager = EasyMock.createNiceMock(classOf[TransactionManager])
+  val transactionManager: TransactionStateManager = EasyMock.createNiceMock(classOf[TransactionStateManager])
 
   EasyMock.expect(transactionManager.isCoordinatorFor(EasyMock.eq("a")))
     .andReturn(true)
