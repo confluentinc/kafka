@@ -38,9 +38,8 @@ import scala.collection.JavaConverters._
  * Transaction manager is part of the transaction coordinator, it manages:
  *
  * 1. the transaction log, which is a special internal topic.
- * 2. the pid metadata including its ongoing transaction status.
- * 3. the background expiration of the transaction as well as the transactional id to pid mapping.
- *
+ * 2. the transaction metadata including its ongoing transaction status.
+ * 3. the background expiration of the transaction as well as the transactional id.
  */
 class TransactionStateManager(brokerId: Int,
                               zkUtils: ZkUtils,
@@ -76,19 +75,19 @@ class TransactionStateManager(brokerId: Int,
   }
 
   /**
-    * Get the pid metadata associated with the given groupId, or null if not found
+    * Get the transaction metadata associated with the given transactionalId, or null if not found
     */
-  def getTransaction(groupId: String): Option[TransactionMetadata] = {
-    Option(transactionMetadataCache.get(groupId))
+  def getTransaction(transactionalId: String): Option[TransactionMetadata] = {
+    Option(transactionMetadataCache.get(transactionalId))
   }
 
   /**
-    * Add a new pid metadata, or retrieve the metadata if it already exists with the associated transactional id
+    * Add a new transaction metadata, or retrieve the metadata if it already exists with the associated transactional id
     */
   def addTransaction(transactionalId: String, txnMetadata: TransactionMetadata): TransactionMetadata = {
-    val currentPidMetadata = transactionMetadataCache.putIfNotExists(transactionalId, txnMetadata)
-    if (currentPidMetadata != null) {
-      currentPidMetadata
+    val currentTxnMetadata = transactionMetadataCache.putIfNotExists(transactionalId, txnMetadata)
+    if (currentTxnMetadata != null) {
+      currentTxnMetadata
     } else {
       txnMetadata
     }
@@ -142,8 +141,8 @@ class TransactionStateManager(brokerId: Int,
       case Some(log) =>
         val buffer = ByteBuffer.allocate(config.loadBufferSize)
 
-        val loadedPids = mutable.Map.empty[String, TransactionMetadata]
-        val removedPids = mutable.Set.empty[String]
+        val loadedTransactions = mutable.Map.empty[String, TransactionMetadata]
+        val removedTransactionalIds = mutable.Set.empty[String]
 
         // loop breaks if leader changes at any time during the load, since getHighWatermark is -1
         var currOffset = log.logStartOffset.getOrElse(throw new IllegalStateException(s"Could not find log start offset for $topicPartition"))
@@ -153,72 +152,76 @@ class TransactionStateManager(brokerId: Int,
             .records.asInstanceOf[FileRecords]
           val bufferRead = fileRecords.readInto(buffer, 0)
 
-          MemoryRecords.readableRecords(bufferRead).batches.asScala.foreach { entry =>
-            for (record <- entry.asScala) {
+          MemoryRecords.readableRecords(bufferRead).batches.asScala.foreach { batch =>
+            for (record <- batch.asScala) {
               require(record.hasKey, "Transaction state log's key should not be null")
               TransactionLog.readMessageKey(record.key) match {
 
                 case txnKey: TxnKey =>
-                  // load pid metadata along with transaction state
+                  // load transaction metadata along with transaction state
                   val transactionalId: String = txnKey.key
                   if (!record.hasValue) {
-                    loadedPids.remove(transactionalId)
-                    removedPids.add(transactionalId)
+                    loadedTransactions.remove(transactionalId)
+                    removedTransactionalIds.add(transactionalId)
                   } else {
                     val txnMetadata = TransactionLog.readMessageValue(record.value)
-                    loadedPids.put(transactionalId, txnMetadata)
-                    removedPids.remove(transactionalId)
+                    loadedTransactions.put(transactionalId, txnMetadata)
+                    removedTransactionalIds.remove(transactionalId)
                   }
 
                 case unknownKey =>
                   throw new IllegalStateException(s"Unexpected message key $unknownKey while loading offsets and group metadata")
               }
 
-              currOffset = entry.nextOffset
+              currOffset = batch.nextOffset
             }
           }
 
-          loadedPids.foreach {
+          loadedTransactions.foreach {
             case (transactionalId, txnMetadata) =>
               val currentTxnMetadata = addTransaction(transactionalId, txnMetadata)
               if (!txnMetadata.equals(currentTxnMetadata)) {
                 // treat this as a fatal failure as this should never happen
                 fatal(s"Attempt to load $transactionalId's metadata $txnMetadata failed " +
-                  s"because there is already a different cached pid metadata $currentTxnMetadata.")
+                  s"because there is already a different cached transaction metadata $currentTxnMetadata.")
 
                 throw new KafkaException("Loading transaction topic partition failed.")
               }
           }
 
-          removedPids.foreach { transactionalId =>
-            // if the cache already contains a pid which should be removed, raise an error.
-            if (transactionMetadataCache.contains(transactionalId))
-              throw new IllegalStateException(s"Unexpected unload of $transactionalId's pid metadata while " +
-                s"loading partition $topicPartition")
+          removedTransactionalIds.foreach { transactionalId =>
+            if (transactionMetadataCache.contains(transactionalId)) {
+              // the cache already contains a transaction which should be removed,
+              // treat this as a fatal failure as this should never happen
+              fatal(s"Unexpected to see $transactionalId's metadata while " +
+                s"loading partition $topicPartition since its latest state is a tombstone")
+
+              throw new KafkaException("Loading transaction topic partition failed.")
+            }
           }
 
-          info(s"Finished loading ${loadedPids.size} pid metadata from $topicPartition in ${time.milliseconds() - startMs} milliseconds")
+          info(s"Finished loading ${loadedTransactions.size} transaction metadata from $topicPartition in ${time.milliseconds() - startMs} milliseconds")
         }
     }
   }
 
   /**
     * When this broker becomes a leader for a transaction log partition, load this partition and
-    * populate the pid metadata cache with the transactional ids.
+    * populate the transaction metadata cache with the transactional ids.
     */
   def loadTransactionsForPartition(partition: Int) {
     validateTransactionTopicPartitionCountIsStable()
 
     val topicPartition = new TopicPartition(Topic.TransactionStateTopicName, partition)
 
-    def loadPidAndTransactions() {
-      info(s"Loading pid metadata from $topicPartition")
+    def loadTransactions() {
+      info(s"Loading transaction metadata from $topicPartition")
 
       inLock(partitionLock) {
         if (loadingPartitions.contains(partition)) {
           // with background scheduler containing one thread, this should never happen,
           // but just in case we change it in the future.
-          info(s"Pid and transaction status loading from $topicPartition already in progress.")
+          info(s"Transaction status loading from $topicPartition already in progress.")
           return
         } else {
           loadingPartitions.add(partition)
@@ -228,7 +231,7 @@ class TransactionStateManager(brokerId: Int,
       try {
         loadTransactionMetadata(topicPartition)
       } catch {
-        case t: Throwable => error(s"Error loading offsets from $topicPartition", t)
+        case t: Throwable => error(s"Error loading transactions from transaction log $topicPartition", t)
       } finally {
         inLock(partitionLock) {
           ownedPartitions.add(partition)
@@ -237,7 +240,7 @@ class TransactionStateManager(brokerId: Int,
       }
     }
 
-    scheduler.schedule(topicPartition.toString, loadPidAndTransactions)
+    scheduler.schedule(topicPartition.toString, loadTransactions)
   }
 
   /**
@@ -249,8 +252,8 @@ class TransactionStateManager(brokerId: Int,
 
     val topicPartition = new TopicPartition(Topic.TransactionStateTopicName, partition)
 
-    def removePidAndTransactions() {
-      var numPidsRemoved = 0
+    def removeTransactions() {
+      var numTxnsRemoved = 0
 
       inLock(partitionLock) {
         if (!ownedPartitions.contains(partition)) {
@@ -264,19 +267,19 @@ class TransactionStateManager(brokerId: Int,
 
         for (transactionalId <- transactionMetadataCache.keys) {
           if (partitionFor(transactionalId) == partition) {
-            // we do not need to worry about whether the pid has any ongoing transaction or not since
+            // we do not need to worry about whether the transactional id has any ongoing transaction or not since
             // the new leader will handle it
             transactionMetadataCache.remove(transactionalId)
-            numPidsRemoved += 1
+            numTxnsRemoved += 1
           }
         }
 
-        if (numPidsRemoved > 0)
-          info(s"Removed $numPidsRemoved cached pid metadata for $topicPartition on follower transition")
+        if (numTxnsRemoved > 0)
+          info(s"Removed $numTxnsRemoved cached transaction metadata for $topicPartition on follower transition")
       }
     }
 
-    scheduler.schedule(topicPartition.toString, removePidAndTransactions)
+    scheduler.schedule(topicPartition.toString, removeTransactions)
   }
 
   private def validateTransactionTopicPartitionCountIsStable(): Unit = {
