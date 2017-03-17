@@ -56,14 +56,14 @@ public class MemoryRecordsBuilder {
     private final int initPos;
     private final long baseOffset;
     private final long logAppendTime;
-    private final long producerId;
-    private final short producerEpoch;
-    private final int baseSequence;
     private final boolean isTransactional;
     private final int partitionLeaderEpoch;
     private final int writeLimit;
     private final int initialCapacity;
 
+    private long producerId;
+    private short producerEpoch;
+    private int baseSequence;
     private long writtenUncompressed = 0;
     private int numRecords = 0;
     private float compressionRate = 1;
@@ -191,6 +191,22 @@ public class MemoryRecordsBuilder {
             return new RecordsInfo(RecordBatch.NO_TIMESTAMP, lastOffset);
         else
             return new RecordsInfo(maxTimestamp, compressionType == CompressionType.NONE ? offsetOfMaxTimestamp : lastOffset);
+    }
+
+    public void setProducerState(long pid, short epoch, int baseSequence) {
+        if (isClosed() && (this.producerId != pid || this.producerEpoch != epoch || this.baseSequence != baseSequence)) {
+            // Sequence numbers are assigned when the batch is closed while the accumulator is being drained.
+            // If the resulting ProduceRequest to the partition leader failed for a retriable error, the batch will
+            // be re queued. When it is drained again, we expect it to receive the same sequence number as before.
+            // If this does not happen, it means that some other batch was written in the intervening period, which
+            // should not happen with a correctly configured producer (in particular for a producer which has
+            // max.in.light.requests == 1).
+            throw new IllegalStateException("Attempting to close the same batch with a different base sequence. "
+                    + "Being in this situation indicates data corruption is afoot.");
+        }
+        this.producerId = pid;
+        this.producerEpoch = epoch;
+        this.baseSequence = baseSequence;
     }
 
     public void close() {
@@ -578,5 +594,12 @@ public class MemoryRecordsBuilder {
             this.maxTimestamp = maxTimestamp;
             this.shallowOffsetOfMaxTimestamp = shallowOffsetOfMaxTimestamp;
         }
+    }
+
+    /**
+     * Return the ProducerId (PID) of the LogEntries created by this builder.
+     */
+    public long producerId() {
+        return this.producerId;
     }
 }

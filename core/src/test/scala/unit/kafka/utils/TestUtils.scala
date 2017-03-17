@@ -340,7 +340,7 @@ object TestUtils extends Logging {
     val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, 0L,
       System.currentTimeMillis, pid, epoch, sequence)
     records.foreach { case (key, value, timestamp) =>
-      builder.appendWithOffset(0, timestamp, key, value)
+      builder.append(timestamp, key, value)
     }
     builder.build()
   }
@@ -945,9 +945,10 @@ object TestUtils extends Logging {
                    flushCheckMs = 1000L,
                    flushCheckpointMs = 10000L,
                    retentionCheckMs = 1000L,
+                   maxPidExpirationMs = 60 * 60 * 1000,
                    scheduler = time.scheduler,
                    time = time,
-                   brokerState = new BrokerState())
+                   brokerState = BrokerState())
   }
 
   @deprecated("This method has been deprecated and it will be removed in a future release.", "0.10.0.0")
