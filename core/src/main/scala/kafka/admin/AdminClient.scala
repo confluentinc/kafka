@@ -17,7 +17,7 @@ import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicInteger
 
 import kafka.common.KafkaException
-import kafka.coordinator.GroupOverview
+import kafka.coordinator.group.GroupOverview
 import kafka.utils.Logging
 
 import org.apache.kafka.clients._

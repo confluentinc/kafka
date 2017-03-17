@@ -14,13 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package kafka.coordinator
+package kafka.coordinator.transaction
 
 import kafka.common.KafkaException
 import kafka.utils.ZkUtils
+
 import org.easymock.{Capture, EasyMock, IAnswer}
-import org.junit.{After, Test}
 import org.junit.Assert._
+import org.junit.{After, Test}
 
 class PidManagerTest {
 
