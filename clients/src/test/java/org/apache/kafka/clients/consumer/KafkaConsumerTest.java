@@ -1562,7 +1562,7 @@ public class KafkaConsumerTest {
                 subscriptions,
                 metadata,
                 retryBackoffMs,
-                requestTimeoutMs, "read_uncommitted");
+                requestTimeoutMs, "READ_UNCOMMITTED");
     }
 
     private static class FetchInfo {
