@@ -86,7 +86,6 @@ class TransactionCoordinator(brokerId: Int,
       txnManager.getTransaction(transactionalId) match {
         case None =>
           val pid: Long = pidManager.getNewPid()
-          // TODO: check transactionTimeoutMs is not larger than the broker configured maximum allowed value
           val newMetadata = new TransactionMetadata(pid, epoch = 0, transactionTimeoutMs)
           val metadata = txnManager.addTransaction(transactionalId, newMetadata)
 
