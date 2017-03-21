@@ -21,6 +21,7 @@ import org.apache.kafka.clients.consumer.CommitFailedException;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Sensor;
@@ -58,8 +59,10 @@ public class StreamTask extends AbstractTask implements Punctuator {
     private final Map<TopicPartition, RecordQueue> partitionQueues;
 
     private final Map<TopicPartition, Long> consumedOffsets;
+    final Producer<byte[], byte[]> producer;
     private final RecordCollector recordCollector;
     private final int maxBufferedSize;
+    private final boolean exactlyOnceEnabled;
 
     private boolean commitRequested = false;
     private boolean commitOffsetNeeded = false;
@@ -93,7 +96,7 @@ public class StreamTask extends AbstractTask implements Punctuator {
      * @param config                the {@link StreamsConfig} specified by the user
      * @param metrics               the {@link StreamsMetrics} created by the thread
      * @param stateDirectory        the {@link StateDirectory} created by the thread
-     * @param recordCollector       the instance of {@link RecordCollector} used to produce records
+     * @param producer              the instance of {@link Producer} used to write records
      */
     public StreamTask(TaskId id,
                       String applicationId,
@@ -101,15 +104,16 @@ public class StreamTask extends AbstractTask implements Punctuator {
                       ProcessorTopology topology,
                       Consumer<byte[], byte[]> consumer,
                       Consumer<byte[], byte[]> restoreConsumer,
+                      final Producer<byte[], byte[]> producer,
                       StreamsConfig config,
                       StreamsMetrics metrics,
                       StateDirectory stateDirectory,
                       ThreadCache cache,
-                      Time time,
-                      final RecordCollector recordCollector) {
+                      Time time) {
         super(id, applicationId, partitions, topology, consumer, restoreConsumer, false, stateDirectory, cache);
         this.punctuationQueue = new PunctuationQueue();
         this.maxBufferedSize = config.getInt(StreamsConfig.BUFFERED_RECORDS_PER_PARTITION_CONFIG);
+        exactlyOnceEnabled = config.getString(StreamsConfig.PROCESSING_GUARANTEE_CONFIG).equals("exactly_once");
         this.metrics = new TaskMetrics(metrics);
 
         // create queues for each assigned partition and associate them
@@ -128,12 +132,13 @@ public class StreamTask extends AbstractTask implements Punctuator {
 
 
         this.partitionGroup = new PartitionGroup(partitionQueues, timestampExtractor);
+        this.producer = producer;
 
         // initialize the consumed offset cache
         this.consumedOffsets = new HashMap<>();
 
         // create the record recordCollector that maintains the produced offsets
-        this.recordCollector = recordCollector;
+        recordCollector = new RecordCollectorImpl(producer, id.toString());
 
         // initialize the topology with its own context
         this.processorContext = new ProcessorContextImpl(id, this, config, this.recordCollector, stateMgr, metrics, cache);
@@ -152,7 +157,7 @@ public class StreamTask extends AbstractTask implements Punctuator {
      *
      * @param partition the partition
      * @param records  the records
-     * @returns the number of added records
+     * @return the number of added records
      */
     @SuppressWarnings("unchecked")
     public int addRecords(TopicPartition partition, Iterable<ConsumerRecord<byte[], byte[]>> records) {
@@ -382,6 +387,18 @@ public class StreamTask extends AbstractTask implements Punctuator {
         this.partitionGroup.close();
         closeTopology();
         metrics.removeAllSensors();
+    }
+
+    public void closeProducer() {
+        if (exactlyOnceEnabled) {
+            try {
+                producer.close();
+            } catch (Throwable e) {
+                log.error("{} Failed to close producer: ", logPrefix, e);
+            }
+        } else {
+            throw new IllegalStateException("Tasks should only close producers if exactly-once semantics is enabled.");
+        }
     }
 
     @Override

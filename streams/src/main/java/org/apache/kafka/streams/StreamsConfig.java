@@ -214,6 +214,9 @@ public class StreamsConfig extends AbstractConfig {
     public static final String REQUEST_TIMEOUT_MS_CONFIG = CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG;
     private static final String REQUEST_TIMEOUT_MS_DOC = CommonClientConfigs.REQUEST_TIMEOUT_MS_DOC;
 
+    public static final String PROCESSING_GUARANTEE_CONFIG = "processing.guarantee";
+    private static final String PROCESSING_GUARANTEE_DOC = "The processing guarantee that should be used. Possible values are <code>at_least_once</code> (default) and <code>exactly_once</code>.";
+
     static {
         CONFIG = new ConfigDef()
             .define(APPLICATION_ID_CONFIG, // required with no default value
@@ -383,7 +386,13 @@ public class StreamsConfig extends AbstractConfig {
                     40 * 1000,
                     atLeast(0),
                     ConfigDef.Importance.MEDIUM,
-                    REQUEST_TIMEOUT_MS_DOC);
+                    REQUEST_TIMEOUT_MS_DOC)
+            .define(PROCESSING_GUARANTEE_CONFIG,
+                    ConfigDef.Type.STRING,
+                    "at_least_once",
+                    in("at_least_once", "exactly_once"),
+                    Importance.MEDIUM,
+                    PROCESSING_GUARANTEE_DOC);
     }
 
     // this is the list of configs for underlying clients

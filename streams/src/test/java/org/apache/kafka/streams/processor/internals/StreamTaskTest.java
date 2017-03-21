@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.kafka.streams.processor.internals;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -44,11 +43,10 @@ import org.apache.kafka.test.MockProcessorNode;
 import org.apache.kafka.test.MockSourceNode;
 import org.apache.kafka.test.MockTimestampExtractor;
 import org.apache.kafka.test.NoOpProcessorContext;
-import org.apache.kafka.test.NoOpRecordCollector;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
-import org.junit.Test;
 import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.util.Arrays;
@@ -108,7 +106,6 @@ public class StreamTaskTest {
     private final MockTime time = new MockTime();
     private File baseDir;
     private StateDirectory stateDirectory;
-    private RecordCollectorImpl recordCollector = new RecordCollectorImpl(producer, "taskId");
     private ThreadCache testCache =  new ThreadCache("testCache", 0, streamsMetrics);
     private StreamsConfig config;
     private StreamTask task;
@@ -137,7 +134,7 @@ public class StreamTaskTest {
         config = createConfig(baseDir);
         stateDirectory = new StateDirectory("applicationId", baseDir.getPath(), new MockTime());
         task = new StreamTask(taskId00, applicationId, partitions, topology, consumer,
-                              restoreStateConsumer, config, streamsMetrics, stateDirectory, null, time, recordCollector);
+                              restoreStateConsumer, producer, config, streamsMetrics, stateDirectory, null, time);
     }
 
     @After
@@ -348,7 +345,7 @@ public class StreamTaskTest {
         task.close();
 
         task  = new StreamTask(taskId00, applicationId, partitions,
-                                                     topology, consumer, restoreStateConsumer, config, streamsMetrics, stateDirectory, testCache, time, recordCollector);
+                                                     topology, consumer, restoreStateConsumer, producer, config, streamsMetrics, stateDirectory, testCache, time);
         final int offset = 20;
         task.addRecords(partition1, Collections.singletonList(
                 new ConsumerRecord<>(partition1.topic(), partition1.partition(), offset, 0L, TimestampType.CREATE_TIME, 0L, 0, 0, recordKey, recordValue)));
@@ -401,16 +398,11 @@ public class StreamTaskTest {
     @Test
     public void shouldFlushRecordCollectorOnFlushState() throws Exception {
         final AtomicBoolean flushed = new AtomicBoolean(false);
-        final NoOpRecordCollector recordCollector = new NoOpRecordCollector() {
-            @Override
-            public void flush() {
-                flushed.set(true);
-            }
-        };
         final StreamsMetrics streamsMetrics = new MockStreamsMetrics(new Metrics());
         final StreamTask streamTask = new StreamTask(taskId00, "appId", partitions, topology, consumer,
-                                                     restoreStateConsumer, createConfig(baseDir), streamsMetrics,
-                                                     stateDirectory, testCache, time, recordCollector);
+                                                     restoreStateConsumer, new MockedProducer(flushed),
+                                                     createConfig(baseDir), streamsMetrics, stateDirectory, testCache,
+                                                     time);
         streamTask.flushState();
         assertTrue(flushed.get());
     }
@@ -478,6 +470,27 @@ public class StreamTaskTest {
         assertTrue(source2.closed);
     }
 
+    @Test(expected = IllegalStateException.class)
+    public void shouldThrowWhenClosingProducerForNonEoS() {
+        task.closeProducer();
+    }
+
+    @Test
+    public void shouldCloseProducer() {
+        final Map properties = this.config.values();
+        properties.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, "exactly_once");
+        final StreamsConfig config = new StreamsConfig(properties);
+
+        MockedProducer producer = new MockedProducer(null);
+
+        task = new StreamTask(taskId00, applicationId, partitions, topology, consumer,
+            restoreStateConsumer, producer, config, streamsMetrics, stateDirectory, null, time);
+
+        task.closeProducer();
+
+        assertTrue(producer.closed);
+    }
+
     @SuppressWarnings("unchecked")
     private StreamTask createTaskThatThrowsExceptionOnClose() {
         final MockSourceNode processorNode = new MockSourceNode(topic1, intDeserializer, intDeserializer) {
@@ -498,10 +511,31 @@ public class StreamTaskTest {
 
 
         return new StreamTask(taskId00, applicationId, partitions,
-                              topology, consumer, restoreStateConsumer, config, streamsMetrics, stateDirectory, testCache, time, recordCollector);
+                              topology, consumer, restoreStateConsumer, producer, config, streamsMetrics, stateDirectory, testCache, time);
     }
 
     private Iterable<ConsumerRecord<byte[], byte[]>> records(ConsumerRecord<byte[], byte[]>... recs) {
         return Arrays.asList(recs);
     }
+
+    private final static class MockedProducer extends MockProducer {
+        private final AtomicBoolean flushed;
+        boolean closed = false;
+
+        MockedProducer(final AtomicBoolean flushed) {
+            super(false, null, null);
+            this.flushed = flushed;
+        }
+
+        @Override
+        public void flush() {
+            flushed.set(true);
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+    }
+
 }

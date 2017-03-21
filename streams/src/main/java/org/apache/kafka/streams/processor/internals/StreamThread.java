@@ -180,7 +180,8 @@ public class StreamThread extends Thread {
 
     protected final StreamsConfig config;
     protected final TopologyBuilder builder;
-    protected final Producer<byte[], byte[]> producer;
+    protected Producer<byte[], byte[]> threadProducer = null;
+    protected final KafkaClientSupplier clientSupplier;
     protected final Consumer<byte[], byte[]> consumer;
     protected final Consumer<byte[], byte[]> restoreConsumer;
 
@@ -208,6 +209,7 @@ public class StreamThread extends Thread {
     private long lastCleanMs;
     private long lastCommitMs;
     private Throwable rebalanceException = null;
+    private boolean exactlyOnceEnabled;
 
     private Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> standbyRecords;
     private boolean processStandbyRecords = false;
@@ -291,6 +293,7 @@ public class StreamThread extends Thread {
         String threadName = getName();
         this.config = config;
         this.builder = builder;
+        this.clientSupplier = clientSupplier;
         this.sourceTopicPattern = builder.sourceTopicPattern();
         this.clientId = clientId;
         this.processId = processId;
@@ -303,15 +306,13 @@ public class StreamThread extends Thread {
             log.warn("Negative cache size passed in thread [{}]. Reverting to cache size of 0 bytes.", threadName);
         }
         this.cache = new ThreadCache(threadClientId, cacheSizeBytes, this.streamsMetrics);
+        exactlyOnceEnabled = config.getString(StreamsConfig.PROCESSING_GUARANTEE_CONFIG).equals("exactly_once");
 
 
         this.logPrefix = String.format("stream-thread [%s]", threadName);
 
-        // set the producer and consumer clients
-        log.info("{} Creating producer client", logPrefix);
-        this.producer = clientSupplier.getProducer(config.getProducerConfigs(threadClientId));
+        // set the consumer clients
         log.info("{} Creating consumer client", logPrefix);
-
         Map<String, Object> consumerConfigs = config.getConsumerConfigs(this, applicationId, threadClientId);
 
         if (!builder.latestResetTopicsPattern().pattern().equals("") || !builder.earliestResetTopicsPattern().pattern().equals("")) {
@@ -398,10 +399,12 @@ public class StreamThread extends Thread {
         shutdownTasksAndState();
 
         // close all embedded clients
-        try {
-            producer.close();
-        } catch (Throwable e) {
-            log.error("{} Failed to close producer: ", logPrefix, e);
+        if (threadProducer != null) {
+            try {
+                threadProducer.close();
+            } catch (Throwable e) {
+                log.error("{} Failed to close producer: ", logPrefix, e);
+            }
         }
         try {
             consumer.close();
@@ -457,6 +460,10 @@ public class StreamThread extends Thread {
         // only commit under clean exit
         if (cleanRun && firstException.get() == null) {
             firstException.set(commitOffsets());
+        }
+        // Close all task producers
+        if (exactlyOnceEnabled) {
+            closeAllProducers();
         }
         // remove the changelog partitions from restore consumer
         unAssignChangeLogPartitions();
@@ -514,6 +521,21 @@ public class StreamThread extends Thread {
             }
         }
         return firstException;
+    }
+
+    private void closeAllProducers() {
+        for (final StreamTask task : activeTasks.values()) {
+            log.info("{} Closing the producer of task {}", StreamThread.this.logPrefix, task.id());
+            try {
+                task.closeProducer();
+            } catch (RuntimeException e) {
+                log.error("{} Failed while executing {} {} due to {}: ",
+                    StreamThread.this.logPrefix,
+                    task.getClass().getSimpleName(),
+                    task.id(),
+                    e);
+            }
+        }
     }
 
     private Throwable closeAllStateManagers(final boolean writeCheckpoint) {
@@ -830,8 +852,19 @@ public class StreamThread extends Thread {
         streamsMetrics.taskCreatedSensor.record();
 
         final ProcessorTopology topology = builder.build(id.topicGroupId);
-        final RecordCollector recordCollector = new RecordCollectorImpl(producer, id.toString());
-        return new StreamTask(id, applicationId, partitions, topology, consumer, restoreConsumer, config, streamsMetrics, stateDirectory, cache, time, recordCollector);
+        Map<String, Object> producerConfigs = config.getProducerConfigs(threadClientId);
+        Producer<byte[], byte[]> producer;
+        if (exactlyOnceEnabled) {
+            log.info("{} Creating producer client for task {}", logPrefix, id);
+            producer = clientSupplier.getProducer(producerConfigs);
+        } else {
+            if (threadProducer == null) {
+                log.info("{} Creating shared producer client", logPrefix);
+                threadProducer = clientSupplier.getProducer(producerConfigs);
+            }
+            producer = threadProducer;
+        }
+        return new StreamTask(id, applicationId, partitions, topology, consumer, restoreConsumer, producer, config, streamsMetrics, stateDirectory, cache, time);
     }
 
     private StreamTask findMatchingSuspendedTask(final TaskId taskId, final Set<TopicPartition> partitions) {
