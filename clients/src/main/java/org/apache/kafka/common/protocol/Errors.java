@@ -41,6 +41,7 @@ import org.apache.kafka.common.errors.InvalidReplicaAssignmentException;
 import org.apache.kafka.common.errors.InvalidReplicationFactorException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.InvalidRequiredAcksException;
+import org.apache.kafka.common.errors.InvalidTxnTimeoutException;
 import org.apache.kafka.common.errors.OutOfOrderSequenceException;
 import org.apache.kafka.common.errors.InvalidSessionTimeoutException;
 import org.apache.kafka.common.errors.InvalidTimestampException;
@@ -184,7 +185,7 @@ public enum Errors {
     INVALID_PID_MAPPING(49,
             new InvalidPidMappingException("The PID mapping is invalid")),
     INVALID_TRANSACTION_TIMEOUT(50,
-            new InvalidSessionTimeoutException("The transaction timeout is larger than the maximum value allowed by the broker " +
+            new InvalidTxnTimeoutException("The transaction timeout is larger than the maximum value allowed by the broker " +
                     "(as configured by max.transaction.timeout.ms)."));
 
     private static final Logger log = LoggerFactory.getLogger(Errors.class);
