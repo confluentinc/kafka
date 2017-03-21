@@ -33,6 +33,7 @@ import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.junit.{After, Before, Test}
 import org.easymock.{Capture, EasyMock, IAnswer}
 
+import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
@@ -149,8 +150,6 @@ class TransactionStateManagerTest {
 
     prepareTxnLog(topicPartition, startOffset, records)
 
-    EasyMock.replay(replicaManager)
-
     // this partition should not be part of the owned partitions
     assertFalse(transactionManager.isCoordinatorFor(txnId1))
     assertFalse(transactionManager.isCoordinatorFor(txnId2))
@@ -183,6 +182,27 @@ class TransactionStateManagerTest {
     assertEquals(None, transactionManager.getTransaction(txnId2))
   }
 
+  @Test
+  def testAppendTransactionToLog() {
+    // first insert the initial transaction metadata
+    transactionManager.addTransaction(txnId1, txnMetadata1)
+
+    // update the metadata to ongoing with two partitions
+    var newMetadata = txnMetadata1.clone()
+    newMetadata.state = Ongoing
+    newMetadata.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
+      new TopicPartition("topic1", 1)))
+
+    // append the new metadata into log
+    transactionManager.appendTransactionToLog(txnId1, newMetadata, assertCallback)
+
+    assertEquals(Some(newMetadata), transactionManager.getTransaction(txnId1))
+  }
+
+  private def assertCallback(error: Errors): Unit = {
+    assertEquals(Errors.NONE, error)
+  }
+
   private def prepareTxnLog(topicPartition: TopicPartition,
                             startOffset: Long,
                             records: MemoryRecords): Unit = {
@@ -200,7 +220,7 @@ class TransactionStateManagerTest {
     EasyMock.expect(fileRecordsMock.readInto(EasyMock.anyObject(classOf[ByteBuffer]), EasyMock.anyInt()))
       .andReturn(records.buffer)
 
-    EasyMock.replay(logMock, fileRecordsMock)
+    EasyMock.replay(logMock, fileRecordsMock, replicaManager)
   }
 
   private def prepareForTxnMessageAppend(error: Errors): Unit = {
@@ -209,15 +229,18 @@ class TransactionStateManagerTest {
       EasyMock.anyShort(),
       EasyMock.anyBoolean(),
       EasyMock.anyObject().asInstanceOf[Map[TopicPartition, MemoryRecords]],
-      EasyMock.capture(capturedArgument))).andAnswer(new IAnswer[Unit] {
-      override def answer = capturedArgument.getValue.apply(
-        Map(new TopicPartition(Topic.GroupMetadataTopicName, groupPartitionId) ->
-          new PartitionResponse(error, 0L, LogEntry.NO_TIMESTAMP)
+      EasyMock.capture(capturedArgument)))
+      .andAnswer(new IAnswer[Unit] {
+        override def answer = capturedArgument.getValue.apply(
+          Map(new TopicPartition(Topic.GroupMetadataTopicName, partitionId) ->
+            new PartitionResponse(error, 0L, RecordBatch.NO_TIMESTAMP)
+          )
         )
-      )})
+      }
+      )
     EasyMock.expect(replicaManager.getMagic(EasyMock.anyObject()))
       .andStubReturn(Some(RecordBatch.MAGIC_VALUE_V1))
 
-    EasyMock.replay(logMock)
+    EasyMock.replay(replicaManager)
   }
 }
