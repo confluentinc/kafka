@@ -316,8 +316,10 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         DefaultRecordBatch that = (DefaultRecordBatch) o;
         return buffer != null ? buffer.equals(that.buffer) : that.buffer == null;
