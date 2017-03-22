@@ -92,6 +92,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         private final int position;
         private final int batchSize;
         private RecordBatch underlying;
+        private Byte magic;
 
         private FileChannelRecordBatch(long offset,
                                        FileChannel channel,
@@ -138,7 +139,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
                 return underlying.lastOffset();
 
             try {
-                // FIXME: This logic probably should be moved into DefaultRecordBatch somehow
+                // TODO: this logic probably should be moved into DefaultRecordBatch somehow
                 // maybe we just need two separate implementations
 
                 byte[] offsetDelta = new byte[4];
@@ -158,14 +159,16 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
 
         @Override
         public byte magic() {
+            if (magic != null)
+                return magic;
             if (underlying != null)
                 return underlying.magic();
 
             try {
-                byte[] magic = new byte[1];
-                ByteBuffer buf = ByteBuffer.wrap(magic);
+                ByteBuffer buf = ByteBuffer.wrap(new byte[1]);
                 Utils.readFullyOrFail(channel, buf, position + Records.MAGIC_OFFSET, "magic byte");
-                return magic[0];
+                magic = buf.get(0);
+                return magic;
             } catch (IOException e) {
                 throw new KafkaException(e);
             }
