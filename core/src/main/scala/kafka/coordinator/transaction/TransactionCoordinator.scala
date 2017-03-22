@@ -85,7 +85,12 @@ class TransactionCoordinator(brokerId: Int,
       txnManager.getTransaction(transactionalId) match {
         case None =>
           val pid = pidManager.nextPid()
-          val newMetadata: TransactionMetadata = new TransactionMetadata(pid, 0, transactionTimeoutMs, Empty, collection.mutable.Set.empty[TopicPartition])
+          val newMetadata: TransactionMetadata = new TransactionMetadata(pid = pid,
+            epoch = 0,
+            txnTimeoutMs = transactionTimeoutMs,
+            state = Empty,
+            topicPartitions = collection.mutable.Set.empty[TopicPartition])
+
           val metadata = txnManager.addTransaction(transactionalId, newMetadata)
 
           // there might be a concurrent thread that has just updated the mapping
@@ -118,11 +123,12 @@ class TransactionCoordinator(brokerId: Int,
     } else if (!txnManager.isCoordinatorFor(transactionalId)) {
       // check if it is the assigned coordinator for the transactional id
       responseCallback(Errors.NOT_COORDINATOR)
-    } else if (!txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
+    } else if (txnManager.isCoordinatorLoadingInProgress(transactionalId)) {
       // check if the corresponding partition is still being loaded
       responseCallback(Errors.COORDINATOR_LOAD_IN_PROGRESS)
     } else {
-      // only try to get a new pid and update the cache if the transactional id is unknown
+      // try to update the transaction metadata and append the updated metadata to txn log;
+      // if there is no such metadata treat it as invalid pid mapping error.
       txnManager.getTransaction(transactionalId) match {
         case None =>
           responseCallback(Errors.INVALID_PID_MAPPING)
@@ -143,6 +149,7 @@ class TransactionCoordinator(brokerId: Int,
 
           if (newMetadata != null) {
             // create the new transaction metadata to be appended
+            newMetadata.transitionTo(Ongoing)
             newMetadata.addPartitions(partitions)
             txnManager.appendTransactionToLog(transactionalId, newMetadata, responseCallback)
           } else {

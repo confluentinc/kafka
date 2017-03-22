@@ -16,6 +16,7 @@
  */
 package kafka.coordinator.transaction
 
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.utils.MockTime
 import org.easymock.{Capture, EasyMock, IAnswer}
@@ -46,6 +47,9 @@ class TransactionCoordinatorTest {
   EasyMock.expect(transactionManager.isCoordinatorFor(EasyMock.eq("b")))
     .andReturn(false)
     .anyTimes()
+  EasyMock.expect(transactionManager.isCoordinatorFor(EasyMock.eq("c")))
+    .andReturn(true)
+    .anyTimes()
   EasyMock.expect(transactionManager.isCoordinatorLoadingInProgress(EasyMock.anyString()))
     .andReturn(false)
     .anyTimes()
@@ -54,6 +58,7 @@ class TransactionCoordinatorTest {
     .anyTimes()
 
   val capturedTxn: Capture[TransactionMetadata] = EasyMock.newCapture()
+  val capturedArgument: Capture[Errors => Unit] = EasyMock.newCapture()
   EasyMock.expect(transactionManager.addTransaction(EasyMock.eq("a"), EasyMock.capture(capturedTxn)))
     .andAnswer(new IAnswer[TransactionMetadata] {
       override def answer(): TransactionMetadata = {
@@ -72,10 +77,25 @@ class TransactionCoordinatorTest {
       }
     })
     .anyTimes()
+  EasyMock.expect(transactionManager.getTransaction(EasyMock.eq("c")))
+    .andAnswer(new IAnswer[Option[TransactionMetadata]] {
+      override def answer(): Option[TransactionMetadata] = {
+        None
+      }
+    })
+    .anyTimes()
+  EasyMock.expect(transactionManager.appendTransactionToLog(EasyMock.eq("a"), EasyMock.capture(capturedTxn), EasyMock.capture(capturedArgument)))
+    .andAnswer(new IAnswer[Unit] {
+      override def answer(): Unit = {
+        // do nothing
+      }
+    })
+    .anyTimes()
 
   val coordinator: TransactionCoordinator = new TransactionCoordinator(0, pidManager, transactionManager)
 
   var result: InitPidResult = _
+  var error: Errors = Errors.NONE
 
   @Before
   def setUp(): Unit = {
@@ -112,7 +132,45 @@ class TransactionCoordinatorTest {
     assertEquals(InitPidResult(-1L, -1, Errors.NOT_COORDINATOR), result)
   }
 
+  @Test
+  def testHandleAddPartitionsToTxn() = {
+    val transactionTimeoutMs = 1000
+
+    coordinator.handleInitPid("a", transactionTimeoutMs, initPidMockCallback)
+    coordinator.handleInitPid("a", transactionTimeoutMs, initPidMockCallback)
+    assertEquals(InitPidResult(0L, 1, Errors.NONE), result)
+
+    coordinator.handleAddPartitionsToTransaction("a", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(0L, capturedTxn.getValue.pid)
+    assertEquals(1, capturedTxn.getValue.epoch)
+    assertEquals(Ongoing, capturedTxn.getValue.state)
+    assertEquals(transactionTimeoutMs, capturedTxn.getValue.txnTimeoutMs)
+    assertEquals(Set[TopicPartition](new TopicPartition("topic1", 0)), capturedTxn.getValue.topicPartitions)
+
+    assertEquals(Errors.NONE, error)
+
+    // testing error cases
+    coordinator.handleAddPartitionsToTransaction("", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(Errors.INVALID_REQUEST, error)
+
+    coordinator.handleAddPartitionsToTransaction("b", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(Errors.NOT_COORDINATOR, error)
+
+    coordinator.handleAddPartitionsToTransaction("c", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(Errors.INVALID_PID_MAPPING, error)
+
+    coordinator.handleAddPartitionsToTransaction("a", 1L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(Errors.INVALID_PID_MAPPING, error)
+
+    coordinator.handleAddPartitionsToTransaction("a", 0L, 0, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(Errors.PRODUCER_FENCED, error)
+  }
+
   def initPidMockCallback(ret: InitPidResult): Unit = {
     result = ret
+  }
+
+  def addPartitionsMockCallback(ret: Errors): Unit = {
+    error = ret
   }
 }

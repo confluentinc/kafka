@@ -382,6 +382,7 @@ class TransactionStateManager(brokerId: Int,
                 // return PRODUCER_FENCED to let the client to close itself
                 responseError = Errors.PRODUCER_FENCED
               } else {
+                // only topic-partition lists could possibly change (state should have transited in the above condition)
                 metadata.addPartitions(txnMetadata.topicPartitions.toSet)
               }
             }

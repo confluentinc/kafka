@@ -116,7 +116,7 @@ private[coordinator] class TransactionMetadata(val pid: Long,
     }
   }
 
-  override def clone(): TransactionMetadata = new TransactionMetadata(pid, epoch, txnTimeoutMs, state, topicPartitions)
+  override def clone(): TransactionMetadata = new TransactionMetadata(pid, epoch, txnTimeoutMs, state, collection.mutable.Set.empty[TopicPartition] ++ topicPartitions)
 
   override def toString: String =
     s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $txnTimeoutMs, transactionState: $state, topicPartitions: ${topicPartitions.mkString("(",",",")")})"
