@@ -199,17 +199,17 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
                 if (underlying != null)
                     return;
 
-                ByteBuffer entryBuffer = ByteBuffer.allocate(LOG_OVERHEAD + entrySize);
-                Utils.readFullyOrFail(channel, entryBuffer, position, "full entry");
-                entryBuffer.rewind();
+                ByteBuffer batchBuffer = ByteBuffer.allocate(LOG_OVERHEAD + entrySize);
+                Utils.readFullyOrFail(channel, batchBuffer, position, "full record batch");
+                batchBuffer.rewind();
 
-                byte magic = entryBuffer.get(LOG_OVERHEAD + LegacyRecord.MAGIC_OFFSET);
+                byte magic = batchBuffer.get(LOG_OVERHEAD + LegacyRecord.MAGIC_OFFSET);
                 if (magic > RecordBatch.MAGIC_VALUE_V1)
-                    underlying = new DefaultRecordBatch(entryBuffer);
+                    underlying = new DefaultRecordBatch(batchBuffer);
                 else
-                    underlying = new AbstractLegacyRecordBatch.ByteBufferLegacyRecordBatch(entryBuffer);
+                    underlying = new AbstractLegacyRecordBatch.ByteBufferLegacyRecordBatch(batchBuffer);
             } catch (IOException e) {
-                throw new KafkaException("Failed to load log entry at position " + position + " from file channel " + channel);
+                throw new KafkaException("Failed to load record batch at position " + position + " from file channel " + channel);
             }
         }
 
