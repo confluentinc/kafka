@@ -628,7 +628,7 @@ class GroupMetadataManager(val brokerId: Int,
               try {
                 // do not need to require acks since even if the tombstone is lost,
                 // it will be appended again in the next purge cycle
-                val records = MemoryRecords.withRecords(magicValue, compressionType, timestampType, tombstones: _*)
+                val records = MemoryRecords.withRecords(magicValue, 0L, compressionType, timestampType, tombstones: _*)
                 partition.appendRecordsToLeader(records)
                 offsetsRemoved += removedOffsets.size
                 trace(s"Successfully appended ${tombstones.size} tombstones to $appendPartition for expired/deleted " +

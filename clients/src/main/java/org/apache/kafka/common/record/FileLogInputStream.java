@@ -66,6 +66,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         long offset = logHeaderBuffer.getLong();
         int size = logHeaderBuffer.getInt();
 
+        // V0 has the smallest overhead, stricter checking is done later
         if (size < LegacyRecord.RECORD_OVERHEAD_V0)
             throw new CorruptRecordException(String.format("Record size is smaller than minimum record overhead (%d).", LegacyRecord.RECORD_OVERHEAD_V0));
 
@@ -89,17 +90,17 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         private final long offset;
         private final FileChannel channel;
         private final int position;
-        private final int entrySize;
+        private final int batchSize;
         private RecordBatch underlying;
 
         private FileChannelRecordBatch(long offset,
                                        FileChannel channel,
                                        int position,
-                                       int entrySize) {
+                                       int batchSize) {
             this.offset = offset;
             this.channel = channel;
             this.position = position;
-            this.entrySize = entrySize;
+            this.batchSize = batchSize;
         }
 
         @Override
@@ -199,11 +200,11 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
                 if (underlying != null)
                     return;
 
-                ByteBuffer batchBuffer = ByteBuffer.allocate(LOG_OVERHEAD + entrySize);
+                ByteBuffer batchBuffer = ByteBuffer.allocate(sizeInBytes());
                 Utils.readFullyOrFail(channel, batchBuffer, position, "full record batch");
                 batchBuffer.rewind();
 
-                byte magic = batchBuffer.get(LOG_OVERHEAD + LegacyRecord.MAGIC_OFFSET);
+                byte magic = batchBuffer.get(Records.MAGIC_OFFSET);
                 if (magic > RecordBatch.MAGIC_VALUE_V1)
                     underlying = new DefaultRecordBatch(batchBuffer);
                 else
@@ -239,7 +240,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
 
         @Override
         public int sizeInBytes() {
-            return LOG_OVERHEAD + entrySize;
+            return LOG_OVERHEAD + batchSize;
         }
 
         @Override
@@ -281,7 +282,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
 
             return offset == that.offset &&
                     position == that.position &&
-                    entrySize == that.entrySize &&
+                    batchSize == that.batchSize &&
                     (channel == null ? that.channel == null : channel.equals(that.channel));
         }
 
@@ -290,7 +291,7 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
             int result = (int) (offset ^ (offset >>> 32));
             result = 31 * result + (channel != null ? channel.hashCode() : 0);
             result = 31 * result + position;
-            result = 31 * result + entrySize;
+            result = 31 * result + batchSize;
             return result;
         }
 
