@@ -436,10 +436,6 @@ public abstract class AbstractLegacyRecordBatch extends AbstractRecordBatch impl
             ByteUtils.writeUnsignedInt(buffer, LOG_OVERHEAD + LegacyRecord.CRC_OFFSET, crc);
         }
 
-        public ByteBuffer buffer() {
-            return buffer;
-        }
-
         @Override
         public boolean equals(Object o) {
             if (this == o)

@@ -334,7 +334,7 @@ class GroupMetadataManager(val brokerId: Int,
           Some(DelayedStore(entries, putCacheCallback))
 
         case None =>
-          val commitStatus = offsetMetadata.map { case (topicPartition, offsetAndMetadata) =>
+          val commitStatus = offsetMetadata.map { case (topicPartition, _) =>
             (topicPartition, Errors.NOT_COORDINATOR_FOR_GROUP)
           }
           responseCallback(commitStatus)
