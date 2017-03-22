@@ -251,9 +251,6 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
         @Override
         public void writeTo(ByteBuffer buffer) {
             try {
-                buffer.limit(entrySize + LOG_OVERHEAD);
-                buffer.putLong(offset);
-                buffer.putInt(entrySize);
                 Utils.readFully(channel, buffer, position);
             } catch (IOException e) {
                 throw new KafkaException("Failed to read log entry at position " + position + " from file channel " +
@@ -275,25 +272,31 @@ public class FileLogInputStream implements LogInputStream<FileLogInputStream.Fil
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
 
             FileChannelRecordBatch that = (FileChannelRecordBatch) o;
 
-            if (offset != that.offset) return false;
-            if (position != that.position) return false;
-            if (entrySize != that.entrySize) return false;
-            return channel != null ? channel.equals(that.channel) : that.channel == null;
+            return offset == that.offset &&
+                    position == that.position &&
+                    entrySize == that.entrySize &&
+                    (channel == null ? that.channel == null : channel.equals(that.channel));
         }
 
         @Override
         public int hashCode() {
-            int result = super.hashCode();
-            result = 31 * result + (int) (offset ^ (offset >>> 32));
+            int result = (int) (offset ^ (offset >>> 32));
             result = 31 * result + (channel != null ? channel.hashCode() : 0);
             result = 31 * result + position;
             result = 31 * result + entrySize;
             return result;
+        }
+
+        @Override
+        public String toString() {
+            return "FileChannelRecordBatch(magic: " + magic() + ", offsets: [" + baseOffset() + ", " + lastOffset() + "])";
         }
     }
 }
