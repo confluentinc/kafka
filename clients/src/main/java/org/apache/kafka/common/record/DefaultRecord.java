@@ -272,7 +272,7 @@ public class DefaultRecord implements Record {
 
     @Override
     public boolean hasMagic(byte magic) {
-        return magic == MAGIC_VALUE_V2;
+        return magic >= MAGIC_VALUE_V2;
     }
 
     @Override
