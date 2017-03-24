@@ -134,13 +134,17 @@ class TransactionCoordinator(brokerId: Int,
           responseCallback(Errors.INVALID_PID_MAPPING)
 
         case Some(metadata) =>
-          var errorCode: Errors = Errors.NONE
+          var error = Errors.NONE
           val newMetadata = metadata synchronized {
             if (metadata.pid != pid) {
-              errorCode = Errors.INVALID_PID_MAPPING
+              error = Errors.INVALID_PID_MAPPING
               null
             } else if (metadata.epoch != epoch) {
-              errorCode = Errors.PRODUCER_FENCED
+              error = Errors.PRODUCER_FENCED
+              null
+            } else if (!metadata.prepareTransitionTo(Ongoing)) {
+              // upon failing the condition, it should change the pending state already
+              error = Errors.INVALID_TXN_STATE
               null
             } else {
               metadata.clone()
@@ -149,11 +153,11 @@ class TransactionCoordinator(brokerId: Int,
 
           if (newMetadata != null) {
             // create the new transaction metadata to be appended
-            newMetadata.transitionTo(Ongoing)
+            newMetadata.state = Ongoing
             newMetadata.addPartitions(partitions)
             txnManager.appendTransactionToLog(transactionalId, newMetadata, responseCallback)
           } else {
-            responseCallback(errorCode)
+            responseCallback(error)
           }
       }
     }

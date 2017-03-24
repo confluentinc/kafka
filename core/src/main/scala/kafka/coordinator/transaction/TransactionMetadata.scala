@@ -89,10 +89,10 @@ private[coordinator] object TransactionMetadata {
   private val validPreviousStates: Map[TransactionState, Set[TransactionState]] =
     Map(Empty -> Set(),
       Ongoing -> Set(Ongoing, Empty, CompleteCommit, CompleteAbort),
-      PrepareCommit -> Set(Ongoing),
-      PrepareAbort -> Set(Ongoing),
-      CompleteCommit -> Set(PrepareCommit),
-      CompleteAbort -> Set(PrepareAbort))
+      PrepareCommit -> Set(PrepareCommit, Ongoing),
+      PrepareAbort -> Set(PrepareAbort, Ongoing),
+      CompleteCommit -> Set(CompleteCommit, PrepareCommit),
+      CompleteAbort -> Set(CompleteAbort, PrepareAbort))
 }
 
 @nonthreadsafe
@@ -102,16 +102,37 @@ private[coordinator] class TransactionMetadata(val pid: Long,
                                                var state: TransactionState,
                                                val topicPartitions: mutable.Set[TopicPartition]) {
 
+  // pending state is used to indicate the state that this transaction is going to
+  // transit to, and for blocking future attempts to transit it again if it is not legal;
+  // initialized as the same as the current state
+  private var pendingState = state
 
   def addPartitions(partitions: collection.Set[TopicPartition]): Unit = {
     topicPartitions ++= partitions
   }
 
-  def transitionTo(newState: TransactionState): Boolean = {
-    if (!TransactionMetadata.validPreviousStates(newState).contains(state)) {
+  def abortPendingTransition(): TransactionState = {
+    val abortedState = pendingState
+    pendingState = state
+    abortedState
+  }
+
+  def prepareTransitionTo(newState: TransactionState): Boolean = {
+    if (!TransactionMetadata.validPreviousStates(newState).contains(pendingState)) {
+      false
+    } else if (pendingState != state && pendingState != newState) {
       false
     } else {
-      state = newState
+      pendingState = newState
+      true
+    }
+  }
+
+  def completeTransitionTo(newState: TransactionState): Boolean = {
+    if (pendingState != newState) {
+      false
+    } else {
+      state = pendingState
       true
     }
   }

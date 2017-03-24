@@ -197,6 +197,7 @@ class TransactionStateManagerTest {
     newMetadata.state = Ongoing
     newMetadata.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
       new TopicPartition("topic1", 1)))
+    txnMetadata1.prepareTransitionTo(Ongoing)
 
     // append the new metadata into log
     transactionManager.appendTransactionToLog(txnId1, newMetadata, assertCallback)
@@ -261,6 +262,7 @@ class TransactionStateManagerTest {
     newMetadata.state = Ongoing
     newMetadata.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
       new TopicPartition("topic1", 1)))
+    txnMetadata1.prepareTransitionTo(Ongoing)
 
     // modify the cache while trying to append the new metadata
     txnMetadata1.epoch = (txnMetadata1.epoch + 1).toShort
