@@ -89,10 +89,10 @@ private[coordinator] object TransactionMetadata {
   private val validPreviousStates: Map[TransactionState, Set[TransactionState]] =
     Map(Empty -> Set(),
       Ongoing -> Set(Ongoing, Empty, CompleteCommit, CompleteAbort),
-      PrepareCommit -> Set(PrepareCommit, Ongoing),
-      PrepareAbort -> Set(PrepareAbort, Ongoing),
-      CompleteCommit -> Set(CompleteCommit, PrepareCommit),
-      CompleteAbort -> Set(CompleteAbort, PrepareAbort))
+      PrepareCommit -> Set(Ongoing),
+      PrepareAbort -> Set(Ongoing),
+      CompleteCommit -> Set(PrepareCommit),
+      CompleteAbort -> Set(PrepareAbort))
 }
 
 @nonthreadsafe
@@ -105,39 +105,44 @@ private[coordinator] class TransactionMetadata(val pid: Long,
   // pending state is used to indicate the state that this transaction is going to
   // transit to, and for blocking future attempts to transit it again if it is not legal;
   // initialized as the same as the current state
-  private var pendingState = state
+  private var pendingState: Option[TransactionState] = None
 
   def addPartitions(partitions: collection.Set[TopicPartition]): Unit = {
     topicPartitions ++= partitions
   }
 
   def abortPendingTransition(): TransactionState = {
-    val abortedState = pendingState
-    pendingState = state
+    val abortedState = pendingState.getOrElse(throw new IllegalStateException("Aborting transaction state transition while it does not have a pending state"))
+    pendingState = Some(state)
     abortedState
   }
 
   def prepareTransitionTo(newState: TransactionState): Boolean = {
-    if (!TransactionMetadata.validPreviousStates(newState).contains(pendingState)) {
-      false
-    } else if (pendingState != state && pendingState != newState) {
-      false
+    // if there is already a pending state, check if the new state is the same as the pending state to transit to;
+    // otherwise, check that the new state transition is valid and update the pending state if necessary
+    if (pendingState.isEmpty) {
+      if (TransactionMetadata.validPreviousStates(newState).contains(state)) {
+        pendingState = Some(newState)
+        true
+      } else {
+        false
+      }
     } else {
-      pendingState = newState
-      true
+      pendingState.get == newState
     }
   }
 
   def completeTransitionTo(newState: TransactionState): Boolean = {
-    if (pendingState != newState) {
+    val toState = pendingState.getOrElse(throw new IllegalStateException("Completing transaction state transition while it does not have a pending state")
+    if (toState != newState) {
       false
     } else {
-      state = pendingState
+      state = toState
       true
     }
   }
 
-  override def clone(): TransactionMetadata = new TransactionMetadata(pid, epoch, txnTimeoutMs, state, collection.mutable.Set.empty[TopicPartition] ++ topicPartitions)
+  def copy(): TransactionMetadata = new TransactionMetadata(pid, epoch, txnTimeoutMs, state, collection.mutable.Set.empty[TopicPartition] ++ topicPartitions)
 
   override def toString: String =
     s"(pid: $pid, epoch: $epoch, transactionTimeoutMs: $txnTimeoutMs, transactionState: $state, topicPartitions: ${topicPartitions.mkString("(",",",")")})"

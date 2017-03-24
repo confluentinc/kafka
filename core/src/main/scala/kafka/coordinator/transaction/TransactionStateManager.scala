@@ -43,7 +43,7 @@ object TransactionManager {
   val DefaultTransactionsMaxTimeoutMs = 900000 // 15 min
 }
 
-/*
+/**
  * Transaction manager is part of the transaction coordinator, it manages:
  *
  * 1. the transaction log, which is a special internal topic.
@@ -59,22 +59,22 @@ class TransactionStateManager(brokerId: Int,
 
   this.logIdent = "[Transaction Log Manager " + brokerId + "]: "
 
-  /* shutting down flag */
+  /** shutting down flag */
   private val shuttingDown = new AtomicBoolean(false)
 
-  /* lock protecting access to loading and owned partition sets */
+  /** lock protecting access to loading and owned partition sets */
   private val partitionLock = new ReentrantLock()
 
-  /* partitions of transaction topic that are assigned to this manager, partition lock should be called BEFORE accessing this set */
+  /** partitions of transaction topic that are assigned to this manager, partition lock should be called BEFORE accessing this set */
   private val ownedPartitions: mutable.Set[Int] = mutable.Set()
 
-  /* partitions of transaction topic that are being loaded, partition lock should be called BEFORE accessing this set */
+  /** partitions of transaction topic that are being loaded, partition lock should be called BEFORE accessing this set */
   private val loadingPartitions: mutable.Set[Int] = mutable.Set()
 
-  /* transaction metadata cache indexed by transactional id */
+  /** transaction metadata cache indexed by transactional id */
   private val transactionMetadataCache = new Pool[String, TransactionMetadata]
 
-  /* number of partitions for the transaction log topic */
+  /** number of partitions for the transaction log topic */
   private val transactionTopicPartitionCount = getTransactionTopicPartitionCount
 
   def enablePidExpiration() {
@@ -84,15 +84,15 @@ class TransactionStateManager(brokerId: Int,
   }
 
   /**
-    * Get the transaction metadata associated with the given transactional id, or null if not found
-    */
+   * Get the transaction metadata associated with the given transactional id, or null if not found
+   */
   def getTransaction(transactionalId: String): Option[TransactionMetadata] = {
     Option(transactionMetadataCache.get(transactionalId))
   }
 
   /**
-    * Add a new transaction metadata, or retrieve the metadata if it already exists with the associated transactional id
-    */
+   * Add a new transaction metadata, or retrieve the metadata if it already exists with the associated transactional id
+   */
   def addTransaction(transactionalId: String, txnMetadata: TransactionMetadata): TransactionMetadata = {
     val currentTxnMetadata = transactionMetadataCache.putIfNotExists(transactionalId, txnMetadata)
     if (currentTxnMetadata != null) {
@@ -102,7 +102,7 @@ class TransactionStateManager(brokerId: Int,
     }
   }
 
-  /*
+  /**
    * Validate the given transaction timeout value
    */
   def validateTransactionTimeoutMs(txnTimeoutMs: Int): Boolean =
@@ -137,7 +137,7 @@ class TransactionStateManager(brokerId: Int,
     loadingPartitions.contains(partitionId)
   }
 
-  /*
+  /**
    * Gets the partition count of the transaction log topic from ZooKeeper.
    * If the topic does not exist, the default partition count is returned.
    */
@@ -221,9 +221,9 @@ class TransactionStateManager(brokerId: Int,
   }
 
   /**
-    * When this broker becomes a leader for a transaction log partition, load this partition and
-    * populate the transaction metadata cache with the transactional ids.
-    */
+   * When this broker becomes a leader for a transaction log partition, load this partition and
+   * populate the transaction metadata cache with the transactional ids.
+   */
   def loadTransactionsForPartition(partition: Int) {
     validateTransactionTopicPartitionCountIsStable()
 
@@ -258,7 +258,7 @@ class TransactionStateManager(brokerId: Int,
     scheduler.schedule(topicPartition.toString, loadTransactions)
   }
 
-  /*
+  /**
    * When this broker becomes a follower for a transaction log partition, clear out the cache for corresponding transactional ids
    * that belong to that partition.
    */
@@ -361,8 +361,8 @@ class TransactionStateManager(brokerId: Int,
             Errors.UNKNOWN
 
           case other =>
-            error(s"Appending metadata message f$txnMetadata or $transactionalId failed due to " +
-              s"unexpected error: ${status.error.exceptionName}")
+            error(s"Appending metadata message $txnMetadata for $transactionalId failed due to " +
+              s"unexpected error: ${status.error.message}")
 
             other
         }
@@ -391,14 +391,14 @@ class TransactionStateManager(brokerId: Int,
           }
 
           if (responseError != Errors.NONE) {
-            info(s"Updating $transactionalId's transaction state from $metadata to $txnMetadata for $transactionalId failed after the transaction message " +
+            debug(s"Updating $transactionalId's transaction state from $metadata to $txnMetadata for $transactionalId failed after the transaction message " +
               s"has been appended to the log since the metadata does not match anymore.")
           }
 
         case None =>
           // this transactional id no longer exists, maybe the corresponding partition has already been migrated out.
           // return NOT_COORDINATOR to let the client retry
-          info(s"Updating $transactionalId's transaction state to $txnMetadata for $transactionalId failed after the transaction message " +
+          debug(s"Updating $transactionalId's transaction state to $txnMetadata for $transactionalId failed after the transaction message " +
             s"has been appended to the log since there is no metadata in the cache anymore.")
 
           responseError = Errors.NOT_COORDINATOR
