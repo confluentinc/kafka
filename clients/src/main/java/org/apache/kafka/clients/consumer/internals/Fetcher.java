@@ -803,15 +803,15 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
 
                     if (isolationLevel == IsolationLevel.READ_COMMITTED) {
                         FetchResponse.AbortedTransaction nextAbortedTransaction = abortedTransactions.peek();
-                        if (abortedPids.contains(batch.pid())
-                                || (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.pid() && nextAbortedTransaction.firstOffset <= batch.baseOffset())) {
-                            if (abortedPids.contains(batch.pid()) && containsAbortMarker(batch)) {
-                                abortedPids.remove(batch.pid());
-                            } else if (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.pid() && nextAbortedTransaction.firstOffset <= batch.baseOffset()) {
-                                abortedPids.add(batch.pid());
+                        if (abortedPids.contains(batch.producerId())
+                                || (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.producerId() && nextAbortedTransaction.firstOffset <= batch.baseOffset())) {
+                            if (abortedPids.contains(batch.producerId()) && containsAbortMarker(batch)) {
+                                abortedPids.remove(batch.producerId());
+                            } else if (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.producerId() && nextAbortedTransaction.firstOffset <= batch.baseOffset()) {
+                                abortedPids.add(batch.producerId());
                                 abortedTransactions.remove(nextAbortedTransaction);
                             }
-                            log.trace("Skipping aborted record with pid {} and base offset {}", batch.pid(), batch.baseOffset());
+                            log.trace("Skipping aborted record with pid {} and base offset {}", batch.producerId(), batch.baseOffset());
                             skippedRecords = true;
                             continue;
                         }
