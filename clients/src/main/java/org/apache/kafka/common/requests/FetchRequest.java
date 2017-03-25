@@ -108,6 +108,10 @@ public class FetchRequest extends AbstractRequest {
         private final IsolationLevel isolationLevel;
         private int maxBytes = DEFAULT_RESPONSE_MAX_BYTES;
 
+        public static Builder forConsumer(int maxWait, int minBytes, LinkedHashMap<TopicPartition, PartitionData> fetchData) {
+            return new Builder(null, CONSUMER_REPLICA_ID, maxWait, minBytes, fetchData, IsolationLevel.READ_UNCOMMITTED);
+        }
+
         public static Builder forConsumer(int maxWait, int minBytes, LinkedHashMap<TopicPartition, PartitionData> fetchData, IsolationLevel isolationLevel) {
             return new Builder(null, CONSUMER_REPLICA_ID, maxWait, minBytes, fetchData, isolationLevel);
         }
@@ -157,6 +161,11 @@ public class FetchRequest extends AbstractRequest {
                     append(")");
             return bld.toString();
         }
+    }
+
+    private FetchRequest(short version, int replicaId, int maxWait, int minBytes, int maxBytes,
+                         LinkedHashMap<TopicPartition, PartitionData> fetchData) {
+        this(version, replicaId, maxWait, minBytes, maxBytes, fetchData, IsolationLevel.READ_UNCOMMITTED);
     }
 
     private FetchRequest(short version, int replicaId, int maxWait, int minBytes, int maxBytes,

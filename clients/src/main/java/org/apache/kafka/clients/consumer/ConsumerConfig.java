@@ -237,11 +237,11 @@ public class ConsumerConfig extends AbstractConfig {
 
     /** <code>isolation.level</code> */
     public static final String ISOLATION_LEVEL_CONFIG = "isolation.level";
-    public static final String ISOLATION_LEVEL_DOC = "<p>Controls how to read messages written transactionally. If set to <code>READ_COMMITTED</code>, the application will only receive" +
-            " transactional messages which have been committed. If set to <code>READ_UNCOMMITTED</code>' (the default), the application will receive all messages, even transactional messages" +
-            " which have been aborted. Non-transactional messages will be returned as they are received in either mode.</p> <p>Messages will be  always returned in offset order. Hence, in " +
-            " <code>READ_COMMITTED</code> mode, the consumer will only return messages upto the last resolved (committed or aborted) transaction. In particular any messages appearing after" +
-            " onging transactions will be withheld until the said transaction has been completed and its messages are delivered to the application. As a result, <code>READ_COMMITTED</code>" +
+    public static final String ISOLATION_LEVEL_DOC = "<p>Controls how to read messages written transactionally. If set to <code>READ_COMMITTED</code>, consumer.poll() will only return" +
+            " transactional messages which have been committed. If set to <code>READ_UNCOMMITTED</code>' (the default), consumer.poll() will return all messages, even transactional messages" +
+            " which have been aborted. Non-transactional messages will be returned unconditionally in either mode.</p> <p>Messages will be  always returned in offset order. Hence, in " +
+            " <code>READ_COMMITTED</code> mode, consumer.poll() will only return messages upto the last resolved (committed or aborted) transaction. In particular any messages appearing after" +
+            " messages belonging onging transactions will be withheld until the said transaction has been completed and its messages are delivered to the application. As a result, <code>READ_COMMITTED</code>" +
             " consumers will not be able to read upto the log end offset when there are inflight transactions.</p>";
 
     public static final String DEFAULT_ISOLATION_LEVEL = IsolationLevel.READ_UNCOMMITTED.toString();

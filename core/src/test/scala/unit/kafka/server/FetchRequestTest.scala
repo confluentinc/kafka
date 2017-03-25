@@ -55,7 +55,7 @@ class FetchRequestTest extends BaseRequestTest {
 
   private def createFetchRequest(maxResponseBytes: Int, maxPartitionBytes: Int, topicPartitions: Seq[TopicPartition],
                                  offsetMap: Map[TopicPartition, Long] = Map.empty): FetchRequest =
-    FetchRequest.Builder.forConsumer(Int.MaxValue, 0, createPartitionMap(maxPartitionBytes, topicPartitions, offsetMap), IsolationLevel.READ_UNCOMMITTED)
+    FetchRequest.Builder.forConsumer(Int.MaxValue, 0, createPartitionMap(maxPartitionBytes, topicPartitions, offsetMap))
       .setMaxBytes(maxResponseBytes).build()
 
   private def createPartitionMap(maxPartitionBytes: Int, topicPartitions: Seq[TopicPartition],
@@ -156,7 +156,7 @@ class FetchRequestTest extends BaseRequestTest {
     val (topicPartition, leaderId) = createTopics(numTopics = 1, numPartitions = 1).head
     producer.send(new ProducerRecord(topicPartition.topic, topicPartition.partition,
       "key", new String(new Array[Byte](maxPartitionBytes + 1)))).get
-    val fetchRequest = FetchRequest.Builder.forConsumer(Int.MaxValue, 0, createPartitionMap(maxPartitionBytes, Seq(topicPartition)), IsolationLevel.READ_UNCOMMITTED).build(2)
+    val fetchRequest = FetchRequest.Builder.forConsumer(Int.MaxValue, 0, createPartitionMap(maxPartitionBytes, Seq(topicPartition))).build(2)
     val fetchResponse = sendFetchRequest(leaderId, fetchRequest, version = 2)
     val partitionData = fetchResponse.responseData.get(topicPartition)
     assertEquals(Errors.NONE, partitionData.error)

@@ -1547,7 +1547,8 @@ public class KafkaConsumerTest {
                 metrics,
                 metricGroupPrefix,
                 time,
-                retryBackoffMs, IsolationLevel.READ_UNCOMMITTED);
+                retryBackoffMs,
+                IsolationLevel.READ_UNCOMMITTED);
 
         return new KafkaConsumer<>(
                 clientId,
@@ -1562,7 +1563,8 @@ public class KafkaConsumerTest {
                 subscriptions,
                 metadata,
                 retryBackoffMs,
-                requestTimeoutMs, "READ_UNCOMMITTED");
+                requestTimeoutMs,
+                "READ_UNCOMMITTED");
     }
 
     private static class FetchInfo {

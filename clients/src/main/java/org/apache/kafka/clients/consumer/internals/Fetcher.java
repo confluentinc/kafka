@@ -29,6 +29,7 @@ import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.CorruptRecordException;
 import org.apache.kafka.common.errors.InvalidMetadataException;
 import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.RecordTooLargeException;
@@ -69,14 +70,18 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static java.util.Collections.emptyList;
 
 /**
  * This class manage the fetching process with the brokers.
@@ -540,7 +545,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
         }
 
         partitionRecords.drain();
-        return Collections.emptyList();
+        return emptyList();
     }
 
     /**
@@ -783,11 +788,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
                  *   1. If the pid is in aborted pids and the entry contains an abort marker, remove the pid from
                  *      aborted pids and skip the entry.
                  *   2. Check lowest offset entry in the abort index. If the PID of the current entry matches the
-                 *      pid of the abort index entry, and the incoming offset is at least the abort index offset,
+                 *      pid of the abort index entry, and the incoming offset is no smaller than the abort index offset,
                  *      this means that the entry has been aborted. Add the pid to the aborted pids set, and remove
                  *      the entry from the abort index.
                  */
-                PriorityQueue<FetchResponse.AbortedTransaction> abortedTransactions = getAbortedTransactions(partition);
+                Queue<FetchResponse.AbortedTransaction> abortedTransactions = getAbortedTransactions(partition);
 
                 List<ConsumerRecord<K, V>> parsed = new ArrayList<>();
                 boolean skippedRecords = false;
@@ -892,7 +897,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
         return parsedRecords;
     }
 
-    private PriorityQueue<FetchResponse.AbortedTransaction> getAbortedTransactions(FetchResponse.PartitionData partition) {
+    private Queue<FetchResponse.AbortedTransaction> getAbortedTransactions(FetchResponse.PartitionData partition) {
         PriorityQueue<FetchResponse.AbortedTransaction> abortedTransactions = null;
         if (partition.abortedTransactions != null && 0 < partition.abortedTransactions.size()) {
             abortedTransactions = new PriorityQueue<>(
@@ -912,7 +917,10 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
     }
 
     private boolean containsAbortMarker(RecordBatch batch) {
-        Record firstRecord = batch.iterator().hasNext() ? batch.iterator().next() : null;
+        Iterator<Record> batchIterator = batch.iterator();
+        Record firstRecord = batchIterator.hasNext() ? batchIterator.next() : null;
+        if (firstRecord != null && batchIterator.hasNext())
+            throw new CorruptRecordException("A RecordBatch containing a control message contained more than one message.");
         return firstRecord != null && firstRecord.isControlRecord() && ControlRecordType.ABORT == ControlRecordType.parse(firstRecord.key());
     }
 
@@ -981,7 +989,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
         private List<ConsumerRecord<K, V>> drainRecords(int n) {
             if (isDrained() || position >= records.size()) {
                 drain();
-                return Collections.emptyList();
+                return emptyList();
             }
 
             // using a sublist avoids a potentially expensive list copy (depending on the size of the records
