@@ -193,7 +193,7 @@ class TransactionStateManagerTest {
     expectedError = Errors.NONE
 
     // update the metadata to ongoing with two partitions
-    val newMetadata = txnMetadata1.clone()
+    val newMetadata = txnMetadata1.copy()
     newMetadata.state = Ongoing
     newMetadata.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
       new TopicPartition("topic1", 1)))
@@ -205,7 +205,7 @@ class TransactionStateManagerTest {
     assertEquals(Some(newMetadata), transactionManager.getTransaction(txnId1))
 
     // append to log again with expected failures
-    val failedMetadata = newMetadata.clone()
+    val failedMetadata = newMetadata.copy()
     failedMetadata.addPartitions(Set[TopicPartition](new TopicPartition("topic2", 0)))
 
     // test COORDINATOR_NOT_AVAILABLE cases
@@ -258,7 +258,7 @@ class TransactionStateManagerTest {
     prepareForTxnMessageAppend(Errors.NONE)
     expectedError = Errors.PRODUCER_FENCED
 
-    val newMetadata = txnMetadata1.clone()
+    val newMetadata = txnMetadata1.copy()
     newMetadata.state = Ongoing
     newMetadata.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
       new TopicPartition("topic1", 1)))
@@ -271,6 +271,27 @@ class TransactionStateManagerTest {
     transactionManager.appendTransactionToLog(txnId1, txnMetadata1, assertCallback)
 
     assertEquals(Some(txnMetadata1), transactionManager.getTransaction(txnId1))
+  }
+
+  @Test(expected = classOf[IllegalStateException])
+  def testAppendTransactionToLogWhilePendingStateChanged() = {
+    // first insert the initial transaction metadata
+    transactionManager.addTransaction(txnId1, txnMetadata1)
+
+    prepareForTxnMessageAppend(Errors.NONE)
+    expectedError = Errors.PRODUCER_FENCED
+
+    val newMetadata = txnMetadata1.copy()
+    newMetadata.state = Ongoing
+    newMetadata.addPartitions(Set[TopicPartition](new TopicPartition("topic1", 0),
+      new TopicPartition("topic1", 1)))
+    txnMetadata1.prepareTransitionTo(Ongoing)
+
+    // modify the cache while trying to append the new metadata
+    txnMetadata1.pendingState = None
+
+    // append the new metadata into log
+    transactionManager.appendTransactionToLog(txnId1, txnMetadata1, assertCallback)
   }
 
   private def assertCallback(error: Errors): Unit = {

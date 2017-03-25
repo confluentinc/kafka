@@ -144,10 +144,16 @@ class TransactionCoordinatorTest {
     assertEquals(0L, capturedTxn.getValue.pid)
     assertEquals(1, capturedTxn.getValue.epoch)
     assertEquals(Ongoing, capturedTxn.getValue.state)
+    assertEquals(None, capturedTxn.getValue.pendingState)
     assertEquals(transactionTimeoutMs, capturedTxn.getValue.txnTimeoutMs)
     assertEquals(Set[TopicPartition](new TopicPartition("topic1", 0)), capturedTxn.getValue.topicPartitions)
 
     assertEquals(Errors.NONE, error)
+
+    capturedTxn.getValue.pendingState = Some(Ongoing)
+    coordinator.handleAddPartitionsToTransaction("a", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 1)), addPartitionsMockCallback)
+    assertEquals(None, capturedTxn.getValue.pendingState)
+    assertEquals(Set[TopicPartition](new TopicPartition("topic1", 0), new TopicPartition("topic1", 1)), capturedTxn.getValue.topicPartitions)
 
     // testing error cases
     coordinator.handleAddPartitionsToTransaction("", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
@@ -164,6 +170,15 @@ class TransactionCoordinatorTest {
 
     coordinator.handleAddPartitionsToTransaction("a", 0L, 0, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
     assertEquals(Errors.PRODUCER_FENCED, error)
+
+    capturedTxn.getValue.state = PrepareCommit
+    coordinator.handleAddPartitionsToTransaction("a", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(Errors.INVALID_TXN_STATE, error)
+
+    capturedTxn.getValue.state = Ongoing
+    capturedTxn.getValue.pendingState = Some(PrepareCommit)
+    coordinator.handleAddPartitionsToTransaction("a", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
+    assertEquals(Errors.INVALID_TXN_STATE, error)
   }
 
   def initPidMockCallback(ret: InitPidResult): Unit = {

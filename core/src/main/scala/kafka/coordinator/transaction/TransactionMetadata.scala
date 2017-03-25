@@ -105,7 +105,7 @@ private[coordinator] class TransactionMetadata(val pid: Long,
   // pending state is used to indicate the state that this transaction is going to
   // transit to, and for blocking future attempts to transit it again if it is not legal;
   // initialized as the same as the current state
-  private var pendingState: Option[TransactionState] = None
+  var pendingState: Option[TransactionState] = None
 
   def addPartitions(partitions: collection.Set[TopicPartition]): Unit = {
     topicPartitions ++= partitions
@@ -133,7 +133,7 @@ private[coordinator] class TransactionMetadata(val pid: Long,
   }
 
   def completeTransitionTo(newState: TransactionState): Boolean = {
-    val toState = pendingState.getOrElse(throw new IllegalStateException("Completing transaction state transition while it does not have a pending state")
+    val toState = pendingState.getOrElse(throw new IllegalStateException("Completing transaction state transition while it does not have a pending state"))
     if (toState != newState) {
       false
     } else {
