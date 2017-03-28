@@ -250,7 +250,7 @@ class TransactionStateManagerTest {
     assertEquals(Some(newMetadata), transactionManager.getTransaction(txnId1))
   }
 
-  @Test
+  @Test(expected = classOf[IllegalStateException])
   def testAppendTransactionToLogWhileProducerFenced() = {
     // first insert the initial transaction metadata
     transactionManager.addTransaction(txnId1, txnMetadata1)
@@ -269,8 +269,6 @@ class TransactionStateManagerTest {
 
     // append the new metadata into log
     transactionManager.appendTransactionToLog(txnId1, txnMetadata1, assertCallback)
-
-    assertEquals(Some(txnMetadata1), transactionManager.getTransaction(txnId1))
   }
 
   @Test(expected = classOf[IllegalStateException])

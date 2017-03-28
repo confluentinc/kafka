@@ -16,6 +16,7 @@
  */
 package kafka.coordinator.transaction
 
+import kafka.server.DelayedOperationPurgatory
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.utils.MockTime
@@ -28,7 +29,7 @@ class TransactionCoordinatorTest {
   val time = new MockTime()
 
   var nextPid: Long = 0L
-  val pidManager = EasyMock.createNiceMock(classOf[ProducerIdManager])
+  val pidManager: ProducerIdManager = EasyMock.createNiceMock(classOf[ProducerIdManager])
 
   EasyMock.expect(pidManager.nextPid())
     .andAnswer(new IAnswer[Long] {
@@ -39,7 +40,7 @@ class TransactionCoordinatorTest {
     })
     .anyTimes()
 
-  val transactionManager = EasyMock.createNiceMock(classOf[TransactionStateManager])
+  val transactionManager: TransactionStateManager = EasyMock.createNiceMock(classOf[TransactionStateManager])
 
   EasyMock.expect(transactionManager.isCoordinatorFor(EasyMock.eq("a")))
     .andReturn(true)
@@ -92,7 +93,10 @@ class TransactionCoordinatorTest {
     })
     .anyTimes()
 
-  val coordinator: TransactionCoordinator = new TransactionCoordinator(0, pidManager, transactionManager)
+  val brokerId = 0
+  val heartbeatPurgatory: DelayedOperationPurgatory[DelayedTxnMetadataUpdate] = EasyMock.createNiceMock(classOf[DelayedOperationPurgatory[DelayedTxnMetadataUpdate]])
+
+  val coordinator: TransactionCoordinator = new TransactionCoordinator(brokerId, pidManager, transactionManager, heartbeatPurgatory)
 
   var result: InitPidResult = _
   var error: Errors = Errors.NONE
@@ -149,11 +153,6 @@ class TransactionCoordinatorTest {
     assertEquals(Set[TopicPartition](new TopicPartition("topic1", 0)), capturedTxn.getValue.topicPartitions)
 
     assertEquals(Errors.NONE, error)
-
-    capturedTxn.getValue.pendingState = Some(Ongoing)
-    coordinator.handleAddPartitionsToTransaction("a", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 1)), addPartitionsMockCallback)
-    assertEquals(None, capturedTxn.getValue.pendingState)
-    assertEquals(Set[TopicPartition](new TopicPartition("topic1", 0), new TopicPartition("topic1", 1)), capturedTxn.getValue.topicPartitions)
 
     // testing error cases
     coordinator.handleAddPartitionsToTransaction("", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)

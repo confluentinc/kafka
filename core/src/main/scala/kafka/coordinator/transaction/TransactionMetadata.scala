@@ -24,49 +24,49 @@ import scala.collection.mutable
 private[coordinator] sealed trait TransactionState { def byte: Byte }
 
 /**
-  * Transaction has not existed yet
-  *
-  * transition: received AddPartitionsToTxnRequest => Ongoing
-  *             received AddOffsetsToTxnRequest => Ongoing
-  */
+ * Transaction has not existed yet
+ *
+ * transition: received AddPartitionsToTxnRequest => Ongoing
+ *             received AddOffsetsToTxnRequest => Ongoing
+ */
 private[coordinator] case object Empty extends TransactionState { val byte: Byte = 0 }
 
 /**
-  * Transaction has started and ongoing
-  *
-  * transition: received EndTxnRequest with commit => PrepareCommit
-  *             received EndTxnRequest with abort => PrepareAbort
-  *             received AddPartitionsToTxnRequest => Ongoing
-  *             received AddOffsetsToTxnRequest => Ongoing
-  */
+ * Transaction has started and ongoing
+ *
+ * transition: received EndTxnRequest with commit => PrepareCommit
+ *             received EndTxnRequest with abort => PrepareAbort
+ *             received AddPartitionsToTxnRequest => Ongoing
+ *             received AddOffsetsToTxnRequest => Ongoing
+ */
 private[coordinator] case object Ongoing extends TransactionState { val byte: Byte = 1 }
 
 /**
-  * Group is preparing to commit
-  *
-  * transition: received acks from all partitions => CompleteCommit
-  */
+ * Group is preparing to commit
+ *
+ * transition: received acks from all partitions => CompleteCommit
+ */
 private[coordinator] case object PrepareCommit extends TransactionState { val byte: Byte = 2}
 
 /**
-  * Group is preparing to abort
-  *
-  * transition: received acks from all partitions => CompleteAbort
-  */
+ * Group is preparing to abort
+ *
+ * transition: received acks from all partitions => CompleteAbort
+ */
 private[coordinator] case object PrepareAbort extends TransactionState { val byte: Byte = 3 }
 
 /**
-  * Group has completed commit
-  *
-  * Will soon be removed from the ongoing transaction cache
-  */
+ * Group has completed commit
+ *
+ * Will soon be removed from the ongoing transaction cache
+ */
 private[coordinator] case object CompleteCommit extends TransactionState { val byte: Byte = 4 }
 
 /**
-  * Group has completed abort
-  *
-  * Will soon be removed from the ongoing transaction cache
-  */
+ * Group has completed abort
+ *
+ * Will soon be removed from the ongoing transaction cache
+ */
 private[coordinator] case object CompleteAbort extends TransactionState { val byte: Byte = 5 }
 
 private[coordinator] object TransactionMetadata {
@@ -111,24 +111,18 @@ private[coordinator] class TransactionMetadata(val pid: Long,
     topicPartitions ++= partitions
   }
 
-  def abortPendingTransition(): TransactionState = {
-    val abortedState = pendingState.getOrElse(throw new IllegalStateException("Aborting transaction state transition while it does not have a pending state"))
-    pendingState = Some(state)
-    abortedState
-  }
+  def hasPendingTransition: Boolean = pendingState.isDefined
 
   def prepareTransitionTo(newState: TransactionState): Boolean = {
-    // if there is already a pending state, check if the new state is the same as the pending state to transit to;
-    // otherwise, check that the new state transition is valid and update the pending state if necessary
-    if (pendingState.isEmpty) {
-      if (TransactionMetadata.validPreviousStates(newState).contains(state)) {
-        pendingState = Some(newState)
-        true
-      } else {
-        false
-      }
+    if (pendingState.isDefined)
+      throw new IllegalStateException(s"Preparing transaction state transition to $newState while it already a pending state ${pendingState.get}")
+
+    // check that the new state transition is valid and update the pending state if necessary
+    if (TransactionMetadata.validPreviousStates(newState).contains(state)) {
+      pendingState = Some(newState)
+      true
     } else {
-      pendingState.get == newState
+      false
     }
   }
 

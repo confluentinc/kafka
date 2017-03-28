@@ -226,7 +226,7 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
   }
 
   /**
-   * Check if some some delayed operations can be completed with the given watch key,
+   * Check if some delayed operations can be completed with the given watch key,
    * and if yes complete them.
    *
    * @return the number of completed operations during this process
@@ -237,6 +237,20 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
       0
     else
       watchers.tryCompleteWatched()
+  }
+
+  /**
+    * Check if some some delayed operations can be completed with the given watch key,
+    * and if yes complete only the first one of the operations.
+    *
+    * @return if one operation has been completed
+    */
+  def checkAndCompleteOne(key: Any): Boolean = {
+    val watchers = inReadLock(removeWatchersLock) { watchersForKey.get(key) }
+    if(watchers == null)
+      false
+    else
+      watchers.tryCompleteFirstWatched()
   }
 
   /**
@@ -328,6 +342,25 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
         removeKeyIfEmpty(key, this)
 
       completed
+    }
+
+    // traverse the list and try to complete some watched elements
+    def tryCompleteFirstWatched(): Boolean = {
+      val iter = operations.iterator()
+      while (iter.hasNext) {
+        val curr = iter.next()
+        if (curr.isCompleted) {
+          // another thread has completed this operation, just remove it
+          iter.remove()
+        } else if (curr.safeTryComplete()) {
+          iter.remove()
+          if (operations.isEmpty)
+            removeKeyIfEmpty(key, this)
+          true
+        }
+      }
+
+      false
     }
 
     // traverse the list and purge elements that are already completed by others

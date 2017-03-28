@@ -368,40 +368,34 @@ class TransactionStateManager(brokerId: Int,
         }
       }
 
-      // now try to update the cache: we need to update the status in-place instead of
-      // overwriting the whole object to ensure synchronization
-      getTransaction(transactionalId) match {
-        case Some(metadata) =>
-          metadata synchronized {
-            if (responseError == Errors.NONE &&
-              metadata.pid == txnMetadata.pid &&
-              metadata.epoch == txnMetadata.epoch &&
-              metadata.txnTimeoutMs == txnMetadata.txnTimeoutMs &&
-              metadata.completeTransitionTo(txnMetadata.state)) {
-              // only topic-partition lists could possibly change (state should have transited in the above condition)
-              metadata.addPartitions(txnMetadata.topicPartitions.toSet)
-            } else {
-              // the record has already been appended but the cache has been modified.
-              // return PRODUCER_FENCED to let the client to close itself
-              metadata.abortPendingTransition()
-
-              if (responseError == Errors.NONE)
-                responseError = Errors.PRODUCER_FENCED
+      if (responseError != Errors.NONE) {
+        debug(s"Updating $transactionalId's transaction state to $txnMetadata for $transactionalId failed after the transaction message " +
+          s"has been appended to the log since the metadata does not match anymore.")
+      } else {
+        // now try to update the cache: we need to update the status in-place instead of
+        // overwriting the whole object to ensure synchronization
+        getTransaction(transactionalId) match {
+          case Some(metadata) =>
+            metadata synchronized {
+              if (metadata.pid == txnMetadata.pid &&
+                metadata.epoch == txnMetadata.epoch &&
+                metadata.txnTimeoutMs == txnMetadata.txnTimeoutMs &&
+                metadata.completeTransitionTo(txnMetadata.state)) {
+                // only topic-partition lists could possibly change (state should have transited in the above condition)
+                metadata.addPartitions(txnMetadata.topicPartitions.toSet)
+              } else {
+                throw new IllegalStateException(s"Completing transaction state transition to $txnMetadata while its current state is $metadata.")
+              }
             }
-          }
 
-          if (responseError != Errors.NONE) {
-            debug(s"Updating $transactionalId's transaction state from $metadata to $txnMetadata for $transactionalId failed after the transaction message " +
-              s"has been appended to the log since the metadata does not match anymore.")
-          }
+          case None =>
+            // this transactional id no longer exists, maybe the corresponding partition has already been migrated out.
+            // return NOT_COORDINATOR to let the client retry
+            debug(s"Updating $transactionalId's transaction state to $txnMetadata for $transactionalId failed after the transaction message " +
+              s"has been appended to the log since there is no metadata in the cache anymore.")
 
-        case None =>
-          // this transactional id no longer exists, maybe the corresponding partition has already been migrated out.
-          // return NOT_COORDINATOR to let the client retry
-          debug(s"Updating $transactionalId's transaction state to $txnMetadata for $transactionalId failed after the transaction message " +
-            s"has been appended to the log since there is no metadata in the cache anymore.")
-
-          responseError = Errors.NOT_COORDINATOR
+            responseError = Errors.NOT_COORDINATOR
+        }
       }
 
       responseCallback(responseError)
