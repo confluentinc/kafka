@@ -28,8 +28,6 @@ import org.apache.kafka.common.utils.Time
 
 import scala.collection.Seq
 
-case class InitPidResult(pid: Long, epoch: Short, error: Errors)
-
 object TransactionCoordinator {
 
   def apply(config: KafkaConfig,
@@ -179,11 +177,20 @@ class TransactionCoordinator(brokerId: Int,
   def tryUpdateTxnState(transactionalId: String,
                         newMetadata: TransactionMetadata,
                         responseCallback: TxnMetadataUpdateCallback): Unit = {
+
+    def completeUpdateCallback(error: Errors): Unit = {
+      // first respond to the clients, then try to complete one other delayed metadata update
+      // operations waiting on this transactional id
+      responseCallback(error)
+
+      txnUpdatePurgatory.checkAndCompleteOne(transactionalId)
+    }
+
     // try to update the transaction metadata and append the updated metadata to txn log;
     // if there is no such metadata treat it as invalid pid mapping error.
     txnManager.getTransaction(transactionalId) match {
       case None =>
-        responseCallback(Errors.INVALID_PID_MAPPING)
+        completeUpdateCallback(Errors.INVALID_PID_MAPPING)
 
       case Some(metadata) =>
         val error = metadata synchronized {
@@ -203,20 +210,12 @@ class TransactionCoordinator(brokerId: Int,
         }
 
         if (error == Errors.NONE) {
-          def completeUpdateCallback(error: Errors): Unit = {
-            // first respond to the clients, then try to complete one other delayed metadata update
-            // operations waiting on this transactional id
-            responseCallback(error)
-
-            txnUpdatePurgatory.checkAndCompleteOne(transactionalId)
-          }
-
-          txnManager.appendTransactionToLog(transactionalId, newMetadata, responseCallback)
+          txnManager.appendTransactionToLog(transactionalId, newMetadata, completeUpdateCallback)
         } else if (error == Errors.COORDINATOR_LOAD_IN_PROGRESS) {
-          val delayedTxnMetadataUpdate = new DelayedTxnMetadataUpdate(this, transactionalId, newMetadata, responseCallback)
+          val delayedTxnMetadataUpdate = new DelayedTxnMetadataUpdate(this, transactionalId, newMetadata, completeUpdateCallback)
           txnUpdatePurgatory.tryCompleteElseWatch(delayedTxnMetadataUpdate, Seq(transactionalId))
         } else {
-          responseCallback(error)
+          completeUpdateCallback(error)
         }
     }
   }
@@ -248,3 +247,5 @@ class TransactionCoordinator(brokerId: Int,
     info("Shutdown complete.")
   }
 }
+
+case class InitPidResult(pid: Long, epoch: Short, error: Errors)
