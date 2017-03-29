@@ -123,7 +123,10 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
 
         producer_prop_file += "\nrequest.timeout.ms=%d\n" % (self.request_timeout_sec * 1000)
         if self.enable_idempotence is True:
-            producer_prop_file += "\nenable.idempotence=true"
+            self.logger.info("Setting up an idempotent producer")
+            producer_prop_file += "\nmax.in.flight.requests.per.connection=1\n"
+            producer_prop_file += "\nretries=50\n"
+            producer_prop_file += "\nenable.idempotence=true\n"
 
         self.logger.info("verifiable_producer.properties:")
         self.logger.info(producer_prop_file)
