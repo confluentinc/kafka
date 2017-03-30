@@ -806,21 +806,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
                         }
                     }
 
-                    if (isolationLevel == IsolationLevel.READ_COMMITTED) {
-                        FetchResponse.AbortedTransaction nextAbortedTransaction = abortedTransactions.peek();
-                        if (abortedPids.contains(batch.producerId())
-                                || (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.producerId() && nextAbortedTransaction.firstOffset <= batch.baseOffset())) {
-                            if (abortedPids.contains(batch.producerId()) && containsAbortMarker(batch)) {
-                                abortedPids.remove(batch.producerId());
-                            } else if (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.producerId() && nextAbortedTransaction.firstOffset <= batch.baseOffset()) {
-                                abortedPids.add(batch.producerId());
-                                abortedTransactions.remove(nextAbortedTransaction);
-                            }
-                            log.trace("Skipping aborted record with pid {} and base offset {}", batch.producerId(), batch.baseOffset());
-                            skippedRecords = true;
-                            continue;
-                        }
+                    if (isBatchAborted(batch, abortedPids, abortedTransactions)) {
+                        skippedRecords = true;
+                        continue;
                     }
+
                     for (Record record : batch) {
                         // control records should not be returned to the user. also skip anything out of range
                         if (record.isControlRecord() || record.offset() < position) {
@@ -895,6 +885,24 @@ public class Fetcher<K, V> implements SubscriptionState.Listener {
             subscriptions.movePartitionToEnd(tp);
 
         return parsedRecords;
+    }
+
+    private boolean isBatchAborted(RecordBatch batch, Set<Long> abortedPids, Queue<FetchResponse.AbortedTransaction> abortedTransactions) {
+        if (isolationLevel == IsolationLevel.READ_COMMITTED) {
+            FetchResponse.AbortedTransaction nextAbortedTransaction = abortedTransactions.peek();
+            if (abortedPids.contains(batch.producerId())
+                    || (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.producerId() && nextAbortedTransaction.firstOffset <= batch.baseOffset())) {
+                if (abortedPids.contains(batch.producerId()) && containsAbortMarker(batch)) {
+                    abortedPids.remove(batch.producerId());
+                } else if (nextAbortedTransaction != null && nextAbortedTransaction.pid == batch.producerId() && nextAbortedTransaction.firstOffset <= batch.baseOffset()) {
+                    abortedPids.add(batch.producerId());
+                    abortedTransactions.remove(nextAbortedTransaction);
+                }
+                log.trace("Skipping aborted record with pid {} and base offset {}", batch.producerId(), batch.baseOffset());
+                return true;
+            }
+        }
+        return false;
     }
 
     private Queue<FetchResponse.AbortedTransaction> getAbortedTransactions(FetchResponse.PartitionData partition) {
