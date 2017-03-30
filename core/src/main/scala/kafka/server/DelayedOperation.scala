@@ -150,7 +150,7 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
   newGauge(
     "PurgatorySize",
     new Gauge[Int] {
-      def value = watched()
+      def value: Int = watched
     },
     metricsTags
   )
@@ -158,7 +158,7 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
   newGauge(
     "NumDelayedOperations",
     new Gauge[Int] {
-      def value = delayed()
+      def value: Int = delayed
     },
     metricsTags
   )
@@ -240,30 +240,16 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
   }
 
   /**
-    * Check if some some delayed operations can be completed with the given watch key,
-    * and if yes complete only the first one of the operations.
-    *
-    * @return if one operation has been completed
-    */
-  def checkAndCompleteOne(key: Any): Boolean = {
-    val watchers = inReadLock(removeWatchersLock) { watchersForKey.get(key) }
-    if(watchers == null)
-      false
-    else
-      watchers.tryCompleteFirstWatched()
-  }
-
-  /**
    * Return the total size of watch lists the purgatory. Since an operation may be watched
    * on multiple lists, and some of its watched entries may still be in the watch lists
    * even when it has been completed, this number may be larger than the number of real operations watched
    */
-  def watched() = allWatchers.map(_.countWatched).sum
+  def watched: Int = allWatchers.map(_.countWatched).sum
 
   /**
    * Return the number of delayed operations in the expiry queue
    */
-  def delayed() = timeoutTimer.size
+  def delayed: Int = timeoutTimer.size
 
   /*
    * Return all the current watcher lists,
@@ -342,25 +328,6 @@ class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
         removeKeyIfEmpty(key, this)
 
       completed
-    }
-
-    // traverse the list and try to complete some watched elements
-    def tryCompleteFirstWatched(): Boolean = {
-      val iter = operations.iterator()
-      while (iter.hasNext) {
-        val curr = iter.next()
-        if (curr.isCompleted) {
-          // another thread has completed this operation, just remove it
-          iter.remove()
-        } else if (curr.safeTryComplete()) {
-          iter.remove()
-          if (operations.isEmpty)
-            removeKeyIfEmpty(key, this)
-          true
-        }
-      }
-
-      false
     }
 
     // traverse the list and purge elements that are already completed by others
