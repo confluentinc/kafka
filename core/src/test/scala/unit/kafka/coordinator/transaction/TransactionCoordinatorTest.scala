@@ -94,9 +94,8 @@ class TransactionCoordinatorTest {
     .anyTimes()
 
   val brokerId = 0
-  val heartbeatPurgatory: DelayedOperationPurgatory[DelayedTxnMetadataUpdate] = EasyMock.createNiceMock(classOf[DelayedOperationPurgatory[DelayedTxnMetadataUpdate]])
 
-  val coordinator: TransactionCoordinator = new TransactionCoordinator(brokerId, pidManager, transactionManager, heartbeatPurgatory)
+  val coordinator: TransactionCoordinator = new TransactionCoordinator(brokerId, pidManager, transactionManager)
 
   var result: InitPidResult = _
   var error: Errors = Errors.NONE
@@ -177,7 +176,7 @@ class TransactionCoordinatorTest {
     capturedTxn.getValue.state = Ongoing
     capturedTxn.getValue.pendingState = Some(PrepareCommit)
     coordinator.handleAddPartitionsToTransaction("a", 0L, 1, Set[TopicPartition](new TopicPartition("topic1", 0)), addPartitionsMockCallback)
-    assertEquals(Errors.INVALID_TXN_STATE, error)
+    assertEquals(Errors.COORDINATOR_LOAD_IN_PROGRESS, error)
   }
 
   def initPidMockCallback(ret: InitPidResult): Unit = {

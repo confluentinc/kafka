@@ -86,6 +86,8 @@ private[coordinator] object TransactionMetadata {
     }
   }
 
+  def isValidTransition(oldState: TransactionState, newState: TransactionState): Boolean = TransactionMetadata.validPreviousStates(newState).contains(oldState)
+
   private val validPreviousStates: Map[TransactionState, Set[TransactionState]] =
     Map(Empty -> Set(),
       Ongoing -> Set(Ongoing, Empty, CompleteCommit, CompleteAbort),
@@ -111,8 +113,6 @@ private[coordinator] class TransactionMetadata(val pid: Long,
     topicPartitions ++= partitions
   }
 
-  def hasPendingTransition: Boolean = pendingState.isDefined
-
   def prepareTransitionTo(newState: TransactionState): Boolean = {
     if (pendingState.isDefined)
       throw new IllegalStateException(s"Preparing transaction state transition to $newState while it already a pending state ${pendingState.get}")
@@ -131,6 +131,7 @@ private[coordinator] class TransactionMetadata(val pid: Long,
     if (toState != newState) {
       false
     } else {
+      pendingState = None
       state = toState
       true
     }
