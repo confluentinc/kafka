@@ -401,7 +401,6 @@ class TransactionStateManager(brokerId: Int,
       responseCallback(responseError)
     }
 
-    // call replica manager to append the txn message
     replicaManager.appendRecords(
       txnMetadata.txnTimeoutMs.toLong,     // use the txn timeout value as the timeout for append
       TransactionLog.EnforcedRequiredAcks,
