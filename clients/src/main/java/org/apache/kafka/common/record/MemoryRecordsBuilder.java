@@ -119,7 +119,7 @@ public class MemoryRecordsBuilder {
             if (producerEpoch < 0)
                 throw new IllegalArgumentException("Invalid negative producer epoch");
 
-            if (baseSequence < 0)
+            if (baseSequence < 0 && baseSequence != RecordBatch.CONTROL_SEQUENCE)
                  throw new IllegalArgumentException("Invalid negative sequence number used");
 
             if (magic < RecordBatch.MAGIC_VALUE_V2)

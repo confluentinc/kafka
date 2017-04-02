@@ -87,10 +87,7 @@ private[kafka] object LogValidator extends Logging {
       offsetCounter.value, now, pid, epoch, sequence)
 
     for (batch <- records.batches.asScala) {
-      ensureNonTransactional(batch)
-
       for (record <- batch.asScala) {
-        ensureNotControlRecord(record)
         validateKey(record, compactedTopic)
         validateTimestamp(batch, record, now, timestampType, messageTimestampDiffMaxMs)
         builder.appendWithOffset(offsetCounter.getAndIncrement(), record)
@@ -117,11 +114,8 @@ private[kafka] object LogValidator extends Logging {
     val initialOffset = offsetCounter.value
 
     for (batch <- records.batches.asScala) {
-      ensureNonTransactional(batch)
-
       for (record <- batch.asScala) {
         record.ensureValid()
-        ensureNotControlRecord(record)
         validateKey(record, compactedTopic)
 
         val offset = offsetCounter.getAndIncrement()
@@ -180,14 +174,11 @@ private[kafka] object LogValidator extends Logging {
       val validatedRecords = new mutable.ArrayBuffer[Record]
 
       for (batch <- records.batches.asScala) {
-        ensureNonTransactional(batch)
-
         for (record <- batch.asScala) {
           if (!record.hasMagic(batch.magic))
             throw new InvalidRecordException(s"Log record magic does not match outer magic ${batch.magic}")
 
           record.ensureValid()
-          ensureNotControlRecord(record)
           validateKey(record, compactedTopic)
 
           if (!record.hasMagic(RecordBatch.MAGIC_VALUE_V0) && messageFormatVersion > RecordBatch.MAGIC_VALUE_V0) {
@@ -255,17 +246,6 @@ private[kafka] object LogValidator extends Logging {
       maxTimestamp = info.maxTimestamp,
       shallowOffsetOfMaxTimestamp = info.shallowOffsetOfMaxTimestamp,
       messageSizeMaybeChanged = true)
-  }
-
-  private def ensureNonTransactional(batch: RecordBatch) {
-    if (batch.isTransactional)
-      throw new InvalidRecordException("Transactional messages are not currently supported")
-  }
-
-  private def ensureNotControlRecord(record: Record) {
-    // Until we have implemented transaction support, we do not permit control records to be written
-    if (record.isControlRecord)
-      throw new InvalidRecordException("Control messages are not currently supported")
   }
 
   private def validateKey(record: Record, compactedTopic: Boolean) {

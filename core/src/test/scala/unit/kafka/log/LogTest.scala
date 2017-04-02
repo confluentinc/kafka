@@ -1566,7 +1566,99 @@ class LogTest extends JUnitSuite {
     assertEquals("There should be 1 segment remaining", 1, log.numberOfSegments)
   }
 
-  def createLog(messageSizeInBytes: Int, retentionMs: Int = -1,
+  @Test
+  def testFirstUnstableOffsetNoTransactionalData() {
+    val log = createLog(1024 * 1024)
+
+    val records = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord("foo".getBytes),
+      new SimpleRecord("bar".getBytes),
+      new SimpleRecord("baz".getBytes))
+
+    log.append(records, assignOffsets = true)
+    assertEquals(None, log.firstUnstableOffset)
+  }
+
+  @Test
+  def testFirstUnstableOffsetWithTransactionalData() {
+    val log = createLog(1024 * 1024)
+
+    val pid = 137L
+    val epoch = 5.toShort
+    var seq = 0
+
+    // add some transactional records
+    val records = MemoryRecords.withTransactionalRecords(CompressionType.NONE, pid, epoch, seq,
+      new SimpleRecord("foo".getBytes),
+      new SimpleRecord("bar".getBytes),
+      new SimpleRecord("baz".getBytes))
+
+    val firstAppendInfo = log.append(records, assignOffsets = true)
+    assertEquals(Some(firstAppendInfo.firstOffset), log.firstUnstableOffset)
+
+    // add more transactional records
+    seq += 3
+    log.append(MemoryRecords.withTransactionalRecords(CompressionType.NONE, pid, epoch, seq,
+      new SimpleRecord("blah".getBytes)), assignOffsets = true)
+
+    // LSO should not have changed
+    assertEquals(Some(firstAppendInfo.firstOffset), log.firstUnstableOffset)
+
+    // now transaction is committed
+    log.append(MemoryRecords.withControlRecord(ControlRecordType.COMMIT, pid, epoch))
+
+    // now there should be no first unstable offset
+    assertEquals(None, log.firstUnstableOffset)
+  }
+
+  @Test
+  def testLastStableOffsetWithMixedProducerData() {
+    val log = createLog(1024 * 1024)
+
+    // for convenience, both producers share the same epoch
+    val epoch = 5.toShort
+
+    val pid1 = 137L
+    val seq1 = 0
+    val pid2 = 983L
+    val seq2 = 0
+
+    // add some transactional records
+    val firstAppendInfo = log.append(MemoryRecords.withTransactionalRecords(CompressionType.NONE, pid1, epoch, seq1,
+      new SimpleRecord("a".getBytes),
+      new SimpleRecord("b".getBytes),
+      new SimpleRecord("c".getBytes)), assignOffsets = true)
+    assertEquals(Some(firstAppendInfo.firstOffset), log.firstUnstableOffset)
+
+    // mix in some non-transactional data
+    log.append(MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord("g".getBytes),
+      new SimpleRecord("h".getBytes),
+      new SimpleRecord("i".getBytes)), assignOffsets = true)
+
+    // append data from the second transactional producer
+    val secondAppendInfo = log.append(MemoryRecords.withTransactionalRecords(CompressionType.NONE, pid2, epoch, seq2,
+      new SimpleRecord("d".getBytes),
+      new SimpleRecord("e".getBytes),
+      new SimpleRecord("f".getBytes)), assignOffsets = true)
+
+    // LSO should not have changed
+    assertEquals(Some(firstAppendInfo.firstOffset), log.firstUnstableOffset)
+
+    // now first producer's transaction is aborted
+    log.append(MemoryRecords.withControlRecord(ControlRecordType.ABORT, pid1, epoch))
+
+    // LSO should now point to one less than the first offset of the second transaction
+    assertEquals(Some(secondAppendInfo.firstOffset), log.firstUnstableOffset)
+
+    // commit the second transaction
+    log.append(MemoryRecords.withControlRecord(ControlRecordType.ABORT, pid2, epoch))
+
+    // now there should be no first unstable offset
+    assertEquals(None, log.firstUnstableOffset)
+  }
+
+  private def createLog(messageSizeInBytes: Int, retentionMs: Int = -1,
                 retentionBytes: Int = -1, cleanupPolicy: String = "delete"): Log = {
     val logProps = new Properties()
     logProps.put(LogConfig.SegmentBytesProp, messageSizeInBytes * 5: Integer)

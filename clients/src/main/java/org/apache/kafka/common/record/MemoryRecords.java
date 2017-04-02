@@ -356,26 +356,42 @@ public class MemoryRecords extends AbstractRecords {
     public static MemoryRecords withRecords(long initialOffset, CompressionType compressionType, Long pid,
                                             short epoch, int baseSequence, SimpleRecord... records) {
         return withRecords(RecordBatch.CURRENT_MAGIC_VALUE, initialOffset, compressionType, TimestampType.CREATE_TIME,
-                pid, epoch, baseSequence, records);
+                pid, epoch, baseSequence, false, records);
     }
+
+    public static MemoryRecords withTransactionalRecords(CompressionType compressionType, long pid, short epoch,
+                                                         int baseSequence, SimpleRecord... records) {
+        return withRecords(RecordBatch.CURRENT_MAGIC_VALUE, 0L, compressionType, TimestampType.CREATE_TIME,
+                pid, epoch, baseSequence, true, records);
+    }
+
 
     public static MemoryRecords withRecords(byte magic, long initialOffset, CompressionType compressionType,
                                             TimestampType timestampType, SimpleRecord... records) {
         return withRecords(magic, initialOffset, compressionType, timestampType, RecordBatch.NO_PRODUCER_ID,
-                RecordBatch.NO_PRODUCER_EPOCH, RecordBatch.NO_SEQUENCE, records);
+                RecordBatch.NO_PRODUCER_EPOCH, RecordBatch.NO_SEQUENCE, false, records);
     }
 
     private static MemoryRecords withRecords(byte magic, long initialOffset, CompressionType compressionType,
                                              TimestampType timestampType, long pid, short epoch, int baseSequence,
-                                             SimpleRecord ... records) {
+                                             boolean isTransactional, SimpleRecord ... records) {
         if (records.length == 0)
             return MemoryRecords.EMPTY;
         int sizeEstimate = AbstractRecords.estimateSizeInBytes(magic, compressionType, Arrays.asList(records));
         ByteBuffer buffer = ByteBuffer.allocate(sizeEstimate);
-        MemoryRecordsBuilder builder = builder(buffer, magic, compressionType, timestampType, initialOffset,
-                System.currentTimeMillis(), pid, epoch, baseSequence);
+        MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, magic, compressionType, timestampType,
+                initialOffset, System.currentTimeMillis(), pid, epoch, baseSequence, isTransactional,
+                RecordBatch.UNKNOWN_PARTITION_LEADER_EPOCH, buffer.capacity());
         for (SimpleRecord record : records)
             builder.append(record);
+        return builder.build();
+    }
+
+    public static MemoryRecords withControlRecord(ControlRecordType type, long pid, short epoch) {
+        ByteBuffer buffer = ByteBuffer.allocate(128);
+        MemoryRecordsBuilder builder = builder(buffer, RecordBatch.CURRENT_MAGIC_VALUE, CompressionType.NONE,
+                TimestampType.CREATE_TIME, 0L, RecordBatch.NO_TIMESTAMP, pid, epoch, RecordBatch.CONTROL_SEQUENCE);
+        builder.appendControlRecord(System.currentTimeMillis(), type, null);
         return builder.build();
     }
 

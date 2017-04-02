@@ -50,6 +50,7 @@ public interface RecordBatch extends Iterable<Record> {
     long NO_PRODUCER_ID = -1L;
     short NO_PRODUCER_EPOCH = -1;
     int NO_SEQUENCE = -1;
+    int CONTROL_SEQUENCE = -2;
 
     /**
      * Used to indicate an unknown leader epoch, which will be the case when the record set is

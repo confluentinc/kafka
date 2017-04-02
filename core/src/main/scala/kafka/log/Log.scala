@@ -369,37 +369,27 @@ class Log(@volatile var dir: File,
       logSegments(pidMap.mapEndOffset, lastOffset).foreach { segment =>
         val startOffset = math.max(segment.baseOffset, pidMap.mapEndOffset)
         val records = segment.read(startOffset, Some(lastOffset), Int.MaxValue).records
-        val currentTimeMs = time.milliseconds
-        records.batches.asScala.foreach { batch =>
-          if (batch.hasProducerId) {
-            // TODO: Currently accessing any of the batch-level headers other than the offset
-            // or magic causes us to load the full entry into memory. It would be better if we
-            // only loaded the header
-            val pidEntry = ProducerIdEntry(batch.producerEpoch, batch.lastSequence, batch.lastOffset,
-              (batch.lastOffset - batch.baseOffset + 1).toInt, batch.maxTimestamp)
-            pidMap.load(batch.producerId, pidEntry, currentTimeMs)
-          }
-        }
+        loadPidsFromLog(records)
       }
       pidMap.cleanFrom(logStartOffset)
     }
   }
 
-  /**
-    * Called from the log cleaner manager to clean up the id map
-    * after a compaction round.
-    *
-    * The current contract is that we expire all ids that do not
-    * have a latest offset greater or equal to the first dirty
-    * offset. The first dirty offset should be the value of the
-    * newStartOffset parameter for this call.
-    *
-    * @param newStartOffset New start offset to clean up the map
-    */
-  private[log] def updateIdMap(newStartOffset: Long): Unit = {
-    lock synchronized {
-      pidMap.cleanFrom(newStartOffset)
+  private[log] def loadPidsFromLog(records: Records): Unit = {
+    val pidsToLoad = mutable.Map[Long, ProducerAppendInfo]()
+    records.batches.asScala.foreach { batch =>
+      if (batch.hasProducerId) {
+        // TODO: Currently accessing any of the batch-level headers other than the offset
+        // or magic causes us to load the full entry into memory. It would be better if we
+        // only loaded the header
+        val pid = batch.producerId
+        val appendInfo = pidsToLoad.getOrElseUpdate(pid, new ProducerAppendInfo(pid, pidMap.lastEntry(pid)))
+        appendInfo.append(batch)
+      }
     }
+
+    pidsToLoad.values.foreach(pidMap.update)
+    pidMap.checkForExpiredPids(time.milliseconds())
   }
 
   private[log] def activePids: Map[Long, ProducerIdEntry] = {
@@ -629,17 +619,17 @@ class Log(@volatile var dir: File,
         producerAppendInfos.get(pid) match {
           case Some(appendInfo) => appendInfo.append(batch)
           case None =>
-            val lastEntry = pidMap.lastEntry(pid).getOrElse(ProducerIdEntry.Empty)
-            if (isFromClient && lastEntry.isDuplicate(batch)) {
-              // This request is a duplicate so return the information about the existing entry
-              isDuplicate = true
-              firstOffset = lastEntry.firstOffset
-              lastOffset = lastEntry.lastOffset
-              maxTimestamp = lastEntry.timestamp
-            } else {
-              val producerAppendInfo = new ProducerAppendInfo(pid, lastEntry)
-              producerAppendInfos.put(pid, producerAppendInfo)
-              producerAppendInfo.append(batch)
+            pidMap.lastEntry(pid) match {
+              case Some(lastEntry) if isFromClient && lastEntry.isDuplicate(batch) =>
+                // This request is a duplicate so return the information about the existing entry
+                isDuplicate = true
+                firstOffset = lastEntry.firstOffset
+                lastOffset = lastEntry.lastOffset
+                maxTimestamp = lastEntry.timestamp
+              case maybeLastEntry =>
+                val producerAppendInfo = new ProducerAppendInfo(pid, maybeLastEntry)
+                producerAppendInfos.put(pid, producerAppendInfo)
+                producerAppendInfo.append(batch)
             }
         }
       }
@@ -889,9 +879,14 @@ class Log(@volatile var dir: File,
   def logEndOffsetMetadata: LogOffsetMetadata = nextOffsetMetadata
 
   /**
-   *  The offset of the next message that will be appended to the log
+   * The offset of the next message that will be appended to the log
    */
   def logEndOffset: Long = nextOffsetMetadata.messageOffset
+
+  /**
+   * The earliest offset which is part of an uncompleted transaction
+   */
+  def firstUnstableOffset: Option[Long] = pidMap.firstUnstableOffset
 
   /**
    * Roll the log over to a new empty log segment if necessary.

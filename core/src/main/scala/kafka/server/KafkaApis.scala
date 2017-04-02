@@ -590,7 +590,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       if (version == 0)
         handleListOffsetRequestV0(request)
       else
-        handleListOffsetRequestV1(request)
+        handleListOffsetRequestV1AndAbove(request)
 
     val response = new ListOffsetResponse(mergedResponseMap.asJava)
     requestChannel.sendResponse(new RequestChannel.Response(request, response))
@@ -647,7 +647,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     responseMap ++ unauthorizedResponseStatus
   }
 
-  private def handleListOffsetRequestV1(request : RequestChannel.Request): Map[TopicPartition, ListOffsetResponse.PartitionData] = {
+  private def handleListOffsetRequestV1AndAbove(request : RequestChannel.Request): Map[TopicPartition, ListOffsetResponse.PartitionData] = {
     val correlationId = request.header.correlationId
     val clientId = request.header.clientId
     val offsetRequest = request.body[ListOffsetRequest]
@@ -680,9 +680,13 @@ class KafkaApis(val requestChannel: RequestChannel,
             replicaManager.getReplicaOrException(topicPartition)
 
           val found = {
-            if (fromConsumer && timestamp == ListOffsetRequest.LATEST_TIMESTAMP)
-              TimestampOffset(RecordBatch.NO_TIMESTAMP, localReplica.highWatermark.messageOffset)
-            else {
+            if (fromConsumer && timestamp == ListOffsetRequest.LATEST_TIMESTAMP) {
+              val lastFetchableOffset = offsetRequest.isolationLevel match {
+                case IsolationLevel.READ_COMMITTED => localReplica.lastStableOffset
+                case IsolationLevel.READ_UNCOMMITTED => localReplica.highWatermark.messageOffset
+              }
+              TimestampOffset(RecordBatch.NO_TIMESTAMP, lastFetchableOffset)
+            } else {
               def allowed(timestampOffset: TimestampOffset): Boolean =
                 !fromConsumer || timestampOffset.offset <= localReplica.highWatermark.messageOffset
 
