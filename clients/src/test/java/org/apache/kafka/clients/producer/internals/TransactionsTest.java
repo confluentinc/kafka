@@ -19,6 +19,7 @@ package org.apache.kafka.clients.producer.internals;
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.MockClient;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.clients.producer.TransactionState;
 import org.apache.kafka.common.Cluster;
@@ -29,8 +30,12 @@ import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.record.MemoryRecords;
+import org.apache.kafka.common.record.MutableRecordBatch;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.requests.AbstractRequest;
+import org.apache.kafka.common.requests.AddOffsetsToTxnRequest;
+import org.apache.kafka.common.requests.AddOffsetsToTxnResponse;
 import org.apache.kafka.common.requests.AddPartitionsToTxnRequest;
 import org.apache.kafka.common.requests.AddPartitionsToTxnResponse;
 import org.apache.kafka.common.requests.EndTxnRequest;
@@ -42,6 +47,8 @@ import org.apache.kafka.common.requests.InitPidResponse;
 import org.apache.kafka.common.requests.ProduceRequest;
 import org.apache.kafka.common.requests.ProduceResponse;
 import org.apache.kafka.common.requests.TransactionResult;
+import org.apache.kafka.common.requests.TxnOffsetCommitRequest;
+import org.apache.kafka.common.requests.TxnOffsetCommitResponse;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.test.TestUtils;
 import org.junit.Before;
@@ -49,13 +56,17 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Future;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class TransactionsTest {
     private static final int MAX_REQUEST_SIZE = 1024 * 1024;
@@ -128,7 +139,7 @@ public class TransactionsTest {
         }, new FindCoordinatorResponse(Errors.NONE, brokerNode));
 
         sender.run(time.milliseconds());  // find coordinator
-
+        assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
         client.prepareResponse(new MockClient.RequestMatcher() {
             @Override
             public boolean matches(AbstractRequest body) {
@@ -142,12 +153,13 @@ public class TransactionsTest {
         sender.run(time.milliseconds());  // connect
         sender.run(time.milliseconds());  // get pid.
         assertTrue(transactionState.hasPid());
-        assertEquals(transactionState.coordinator(), brokerNode);
+
         transactionState.beginTransaction();
         transactionState.maybeAddPartitionToTransaction(tp0);
         Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(),
                 "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
 
+        assertFalse(responseFuture.isDone());
         client.prepareResponse(new MockClient.RequestMatcher() {
             @Override
             public boolean matches(AbstractRequest body) {
@@ -160,18 +172,71 @@ public class TransactionsTest {
             }
         }, new AddPartitionsToTxnResponse(Errors.NONE));
 
+
+        assertFalse(transactionState.transactionContainsPartition(tp0));
         sender.run(time.milliseconds());  // send addPartitions.
+        // Check that only addPartitions was sent.
         assertTrue(transactionState.transactionContainsPartition(tp0));
+        assertFalse(responseFuture.isDone());
 
         client.prepareResponse(new MockClient.RequestMatcher() {
             @Override
             public boolean matches(AbstractRequest body) {
                 ProduceRequest produceRequest = (ProduceRequest) body;
-                assertEquals(produceRequest.transactionalId(), transactionalId);
+                MemoryRecords records = produceRequest.partitionRecordsOrFail().get(tp0);
+                assertNotNull(records);
+                Iterator<MutableRecordBatch> batchIterator = records.batches().iterator();
+                assertTrue(batchIterator.hasNext());
+                MutableRecordBatch batch = batchIterator.next();
+                assertFalse(batchIterator.hasNext());
+                assertTrue(batch.isTransactional());
+                assertEquals(pid, batch.producerId());
+                assertEquals(epoch, batch.producerEpoch());
+                assertEquals(transactionalId, produceRequest.transactionalId());
                 return true;
             }
         }, produceResponse(tp0, 0, Errors.NONE, 0));
         sender.run(time.milliseconds());  // send produce request.
+        assertTrue(responseFuture.isDone());
+
+        Map<TopicPartition, OffsetAndMetadata> offsets = new HashMap<>();
+        offsets.put(tp1, new OffsetAndMetadata(1));
+        final String consumerGroupId = "myconsumergroup";
+        transactionState.sendOffsetsToTransaction(offsets, consumerGroupId);
+
+        assertFalse(transactionState.hasPendingOffsetCommits());
+
+        client.prepareResponse(new MockClient.RequestMatcher() {
+            @Override
+            public boolean matches(AbstractRequest body) {
+                AddOffsetsToTxnRequest addOffsetsToTxnRequest = (AddOffsetsToTxnRequest) body;
+                assertEquals(consumerGroupId, addOffsetsToTxnRequest.consumerGroupId());
+                assertEquals(transactionalId, addOffsetsToTxnRequest.transactionalId());
+                assertEquals(pid, addOffsetsToTxnRequest.pid());
+                assertEquals(epoch, addOffsetsToTxnRequest.epoch());
+                return true;
+            }
+        }, new AddOffsetsToTxnResponse(Errors.NONE, brokerNode));
+
+        sender.run(time.milliseconds());  // Send AddOffsetsRequest
+        assertTrue(transactionState.hasPendingOffsetCommits());  // We should now have created and queued the offset commit request.
+
+        Map<TopicPartition, Errors> txnOffsetCommitResponse = new HashMap<>();
+        txnOffsetCommitResponse.put(tp1, Errors.NONE);
+        client.prepareResponse(new MockClient.RequestMatcher() {
+            @Override
+            public boolean matches(AbstractRequest body) {
+                TxnOffsetCommitRequest txnOffsetCommitRequest = (TxnOffsetCommitRequest) body;
+                assertEquals(consumerGroupId, txnOffsetCommitRequest.consumerGroupId());
+                assertEquals(pid, txnOffsetCommitRequest.pid());
+                assertEquals(epoch, txnOffsetCommitRequest.epoch());
+                return true;
+            }
+        }, new TxnOffsetCommitResponse(txnOffsetCommitResponse));
+
+
+        sender.run(time.milliseconds());  // send offset commit.
+        assertFalse(transactionState.hasPendingOffsetCommits());
 
         transactionState.beginCommittingTransaction();
         client.prepareResponse(new MockClient.RequestMatcher() {
@@ -186,8 +251,8 @@ public class TransactionsTest {
             }
         }, new EndTxnResponse(Errors.NONE));
 
-        sender.run(time.milliseconds());  // flush
         sender.run(time.milliseconds());  // commit.
+
 
         assertFalse(transactionState.isInTransaction());
         assertFalse(transactionState.isCompletingTransaction());
@@ -206,8 +271,10 @@ public class TransactionsTest {
         public void run()  {
             try {
                 transactionState.awaitPidAndEpoch(1000);
+                assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+                assertTrue(transactionState.hasPid());
             } catch (InterruptedException e) {
-
+                fail("interrupted while waiting for pidAndEpoch");
             }
         }
     }

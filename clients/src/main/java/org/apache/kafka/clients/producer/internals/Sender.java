@@ -297,17 +297,21 @@ public class Sender implements Runnable {
 
         while (targetNode == null && nextIterationTime < expiryTime) {
             try {
-                if (nextRequest.mustBeSentToCoordinator()) {
-                    targetNode = transactionState.coordinator();
-                    if (!NetworkClientUtils.awaitReady(client, targetNode, time, expiryTime - nextIterationTime)) {
-                        transactionState.markCoordinatorDead(targetNode);
+                long timeRemaining = expiryTime - nextIterationTime;
+                if (nextRequest.needsCoordinator()) {
+                    targetNode = transactionState.coordinator(nextRequest.coordinatorType());
+                    if (targetNode == null) {
+                        transactionState.needsCoordinator(nextRequest.coordinatorType());
+                        break;
+                    }
+                    if (!NetworkClientUtils.awaitReady(client, targetNode, time, timeRemaining)) {
+                        transactionState.needsCoordinator(nextRequest.coordinatorType());
                         targetNode = null;
                         break;
                     }
                 } else {
-                    targetNode = awaitLeastLoadedNodeReady(expiryTime - nextIterationTime);
+                    targetNode = awaitLeastLoadedNodeReady(timeRemaining);
                 }
-
                 if (targetNode != null) {
                     ClientRequest clientRequest = client.newClientRequest(targetNode.idString(), nextRequest.requestBuilder(),
                             now, true, nextRequest.responseHandler());
@@ -328,6 +332,7 @@ public class Sender implements Runnable {
 
         return true;
     }
+
     /**
      * Start closing the sender (won't actually complete until all data is sent out)
      */

@@ -477,7 +477,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     public void beginTransaction() throws ProducerFencedException {
         // Set the transactional bit in the producer.
-        assert transactionState != null && transactionState.isTransactional() && transactionState.hasPid();
+        assert transactionState != null && transactionState.isTransactional() && !transactionState.isInTransaction() && transactionState.hasPid();
         transactionState.beginTransaction();
     }
 
@@ -494,7 +494,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets,
                                          String consumerGroupId) throws ProducerFencedException {
-
+        assert transactionState != null && transactionState.isInTransaction() && !transactionState.isCompletingTransaction() && transactionState.hasPid();
+        transactionState.sendOffsetsToTransaction(offsets, consumerGroupId);
     }
 
     /**
@@ -504,7 +505,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      *         transactional.id is active.
      */
     public void commitTransaction() throws ProducerFencedException {
-        assert transactionState != null && transactionState.isTransactional() && transactionState.hasPid();
+        assert transactionState != null && transactionState.isInTransaction() && transactionState.hasPid() && !transactionState.isCompletingTransaction();
+        // TODO(apurva): make this blocking till completion.
         transactionState.beginCommittingTransaction();
     }
 
@@ -515,7 +517,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      *         transactional.id is active.
      */
     public void abortTransaction() throws ProducerFencedException {
-        assert transactionState != null && transactionState.isTransactional() && transactionState.hasPid();
+        assert transactionState != null && transactionState.isInTransaction() && transactionState.hasPid() && !transactionState.isCompletingTransaction();
+        // TODO(apurva): making this blocking till completion.
         transactionState.beginAbortingTransaction();
     }
 
