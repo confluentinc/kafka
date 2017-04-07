@@ -83,24 +83,24 @@ public class TransactionsTest {
     private TopicPartition tp1 = new TopicPartition("test", 1);
     private MockTime time = new MockTime();
     private MockClient client = new MockClient(time);
-    private int batchSize = 16 * 1024;
+
     private Metadata metadata = new Metadata(0, Long.MAX_VALUE, true, new ClusterResourceListeners());
     private ApiVersions apiVersions = new ApiVersions();
     private Cluster cluster = TestUtils.singletonCluster("test", 2);
-    private Metrics metrics = null;
     private RecordAccumulator accumulator = null;
     private Sender sender = null;
     private TransactionState transactionState = null;
-    Node brokerNode = null;
+    private Node brokerNode = null;
 
     @Before
     public void setup() {
         Map<String, String> metricTags = new LinkedHashMap<>();
         metricTags.put("client-id", CLIENT_ID);
+        int batchSize = 16 * 1024;
         MetricConfig metricConfig = new MetricConfig().tags(metricTags);
         this.brokerNode = new Node(0, "localhost", 2211);
         this.transactionState = new TransactionState(time, transactionalId, transactionTimeoutMs);
-        this.metrics = new Metrics(metricConfig, time);
+        Metrics metrics = new Metrics(metricConfig, time);
         this.accumulator = new RecordAccumulator(batchSize, 1024 * 1024, CompressionType.NONE, 0L, 0L, metrics, time, apiVersions, transactionState);
         this.sender = new Sender(this.client,
                 this.metadata,
@@ -109,7 +109,7 @@ public class TransactionsTest {
                 MAX_REQUEST_SIZE,
                 ACKS_ALL,
                 MAX_RETRIES,
-                this.metrics,
+                metrics,
                 this.time,
                 REQUEST_TIMEOUT,
                 50,
@@ -289,10 +289,12 @@ public class TransactionsTest {
 
         sender.run(time.milliseconds());  // AddPartitions.
         assertTrue(transactionState.transactionContainsPartition(tp0));
+        assertFalse(responseFuture.isDone());
         assertFalse(commitResult.isDone());
 
         prepareProduceResponse(Errors.NONE, pid, epoch);
         sender.run(time.milliseconds());  // Produce.
+        assertTrue(responseFuture.isDone());
 
         prepareEndTxnResponse(Errors.NONE, TransactionResult.COMMIT, pid, epoch);
         assertFalse(commitResult.isDone());

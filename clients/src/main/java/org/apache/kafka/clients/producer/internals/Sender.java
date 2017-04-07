@@ -274,22 +274,18 @@ public class Sender implements Runnable {
     }
 
     private boolean maybeSendTransactionalRequest(long now) {
-        if (transactionState == null)
-            return false;
-
-        if (transactionState.hasInflightTransactionalRequest())
+        if (transactionState != null && transactionState.hasInflightTransactionalRequest())
             return true;
 
-        if (!transactionState.hasPendingTransactionalRequests())
+        if (transactionState == null || !transactionState.hasPendingTransactionalRequests())
             return false;
-
 
         TransactionState.TransactionalRequest nextRequest = transactionState.nextTransactionalRequest();
 
         if (nextRequest.isEndTxnRequest() && transactionState.isCompletingTransaction() && accumulator.hasUnflushedBatches()) {
             if (!accumulator.flushInProgress())
                 accumulator.beginFlush();
-            transactionState.needsRetry(nextRequest);
+            transactionState.didNotSend(nextRequest);
             return false;
         }
 

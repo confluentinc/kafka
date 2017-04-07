@@ -265,6 +265,10 @@ public class TransactionState {
         pendingTransactionalRequests.add(request);
     }
 
+    public void didNotSend(TransactionalRequest request) {
+        pendingTransactionalRequests.add(request);
+    }
+
     public Node coordinator(FindCoordinatorRequest.CoordinatorType type) {
         switch (type) {
             case GROUP:
@@ -310,7 +314,7 @@ public class TransactionState {
 
     public synchronized FutureTransactionalResult initializeTransactions() {
         if (isInitializing) {
-            throw new IllegalStateException("Multiple concurrent calls to initTransactions is not allowed.");
+            throw new IllegalStateException("Multiple concurrent calls to initTransactions are not allowed.");
         }
         isInitializing = true;
         if (transactionCoordinator == null)
