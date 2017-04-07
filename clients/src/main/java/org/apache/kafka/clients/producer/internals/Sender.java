@@ -283,13 +283,15 @@ public class Sender implements Runnable {
         if (!transactionState.hasPendingTransactionalRequests())
             return false;
 
-        if (transactionState.isCompletingTransaction() && accumulator.hasUnflushedBatches()) {
-            if (!accumulator.flushInProgress())
-                accumulator.beginFlush();
-            return false;
-        }
 
         TransactionState.TransactionalRequest nextRequest = transactionState.nextTransactionalRequest();
+
+        if (nextRequest.isEndTxnRequest() && transactionState.isCompletingTransaction() && accumulator.hasUnflushedBatches()) {
+            if (!accumulator.flushInProgress())
+                accumulator.beginFlush();
+            transactionState.needsRetry(nextRequest);
+            return false;
+        }
 
         Node targetNode = null;
         long expiryTime = now + requestTimeout;

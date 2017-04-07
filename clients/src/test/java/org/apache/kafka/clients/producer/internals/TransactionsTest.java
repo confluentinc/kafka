@@ -126,77 +126,33 @@ public class TransactionsTest {
         // It finds the coordinator and then gets a PID.
         final long pid = 13131L;
         final short epoch = 1;
-//        new Thread(new AwaitPidRunnable(transactionState)).start();
         transactionState.initializeTransactions();
-        client.prepareResponse(new MockClient.RequestMatcher() {
-            @Override
-            public boolean matches(AbstractRequest body) {
-                FindCoordinatorRequest findCoordinatorRequest = (FindCoordinatorRequest) body;
-                assertEquals(findCoordinatorRequest.coordinatorType(), FindCoordinatorRequest.CoordinatorType.TRANSACTION);
-                assertEquals(findCoordinatorRequest.coordinatorKey(), transactionalId);
-                return true;
-            }
-        }, new FindCoordinatorResponse(Errors.NONE, brokerNode));
+        prepareFindCoordinatorResponse(Errors.NONE, false);
 
         sender.run(time.milliseconds());  // find coordinator
         assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
 
-        client.prepareResponse(new MockClient.RequestMatcher() {
-            @Override
-            public boolean matches(AbstractRequest body) {
-                InitPidRequest initPidRequest = (InitPidRequest) body;
-                assertEquals(initPidRequest.transactionalId(), transactionalId);
-                assertEquals(initPidRequest.transactionTimeoutMs(), transactionTimeoutMs);
-                return true;
-            }
-        }, new InitPidResponse(Errors.NONE, pid, epoch));
+        prepareInitPidResponse(Errors.NONE, false, pid, epoch);
 
-        sender.run(time.milliseconds());  // connect
         sender.run(time.milliseconds());  // get pid.
-        assertTrue(transactionState.hasPid());
 
+        assertTrue(transactionState.hasPid());
         transactionState.beginTransaction();
         transactionState.maybeAddPartitionToTransaction(tp0);
+
         Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(),
                 "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
 
         assertFalse(responseFuture.isDone());
-        client.prepareResponse(new MockClient.RequestMatcher() {
-            @Override
-            public boolean matches(AbstractRequest body) {
-                AddPartitionsToTxnRequest addPartitionsToTxnRequest = (AddPartitionsToTxnRequest) body;
-                assertEquals(pid, addPartitionsToTxnRequest.pid());
-                assertEquals(epoch, addPartitionsToTxnRequest.epoch());
-                assertEquals(Arrays.asList(tp0), addPartitionsToTxnRequest.partitions());
-                assertEquals(transactionalId, addPartitionsToTxnRequest.transactionalId());
-                return true;
-            }
-        }, new AddPartitionsToTxnResponse(Errors.NONE));
+        prepareAddPartitionsToTxnResponse(Errors.NONE, pid, epoch);
 
-
+        prepareProduceResponse(Errors.NONE, pid, epoch);
         assertFalse(transactionState.transactionContainsPartition(tp0));
         sender.run(time.milliseconds());  // send addPartitions.
         // Check that only addPartitions was sent.
         assertTrue(transactionState.transactionContainsPartition(tp0));
         assertFalse(responseFuture.isDone());
 
-        client.prepareResponse(new MockClient.RequestMatcher() {
-            @Override
-            public boolean matches(AbstractRequest body) {
-                ProduceRequest produceRequest = (ProduceRequest) body;
-                MemoryRecords records = produceRequest.partitionRecordsOrFail().get(tp0);
-                assertNotNull(records);
-                Iterator<MutableRecordBatch> batchIterator = records.batches().iterator();
-                assertTrue(batchIterator.hasNext());
-                MutableRecordBatch batch = batchIterator.next();
-                assertFalse(batchIterator.hasNext());
-                assertTrue(batch.isTransactional());
-                assertEquals(pid, batch.producerId());
-                assertEquals(epoch, batch.producerEpoch());
-                assertEquals(transactionalId, produceRequest.transactionalId());
-                return true;
-            }
-        }, produceResponse(tp0, 0, Errors.NONE, 0));
         sender.run(time.milliseconds());  // send produce request.
         assertTrue(responseFuture.isDone());
 
@@ -240,6 +196,174 @@ public class TransactionsTest {
         assertFalse(transactionState.hasPendingOffsetCommits());
 
         transactionState.beginCommittingTransaction();
+        prepareEndTxnResponse(Errors.NONE, TransactionResult.COMMIT, pid, epoch);
+        sender.run(time.milliseconds());  // commit.
+
+        assertFalse(transactionState.isInTransaction());
+        assertFalse(transactionState.isCompletingTransaction());
+        assertFalse(transactionState.transactionContainsPartition(tp0));
+    }
+
+    @Test
+    public void testDisconnectAndRetry() {
+        client.setNode(brokerNode);
+        // This is called from the initTransactions method in the producer as the first order of business.
+        // It finds the coordinator and then gets a PID.
+        transactionState.initializeTransactions();
+        prepareFindCoordinatorResponse(Errors.NONE, true);
+        sender.run(time.milliseconds());  // find coordinator, connection lost.
+
+        prepareFindCoordinatorResponse(Errors.NONE, false);
+        sender.run(time.milliseconds());  // find coordinator
+        assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+    }
+
+    @Test
+    public void testCoordinatorLost() {
+        client.setNode(brokerNode);
+        // This is called from the initTransactions method in the producer as the first order of business.
+        // It finds the coordinator and then gets a PID.
+        final long pid = 13131L;
+        final short epoch = 1;
+        FutureTransactionalResult initPidResult = transactionState.initializeTransactions();
+        prepareFindCoordinatorResponse(Errors.NONE, false);
+        sender.run(time.milliseconds());  // find coordinator
+        assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+
+        prepareInitPidResponse(Errors.NOT_COORDINATOR, false, pid, epoch);
+        sender.run(time.milliseconds());  // send pid, get not coordinator. Should resend the FindCoordinator and InitPid requests
+
+        assertEquals(null, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+        assertFalse(initPidResult.isDone());
+        assertFalse(transactionState.hasPid());
+
+        prepareFindCoordinatorResponse(Errors.NONE, false);
+        sender.run(time.milliseconds());
+        assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+        assertFalse(initPidResult.isDone());
+        prepareInitPidResponse(Errors.NONE, false, pid, epoch);
+        sender.run(time.milliseconds());  // get pid and epoch
+
+        assertTrue(initPidResult.isDone()); // The future should only return after the second round of retries succeed.
+        assertTrue(transactionState.hasPid());
+        assertEquals(pid, transactionState.pidAndEpoch().producerId);
+        assertEquals(epoch, transactionState.pidAndEpoch().epoch);
+    }
+
+    @Test
+    public void testFlushPendingPartitionsOnCommit() throws InterruptedException {
+        client.setNode(brokerNode);
+        // This is called from the initTransactions method in the producer as the first order of business.
+        // It finds the coordinator and then gets a PID.
+        final long pid = 13131L;
+        final short epoch = 1;
+        transactionState.initializeTransactions();
+        prepareFindCoordinatorResponse(Errors.NONE, false);
+
+        sender.run(time.milliseconds());  // find coordinator
+        assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+
+        prepareInitPidResponse(Errors.NONE, false, pid, epoch);
+
+        sender.run(time.milliseconds());  // get pid.
+
+        assertTrue(transactionState.hasPid());
+
+        transactionState.beginTransaction();
+        transactionState.maybeAddPartitionToTransaction(tp0);
+
+        Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(),
+                "value".getBytes(), null, MAX_BLOCK_TIMEOUT).future;
+
+        assertFalse(responseFuture.isDone());
+
+        FutureTransactionalResult commitResult = transactionState.beginCommittingTransaction();
+
+        // we have an append, an add partitions request, and now also an endtxn.
+        // The order should be:
+        //  1. Add Partitions
+        //  2. Produce
+        //  3. EndTxn.
+        assertFalse(transactionState.transactionContainsPartition(tp0));
+        prepareAddPartitionsToTxnResponse(Errors.NONE, pid, epoch);
+
+        sender.run(time.milliseconds());  // AddPartitions.
+        assertTrue(transactionState.transactionContainsPartition(tp0));
+        assertFalse(commitResult.isDone());
+
+        prepareProduceResponse(Errors.NONE, pid, epoch);
+        sender.run(time.milliseconds());  // Produce.
+
+        prepareEndTxnResponse(Errors.NONE, TransactionResult.COMMIT, pid, epoch);
+        assertFalse(commitResult.isDone());
+        assertTrue(transactionState.isInTransaction());
+        assertTrue(transactionState.isCompletingTransaction());
+
+        sender.run(time.milliseconds());
+        assertTrue(commitResult.isDone());
+        assertFalse(transactionState.isInTransaction());
+    }
+
+    private void prepareFindCoordinatorResponse(Errors error, boolean shouldDisconnect) {
+        client.prepareResponse(new MockClient.RequestMatcher() {
+            @Override
+            public boolean matches(AbstractRequest body) {
+                FindCoordinatorRequest findCoordinatorRequest = (FindCoordinatorRequest) body;
+                assertEquals(findCoordinatorRequest.coordinatorType(), FindCoordinatorRequest.CoordinatorType.TRANSACTION);
+                assertEquals(findCoordinatorRequest.coordinatorKey(), transactionalId);
+                return true;
+            }
+        }, new FindCoordinatorResponse(error, brokerNode), shouldDisconnect);
+    }
+
+    private void prepareInitPidResponse(Errors error, boolean shouldDisconnect, long pid, short epoch) {
+        client.prepareResponse(new MockClient.RequestMatcher() {
+            @Override
+            public boolean matches(AbstractRequest body) {
+                InitPidRequest initPidRequest = (InitPidRequest) body;
+                assertEquals(initPidRequest.transactionalId(), transactionalId);
+                assertEquals(initPidRequest.transactionTimeoutMs(), transactionTimeoutMs);
+                return true;
+            }
+        }, new InitPidResponse(error, pid, epoch), shouldDisconnect);
+    }
+
+    private void prepareProduceResponse(Errors error, final long pid, final short epoch) {
+        client.prepareResponse(new MockClient.RequestMatcher() {
+            @Override
+            public boolean matches(AbstractRequest body) {
+                ProduceRequest produceRequest = (ProduceRequest) body;
+                MemoryRecords records = produceRequest.partitionRecordsOrFail().get(tp0);
+                assertNotNull(records);
+                Iterator<MutableRecordBatch> batchIterator = records.batches().iterator();
+                assertTrue(batchIterator.hasNext());
+                MutableRecordBatch batch = batchIterator.next();
+                assertFalse(batchIterator.hasNext());
+                assertTrue(batch.isTransactional());
+                assertEquals(pid, batch.producerId());
+                assertEquals(epoch, batch.producerEpoch());
+                assertEquals(transactionalId, produceRequest.transactionalId());
+                return true;
+            }
+        }, produceResponse(tp0, 0, error, 0));
+
+    }
+
+    private void prepareAddPartitionsToTxnResponse(Errors error, final long pid, final short epoch) {
+        client.prepareResponse(new MockClient.RequestMatcher() {
+            @Override
+            public boolean matches(AbstractRequest body) {
+                AddPartitionsToTxnRequest addPartitionsToTxnRequest = (AddPartitionsToTxnRequest) body;
+                assertEquals(pid, addPartitionsToTxnRequest.pid());
+                assertEquals(epoch, addPartitionsToTxnRequest.epoch());
+                assertEquals(Arrays.asList(tp0), addPartitionsToTxnRequest.partitions());
+                assertEquals(transactionalId, addPartitionsToTxnRequest.transactionalId());
+                return true;
+            }
+        }, new AddPartitionsToTxnResponse(error));
+    }
+
+    private void prepareEndTxnResponse(Errors error, final TransactionResult result, final long pid, final short epoch) {
         client.prepareResponse(new MockClient.RequestMatcher() {
             @Override
             public boolean matches(AbstractRequest body) {
@@ -247,34 +371,10 @@ public class TransactionsTest {
                 assertEquals(transactionalId, endTxnRequest.transactionalId());
                 assertEquals(pid, endTxnRequest.pid());
                 assertEquals(epoch, endTxnRequest.epoch());
-                assertEquals(TransactionResult.COMMIT, endTxnRequest.command());
+                assertEquals(result, endTxnRequest.command());
                 return true;
             }
-        }, new EndTxnResponse(Errors.NONE));
-
-        sender.run(time.milliseconds());  // commit.
-
-
-        assertFalse(transactionState.isInTransaction());
-        assertFalse(transactionState.isCompletingTransaction());
-        assertFalse(transactionState.transactionContainsPartition(tp0));
-
-    }
-
-    private class AwaitPidRunnable implements Runnable {
-        private TransactionState transactionState;
-
-        public AwaitPidRunnable(TransactionState transactionState) {
-            this.transactionState = transactionState;
-        }
-
-        @Override
-        public void run()  {
-            FutureTransactionalResult result = transactionState.initializeTransactions();
-            result.get();
-            assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
-            assertTrue(transactionState.hasPid());
-        }
+        }, new EndTxnResponse(error));
     }
 
     private ProduceResponse produceResponse(TopicPartition tp, long offset, Errors error, int throttleTimeMs) {

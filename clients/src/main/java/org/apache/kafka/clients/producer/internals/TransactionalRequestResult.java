@@ -57,4 +57,8 @@ public final class TransactionalRequestResult {
         return error == null;
     }
 
+    public boolean isCompleted() {
+        return latch.getCount() == 0L;
+    }
+
 }

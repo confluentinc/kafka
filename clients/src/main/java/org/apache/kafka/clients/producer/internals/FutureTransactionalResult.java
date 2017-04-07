@@ -30,7 +30,7 @@ public final class FutureTransactionalResult implements Future<TransactionalRequ
 
     @Override
     public boolean isDone() {
-        return false;
+        return this.result.isCompleted();
     }
 
     @Override
