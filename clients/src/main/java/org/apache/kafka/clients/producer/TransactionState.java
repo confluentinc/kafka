@@ -109,7 +109,7 @@ public class TransactionState {
         // a pending FindCoordinator request, that must always go first. Next, If we need a Pid, that must go second.
         // The endTxn request must always go last.
         private final int priority;
-        private final boolean isRetry;
+        private boolean isRetry;
 
         private TransactionalRequest(AbstractRequest.Builder<?> requestBuilder, RequestCompletionHandler handler,
                                      FindCoordinatorRequest.CoordinatorType coordinatorType, int priority, boolean isRetry) {
@@ -138,6 +138,10 @@ public class TransactionState {
 
         public boolean isRetry() {
             return isRetry;
+        }
+
+        private void setRetry() {
+            isRetry = true;
         }
 
         private int priority() {
@@ -245,6 +249,7 @@ public class TransactionState {
     }
 
     public void needsRetry(TransactionalRequest request) {
+        request.setRetry();
         pendingTransactionalRequests.add(request);
     }
 
@@ -341,8 +346,12 @@ public class TransactionState {
      */
     public synchronized void resetProducerId() {
         if (isTransactional()) {
-            // If this is a transactional producer, the user will get an error and should abort the transaction
-            // manually.
+            // We can't reset the producer state for the transactional producer as this would mean bumping the epoch
+            // for the same pid. This might involve aborting the ongoing transaction during the initPidRequest, and
+            // the user would not have any way of knowing this happened.
+            //
+            // So it's best to return the produce error to the user and let them abort the transaction and close
+            // the producer explicitly.
             return;
         }
         setPidAndEpoch(NO_PRODUCER_ID, NO_PRODUCER_EPOCH);
@@ -413,19 +422,19 @@ public class TransactionState {
     }
 
     private TransactionalRequest txnOffsetCommitRequest(Map<TopicPartition, OffsetAndMetadata> offsets,
-                                                        String consumerGroupId, boolean isRetry) {
+                                                        String consumerGroupId, boolean isRetry, TransactionalRequestResult result) {
         for (Map.Entry<TopicPartition, OffsetAndMetadata> entry : offsets.entrySet()) {
             OffsetAndMetadata offsetAndMetadata = entry.getValue();
             pendingTxnOffsetCommits.put(entry.getKey(),
                     new TxnOffsetCommitRequest.CommittedOffset(offsetAndMetadata.offset(), offsetAndMetadata.metadata()));
         }
-        return txnOffsetCommitRequest(consumerGroupId, isRetry);
+        return txnOffsetCommitRequest(consumerGroupId, isRetry, result);
     }
 
-    private TransactionalRequest txnOffsetCommitRequest(String consumerGroupId, boolean isRetry) {
+    private TransactionalRequest txnOffsetCommitRequest(String consumerGroupId, boolean isRetry, TransactionalRequestResult result) {
         TxnOffsetCommitRequest.Builder builder = new TxnOffsetCommitRequest.Builder(consumerGroupId,
                 pidAndEpoch.producerId, pidAndEpoch.epoch, OffsetCommitRequest.DEFAULT_RETENTION_TIME, pendingTxnOffsetCommits);
-        return new TransactionalRequest(builder, new TxnOffsetCommitCallback(consumerGroupId),
+        return new TransactionalRequest(builder, new TxnOffsetCommitCallback(consumerGroupId, result),
                 FindCoordinatorRequest.CoordinatorType.GROUP, 2, isRetry);
     }
 
@@ -476,16 +485,23 @@ public class TransactionState {
         @Override
         public void handleResponse(AbstractResponse responseBody) {
             InitPidResponse initPidResponse = (InitPidResponse) responseBody;
-            try {
-                if (initPidResponse.error() == Errors.NONE) {
-                    setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
-                    isInitializing = false;
-                } else {
-                    result.setError(Errors.UNKNOWN.exception());
-                }
-            } finally {
-                result.done();
+            Errors error = initPidResponse.error();
+            if (error == Errors.NONE) {
+                setPidAndEpoch(initPidResponse.producerId(), initPidResponse.epoch());
+                isInitializing = false;
+            } else if (error == Errors.NOT_COORDINATOR || error == Errors.COORDINATOR_NOT_AVAILABLE) {
+                needsCoordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION);
+                reenqueue();
+            } else if (error == Errors.COORDINATOR_LOAD_IN_PROGRESS) {
+                reenqueue();
+            } else if (error == Errors.INVALID_TRANSACTION_TIMEOUT) {
+                result.setError(error.exception());
+            } else {
+                result.setError(error.exception());
             }
+
+            if (error == Errors.NONE || !result.isSuccessful())
+                result.done();
         }
 
         @Override
@@ -573,27 +589,26 @@ public class TransactionState {
 
         @Override
         public void handleResponse(AbstractResponse responseBody) {
-            try {
-                EndTxnResponse endTxnResponse = (EndTxnResponse) responseBody;
-                Errors error = endTxnResponse.error();
-                if (error == Errors.NONE) {
-                    completeTransaction();
-                } else if (error == Errors.COORDINATOR_NOT_AVAILABLE || error == Errors.NOT_COORDINATOR) {
-                    needsCoordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION);
-                    reenqueue();
-                } else if (error == Errors.COORDINATOR_LOAD_IN_PROGRESS) {
-                    reenqueue();
-                } else if (error == Errors.INVALID_PID_MAPPING || error == Errors.INVALID_TXN_STATE) {
-                    result.setError(error.exception());
-                } else if (error == Errors.PRODUCER_FENCED) {
-                    isFenced = true;
-                    result.setError(error.exception());
-                } else {
-                    result.setError(error.exception());
-                }
-            } finally {
-                result.done();
+            EndTxnResponse endTxnResponse = (EndTxnResponse) responseBody;
+            Errors error = endTxnResponse.error();
+            if (error == Errors.NONE) {
+                completeTransaction();
+            } else if (error == Errors.COORDINATOR_NOT_AVAILABLE || error == Errors.NOT_COORDINATOR) {
+                needsCoordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION);
+                reenqueue();
+            } else if (error == Errors.COORDINATOR_LOAD_IN_PROGRESS) {
+                reenqueue();
+            } else if (error == Errors.INVALID_PID_MAPPING || error == Errors.INVALID_TXN_STATE) {
+                result.setError(error.exception());
+            } else if (error == Errors.PRODUCER_FENCED) {
+                isFenced = true;
+                result.setError(error.exception());
+            } else {
+                result.setError(error.exception());
             }
+
+            if (error == Errors.NONE || !result.isSuccessful())
+                result.done();
         }
 
         @Override
@@ -610,32 +625,31 @@ public class TransactionState {
             super(result);
             this.offsets = offsets;
             this.consumerGroupId = consumerGroupId;
-
         }
+
         @Override
         public void handleResponse(AbstractResponse responseBody) {
-            try {
-                AddOffsetsToTxnResponse addOffsetsToTxnResponse = (AddOffsetsToTxnResponse) responseBody;
-                Errors error = addOffsetsToTxnResponse.error();
-                if (error == Errors.NONE) {
-                    consumerGroupCoordinator = addOffsetsToTxnResponse.consumerGroupCoordinator();
-                    pendingTransactionalRequests.add(txnOffsetCommitRequest(offsets, consumerGroupId, false));
-                } else if (error == Errors.COORDINATOR_NOT_AVAILABLE || error == Errors.NOT_COORDINATOR) {
-                    needsCoordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION);
-                    reenqueue();
-                } else if (error == Errors.COORDINATOR_LOAD_IN_PROGRESS) {
-                    reenqueue();
-                } else if (error == Errors.INVALID_PID_MAPPING || error == Errors.INVALID_TXN_STATE) {
-                    result.setError(error.exception());
-                } else if (error == Errors.PRODUCER_FENCED) {
-                    isFenced = true;
-                    result.setError(error.exception());
-                } else {
-                    result.setError(error.exception());
-                }
-            } finally {
-                result.done();
+            AddOffsetsToTxnResponse addOffsetsToTxnResponse = (AddOffsetsToTxnResponse) responseBody;
+            Errors error = addOffsetsToTxnResponse.error();
+            if (error == Errors.NONE) {
+                consumerGroupCoordinator = addOffsetsToTxnResponse.consumerGroupCoordinator();
+                pendingTransactionalRequests.add(txnOffsetCommitRequest(offsets, consumerGroupId, false, result));
+            } else if (error == Errors.COORDINATOR_NOT_AVAILABLE || error == Errors.NOT_COORDINATOR) {
+                needsCoordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION);
+                reenqueue();
+            } else if (error == Errors.COORDINATOR_LOAD_IN_PROGRESS) {
+                reenqueue();
+            } else if (error == Errors.INVALID_PID_MAPPING || error == Errors.INVALID_TXN_STATE) {
+                result.setError(error.exception());
+            } else if (error == Errors.PRODUCER_FENCED) {
+                isFenced = true;
+                result.setError(error.exception());
+            } else {
+                result.setError(error.exception());
             }
+
+            if (!result.isSuccessful())
+                result.done();
         }
 
         @Override
@@ -647,29 +661,45 @@ public class TransactionState {
     private class TxnOffsetCommitCallback extends TransactionalRequestCallBack {
         private final String consumerGroupId;
 
-        TxnOffsetCommitCallback(String consumerGroupId) {
-            super(null);
+        TxnOffsetCommitCallback(String consumerGroupId, TransactionalRequestResult result) {
+            super(result);
             this.consumerGroupId = consumerGroupId;
         }
 
         @Override
         public void handleResponse(AbstractResponse responseBody) {
             TxnOffsetCommitResponse txnOffsetCommitResponse = (TxnOffsetCommitResponse) responseBody;
+            boolean coordinatorReloaded = false;
             for (Map.Entry<TopicPartition, Errors> entry : txnOffsetCommitResponse.errors().entrySet()) {
                 TopicPartition topicPartition = entry.getKey();
                 Errors error = entry.getValue();
                 if (error == Errors.NONE) {
                     pendingTxnOffsetCommits.remove(topicPartition);
+                } else if (error == Errors.COORDINATOR_NOT_AVAILABLE || error == Errors.NOT_COORDINATOR) {
+                    if (!coordinatorReloaded) {
+                        coordinatorReloaded = true;
+                        needsCoordinator(FindCoordinatorRequest.CoordinatorType.GROUP);
+                    }
+                } else if (error == Errors.PRODUCER_FENCED) {
+                    isFenced = true;
+                    result.setError(error.exception());
+                    break;
                 }
             }
+
+            if (!result.isSuccessful()) {
+                result.done();
+                return;
+            }
+
             if (0 < pendingTxnOffsetCommits.size()) {
-                pendingTransactionalRequests.add(txnOffsetCommitRequest(consumerGroupId, false));
+                pendingTransactionalRequests.add(txnOffsetCommitRequest(consumerGroupId, true, result));
             }
         }
 
         @Override
         public void reenqueue() {
-            pendingTransactionalRequests.add(txnOffsetCommitRequest(consumerGroupId, true));
+            pendingTransactionalRequests.add(txnOffsetCommitRequest(consumerGroupId, true, result));
         }
     }
 }
