@@ -21,6 +21,7 @@ import org.apache.kafka.clients.ClientUtils;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.NetworkClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.producer.internals.FutureTransactionalResult;
 import org.apache.kafka.clients.producer.internals.ProducerInterceptors;
 import org.apache.kafka.clients.producer.internals.RecordAccumulator;
 import org.apache.kafka.clients.producer.internals.Sender;
@@ -46,6 +47,7 @@ import org.apache.kafka.common.metrics.MetricsReporter;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.network.ChannelBuilder;
 import org.apache.kafka.common.network.Selector;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.AbstractRecords;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.RecordBatch;
@@ -459,14 +461,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         if (transactionState == null || !transactionState.isTransactional()) {
             throw new IllegalStateException("Cannot call initTransactions without setting a transactional id.");
         }
-        TransactionState.PidAndEpoch pidAndEpoch = null;
-        while (pidAndEpoch == null || !pidAndEpoch.isValid()) {
-            try {
-                pidAndEpoch = transactionState.awaitPidAndEpoch(maxBlockTimeMs);
-            } catch (InterruptedException e) {
-
-            }
-        }
+        FutureTransactionalResult result = transactionState.initializeTransactions();
+        result.get();
     }
 
     /**
@@ -495,7 +491,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets,
                                          String consumerGroupId) throws ProducerFencedException {
         assert transactionState != null && transactionState.isInTransaction() && !transactionState.isCompletingTransaction() && transactionState.hasPid();
-        transactionState.sendOffsetsToTransaction(offsets, consumerGroupId);
+        FutureTransactionalResult result = transactionState.sendOffsetsToTransaction(offsets, consumerGroupId);
+        result.get();
     }
 
     /**
@@ -506,8 +503,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     public void commitTransaction() throws ProducerFencedException {
         assert transactionState != null && transactionState.isInTransaction() && transactionState.hasPid() && !transactionState.isCompletingTransaction();
-        // TODO(apurva): make this blocking till completion.
-        transactionState.beginCommittingTransaction();
+        FutureTransactionalResult result = transactionState.beginCommittingTransaction();
+        result.get();
+
     }
 
     /**
@@ -518,10 +516,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     public void abortTransaction() throws ProducerFencedException {
         assert transactionState != null && transactionState.isInTransaction() && transactionState.hasPid() && !transactionState.isCompletingTransaction();
-        // TODO(apurva): making this blocking till completion.
-        transactionState.beginAbortingTransaction();
+        FutureTransactionalResult result = transactionState.beginAbortingTransaction();
+        result.get();
     }
-
 
     /**
      * Asynchronously send a record to a topic. Equivalent to <code>send(record, null)</code>.
@@ -616,8 +613,12 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      * Implementation of asynchronously send a record to a topic.
      */
     private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
-        if (transactionState != null && transactionState.isTransactional() && !transactionState.hasPid())
+        if (transactionState != null && transactionState.isTransactional() && !transactionState.hasPid()) {
+            if (transactionState.isFenced()) {
+                throw Errors.PRODUCER_FENCED.exception();
+            }
             throw new IllegalStateException("Cannot perform a 'send' before completing a call to initTransactions when transactions are enabled.");
+        }
 
         if (transactionState != null && transactionState.isCompletingTransaction()) {
             throw new IllegalStateException("Cannot call send while a commit or abort is in progress.");

@@ -66,7 +66,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public class TransactionsTest {
     private static final int MAX_REQUEST_SIZE = 1024 * 1024;
@@ -127,7 +126,8 @@ public class TransactionsTest {
         // It finds the coordinator and then gets a PID.
         final long pid = 13131L;
         final short epoch = 1;
-        new Thread(new AwaitPidRunnable(transactionState)).start();
+//        new Thread(new AwaitPidRunnable(transactionState)).start();
+        transactionState.initializeTransactions();
         client.prepareResponse(new MockClient.RequestMatcher() {
             @Override
             public boolean matches(AbstractRequest body) {
@@ -140,6 +140,7 @@ public class TransactionsTest {
 
         sender.run(time.milliseconds());  // find coordinator
         assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+
         client.prepareResponse(new MockClient.RequestMatcher() {
             @Override
             public boolean matches(AbstractRequest body) {
@@ -269,13 +270,10 @@ public class TransactionsTest {
 
         @Override
         public void run()  {
-            try {
-                transactionState.awaitPidAndEpoch(1000);
-                assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
-                assertTrue(transactionState.hasPid());
-            } catch (InterruptedException e) {
-                fail("interrupted while waiting for pidAndEpoch");
-            }
+            FutureTransactionalResult result = transactionState.initializeTransactions();
+            result.get();
+            assertEquals(brokerNode, transactionState.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION));
+            assertTrue(transactionState.hasPid());
         }
     }
 
