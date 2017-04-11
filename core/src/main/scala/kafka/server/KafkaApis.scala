@@ -112,7 +112,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.ADD_PARTITIONS_TO_TXN => handleAddPartitionToTransactionRequest(request)
         case ApiKeys.ADD_OFFSETS_TO_TXN => handleAddOffsetsToTransactionRequest(request)
         case ApiKeys.END_TXN => handleEndTransactionRequest(request)
-        case ApiKeys.WRITE_TXN_MARKER => handleWriteTxnMarkerRequest(request)
+        case ApiKeys.WRITE_TXN_MARKERS => handleWriteTxnMarkerRequest(request)
         case ApiKeys.TXN_OFFSET_COMMIT => handleTxnOffsetCommitRequest(request)
         case requestId => throw new KafkaException("Unknown api code " + requestId)
       }
@@ -154,7 +154,7 @@ class KafkaApis(val requestChannel: RequestChannel,
           if (partition.topic == GroupMetadataTopicName)
             groupCoordinator.handleGroupImmigration(partition.partitionId)
           else if (partition.topic == TransactionStateTopicName)
-            txnCoordinator.handleTxnImmigration(partition.partitionId)
+            txnCoordinator.handleTxnImmigration(partition.partitionId, partition.getLeaderEpoch)
         }
 
         updatedFollowers.foreach { partition =>
@@ -1359,7 +1359,19 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   def handleEndTransactionRequest(request: RequestChannel.Request): Unit = {
-    throw new UnsupportedOperationException
+    val endTxnRequest = request.body[EndTxnRequest]
+
+    def sendResponseCallback(error: Errors) {
+      val responseBody = new EndTxnResponse(error)
+      trace(s"Completed ${endTxnRequest.transactionalId()}'s EndTxnRequest with command: ${endTxnRequest.command()}, errors: $error from client ${request.header.clientId()}.")
+      requestChannel.sendResponse(new RequestChannel.Response(request, responseBody))
+    }
+
+    txnCoordinator.handleEndTransaction(endTxnRequest.transactionalId(),
+      endTxnRequest.pid(),
+      endTxnRequest.epoch(),
+      endTxnRequest.command(),
+      sendResponseCallback)
   }
 
   def handleAddPartitionToTransactionRequest(request: RequestChannel.Request): Unit = {
