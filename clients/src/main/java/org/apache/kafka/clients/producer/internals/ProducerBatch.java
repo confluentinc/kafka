@@ -295,7 +295,7 @@ public final class ProducerBatch {
      * </ol>
      * This methods closes this batch and sets {@code expiryErrorMessage} if the batch has timed out.
      */
-    boolean maybeExpire(int requestTimeoutMs, long retryBackoffMs, long now, long lingerMs, boolean isFull) {
+    boolean maybeExpire(long requestTimeoutMs, long retryBackoffMs, long now, long lingerMs, boolean isFull) {
         if (!this.inRetry() && isFull && requestTimeoutMs < (now - this.lastAppendTime))
             expiryErrorMessage = (now - this.lastAppendTime) + " ms has passed since last append";
         else if (!this.inRetry() && requestTimeoutMs < (createdTimeMs(now) - lingerMs))

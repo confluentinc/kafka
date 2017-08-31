@@ -121,6 +121,9 @@ public class Sender implements Runnable {
     /* all the state related to transactions, in particular the producer id, producer epoch, and sequence numbers */
     private final TransactionManager transactionManager;
 
+    /* the time to wait before expiring batches in the accumulator */
+    private final long batchExpiryMs;
+
     public Sender(KafkaClient client,
                   Metadata metadata,
                   RecordAccumulator accumulator,
@@ -133,7 +136,8 @@ public class Sender implements Runnable {
                   int requestTimeout,
                   long retryBackoffMs,
                   TransactionManager transactionManager,
-                  ApiVersions apiVersions) {
+                  ApiVersions apiVersions,
+                  long batchExpiryMs) {
         this.client = client;
         this.accumulator = accumulator;
         this.metadata = metadata;
@@ -148,6 +152,7 @@ public class Sender implements Runnable {
         this.retryBackoffMs = retryBackoffMs;
         this.apiVersions = apiVersions;
         this.transactionManager = transactionManager;
+        this.batchExpiryMs = batchExpiryMs;
     }
 
     /**
@@ -261,7 +266,7 @@ public class Sender implements Runnable {
             }
         }
 
-        List<ProducerBatch> expiredBatches = this.accumulator.expiredBatches(this.requestTimeout, now);
+        List<ProducerBatch> expiredBatches = this.accumulator.expiredBatches(this.batchExpiryMs, now);
         boolean needsTransactionStateReset = false;
         // Reset the producer id if an expired batch has previously been sent to the broker. Also update the metrics
         // for expired batches. see the documentation of @TransactionState.resetProducerId to understand why

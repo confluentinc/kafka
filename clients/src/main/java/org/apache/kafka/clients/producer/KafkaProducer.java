@@ -401,7 +401,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     this.requestTimeoutMs,
                     config.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG),
                     this.transactionManager,
-                    apiVersions);
+                    apiVersions,
+                    config.getLong(ProducerConfig.BATCH_EXPIRY_MS));
             String ioThreadName = "kafka-producer-network-thread" + (clientId.length() > 0 ? " | " + clientId : "");
             this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
             this.ioThread.start();

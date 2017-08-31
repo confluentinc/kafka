@@ -91,6 +91,7 @@ public class SenderTest {
     private static final double EPS = 0.0001;
     private static final int MAX_BLOCK_TIMEOUT = 1000;
     private static final int REQUEST_TIMEOUT = 1000;
+    private static final int BATCH_EXPIRY_TIMEOUT = 1000;
 
     private TopicPartition tp0 = new TopicPartition("test", 0);
     private TopicPartition tp1 = new TopicPartition("test", 1);
@@ -276,7 +277,7 @@ public class SenderTest {
         Metrics m = new Metrics();
         try {
             Sender sender = new Sender(client, metadata, this.accumulator, false, MAX_REQUEST_SIZE, ACKS_ALL,
-                    maxRetries, m, time, REQUEST_TIMEOUT, 50, null, apiVersions);
+                    maxRetries, m, time, REQUEST_TIMEOUT, 50, null, apiVersions, BATCH_EXPIRY_TIMEOUT);
             // do a successful retry
             Future<RecordMetadata> future = accumulator.append(tp0, 0L, "key".getBytes(), "value".getBytes(), null, null, MAX_BLOCK_TIMEOUT).future;
             sender.run(time.milliseconds()); // connect
@@ -323,7 +324,7 @@ public class SenderTest {
         Metrics m = new Metrics();
         try {
             Sender sender = new Sender(client, metadata, this.accumulator, true, MAX_REQUEST_SIZE, ACKS_ALL, maxRetries,
-                    m, time, REQUEST_TIMEOUT, 50, null, apiVersions);
+                    m, time, REQUEST_TIMEOUT, 50, null, apiVersions, BATCH_EXPIRY_TIMEOUT);
             // Create a two broker cluster, with partition 0 on broker 0 and partition 1 on broker 1
             Cluster cluster1 = TestUtils.clusterWith(2, "test", 2);
             metadata.update(cluster1, Collections.<String>emptySet(), time.milliseconds());
@@ -575,7 +576,7 @@ public class SenderTest {
         int maxRetries = 10;
         Metrics m = new Metrics();
         Sender sender = new Sender(client, metadata, this.accumulator, true, MAX_REQUEST_SIZE, ACKS_ALL, maxRetries,
-                m, time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions);
+                m, time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions, BATCH_EXPIRY_TIMEOUT);
 
         Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(), "value".getBytes(), null, null, MAX_BLOCK_TIMEOUT).future;
         client.prepareResponse(new MockClient.RequestMatcher() {
@@ -616,7 +617,7 @@ public class SenderTest {
         int maxRetries = 10;
         Metrics m = new Metrics();
         Sender sender = new Sender(client, metadata, this.accumulator, true, MAX_REQUEST_SIZE, ACKS_ALL, maxRetries,
-                m, time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions);
+                m, time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions, BATCH_EXPIRY_TIMEOUT);
 
         Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(), "value".getBytes(), null, null, MAX_BLOCK_TIMEOUT).future;
         sender.run(time.milliseconds());  // connect.
@@ -653,7 +654,7 @@ public class SenderTest {
         int maxRetries = 10;
         Metrics m = new Metrics();
         Sender sender = new Sender(client, metadata, this.accumulator, true, MAX_REQUEST_SIZE, ACKS_ALL, maxRetries,
-                m, time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions);
+                m, time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions, BATCH_EXPIRY_TIMEOUT);
 
         Future<RecordMetadata> responseFuture = accumulator.append(tp0, time.milliseconds(), "key".getBytes(), "value".getBytes(), null, null, MAX_BLOCK_TIMEOUT).future;
         sender.run(time.milliseconds());  // connect.
@@ -706,7 +707,7 @@ public class SenderTest {
                 new ApiVersions(), txnManager);
         try {
             Sender sender = new Sender(client, metadata, this.accumulator, true, MAX_REQUEST_SIZE, ACKS_ALL, maxRetries,
-                    m, time, REQUEST_TIMEOUT, 1000L, txnManager, new ApiVersions());
+                    m, time, REQUEST_TIMEOUT, 1000L, txnManager, new ApiVersions(), BATCH_EXPIRY_TIMEOUT);
             // Create a two broker cluster, with partition 0 on broker 0 and partition 1 on broker 1
             Cluster cluster1 = TestUtils.clusterWith(2, topic, 2);
             metadata.update(cluster1, Collections.<String>emptySet(), time.milliseconds());
@@ -828,7 +829,7 @@ public class SenderTest {
         this.accumulator = new RecordAccumulator(batchSize, 1024 * 1024, CompressionType.NONE, 0L, 0L, metrics, time,
                 apiVersions, transactionManager);
         this.sender = new Sender(this.client, this.metadata, this.accumulator, true, MAX_REQUEST_SIZE, ACKS_ALL,
-                MAX_RETRIES, this.metrics, this.time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions);
+                MAX_RETRIES, this.metrics, this.time, REQUEST_TIMEOUT, 50, transactionManager, apiVersions, BATCH_EXPIRY_TIMEOUT);
         this.metadata.update(this.cluster, Collections.<String>emptySet(), time.milliseconds());
     }
 
