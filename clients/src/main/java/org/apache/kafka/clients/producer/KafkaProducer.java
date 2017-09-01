@@ -359,6 +359,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             int retries = configureRetries(config, transactionManager != null);
             int maxInflightRequests = configureInflightRequests(config, transactionManager != null);
             short acks = configureAcks(config, transactionManager != null);
+            long batchExpiryMs = configureBatchExpiry(config);
 
             this.apiVersions = new ApiVersions();
             this.accumulator = new RecordAccumulator(config.getInt(ProducerConfig.BATCH_SIZE_CONFIG),
@@ -402,7 +403,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     config.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG),
                     this.transactionManager,
                     apiVersions,
-                    config.getLong(ProducerConfig.BATCH_EXPIRY_MS));
+                    batchExpiryMs);
             String ioThreadName = "kafka-producer-network-thread" + (clientId.length() > 0 ? " | " + clientId : "");
             this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
             this.ioThread.start();
@@ -503,6 +504,16 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     "producer. Otherwise we cannot guarantee idempotence.");
         }
         return acks;
+    }
+
+
+    // If the user has explicitly defined batch.expiry.ms, we use that value. Otherwise we use the request.timeout.ms
+    // to remain backwards compatible.
+    private static long configureBatchExpiry(ProducerConfig config) {
+        if (config.originals().containsKey(ProducerConfig.BATCH_EXPIRY_MS)) {
+            return config.getLong(ProducerConfig.BATCH_EXPIRY_MS);
+        }
+        return config.getInt(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG);
     }
 
     private static int parseAcks(String acksString) {
