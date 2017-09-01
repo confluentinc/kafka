@@ -332,11 +332,10 @@ public class ProducerConfig extends AbstractConfig {
                                         new ConfigDef.NonEmptyString(),
                                         Importance.LOW,
                                         TRANSACTIONAL_ID_DOC)
-                                .define(BATCH_EXPIRY_MS,
+                                .defineInternal(BATCH_EXPIRY_MS,
                                         Type.LONG,
                                         30 * 1000,
-                                        Importance.LOW,
-                                        BATCH_EXPIRY_MS_DOC);
+                                        Importance.LOW);
     }
 
     @Override
