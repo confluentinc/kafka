@@ -221,7 +221,7 @@ public class ProducerConfig extends AbstractConfig {
 
 
     /** <code> batch.expiry.ms  </code> */
-    public static final String BATCH_EXPIRY_MS = "batch.expiry.ms";
+    public static final String BATCH_EXPIRY_MS = "confluent.batch.expiry.ms";
     public static final String BATCH_EXPIRY_MS_DOC = "How long the batch should stay in the accumulator and unacknowledged before being expired.";
 
     static {
