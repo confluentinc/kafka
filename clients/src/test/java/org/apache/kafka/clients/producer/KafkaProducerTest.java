@@ -476,4 +476,20 @@ public class KafkaProducerTest {
             // expected
         }
     }
+
+    @Test
+    public void testBatchExpiryMs() {
+        Properties props = new Properties();
+        props.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:2002");
+        props.setProperty(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "5");
+
+        try (KafkaProducer<String, String> producerWithDefaultBatchExpiry = new KafkaProducer<>(props, new StringSerializer(), new StringSerializer())) {
+            assertEquals(5, producerWithDefaultBatchExpiry.batchExpiryMs());
+        }
+
+        props.setProperty(ProducerConfig.BATCH_EXPIRY_MS, "10");
+        try (KafkaProducer<String, String> producerWithConfiguredBatchExpiry = new KafkaProducer<>(props, new StringSerializer(), new StringSerializer())) {
+            assertEquals(10L, producerWithConfiguredBatchExpiry.batchExpiryMs());
+        }
+    }
 }

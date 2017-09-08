@@ -302,17 +302,17 @@ public final class ProducerBatch {
     /**
      * A batch whose metadata is not available should be expired if one of the following is true:
      * <ol>
-     *     <li> the batch is not in retry AND request timeout has elapsed after it is ready (full or linger.ms has reached).
-     *     <li> the batch is in retry AND request timeout has elapsed after the backoff period ended.
+     *     <li> the batch is not in retry AND batch expiry timeout has elapsed after it is ready (full or linger.ms has reached).
+     *     <li> the batch is in retry AND batch expiry timeout has elapsed after the backoff period ended.
      * </ol>
      * This methods closes this batch and sets {@code expiryErrorMessage} if the batch has timed out.
      */
-    boolean maybeExpire(int requestTimeoutMs, long retryBackoffMs, long now, long lingerMs, boolean isFull) {
-        if (!this.inRetry() && isFull && requestTimeoutMs < (now - this.lastAppendTime))
+    boolean maybeExpire(long batchExpiryTimeoutMs, long retryBackoffMs, long now, long lingerMs, boolean isFull) {
+        if (!this.inRetry() && isFull && batchExpiryTimeoutMs < (now - this.lastAppendTime))
             expiryErrorMessage = (now - this.lastAppendTime) + " ms has passed since last append";
-        else if (!this.inRetry() && requestTimeoutMs < (createdTimeMs(now) - lingerMs))
+        else if (!this.inRetry() && batchExpiryTimeoutMs < (createdTimeMs(now) - lingerMs))
             expiryErrorMessage = (createdTimeMs(now) - lingerMs) + " ms has passed since batch creation plus linger time";
-        else if (this.inRetry() && requestTimeoutMs < (waitedTimeMs(now) - retryBackoffMs))
+        else if (this.inRetry() && batchExpiryTimeoutMs < (waitedTimeMs(now) - retryBackoffMs))
             expiryErrorMessage = (waitedTimeMs(now) - retryBackoffMs) + " ms has passed since last attempt plus backoff time";
 
         boolean expired = expiryErrorMessage != null;

@@ -268,7 +268,7 @@ public final class RecordAccumulator {
     /**
      * Get a list of batches which have been sitting in the accumulator too long and need to be expired.
      */
-    public List<ProducerBatch> expiredBatches(int requestTimeout, long now) {
+    public List<ProducerBatch> expiredBatches(long batchExpiryTimeoutMs, long now) {
         List<ProducerBatch> expiredBatches = new ArrayList<>();
         for (Map.Entry<TopicPartition, Deque<ProducerBatch>> entry : this.batches.entrySet()) {
             Deque<ProducerBatch> dq = entry.getValue();
@@ -289,7 +289,7 @@ public final class RecordAccumulator {
                         // are invoked after completing the iterations, since sends invoked from callbacks
                         // may append more batches to the deque being iterated. The batch is deallocated after
                         // callbacks are invoked.
-                        if (batch.maybeExpire(requestTimeout, retryBackoffMs, now, this.lingerMs, isFull)) {
+                        if (batch.maybeExpire(batchExpiryTimeoutMs, retryBackoffMs, now, this.lingerMs, isFull)) {
                             expiredBatches.add(batch);
                             batchIterator.remove();
                         } else {

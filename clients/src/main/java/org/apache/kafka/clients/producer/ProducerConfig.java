@@ -219,6 +219,11 @@ public class ProducerConfig extends AbstractConfig {
             "Note that enable.idempotence must be enabled if a TransactionalId is configured. " +
             "The default is empty, which means transactions cannot be used.";
 
+
+    /** <code> batch.expiry.ms  </code> */
+    public static final String BATCH_EXPIRY_MS = "confluent.batch.expiry.ms";
+    public static final String BATCH_EXPIRY_MS_DOC = "How long the batch should stay in the accumulator and unacknowledged before being expired.";
+
     static {
         CONFIG = new ConfigDef().define(BOOTSTRAP_SERVERS_CONFIG, Type.LIST, Importance.HIGH, CommonClientConfigs.BOOTSTRAP_SERVERS_DOC)
                                 .define(BUFFER_MEMORY_CONFIG, Type.LONG, 32 * 1024 * 1024L, atLeast(0L), Importance.HIGH, BUFFER_MEMORY_DOC)
@@ -326,7 +331,11 @@ public class ProducerConfig extends AbstractConfig {
                                         null,
                                         new ConfigDef.NonEmptyString(),
                                         Importance.LOW,
-                                        TRANSACTIONAL_ID_DOC);
+                                        TRANSACTIONAL_ID_DOC)
+                                .defineInternal(BATCH_EXPIRY_MS,
+                                        Type.LONG,
+                                        30 * 1000,
+                                        Importance.LOW);
     }
 
     @Override

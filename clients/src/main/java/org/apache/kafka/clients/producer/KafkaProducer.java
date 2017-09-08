@@ -254,6 +254,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private final ProducerInterceptors<K, V> interceptors;
     private final ApiVersions apiVersions;
     private final TransactionManager transactionManager;
+    private final long batchExpiryMs;
 
     /**
      * A producer is instantiated by providing a set of key-value pairs as configuration. Valid configuration strings
@@ -374,6 +375,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             int retries = configureRetries(config, transactionManager != null, log);
             int maxInflightRequests = configureInflightRequests(config, transactionManager != null);
             short acks = configureAcks(config, transactionManager != null, log);
+            this.batchExpiryMs = configureBatchExpiry(config);
 
             this.apiVersions = new ApiVersions();
             this.accumulator = new RecordAccumulator(logContext,
@@ -419,7 +421,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     this.requestTimeoutMs,
                     config.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG),
                     this.transactionManager,
-                    apiVersions);
+                    apiVersions,
+                    this.batchExpiryMs);
             String ioThreadName = NETWORK_THREAD_PREFIX + " | " + clientId;
             this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
             this.ioThread.start();
@@ -512,6 +515,16 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     "producer. Otherwise we cannot guarantee idempotence.");
         }
         return acks;
+    }
+
+
+    // If the user has explicitly defined batch.expiry.ms, we use that value. Otherwise we use the request.timeout.ms
+    // to remain backwards compatible.
+    private static long configureBatchExpiry(ProducerConfig config) {
+        if (config.originals().containsKey(ProducerConfig.BATCH_EXPIRY_MS)) {
+            return config.getLong(ProducerConfig.BATCH_EXPIRY_MS);
+        }
+        return config.getInt(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG);
     }
 
     private static int parseAcks(String acksString) {
@@ -1077,6 +1090,11 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         log.debug("Kafka producer has been closed");
         if (firstException.get() != null && !swallowException)
             throw new KafkaException("Failed to close kafka producer", firstException.get());
+    }
+
+    // Visible for testing
+    long batchExpiryMs() {
+        return batchExpiryMs;
     }
 
     private ClusterResourceListeners configureClusterResourceListeners(Serializer<K> keySerializer, Serializer<V> valueSerializer, List<?>... candidateLists) {
