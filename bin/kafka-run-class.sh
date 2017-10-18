@@ -174,6 +174,8 @@ else
   fi
 fi
 
+
+
 # If Cygwin is detected, LOG_DIR is converted to Windows format.
 (( CYGWIN )) && LOG_DIR=$(cygpath --path --mixed "${LOG_DIR}")
 KAFKA_LOG4J_OPTS="-Dkafka.logs.dir=$LOG_DIR $KAFKA_LOG4J_OPTS"
@@ -226,7 +228,6 @@ while [ $# -gt 0 ]; do
   case $COMMAND in
     -name)
       DAEMON_NAME=$2
-      CONSOLE_OUTPUT_FILE=$LOG_DIR/$DAEMON_NAME.out
       shift 2
       ;;
     -loggc)
@@ -244,6 +245,10 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "CONSOLE_OUTPUT_FILE" = "x" ]; then 
+  CONSOLE_OUTPUT_FILE=$LOG_DIR/$DAEMON_NAME.out
+fi
 
 # GC options
 GC_FILE_SUFFIX='-gc.log'
