@@ -21,6 +21,7 @@ import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.CreateTopicsOptions;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.KafkaFuture;
+import org.apache.kafka.common.errors.ClusterAuthorizationException;
 import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
@@ -233,7 +234,7 @@ public class TopicAdmin implements AutoCloseable {
                     log.debug("Found existing topic '{}' on the brokers at {}", topic, bootstrapServers);
                     continue;
                 }
-                if (cause instanceof UnsupportedVersionException) {
+                if (cause instanceof UnsupportedVersionException || cause instanceof ClusterAuthorizationException) {
                     log.debug("Unable to use Kafka admin client to create topic descriptions for '{}' using the brokers at {}," +
                                       "falling back to assume topic(s) exist or will be auto-created by the broker", topicNameList, bootstrapServers);
                     return Collections.emptySet();
