@@ -36,7 +36,8 @@ RUN ./gradlew -s --no-daemon :connect:runtime:build
 ###############
 
 # We need a glibc-based Alpine build since RocksDB's JNI libs depend on glibc.
-FROM anapsix/alpine-java:8u192b12_server-jre_unlimited
+FROM sunbit/sd-alpine-java-8u202b08_jdk_unlimited:a4eb35edee5133063f4b0cf625016479c012c546
+
 
 ENV project=connect \
     version=5.1.0-sunbit \
