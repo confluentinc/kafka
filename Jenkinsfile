@@ -6,6 +6,7 @@ def config = jobConfig {
     testResultSpecs = ['junit': '**/build/test-results/**/TEST-*.xml']
     slackChannel = '#kafka'
     timeoutHours = 4
+    runMergeCheck = false
 }
 
 
