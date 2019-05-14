@@ -14,32 +14,31 @@ def job = {
     stage("Check compilation compatibility with Scala 2.11") {
         sh "gradle"
         sh "./gradlew clean compileJava compileScala compileTestJava compileTestScala " +
-                "--stacktrace -PscalaVersion=2.11"
+                "--no-daemon --stacktrace -PscalaVersion=2.11"
     }
 
     stage("Compile and validate") {
         sh "./gradlew clean assemble spotlessScalaCheck checkstyleMain checkstyleTest spotbugsMain " +
-                "--stacktrace --continue -PxmlSpotBugsReport=true"
+                "--no-daemon --stacktrace --continue -PxmlSpotBugsReport=true"
     }
 
     
     if (config.publish && config.isDevJob) {
       configFileProvider([configFile(fileId: 'Gradle Nexus Settings', variable: 'GRADLE_NEXUS_SETTINGS')]) {
           stage("Publish to nexus") {
-              sh "./gradlew --init-script ${GRADLE_NEXUS_SETTINGS} uploadArchivesAll"
+              sh "./gradlew --init-script ${GRADLE_NEXUS_SETTINGS} --no-daemon uploadArchivesAll"
           }
       }
     }
 
     stage("Unit Test") {
-      sh "./gradlew unitTest --continue --stacktrace || true"
+      sh "./gradlew --no-daemon unitTest --continue --stacktrace || true"
     }
 
     stage("Integration test") {
         sh "./gradlew integrationTest " +
-                "--stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=6 || true"
+                "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=6 || true"
     }
-
 }
 
 def post = {
