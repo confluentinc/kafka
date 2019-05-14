@@ -31,10 +31,12 @@ def job = {
                 "--stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=6 || true"
     }
 
-    configFileProvider([configFile(fileId: 'Gradle Nexus Settings', variable: 'GRADLE_NEXUS_SETTINGS')]) {
-        stage("Update the Confluent Kafka repository") {
-            sh "./gradlew --init-script ${GRADLE_NEXUS_SETTINGS} uploadArchivesAll"
-        }
+    if (config.publish && config.isDevJob) {
+      configFileProvider([configFile(fileId: 'Gradle Nexus Settings', variable: 'GRADLE_NEXUS_SETTINGS')]) {
+          stage("Update the Confluent Kafka repository") {
+              sh "./gradlew --init-script ${GRADLE_NEXUS_SETTINGS} uploadArchivesAll"
+          }
+      }
     }
 }
 
