@@ -14,7 +14,7 @@ def job = {
     stage("Check compilation compatibility with Scala 2.11") {
         sh "gradle"
         sh "./gradlew clean compileJava compileScala compileTestJava compileTestScala " +
-                "--no-daemon --stacktrace -PscalaVersion=2.11"
+                "--stacktrace -PscalaVersion=2.11"
     }
 
     stage("Compile and validate") {
