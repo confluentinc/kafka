@@ -4,8 +4,7 @@ def config = jobConfig {
     cron = '@midnight'
     nodeLabel = 'docker-oraclejdk8'
     testResultSpecs = ['junit': '**/build/test-results/**/TEST-*.xml']
-    //slackChannel = '#kafka'
-    slackChannel = '#things'
+    slackChannel = '#kafka'
     timeoutHours = 4
 }
 
@@ -15,35 +14,22 @@ def job = {
     stage("Check compilation compatibility with Scala 2.11") {
         sh "gradle"
         sh "./gradlew clean compileJava compileScala compileTestJava compileTestScala " +
-                "--no-daemon --stacktrace -PscalaVersion=2.11"
+                "--stacktrace -PscalaVersion=2.11"
     }
 
     stage("Compile and validate") {
-        sh "./gradlew clean compileJava compileScala compileTestJava compileTestScala " +
-                "spotlessScalaCheck checkstyleMain checkstyleTest spotbugsMain " +
-                "--no-daemon --stacktrace --continue -PxmlSpotBugsReport=true"
+        sh "./gradlew clean assemble spotlessScalaCheck checkstyleMain checkstyleTest spotbugsMain " +
+                "--stacktrace --continue -PxmlSpotBugsReport=true"
     }
 
     stage("Test") {
-        sh "./gradlew unitTest integrationTest " +
-                "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4"
+      sh "./gradlew unitTest --continue --stacktrace || true"
     }
 
-    /*
-    def kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true).substring('https://github.com/'.size()).trim();
-    def kafkaBranch = env.BRANCH_NAME;
-    def muckrakeBranch = "master";
-    // Start the downstream job.
-    stage("Trigger test-cp-downstream-builds-kafka") {
-        echo "Schedule test-cp-downstream-builds-kafka with muckrake branch ${muckrakeBranch} and Apache Kafka branch ${kafkaRepo}:${kafkaBranch}."
-        buildResult = build job: 'test-cp-downstream-builds-kafka', parameters: [
-                [$class: 'StringParameterValue', name: 'BRANCH', value: muckrakeBranch],
-                [$class: 'StringParameterValue', name: 'KAFKA_REPO', value: kafkaRepo],
-                [$class: 'StringParameterValue', name: 'KAFKA_BRANCH', value: kafkaBranch],
-                [$class: 'StringParameterValue', name: 'NODE_LABEL', value: "docker-oraclejdk8"]],
-                propagate: false, wait: false
+    stage("Integration test") {
+        sh "./gradlew integrationTest " +
+                "--stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=6 || true"
     }
-    */
 
     configFileProvider([configFile(fileId: 'Gradle Nexus Settings', variable: 'GRADLE_NEXUS_SETTINGS')]) {
         stage("Update the Confluent Kafka repository") {
