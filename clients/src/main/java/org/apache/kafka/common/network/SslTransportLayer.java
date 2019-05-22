@@ -47,6 +47,7 @@ public class SslTransportLayer implements TransportLayer {
     private static final Logger log = LoggerFactory.getLogger(SslTransportLayer.class);
 
     private enum State {
+        NOT_INITIALIZED,
         HANDSHAKE,
         HANDSHAKE_FAILED,
         READY,
@@ -68,9 +69,7 @@ public class SslTransportLayer implements TransportLayer {
     private ByteBuffer emptyBuf = ByteBuffer.allocate(0);
 
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine) throws IOException {
-        SslTransportLayer transportLayer = new SslTransportLayer(channelId, key, sslEngine);
-        transportLayer.startHandshake();
-        return transportLayer;
+        return new SslTransportLayer(channelId, key, sslEngine);
     }
 
     // Prefer `create`, only use this in tests
@@ -79,11 +78,12 @@ public class SslTransportLayer implements TransportLayer {
         this.key = key;
         this.socketChannel = (SocketChannel) key.channel();
         this.sslEngine = sslEngine;
+        this.state = State.NOT_INITIALIZED;
     }
 
     // Visible for testing
     protected void startHandshake() throws IOException {
-        if (state != null)
+        if (state != State.NOT_INITIALIZED)
             throw new IllegalStateException("startHandshake() can only be called once, state " + state);
 
         this.netReadBuffer = ByteBuffer.allocate(netReadBufferSize());
@@ -151,11 +151,12 @@ public class SslTransportLayer implements TransportLayer {
     */
     @Override
     public void close() throws IOException {
+        State prevState = state;
         if (state == State.CLOSING) return;
         state = State.CLOSING;
         sslEngine.closeOutbound();
         try {
-            if (isConnected()) {
+            if (prevState != State.NOT_INITIALIZED && isConnected()) {
                 if (!flush(netWriteBuffer)) {
                     throw new IOException("Remaining data in the network buffer, can't send SSL close message.");
                 }
@@ -176,6 +177,9 @@ public class SslTransportLayer implements TransportLayer {
         } finally {
             socketChannel.socket().close();
             socketChannel.close();
+            netReadBuffer = null;
+            netWriteBuffer = null;
+            appReadBuffer = null;
         }
     }
 
@@ -237,6 +241,8 @@ public class SslTransportLayer implements TransportLayer {
     */
     @Override
     public void handshake() throws IOException {
+        if (state == State.NOT_INITIALIZED)
+            startHandshake();
         if (state == State.READY)
             throw renegotiationException();
         if (state == State.CLOSING)

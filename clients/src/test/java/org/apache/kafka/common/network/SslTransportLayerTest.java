@@ -976,6 +976,12 @@ public class SslTransportLayerTest {
                 return super.flush(buf);
             }
 
+            @Override
+            protected void startHandshake() throws IOException {
+                assertTrue("SSL handshake initialized too early", socketChannel().isConnected());
+                super.startHandshake();
+            }
+
             private void resetDelayedFlush() {
                 numDelayedFlushesRemaining.set(flushDelayCount);
             }

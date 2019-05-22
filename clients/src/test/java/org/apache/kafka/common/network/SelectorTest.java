@@ -396,6 +396,19 @@ public class SelectorTest {
     }
 
     @Test
+    public void testIdleExpiryWithoutReadyKeys() throws IOException {
+        String id = "0";
+        selector.connect(id, new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE);
+        KafkaChannel channel = selector.channel(id);
+        channel.selectionKey().interestOps(0);
+
+        time.sleep(6000); // The max idle time is 5000ms
+        selector.poll(0);
+        assertTrue("The idle connection should have been closed", selector.disconnected().containsKey(id));
+        assertEquals(ChannelState.EXPIRED, selector.disconnected().get(id));
+    }
+
+    @Test
     public void testCloseOldestConnectionWithOneStagedReceive() throws Exception {
         verifyCloseOldestConnectionWithStagedReceives(1);
     }

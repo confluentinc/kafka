@@ -278,6 +278,9 @@ public class Selector implements Selectable, AutoCloseable {
         SelectionKey key = socketChannel.register(nioSelector, interestedOps);
         KafkaChannel channel = buildAndAttachKafkaChannel(socketChannel, id, key);
         this.channels.put(id, channel);
+        if (idleExpiryManager != null)
+            idleExpiryManager.update(channel.id(), time.nanoseconds());
+
         return key;
     }
 
@@ -635,9 +638,8 @@ public class Selector implements Selectable, AutoCloseable {
             String connectionId = expiredConnection.getKey();
             KafkaChannel channel = this.channels.get(connectionId);
             if (channel != null) {
-                if (log.isTraceEnabled())
-                    log.trace("About to close the idle connection from {} due to being idle for {} millis",
-                            connectionId, (currentTimeNanos - expiredConnection.getValue()) / 1000 / 1000);
+                log.info("About to close the idle connection from {} due to being idle for {} millis",
+                        connectionId, (currentTimeNanos - expiredConnection.getValue()) / 1000 / 1000);
                 channel.state(ChannelState.EXPIRED);
                 close(channel, CloseMode.GRACEFUL);
             }
