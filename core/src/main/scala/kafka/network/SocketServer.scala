@@ -399,13 +399,12 @@ private[kafka] class Acceptor(val endPoint: EndPoint,
                       currentProcessor = currentProcessor % processors.size
                       processors(currentProcessor)
                     }
+                    // round robin to the next processor thread, mod(numProcessors) will be done later
+                    currentProcessor = currentProcessor + 1
                   } while (!assignNewConnection(socketChannel, processor, retriesLeft == 0))
-                }
-                else {
+                } else {
                   throw new IllegalStateException("Unrecognized key state for acceptor thread.")
                 }
-                // round robin to the next processor thread, mod(numProcessors) will be done later
-                currentProcessor = currentProcessor + 1
               } catch {
                 case e: Throwable => error("Error while accepting connection", e)
               }

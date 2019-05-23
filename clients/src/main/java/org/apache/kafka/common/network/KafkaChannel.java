@@ -61,6 +61,10 @@ public class KafkaChannel {
         Utils.closeAll(transportLayer, authenticator, receive);
     }
 
+    boolean isDisconnected() {
+        return this.disconnected;
+    }
+
     /**
      * Returns the principal returned by `authenticator.principal()`.
      */
