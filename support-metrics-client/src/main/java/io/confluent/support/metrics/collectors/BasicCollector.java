@@ -62,8 +62,8 @@ public class BasicCollector extends Collector {
     return metricsRecord;
   }
 
-  // package private for testing
-  static String cpVersion(String kafkaVersion) {
+  // visible for testing
+  public static String cpVersion(String kafkaVersion) {
     return kafkaVersion.replace("-ce", "").replace("-ccs", "");
   }
 

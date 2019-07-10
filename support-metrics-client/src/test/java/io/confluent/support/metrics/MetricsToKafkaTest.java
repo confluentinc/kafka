@@ -14,6 +14,7 @@
 
 package io.confluent.support.metrics;
 
+import io.confluent.support.metrics.collectors.BasicCollector;
 import io.confluent.support.metrics.common.kafka.KafkaUtilities;
 import kafka.utils.TestUtils;
 import kafka.zk.KafkaZkClient;
@@ -147,7 +148,7 @@ public class MetricsToKafkaTest {
     TimeUtils time = new TimeUtils();
     assertTrue(basicRecord.getTimestamp() <= time.nowInUnixTime());
     assertEquals(AppInfoParser.getVersion(), basicRecord.getKafkaVersion());
-    assertEquals("unknown", basicRecord.getConfluentPlatformVersion());
+    assertEquals(BasicCollector.cpVersion(AppInfoParser.getVersion()), basicRecord.getConfluentPlatformVersion());
     assertFalse(basicRecord.getBrokerProcessUUID().isEmpty());
   }
 

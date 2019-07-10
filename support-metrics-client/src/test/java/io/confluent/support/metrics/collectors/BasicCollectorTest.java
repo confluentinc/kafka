@@ -57,7 +57,7 @@ public class BasicCollectorTest {
     assertTrue(unixTimeAtTestStart <= basicRecord.getTimestamp());
     assertTrue(basicRecord.getTimestamp() <= time.nowInUnixTime());
     assertEquals(AppInfoParser.getVersion(), basicRecord.getKafkaVersion());
-    assertEquals("unknown", basicRecord.getConfluentPlatformVersion());
+    assertEquals(BasicCollector.cpVersion(AppInfoParser.getVersion()), basicRecord.getConfluentPlatformVersion());
     assertEquals(metricsCollector.getRuntimeState().stateId(), basicRecord.getCollectorState().intValue());
     assertEquals(uuid.toString(), basicRecord.getBrokerProcessUUID());
   }
