@@ -28,7 +28,6 @@ import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Properties;
 
-import io.confluent.support.metrics.common.Version;
 import io.confluent.support.metrics.common.kafka.EmbeddedKafkaCluster;
 import io.confluent.support.metrics.common.time.TimeUtils;
 import io.confluent.support.metrics.serde.AvroDeserializer;
@@ -148,7 +147,7 @@ public class MetricsToKafkaTest {
     TimeUtils time = new TimeUtils();
     assertTrue(basicRecord.getTimestamp() <= time.nowInUnixTime());
     assertEquals(AppInfoParser.getVersion(), basicRecord.getKafkaVersion());
-    assertEquals(Version.getVersion(), basicRecord.getConfluentPlatformVersion());
+    assertEquals("unknown", basicRecord.getConfluentPlatformVersion());
     assertFalse(basicRecord.getBrokerProcessUUID().isEmpty());
   }
 
