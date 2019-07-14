@@ -25,8 +25,7 @@ import kafka.server.KafkaConfig
 import kafka.server.KafkaServer
 import kafka.utils.TestUtils
 import kafka.zk.ZooKeeperTestHarness
-import org.apache.kafka.clients.admin.AdminClientConfig
-import org.apache.kafka.clients.admin.{AdminClient => JAdminClient}
+import org.apache.kafka.clients.admin.{Admin, AdminClientConfig}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
@@ -70,7 +69,7 @@ final class LeaderElectionCommandTest extends ZooKeeperTestHarness {
 
   @Test
   def testAllTopicPartition(): Unit = {
-    TestUtils.resource(JAdminClient.create(createConfig(servers).asJava)) { client =>
+    TestUtils.resource(Admin.create(createConfig(servers).asJava)) { client =>
       val topic = "unclean-topic"
       val partition = 0
       val assignment = Seq(broker2, broker3)
@@ -101,7 +100,7 @@ final class LeaderElectionCommandTest extends ZooKeeperTestHarness {
 
   @Test
   def testTopicPartition(): Unit = {
-    TestUtils.resource(JAdminClient.create(createConfig(servers).asJava)) { client =>
+    TestUtils.resource(Admin.create(createConfig(servers).asJava)) { client =>
       val topic = "unclean-topic"
       val partition = 0
       val assignment = Seq(broker2, broker3)
@@ -133,7 +132,7 @@ final class LeaderElectionCommandTest extends ZooKeeperTestHarness {
 
   @Test
   def testPathToJsonFile(): Unit = {
-    TestUtils.resource(JAdminClient.create(createConfig(servers).asJava)) { client =>
+    TestUtils.resource(Admin.create(createConfig(servers).asJava)) { client =>
       val topic = "unclean-topic"
       val partition = 0
       val assignment = Seq(broker2, broker3)
@@ -166,7 +165,7 @@ final class LeaderElectionCommandTest extends ZooKeeperTestHarness {
 
   @Test
   def testPreferredReplicaElection(): Unit = {
-    TestUtils.resource(JAdminClient.create(createConfig(servers).asJava)) { client =>
+    TestUtils.resource(Admin.create(createConfig(servers).asJava)) { client =>
       val topic = "unclean-topic"
       val partition = 0
       val assignment = Seq(broker2, broker3)
@@ -319,7 +318,7 @@ object LeaderElectionCommandTest {
     }.headOption.mkString(",")
   }
 
-  def currentLeader(client: JAdminClient, topicPartition: TopicPartition): Option[Int] = {
+  def currentLeader(client: Admin, topicPartition: TopicPartition): Option[Int] = {
     Option(
       client
         .describeTopics(List(topicPartition.topic).asJava)
@@ -332,14 +331,14 @@ object LeaderElectionCommandTest {
     ).map(_.id)
   }
 
-  def waitForLeaderToBecome(client: JAdminClient, topicPartition: TopicPartition, leader: Option[Int]): Unit = {
+  def waitForLeaderToBecome(client: Admin, topicPartition: TopicPartition, leader: Option[Int]): Unit = {
     TestUtils.waitUntilTrue(
       () => currentLeader(client, topicPartition) == leader,
       s"Expected leader to become $leader", 10000
     )
   }
 
-  def waitForBrokerOutOfIsr(client: JAdminClient, partitions: Set[TopicPartition], brokerId: Int): Unit = {
+  def waitForBrokerOutOfIsr(client: Admin, partitions: Set[TopicPartition], brokerId: Int): Unit = {
     TestUtils.waitUntilTrue(
       () => {
         val description = client.describeTopics(partitions.map(_.topic).asJava).all.get.asScala
@@ -350,7 +349,7 @@ object LeaderElectionCommandTest {
     )
   }
 
-  def waitForBrokerInIsr(client: JAdminClient, partitions: Set[TopicPartition], brokerId: Int): Unit = {
+  def waitForBrokerInIsr(client: Admin, partitions: Set[TopicPartition], brokerId: Int): Unit = {
     TestUtils.waitUntilTrue(
       () => {
         val description = client.describeTopics(partitions.map(_.topic).asJava).all.get.asScala
