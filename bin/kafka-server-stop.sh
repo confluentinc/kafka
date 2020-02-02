@@ -15,16 +15,10 @@
 # limitations under the License.
 SIGNAL=${SIGNAL:-TERM}
 PIDS=$(ps ax | grep -i 'kafka\.Kafka' | grep java | grep -v grep | awk '{print $1}')
-PIDS_SUPPORT=$(ps ax | grep -i 'io\.confluent\.support\.metrics\.SupportedKafka' | grep java | grep -v grep | awk '{print $1}')
 
 if [ -z "$PIDS" ]; then
-  # Normal Kafka is not running, but maybe we are running the support wrapper?
-  if [ -z "${PIDS_SUPPORT}" ]; then
-    echo "No kafka server to stop"
-    exit 1
-  else
-    kill -s $SIGNAL $PIDS_SUPPORT
-  fi
+  echo "No kafka server to stop"
+  exit 1
 else
   kill -s $SIGNAL $PIDS
 fi
