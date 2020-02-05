@@ -40,8 +40,12 @@ def job = {
            runTestsStepName: {
                stage('Run tests') {
                    echo "Running unit and integration tests"
+                   def retryFlags =
+                       if (config.isPrJob) " -PmaxTestRetries=1 -PmaxTestRetryFailures=5"
+                       else ""
                    sh "./gradlew unitTest integrationTest " +
-                           "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true"
+                           "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true" +
+                           retryFlags
                }
                stage('Upload results') {
                    // Kafka failed test stdout files
