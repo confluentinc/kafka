@@ -40,9 +40,10 @@ def job = {
            runTestsStepName: {
                stage('Run tests') {
                    echo "Running unit and integration tests"
-                   def retryFlags =
+                   def retryFlags = {
                        if (config.isPrJob) " -PmaxTestRetries=1 -PmaxTestRetryFailures=5"
                        else ""
+                   }
                    sh "./gradlew unitTest integrationTest " +
                            "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true" +
                            retryFlags
@@ -81,7 +82,7 @@ def job = {
                 return ", downstream build result: " + buildResult.getResult();
             } else {
                 return ""
-			}
+            }
          }
         ]
 
