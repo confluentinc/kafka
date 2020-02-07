@@ -40,7 +40,7 @@ def job = {
            runTestsStepName: {
                stage('Run tests') {
                    echo "Running unit and integration tests"
-                   def retryFlags = {
+                   def retryFlags() {
                        if (config.isPrJob) " -PmaxTestRetries=1 -PmaxTestRetryFailures=5"
                        else ""
                    }
