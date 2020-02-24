@@ -17,10 +17,12 @@
 package org.apache.kafka.streams.processor.internals;
 
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
@@ -47,7 +49,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.util.Base64;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -57,6 +58,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static java.util.Collections.emptyMap;
 import static java.util.Collections.singleton;
 import static org.apache.kafka.streams.processor.internals.metrics.StreamsMetricsImpl.maybeMeasureLatency;
 
@@ -69,11 +71,10 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
     // visible for testing
     static final byte LATEST_MAGIC_BYTE = 1;
 
+    private final Time time;
     private final Logger log;
     private final String logPrefix;
-    private final Time time;
-    private final String threadId;
-    private final Consumer<byte[], byte[]> consumer;
+    private final Consumer<byte[], byte[]> mainConsumer;
 
     // we want to abstract eos logic out of StreamTask, however
     // there's still an optimization that requires this info to be
@@ -82,7 +83,6 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
 
     private final long maxTaskIdleMs;
     private final int maxBufferedSize;
-    private final StreamsMetricsImpl streamsMetrics;
     private final PartitionGroup partitionGroup;
     private final RecordCollector recordCollector;
     private final PartitionGroup.RecordInfo recordInfo;
@@ -104,7 +104,7 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
     public StreamTask(final TaskId id,
                       final Set<TopicPartition> partitions,
                       final ProcessorTopology topology,
-                      final Consumer<byte[], byte[]> consumer,
+                      final Consumer<byte[], byte[]> mainConsumer,
                       final StreamsConfig config,
                       final StreamsMetricsImpl streamsMetrics,
                       final StateDirectory stateDirectory,
@@ -113,7 +113,7 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
                       final ProcessorStateManager stateMgr,
                       final RecordCollector recordCollector) {
         super(id, topology, stateDirectory, stateMgr, partitions);
-        this.consumer = consumer;
+        this.mainConsumer = mainConsumer;
 
         final String threadIdPrefix = format("stream-thread [%s] ", Thread.currentThread().getName());
         logPrefix = threadIdPrefix + format("%s [%s] ", "task", id);
@@ -121,11 +121,10 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         log = logContext.logger(getClass());
 
         this.time = time;
-        this.streamsMetrics = streamsMetrics;
         this.recordCollector = recordCollector;
         eosDisabled = !StreamsConfig.EXACTLY_ONCE.equals(config.getString(StreamsConfig.PROCESSING_GUARANTEE_CONFIG));
 
-        threadId = Thread.currentThread().getName();
+        final String threadId = Thread.currentThread().getName();
         closeTaskSensor = ThreadMetrics.closeTaskSensor(threadId, streamsMetrics);
         final String taskId = id.toString();
         if (streamsMetrics.version() == Version.FROM_0100_TO_24) {
@@ -185,11 +184,14 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
 
     /**
      * @throws LockException could happen when multi-threads within the single instance, could retry
+     * @throws TimeoutException if initializing record collector timed out
      * @throws StreamsException fatal error, should close the thread
      */
     @Override
     public void initializeIfNeeded() {
         if (state() == State.CREATED) {
+            recordCollector.initialize();
+
             StateManagerUtil.registerStateStores(log, logPrefix, topology, stateMgr, stateDirectory, processorContext);
 
             transitionTo(State.RESTORING);
@@ -198,6 +200,9 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         }
     }
 
+    /**
+     * @throws TimeoutException if fetching committed offsets timed out
+     */
     @Override
     public void completeRestoration() {
         if (state() == State.RESTORING) {
@@ -231,25 +236,32 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         if (state() == State.CREATED || state() == State.CLOSING || state() == State.SUSPENDED) {
             // do nothing
             log.trace("Skip suspending since state is {}", state());
+        } else if (state() == State.RUNNING) {
+            closeTopology(true);
+
+            commitState();
+            // whenever we have successfully committed state during suspension, it is safe to checkpoint
+            // the state as well no matter if EOS is enabled or not
+            stateMgr.checkpoint(checkpointableOffsets());
+
+            // we should also clear any buffered records of a task when suspending it
+            partitionGroup.clear();
+
+            transitionTo(State.SUSPENDED);
+            log.info("Suspended running");
+        } else if (state() == State.RESTORING) {
+            // we just checkpoint the position that we've restored up to without
+            // going through the commit process
+            stateMgr.flush();
+            stateMgr.checkpoint(emptyMap());
+
+            // we should also clear any buffered records of a task when suspending it
+            partitionGroup.clear();
+
+            transitionTo(State.SUSPENDED);
+            log.info("Suspended restoring");
         } else {
-            if (state() == State.RUNNING) {
-                closeTopology(true);
-            }
-
-            if (state() == State.RUNNING || state() == State.RESTORING) {
-                commitState();
-                // whenever we have successfully committed state during suspension, it is safe to checkpoint
-                // the state as well no matter if EOS is enabled or not
-                stateMgr.checkpoint(checkpointableOffsets());
-
-                // we should also clear any buffered records of a task when suspending it
-                partitionGroup.clear();
-
-                transitionTo(State.SUSPENDED);
-                log.info("Suspended running");
-            } else {
-                throw new IllegalStateException("Illegal state " + state() + " while suspending active task " + id);
-            }
+            throw new IllegalStateException("Illegal state " + state() + " while suspending active task " + id);
         }
     }
 
@@ -336,7 +348,21 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         final Map<TopicPartition, OffsetAndMetadata> consumedOffsetsAndMetadata = new HashMap<>(consumedOffsets.size());
         for (final Map.Entry<TopicPartition, Long> entry : consumedOffsets.entrySet()) {
             final TopicPartition partition = entry.getKey();
-            final long offset = entry.getValue() + 1L;
+            Long offset = partitionGroup.headRecordOffset(partition);
+            if (offset == null) {
+                try {
+                    offset = mainConsumer.position(partition);
+                } catch (final TimeoutException error) {
+                    // the `consumer.position()` call should never block, because we know that we did process data
+                    // for the requested partition and thus the consumer should have a valid local position
+                    // that it can return immediately
+
+                    // hence, a `TimeoutException` indicates a bug and thus we rethrow it as fatal `IllegalStateException`
+                    throw new IllegalStateException(error);
+                } catch (final KafkaException fatal) {
+                    throw new StreamsException(fatal);
+                }
+            }
             final long partitionTime = partitionTimes.get(partition);
             consumedOffsetsAndMetadata.put(partition, new OffsetAndMetadata(offset, encodeTimestamp(partitionTime)));
         }
@@ -391,25 +417,22 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         } else {
             if (state() == State.RUNNING) {
                 closeTopology(clean);
-            }
 
-            if (state() == State.RUNNING || state() == State.RESTORING) {
                 if (clean) {
                     commitState();
                     // whenever we have successfully committed state, it is safe to checkpoint
                     // the state as well no matter if EOS is enabled or not
                     stateMgr.checkpoint(checkpointableOffsets());
-                } else if (eosDisabled) {
-                    // if from unclean close, then only need to flush state to make sure that when later
-                    // closing the states, there's no records triggering any processing anymore; also swallow all caught exceptions
-                    // However, for a _clean_ shutdown, we try to commit and checkpoint. If there are any exceptions, they become
-                    // fatal for the "closeClean()" call, and the caller can try again with closeDirty() to complete the shutdown.
-                    try {
-                        stateMgr.flush();
-                    } catch (final RuntimeException error) {
-                        log.debug("Ignoring flush error in unclean close.", error);
-                    }
+                } else {
+                    executeAndMaybeSwallow(false, stateMgr::flush, "state manager flush");
                 }
+
+                transitionTo(State.CLOSING);
+            } else if (state() == State.RESTORING) {
+                executeAndMaybeSwallow(clean, () -> {
+                    stateMgr.flush();
+                    stateMgr.checkpoint(Collections.emptyMap());
+                }, "state manager flush and checkpoint");
 
                 transitionTo(State.CLOSING);
             } else if (state() == State.SUSPENDED) {
@@ -422,12 +445,13 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
                 // if the latter throws and we re-close dirty which would close the state manager again.
                 StateManagerUtil.closeStateManager(log, logPrefix, clean, stateMgr, stateDirectory);
 
-                // if EOS is enabled, we wipe out the whole state store since they are invalid to use anymore
-                if (!eosDisabled) {
+                // if EOS is enabled, we wipe out the whole state store for unclean close
+                // since they are invalid to use anymore
+                if (!clean && !eosDisabled) {
                     StateManagerUtil.wipeStateStores(log, stateMgr);
                 }
 
-                closeRecordCollector(clean);
+                executeAndMaybeSwallow(clean, recordCollector::close, "record collector close");
             } else {
                 throw new IllegalStateException("Illegal state " + state() + " while closing active task " + id);
             }
@@ -435,7 +459,6 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
 
         partitionGroup.close();
         closeTaskSensor.record();
-        streamsMetrics.removeAllTaskLevelSensors(threadId, id.toString());
 
         transitionTo(State.CLOSED);
     }
@@ -444,7 +467,16 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
      * An active task is processable if its buffer contains data for all of its input
      * source topic partitions, or if it is enforced to be processable
      */
-    private boolean isProcessable(final long wallClockTime) {
+    public boolean isProcessable(final long wallClockTime) {
+        if (state() == State.CLOSED || state() == State.CLOSING) {
+            // a task is only closing / closed when 1) task manager is closing, 2) a rebalance is undergoing;
+            // in either case we can just log it and move on without notifying the thread since the consumer
+            // would soon be updated to not return any records for this task anymore.
+            log.info("Stream task {} is already in {} state, skip processing it.", id(), state());
+
+            return false;
+        }
+
         if (partitionGroup.allPartitionsBuffered()) {
             idleStartTime = RecordQueue.UNKNOWN;
             return true;
@@ -507,7 +539,7 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
             // after processing this record, if its partition queue's buffered size has been
             // decreased to the threshold, we can then resume the consumption on this partition
             if (recordInfo.queue().size() == maxBufferedSize) {
-                consumer.resume(singleton(partition));
+                mainConsumer.resume(singleton(partition));
             }
         } catch (final StreamsException e) {
             throw e;
@@ -593,10 +625,17 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
 
     private void initializeMetadata() {
         try {
-            final Map<TopicPartition, OffsetAndMetadata> offsetsAndMetadata = consumer.committed(partitions).entrySet().stream()
+            final Map<TopicPartition, OffsetAndMetadata> offsetsAndMetadata = mainConsumer.committed(partitions).entrySet().stream()
                 .filter(e -> e.getValue() != null)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             initializeTaskTime(offsetsAndMetadata);
+        } catch (final TimeoutException e) {
+            log.warn("Encountered {} while trying to fetch committed offsets, will retry initializing the metadata in the next loop." +
+                "\nConsider overwriting consumer config {} to a larger value to avoid timeout errors",
+                e.toString(),
+                ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG);
+
+            throw e;
         } catch (final KafkaException e) {
             throw new StreamsException(format("task [%s] Failed to initialize offsets for %s", id, partitions), e);
         }
@@ -672,12 +711,14 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         }
     }
 
-    private void closeRecordCollector(final boolean clean) {
+    private void executeAndMaybeSwallow(final boolean clean, final Runnable runnable, final String name) {
         try {
-            recordCollector.close();
+            runnable.run();
         } catch (final RuntimeException e) {
             if (clean) {
                 throw e;
+            } else {
+                log.debug("Ignoring error in unclean {}", name);
             }
         }
     }
@@ -691,12 +732,6 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
      */
     @Override
     public void addRecords(final TopicPartition partition, final Iterable<ConsumerRecord<byte[], byte[]>> records) {
-        if (state() == State.CLOSED || state() == State.CLOSING) {
-            log.info("Stream task {} is already closed, probably because it got unexpectedly migrated to another thread already. " +
-                         "Notifying the thread to trigger a new rebalance immediately.", id());
-            throw new TaskMigratedException(id());
-        }
-
         final int newQueueSize = partitionGroup.addRawRecords(partition, records);
 
         if (log.isTraceEnabled()) {
@@ -706,7 +741,7 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         // if after adding these records, its partition queue's buffered size has been
         // increased beyond the threshold, we can then pause the consumption for this partition
         if (newQueueSize > maxBufferedSize) {
-            consumer.pause(singleton(partition));
+            mainConsumer.pause(singleton(partition));
         }
     }
 
@@ -891,11 +926,6 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
     }
 
     @Override
-    public Collection<TopicPartition> changelogPartitions() {
-        return stateMgr.changelogPartitions();
-    }
-
-    @Override
     public Map<TopicPartition, Long> changelogOffsets() {
         if (state() == State.RUNNING) {
             // if we are in running state, just return the latest offset sentinel indicating
@@ -905,6 +935,10 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator,
         } else {
             return Collections.unmodifiableMap(stateMgr.changelogOffsets());
         }
+    }
+
+    public boolean hasRecordsQueued() {
+        return numBuffered() > 0;
     }
 
     // below are visible for testing only
