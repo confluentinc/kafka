@@ -86,7 +86,7 @@ def job = {
                     return "cp-downstream-builds FAILURE";
                 }
             } else {
-                return "";
+                return ""
             }
          }
         ]
