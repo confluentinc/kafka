@@ -9,6 +9,10 @@ def config = jobConfig {
     runMergeCheck = false
 }
 
+def retryFlagsString(jobConfig) {
+    if (jobConfig.isPrJob) " -PmaxTestRetries=1 -PmaxTestRetryFailures=5"
+    else ""
+}
 
 def job = {
     // https://github.com/confluentinc/common-tools/blob/master/confluent/config/dev/versions.json
@@ -40,13 +44,9 @@ def job = {
            runTestsStepName: {
                stage('Run tests') {
                    echo "Running unit and integration tests"
-                   def retryFlags() {
-                       if (config.isPrJob) " -PmaxTestRetries=1 -PmaxTestRetryFailures=5"
-                       else ""
-                   }
                    sh "./gradlew unitTest integrationTest " +
                            "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true" +
-                           retryFlags
+                           retryFlagsString(config)
                }
                stage('Upload results') {
                    // Kafka failed test stdout files
