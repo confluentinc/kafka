@@ -83,8 +83,11 @@ def job = {
                     downstreamBuildFailureOutput = "cp-downstream-builds result: " + buildResult.getResult();
                     return downstreamBuildFailureOutput
                 } catch (ignored) {
-                    downstreamBuildFailureOutput = "cp-downstream-builds result: " + e.getMessage()
                     currentBuild.result = 'UNSTABLE'
+                    downstreamBuildFailureOutput = "cp-downstream-builds result: " + e.getMessage()
+                    writeFile file: "downstream/downstream-build-result.txt", text: downstreamBuildFailureOutput
+                    archiveArtifacts artifacts: 'downstream/*.txt'
+
                     return downstreamBuildFailureOutput
                 }
             } else {
