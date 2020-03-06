@@ -80,10 +80,12 @@ def job = {
                             [$class: 'StringParameterValue', name: 'KAFKA_REPO', value: forkRepo],
                             [$class: 'StringParameterValue', name: 'KAFKA_BRANCH', value: forkBranch]],
                             propagate: true, wait: true
-                    return "cp-downstream-builds SUCCESS";
+                    downstreamBuildFailureOutput = "cp-downstream-builds result: " + buildResult.getResult();
+                    return downstreamBuildFailureOutput
                 } catch (ignored) {
+                    downstreamBuildFailureOutput = "cp-downstream-builds result: " + e.getMessage()
                     currentBuild.result = 'UNSTABLE'
-                    return "cp-downstream-builds FAILURE";
+                    return downstreamBuildFailureOutput
                 }
             } else {
                 return ""
@@ -98,3 +100,4 @@ def job = {
 }
 
 runJob config, job
+echo downstreamBuildFailureOutput
