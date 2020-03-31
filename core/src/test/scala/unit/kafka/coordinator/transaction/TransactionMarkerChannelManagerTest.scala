@@ -17,10 +17,8 @@
 package kafka.coordinator.transaction
 
 import java.util.Arrays.asList
-import java.util.concurrent.locks.ReentrantReadWriteLock
 
-import kafka.server.{DelayedOperationPurgatory, KafkaConfig, MetadataCache}
-import kafka.utils.timer.MockTimer
+import kafka.server.{KafkaConfig, MetadataCache}
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.{ClientResponse, NetworkClient}
 import org.apache.kafka.common.requests.{RequestHeader, TransactionResult, WriteTxnMarkersRequest, WriteTxnMarkersResponse}
@@ -62,10 +60,6 @@ class TransactionMarkerChannelManagerTest {
     PrepareCommit, mutable.Set[TopicPartition](partition1), 0L, 0L)
 
   private val capturedErrorsCallback: Capture[Errors => Unit] = EasyMock.newCapture()
-
-  private val txnMarkerPurgatory = new DelayedOperationPurgatory[DelayedTxnMarker]("txn-purgatory-name",
-    new MockTimer,
-    reaperEnabled = false)
   private val time = new MockTime
 
   private val channelManager = new TransactionMarkerChannelManager(
@@ -73,7 +67,6 @@ class TransactionMarkerChannelManagerTest {
     metadataCache,
     networkClient,
     txnStateManager,
-    txnMarkerPurgatory,
     time)
 
   private def mockCache(): Unit = {
@@ -88,10 +81,6 @@ class TransactionMarkerChannelManagerTest {
       .anyTimes()
     EasyMock.expect(txnStateManager.getTransactionState(EasyMock.eq(transactionalId2)))
       .andReturn(Right(Some(CoordinatorEpochAndTxnMetadata(coordinatorEpoch, txnMetadata2))))
-      .anyTimes()
-    val stateLock = new ReentrantReadWriteLock
-    EasyMock.expect(txnStateManager.stateReadLock)
-      .andReturn(stateLock.readLock)
       .anyTimes()
   }
 
@@ -118,10 +107,10 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.replay(metadataCache)
 
-    channelManager.addTxnMarkersToSend(transactionalId1, coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
-    channelManager.addTxnMarkersToSend(transactionalId2, coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
 
-    assertEquals(2, txnMarkerPurgatory.watched)
+    assertEquals(2, channelManager.numTxnsWithPendingMarkers)
     assertEquals(2, channelManager.queueForBroker(broker1.id).get.totalNumMarkers)
     assertEquals(1, channelManager.queueForBroker(broker1.id).get.totalNumMarkers(txnTopicPartition1))
     assertEquals(1, channelManager.queueForBroker(broker1.id).get.totalNumMarkers(txnTopicPartition2))
@@ -161,10 +150,10 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.replay(metadataCache)
 
-    channelManager.addTxnMarkersToSend(transactionalId1, coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
-    channelManager.addTxnMarkersToSend(transactionalId2, coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
 
-    assertEquals(1, txnMarkerPurgatory.watched)
+    assertEquals(1, channelManager.numTxnsWithPendingMarkers)
     assertEquals(1, channelManager.queueForBroker(broker2.id).get.totalNumMarkers)
     assertTrue(channelManager.queueForBroker(broker1.id).isEmpty)
     assertEquals(1, channelManager.queueForBroker(broker2.id).get.totalNumMarkers(txnTopicPartition1))
@@ -194,10 +183,10 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.replay(metadataCache)
 
-    channelManager.addTxnMarkersToSend(transactionalId1, coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
-    channelManager.addTxnMarkersToSend(transactionalId2, coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
 
-    assertEquals(2, txnMarkerPurgatory.watched)
+    assertEquals(2, channelManager.numTxnsWithPendingMarkers)
     assertEquals(1, channelManager.queueForBroker(broker2.id).get.totalNumMarkers)
     assertTrue(channelManager.queueForBroker(broker1.id).isEmpty)
     assertEquals(1, channelManager.queueForBroker(broker2.id).get.totalNumMarkers(txnTopicPartition1))
@@ -243,10 +232,10 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.replay(metadataCache)
 
-    channelManager.addTxnMarkersToSend(transactionalId1, coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
-    channelManager.addTxnMarkersToSend(transactionalId2, coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata1, txnMetadata1.prepareComplete(time.milliseconds()))
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata2, txnMetadata2.prepareComplete(time.milliseconds()))
 
-    assertEquals(2, txnMarkerPurgatory.watched)
+    assertEquals(2, channelManager.numTxnsWithPendingMarkers)
     assertEquals(2, channelManager.queueForBroker(broker1.id).get.totalNumMarkers)
     assertEquals(1, channelManager.queueForBroker(broker1.id).get.totalNumMarkers(txnTopicPartition1))
     assertEquals(1, channelManager.queueForBroker(broker1.id).get.totalNumMarkers(txnTopicPartition2))
@@ -256,7 +245,7 @@ class TransactionMarkerChannelManagerTest {
 
     channelManager.removeMarkersForTxnTopicPartition(txnTopicPartition1)
 
-    assertEquals(1, txnMarkerPurgatory.watched)
+    assertEquals(1, channelManager.numTxnsWithPendingMarkers)
     assertEquals(1, channelManager.queueForBroker(broker1.id).get.totalNumMarkers)
     assertEquals(0, channelManager.queueForBroker(broker1.id).get.totalNumMarkers(txnTopicPartition1))
     assertEquals(1, channelManager.queueForBroker(broker1.id).get.totalNumMarkers(txnTopicPartition2))
@@ -296,7 +285,7 @@ class TransactionMarkerChannelManagerTest {
       }).once()
     EasyMock.replay(txnStateManager, metadataCache)
 
-    channelManager.addTxnMarkersToSend(transactionalId2, coordinatorEpoch, txnResult, txnMetadata2, txnTransitionMetadata2)
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata2, txnTransitionMetadata2)
 
     val requestAndHandlers: Iterable[RequestAndCompletionHandler] = channelManager.generateRequests()
 
@@ -308,7 +297,7 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.verify(txnStateManager)
 
-    assertEquals(0, txnMarkerPurgatory.watched)
+    assertEquals(0, channelManager.numTxnsWithPendingMarkers)
     assertEquals(0, channelManager.queueForBroker(broker1.id).get.totalNumMarkers)
     assertEquals(None, txnMetadata2.pendingState)
     assertEquals(CompleteCommit, txnMetadata2.state)
@@ -345,7 +334,7 @@ class TransactionMarkerChannelManagerTest {
       }).once()
     EasyMock.replay(txnStateManager, metadataCache)
 
-    channelManager.addTxnMarkersToSend(transactionalId2, coordinatorEpoch, txnResult, txnMetadata2, txnTransitionMetadata2)
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata2, txnTransitionMetadata2)
 
     val requestAndHandlers: Iterable[RequestAndCompletionHandler] = channelManager.generateRequests()
 
@@ -357,7 +346,7 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.verify(txnStateManager)
 
-    assertEquals(0, txnMarkerPurgatory.watched)
+    assertEquals(0, channelManager.numTxnsWithPendingMarkers)
     assertEquals(0, channelManager.queueForBroker(broker1.id).get.totalNumMarkers)
     assertEquals(None, txnMetadata2.pendingState)
     assertEquals(PrepareCommit, txnMetadata2.state)
@@ -400,7 +389,7 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.replay(txnStateManager, metadataCache)
 
-    channelManager.addTxnMarkersToSend(transactionalId2, coordinatorEpoch, txnResult, txnMetadata2, txnTransitionMetadata2)
+    channelManager.addTxnMarkersToSend(coordinatorEpoch, txnResult, txnMetadata2, txnTransitionMetadata2)
 
     val requestAndHandlers: Iterable[RequestAndCompletionHandler] = channelManager.generateRequests()
 
@@ -415,7 +404,7 @@ class TransactionMarkerChannelManagerTest {
 
     EasyMock.verify(txnStateManager)
 
-    assertEquals(0, txnMarkerPurgatory.watched)
+    assertEquals(0, channelManager.numTxnsWithPendingMarkers)
     assertEquals(0, channelManager.queueForBroker(broker1.id).get.totalNumMarkers)
     assertEquals(None, txnMetadata2.pendingState)
     assertEquals(CompleteCommit, txnMetadata2.state)
