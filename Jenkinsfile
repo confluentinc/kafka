@@ -43,7 +43,7 @@ def job = {
     ]
 
     stage("Compile and validate") {
-        sh "gradle && ./gradlew clean assemble spotlessScalaCheck checkstyleMain checkstyleTest " +
+        sh "gradle && ./gradlew clean assemble checkstyleMain checkstyleTest " +
                 "--no-daemon --stacktrace --continue"
     }
 
