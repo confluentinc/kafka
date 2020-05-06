@@ -24,6 +24,7 @@ def config = jobConfig {
     slackChannel = '#kafka-warn'
     timeoutHours = 4
     runMergeCheck = false
+    downStreamValidate = true
 }
 
 def retryFlagsString(jobConfig) {
@@ -96,36 +97,15 @@ def job = {
         },
         downstreamBuildsStepName: {
             echo "Building cp-downstream-builds"
-            if (config.isPrJob) {
-                try {
-                    def muckrakeBranch = kafkaMuckrakeVersionMap[env.CHANGE_TARGET]
-                    def forkRepo = "${env.CHANGE_FORK ?: "confluentinc"}/kafka.git"
-                    def forkBranch = env.CHANGE_BRANCH
-                    echo "Schedule test-cp-downstream-builds with :"
-                    echo "Muckrake branch : ${muckrakeBranch}"
-                    echo "PR fork repo : ${forkRepo}"
-                    echo "PR fork branch : ${forkBranch}"
-                    buildResult = build job: 'test-cp-downstream-builds', parameters: [
-                            [$class: 'StringParameterValue', name: 'BRANCH', value: muckrakeBranch],
-                            [$class: 'StringParameterValue', name: 'TEST_PATH', value: "muckrake/tests/dummy_test.py"],
-                            [$class: 'StringParameterValue', name: 'KAFKA_REPO', value: forkRepo],
-                            [$class: 'StringParameterValue', name: 'KAFKA_BRANCH', value: forkBranch]],
-                            propagate: true, wait: true
-                    downstreamBuildFailureOutput = "cp-downstream-builds result: " + buildResult.getResult();
-                    return downstreamBuildFailureOutput
-                } catch (Exception e) {
-                    currentBuild.result = 'UNSTABLE'
-                    downstreamBuildFailureOutput = "cp-downstream-builds result: " + e.getMessage()
-                    writeFile file: "downstream/cp-downstream-build-failure.txt", text: downstreamBuildFailureOutput
-                    archiveArtifacts artifacts: 'downstream/*.txt'
-
-                    return downstreamBuildFailureOutput
+            stage('Downstream validation') {
+                if (config.isPrJob && config.downStreamValidate) {
+                    downStreamValidation(true)
+                } else {
+                    return "skip downStreamValidation"
                 }
-            } else {
-                return ""
             }
-         }
-        ]
+        }
+    ]
 
         result = parallel testTargets
         // combine results of the two targets into one result string
