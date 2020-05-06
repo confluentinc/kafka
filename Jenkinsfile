@@ -99,7 +99,12 @@ def job = {
             echo "Building cp-downstream-builds"
             stage('Downstream validation') {
                 if (config.isPrJob && config.downStreamValidate) {
-                    downStreamValidation(true)
+                    try{
+                        downStreamValidation(true)
+                    } catch (Exception e) {
+                        currentBuild.result = 'UNSTABLE'
+                        return "some downstream builds failed"
+                    }
                 } else {
                     return "skip downStreamValidation"
                 }
