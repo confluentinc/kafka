@@ -62,8 +62,8 @@ public class QuorumState {
             log.warn("Clear local quorum state store {}", store.toString(), e);
             store.clear();
 
-            election = ElectionState.withUnknownLeader(0);
-            state = new FollowerState(election.epoch);
+            election = ElectionState.withUnknownLeader(0, voters);
+            state = new FollowerState(election.epoch, voters);
         }
 
         if (election.epoch < logEndOffsetAndEpoch.epoch) {
@@ -76,7 +76,7 @@ public class QuorumState {
         } else if (election.isCandidate(localId)) {
             state = new CandidateState(localId, election.epoch, voters);
         } else {
-            state = new FollowerState(election.epoch);
+            state = new FollowerState(election.epoch, voters);
             if (election.hasLeader()) {
                 becomeFetchingFollower(election.epoch, election.leaderId());
             } else if (election.hasVoted()) {
@@ -193,7 +193,7 @@ public class QuorumState {
             throw new IllegalArgumentException("Cannot become follower in epoch " + newEpoch +
                     " since it is smaller epoch than our current epoch " + currentEpoch);
         } else if (newEpoch > currentEpoch || isCandidate()) {
-            state = new FollowerState(newEpoch);
+            state = new FollowerState(newEpoch, voters);
             stateChanged = true;
         } else if (isLeader()) {
             throw new IllegalArgumentException("Cannot become follower of epoch " + newEpoch +

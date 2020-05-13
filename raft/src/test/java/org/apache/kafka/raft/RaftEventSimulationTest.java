@@ -129,13 +129,16 @@ public class RaftEventSimulationTest {
     }
 
     private void testReplicationNoLeaderChange(QuorumConfig config) throws IOException {
+        Set<Integer> voters = getVoters(config.numVoters);
+
         for (int seed = 0; seed < 100; seed++) {
             Cluster cluster = new Cluster(config, seed);
             MessageRouter router = new MessageRouter(cluster);
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
 
+
             // Start with node 0 as the leader
-            cluster.initializeElection(ElectionState.withElectedLeader(2, 0));
+            cluster.initializeElection(ElectionState.withElectedLeader(2, 0, voters));
             cluster.startAll();
             assertTrue(cluster.hasConsistentLeader());
 
@@ -179,6 +182,7 @@ public class RaftEventSimulationTest {
     private void testElectionAfterLeaderFailure(QuorumConfig config) throws IOException {
         // We need at least three voters to run this tests
         assumeTrue(config.numVoters > 2);
+        Set<Integer> voters = getVoters(config.numVoters);
 
         for (int seed = 0; seed < 100; seed++) {
             Cluster cluster = new Cluster(config, seed);
@@ -186,7 +190,7 @@ public class RaftEventSimulationTest {
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
 
             // Start with node 1 as the leader
-            cluster.initializeElection(ElectionState.withElectedLeader(2, 0));
+            cluster.initializeElection(ElectionState.withElectedLeader(2, 0, voters));
             cluster.startAll();
             assertTrue(cluster.hasConsistentLeader());
 
@@ -236,6 +240,7 @@ public class RaftEventSimulationTest {
     private void testElectionAfterLeaderNetworkPartition(QuorumConfig config) throws IOException {
         // We need at least three voters to run this tests
         assumeTrue(config.numVoters > 2);
+        Set<Integer> voters = getVoters(config.numVoters);
 
         for (int seed = 0; seed < 100; seed++) {
             Cluster cluster = new Cluster(config, seed);
@@ -243,7 +248,7 @@ public class RaftEventSimulationTest {
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
 
             // Start with node 1 as the leader
-            cluster.initializeElection(ElectionState.withElectedLeader(2, 1));
+            cluster.initializeElection(ElectionState.withElectedLeader(2, 1, voters));
             cluster.startAll();
             assertTrue(cluster.hasConsistentLeader());
 
@@ -277,6 +282,7 @@ public class RaftEventSimulationTest {
     private void testElectionAfterMultiNodeNetworkPartition(QuorumConfig config) throws IOException {
         // We need at least three voters to run this tests
         assumeTrue(config.numVoters > 2);
+        Set<Integer> voters = getVoters(config.numVoters);
 
         for (int seed = 0; seed < 100; seed++) {
             Cluster cluster = new Cluster(config, seed);
@@ -284,7 +290,7 @@ public class RaftEventSimulationTest {
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
 
             // Start with node 1 as the leader
-            cluster.initializeElection(ElectionState.withElectedLeader(2, 1));
+            cluster.initializeElection(ElectionState.withElectedLeader(2, 1, voters));
             cluster.startAll();
             assertTrue(cluster.hasConsistentLeader());
 
@@ -318,6 +324,14 @@ public class RaftEventSimulationTest {
 
             scheduler.runUntil(() -> cluster.allReachedHighWatermark(30));
         }
+    }
+
+    private Set<Integer> getVoters(int numVoters) {
+        Set<Integer> voters = new HashSet<>(numVoters);
+        for (int nodeId = 0; nodeId < numVoters; nodeId++) {
+            voters.add(nodeId);
+        }
+        return voters;
     }
 
     private EventScheduler schedulerWithDefaultInvariants(Cluster cluster) {
