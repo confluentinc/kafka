@@ -16,6 +16,8 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.errors.KafkaRaftException;
+
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.Set;
@@ -63,13 +65,13 @@ public class FollowerState implements EpochState {
      */
     public boolean grantVoteTo(int candidateId) {
         if (candidateId < 0) {
-            throw new IllegalArgumentException("Illegal negative candidateId: " + candidateId);
+            throw new KafkaRaftException("Illegal negative candidateId: " + candidateId);
         } else if (hasLeader()) {
             throw new IllegalArgumentException("Cannot vote in epoch " + epoch +
                     " since we already have a known leader for epoch");
         } else if (hasVoted()) {
             if (votedIdOpt.orElse(-1) != candidateId) {
-                throw new IllegalArgumentException("Cannot change vote in epoch " + epoch +
+                throw new KafkaRaftException("Cannot change vote in epoch " + epoch +
                         " from " + votedIdOpt + " to " + candidateId);
             }
             return false;
@@ -85,16 +87,16 @@ public class FollowerState implements EpochState {
 
     public boolean hasLeader(int replicaId) {
         if (replicaId < 0)
-            throw new IllegalArgumentException("Illegal negative replicaId " + replicaId);
+            throw new KafkaRaftException("Illegal negative replicaId " + replicaId);
         return leaderIdOpt.orElse(-1) == replicaId;
     }
 
     public boolean acknowledgeLeader(int leaderId) {
         if (leaderId < 0) {
-            throw new IllegalArgumentException("Invalid negative leaderId: " + leaderId);
+            throw new KafkaRaftException("Invalid negative leaderId: " + leaderId);
         } else if (hasLeader()) {
             if (leaderIdOpt.orElse(-1) != leaderId) {
-                throw new IllegalArgumentException("Cannot acknowledge leader " + leaderId +
+                throw new KafkaRaftException("Cannot acknowledge leader " + leaderId +
                         " in epoch " + epoch + " since we have already acknowledged " + leaderIdOpt);
             }
             return false;
@@ -117,9 +119,14 @@ public class FollowerState implements EpochState {
         return votedIdOpt.isPresent();
     }
 
-    public boolean hasVotedFor(int candidateId) {
+    /**
+     * Check whether we have voted for this candidate.
+     *
+     * @throws KafkaRaftException if the given candidate id is invalid
+     */
+    public boolean hasVotedFor(int candidateId) throws KafkaRaftException {
         if (candidateId < 0)
-            throw new IllegalArgumentException("Illegal negative candidateId " + candidateId);
+            throw new KafkaRaftException("Illegal negative candidateId " + candidateId);
         return votedIdOpt.orElse(-1) == candidateId;
     }
 

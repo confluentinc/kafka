@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.errors.KafkaRaftException;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.Test;
 
@@ -45,7 +46,7 @@ public class LeaderStateTest {
     public void testNonFollowerEndorsement() {
         int nonVoterId = 1;
         LeaderState state = new LeaderState(localId, epoch, 0L, Collections.singleton(localId));
-        assertThrows(IllegalArgumentException.class, () -> state.addEndorsementFrom(nonVoterId));
+        assertThrows(KafkaRaftException.class, () -> state.addEndorsementFrom(nonVoterId));
     }
 
     @Test
