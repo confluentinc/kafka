@@ -266,8 +266,8 @@ public class KafkaConfigBackingStore implements ConfigBackingStore {
     @Override
     public ClusterConfigState snapshot() {
         synchronized (lock) {
-            // Doing a shallow copy of the data is safe here because the complex nested data that is copied should all be
-            // immutable configs
+            // Only a shallow copy is performed here; in order to avoid accidentally corrupting the worker's view
+            // of the config topic, any nested structures should be copied before making modifications
             return new ClusterConfigState(
                     offset,
                     new HashMap<>(connectorTaskCounts),
@@ -516,6 +516,8 @@ public class KafkaConfigBackingStore implements ConfigBackingStore {
                         // Connector deletion will be written as a null value
                         log.info("Successfully processed removal of connector '{}'", connectorName);
                         connectorConfigs.remove(connectorName);
+                        connectorTaskCounts.remove(connectorName);
+                        taskConfigs.keySet().removeIf(taskId -> taskId.connector().equals(connectorName));
                         removed = true;
                     } else {
                         // Connector configs can be applied and callbacks invoked immediately

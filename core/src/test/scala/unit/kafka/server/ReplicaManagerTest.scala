@@ -195,6 +195,67 @@ class ReplicaManagerTest {
   }
 
   @Test
+  def testFencedErrorCausedByBecomeLeader(): Unit = {
+    testFencedErrorCausedByBecomeLeader(0)
+    testFencedErrorCausedByBecomeLeader(1)
+    testFencedErrorCausedByBecomeLeader(10)
+  }
+
+  private[this] def testFencedErrorCausedByBecomeLeader(loopEpochChange: Int): Unit = {
+    val replicaManager = setupReplicaManagerWithMockedPurgatories(new MockTimer)
+    try {
+      val brokerList = Seq[Integer](0, 1).asJava
+      val topicPartition = new TopicPartition(topic, 0)
+      replicaManager.getOrCreatePartition(topicPartition)
+          .getOrCreateReplica(0, isNew = false)
+
+      val replica = replicaManager.localReplicaOrException(topicPartition)
+      assertFalse(replicaManager.futureLogExists(topicPartition))
+      assertEquals(None, replicaManager.futureLocalReplica(topicPartition))
+
+      def leaderAndIsrRequest(epoch: Int): LeaderAndIsrRequest = new LeaderAndIsrRequest.Builder(
+        ApiKeys.LEADER_AND_ISR.latestVersion,
+        0,
+        0,
+        brokerEpoch,
+        Map(topicPartition -> new LeaderAndIsrRequest.PartitionState(0, 0,
+          epoch, brokerList, 0, brokerList, true)).asJava,
+        Set(new Node(0, "host1", 0), new Node(1, "host2", 1)).asJava
+      ).build()
+
+      replicaManager.becomeLeaderOrFollower(0, leaderAndIsrRequest(0), (_, _) => ())
+      val previousReplicaFolder = replica.log.get.dir.getParentFile
+
+      // find the live and different folder
+      assertEquals(1, replicaManager.logManager.liveLogDirs.filterNot(_ == previousReplicaFolder).size)
+      val newReplicaFolder = replicaManager.logManager.liveLogDirs.filterNot(_ == previousReplicaFolder).head
+      assertEquals(0, replicaManager.replicaAlterLogDirsManager.fetcherThreadMap.size)
+      replicaManager.alterReplicaLogDirs(Map(topicPartition -> newReplicaFolder.getAbsolutePath))
+      // make sure the future log is created
+      val futureReplica = replicaManager.futureLocalReplicaOrException(topicPartition)
+      assertEquals(1, replicaManager.replicaAlterLogDirsManager.fetcherThreadMap.size)
+      (1 to loopEpochChange).foreach(epoch => replicaManager.becomeLeaderOrFollower(0, leaderAndIsrRequest(epoch), (_, _) => ()))
+      // wait for the ReplicaAlterLogDirsThread to complete
+      TestUtils.waitUntilTrue(() => {
+        replicaManager.replicaAlterLogDirsManager.shutdownIdleFetcherThreads()
+        replicaManager.replicaAlterLogDirsManager.fetcherThreadMap.isEmpty
+      }, s"ReplicaAlterLogDirsThread should be gone")
+
+      // the fenced error should be recoverable
+      assertEquals(0, replicaManager.replicaAlterLogDirsManager.failedPartitions.size)
+      // the replica change is completed after retrying
+      assertTrue(futureReplica.log.isEmpty)
+      assertEquals(newReplicaFolder.getAbsolutePath, replica.log.get.dir.getParent)
+      // change the replica folder again
+      val response = replicaManager.alterReplicaLogDirs(Map(topicPartition -> previousReplicaFolder.getAbsolutePath))
+      assertNotEquals(0, response.size)
+      response.values.foreach(assertEquals(Errors.NONE, _))
+      // should succeed to invoke ReplicaAlterLogDirsThread again
+      assertEquals(1, replicaManager.replicaAlterLogDirsManager.fetcherThreadMap.size)
+    } finally replicaManager.shutdown(checkpointHW = false)
+  }
+
+  @Test
   def testReceiveOutOfOrderSequenceExceptionWithLogStartOffset(): Unit = {
     val timer = new MockTimer
     val replicaManager = setupReplicaManagerWithMockedPurgatories(timer)
@@ -636,6 +697,7 @@ class ReplicaManagerTest {
       EasyMock.expect(mockLogMgr.truncateTo(Map(new TopicPartition(topic, topicPartition) -> offsetFromLeader),
         isFuture = false)).once
     }
+    EasyMock.expect(mockLogMgr.getLog(new TopicPartition(topic, topicPartition), isFuture = true)).andReturn(None)
     EasyMock.replay(mockLogMgr)
 
     val aliveBrokerIds = Seq[Integer](followerBrokerId, leaderBrokerId)
@@ -798,7 +860,7 @@ class ReplicaManagerTest {
 
   private def setupReplicaManagerWithMockedPurgatories(timer: MockTimer, aliveBrokerIds: Seq[Int] = Seq(0, 1)): ReplicaManager = {
     val props = TestUtils.createBrokerConfig(0, TestUtils.MockZkConnect)
-    props.put("log.dir", TestUtils.tempRelativeDir("data").getAbsolutePath)
+    props.put("log.dirs", TestUtils.tempRelativeDir("data").getAbsolutePath + "," + TestUtils.tempRelativeDir("data2").getAbsolutePath)
     val config = KafkaConfig.fromProps(props)
     val logProps = new Properties()
     val mockLogMgr = TestUtils.createLogManager(config.logDirs.map(new File(_)), LogConfig(logProps))
