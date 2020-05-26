@@ -81,7 +81,7 @@ public class KafkaRaftClientTest {
     private final MockLog log = new MockLog();
     private final MockNetworkChannel channel = new MockNetworkChannel();
     private final Random random = Mockito.spy(new Random());
-    private final NoOpStateMachine stateMachine = new NoOpStateMachine();
+    private final MockStateMachine stateMachine = new MockStateMachine();
     private final QuorumStateStore quorumStateStore = new MockQuorumStateStore();
 
     @After
@@ -94,7 +94,7 @@ public class KafkaRaftClientTest {
     }
 
     private KafkaRaftClient buildClient(Set<Integer> voters) throws IOException {
-        return buildClient(voters, new NoOpStateMachine());
+        return buildClient(voters, new MockStateMachine());
     }
 
     private KafkaRaftClient buildClient(Set<Integer> voters, ReplicatedStateMachine stateMachine) throws IOException {
@@ -1325,7 +1325,7 @@ public class KafkaRaftClientTest {
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId));
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
 
-        NoOpStateMachine stateMachine = new NoOpStateMachine();
+        MockStateMachine stateMachine = new MockStateMachine();
         buildClient(voters, stateMachine);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), quorumStateStore.readElectionState());
         assertTrue(stateMachine.isFollower());
@@ -1380,7 +1380,7 @@ public class KafkaRaftClientTest {
     public void testLeaderAppendSingleMemberQuorum() throws IOException {
         long now = time.milliseconds();
 
-        NoOpStateMachine stateMachine = new NoOpStateMachine();
+        MockStateMachine stateMachine = new MockStateMachine();
         KafkaRaftClient client = buildClient(Collections.singleton(localId), stateMachine);
         assertEquals(ElectionState.withElectedLeader(1, localId), quorumStateStore.readElectionState());
 

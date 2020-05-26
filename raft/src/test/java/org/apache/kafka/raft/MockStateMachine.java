@@ -21,7 +21,7 @@ import org.apache.kafka.common.record.Records;
 
 import java.util.concurrent.CompletableFuture;
 
-public class NoOpStateMachine implements ReplicatedStateMachine {
+public class MockStateMachine implements ReplicatedStateMachine {
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
 
     private RecordAppender recordAppender = null;
