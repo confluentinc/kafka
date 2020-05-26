@@ -1305,6 +1305,9 @@ public class KafkaRaftClientTest {
         int otherNodeId = 1;
         int epoch = 5;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
+
         KafkaRaftClient client = buildClient(voters, stateMachine);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
         assertTrue(stateMachine.isFollower());
@@ -1332,7 +1335,9 @@ public class KafkaRaftClientTest {
     public void testAppendToNonLeaderFails() throws IOException {
         int otherNodeId = 1;
         int epoch = 5;
+
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+        quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
 
         MockStateMachine stateMachine = new MockStateMachine();
         buildClient(voters, stateMachine);
