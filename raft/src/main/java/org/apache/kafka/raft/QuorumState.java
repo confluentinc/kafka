@@ -66,7 +66,12 @@ public class QuorumState {
             state = new FollowerState(election.epoch, voters);
         }
 
-        if (election.epoch < logEndOffsetAndEpoch.epoch) {
+        if (voters != election.voters()) {
+            throw new IllegalStateException("Configured voter set: " + voters
+                + " is different from the voter set read from the state file: " + voters +
+                ". Check if the quorum configuration is up to date, " +
+                "or wipe out the local state file if necessary");
+        } else if (election.epoch < logEndOffsetAndEpoch.epoch) {
             log.warn("Epoch from quorum-state file is {}, which is " +
                 "smaller than last written epoch {} in the log",
                 election.epoch, logEndOffsetAndEpoch.epoch);
