@@ -66,7 +66,7 @@ public class QuorumState {
             state = new FollowerState(election.epoch, voters);
         }
 
-        if (!voters.equals(election.voters())) {
+        if (!election.voters().isEmpty() && !voters.equals(election.voters())) {
             throw new IllegalStateException("Configured voter set: " + voters
                 + " is different from the voter set read from the state file: " + election.voters() +
                 ". Check if the quorum configuration is up to date, " +

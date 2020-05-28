@@ -39,9 +39,6 @@ public class QuorumStateTest {
     public void testInitializePrimordialEpoch() throws IOException {
         Set<Integer> voters = Utils.mkSet(localId);
         assertEquals(0, store.readElectionState().epoch);
-//
-//        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
-//        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
 
         QuorumState state = initializeState(voters, store);
         assertTrue(state.isFollower());
