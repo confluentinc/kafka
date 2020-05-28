@@ -87,6 +87,7 @@ public class KafkaRaftClientTest {
     @After
     public void cleanUp() throws IOException {
         quorumStateStore.clear();
+        stateMachine.close();
     }
 
     private InetSocketAddress mockAddress(int id) {
@@ -94,16 +95,24 @@ public class KafkaRaftClientTest {
     }
 
     private KafkaRaftClient buildClient(Set<Integer> voters) throws IOException {
-        return buildClient(voters, new MockStateMachine());
+        return buildClient(voters, stateMachine, true);
     }
 
-    private KafkaRaftClient buildClient(Set<Integer> voters, ReplicatedStateMachine stateMachine) throws IOException {
+    private KafkaRaftClient buildClientWithInitializedState(Set<Integer> voters) throws IOException {
+        return buildClient(voters, stateMachine, false);
+    }
+
+    private KafkaRaftClient buildClient(Set<Integer> voters, ReplicatedStateMachine stateMachine, boolean needInitialState) throws IOException {
         LogContext logContext = new LogContext();
         QuorumState quorum = new QuorumState(localId, voters, quorumStateStore, logContext);
 
         List<InetSocketAddress> bootstrapServers = voters.stream()
             .map(this::mockAddress)
             .collect(Collectors.toList());
+
+        if (needInitialState) {
+            quorumStateStore.writeElectionState(ElectionState.withUnknownLeader(0, voters));
+        }
 
         KafkaRaftClient client = new KafkaRaftClient(channel, log, quorum, time,
             new MockFuturePurgatory<>(time), mockAddress(localId), bootstrapServers,
@@ -128,7 +137,7 @@ public class KafkaRaftClientTest {
         int epoch = 2;
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters, stateMachine);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertTrue(stateMachine.isLeader());
 
         assertEquals(epoch, stateMachine.epoch());
@@ -146,7 +155,8 @@ public class KafkaRaftClientTest {
         // Need 3 node to require a 2-node majority
         Set<Integer> voters = Utils.mkSet(localId, 1, 2);
         quorumStateStore.writeElectionState(ElectionState.withVotedCandidate(2, localId, voters));
-        KafkaRaftClient client = buildClient(voters);
+
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertFalse(stateMachine.isLeader());
         assertEquals(0L, log.endOffset());
 
@@ -258,7 +268,7 @@ public class KafkaRaftClientTest {
 
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
         quorumStateStore.writeElectionState(ElectionState.withVotedCandidate(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         deliverRequest(endEpochRequest(epoch, OptionalInt.empty(), otherNodeId));
         client.poll();
@@ -285,7 +295,7 @@ public class KafkaRaftClientTest {
 
         Set<Integer> voters = Utils.mkSet(localId, voter2, voter3);
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         // One of the voters may have sent EndEpoch as a candidate because it
         // had not yet been notified that the local node was the leader.
@@ -309,7 +319,7 @@ public class KafkaRaftClientTest {
 
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
         quorumStateStore.writeElectionState(ElectionState.withVotedCandidate(epoch, otherNodeId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         deliverRequest(endEpochRequest(epoch, OptionalInt.empty(), otherNodeId));
         client.poll();
@@ -336,7 +346,7 @@ public class KafkaRaftClientTest {
 
         Set<Integer> voters = Utils.mkSet(localId, voter2, voter3);
         quorumStateStore.writeElectionState(ElectionState.withUnknownLeader(epoch, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         deliverRequest(endEpochRequest(epoch, OptionalInt.of(voter2), voter2));
         client.poll();
@@ -447,7 +457,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, electedLeaderId, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         deliverRequest(voteRequest(epoch, otherNodeId, epoch - 1, 1));
 
@@ -468,7 +478,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withVotedCandidate(epoch, votedCandidateId, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         deliverRequest(voteRequest(epoch, otherNodeId, epoch - 1, 1));
 
@@ -487,7 +497,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withUnknownLeader(epoch, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         deliverRequest(voteRequest(epoch - 1, otherNodeId, epoch - 2, 1));
 
         client.poll();
@@ -505,7 +515,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withUnknownLeader(epoch, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         deliverRequest(voteRequest(epoch + 1, otherNodeId, epoch, 1));
 
@@ -523,7 +533,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(leaderEpoch, localId, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         pollUntilSend(client);
         assertSentFindQuorumRequest();
@@ -545,7 +555,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withVotedCandidate(leaderEpoch, localId, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         pollUntilSend(client);
         assertSentFindQuorumRequest();
@@ -611,7 +621,7 @@ public class KafkaRaftClientTest {
         int epoch = 5;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -633,7 +643,7 @@ public class KafkaRaftClientTest {
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
         log.appendAsLeader(Collections.singleton(new SimpleRecord("foo".getBytes())), lastEpoch);
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -655,7 +665,7 @@ public class KafkaRaftClientTest {
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
         log.appendAsLeader(Collections.singleton(new SimpleRecord("foo".getBytes())), lastEpoch);
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -718,7 +728,7 @@ public class KafkaRaftClientTest {
         int epoch = 1;
         Set<Integer> voters = Utils.mkSet(localId, 1, 2, 3, 4);
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters, stateMachine);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         // Initialize ourselves as the leader
         assertEquals(ElectionState.withElectedLeader(epoch, localId, voters), quorumStateStore.readElectionState());
@@ -794,7 +804,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, localId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -837,7 +847,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, localId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -868,7 +878,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -982,7 +992,7 @@ public class KafkaRaftClientTest {
         ReplicatedStateMachine stateMachine
     ) throws Exception {
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters, stateMachine);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, localId, voters), quorumStateStore.readElectionState());
 
         // Handle FindQuorum
@@ -1009,7 +1019,7 @@ public class KafkaRaftClientTest {
         // The other node starts out as the leader
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -1047,7 +1057,7 @@ public class KafkaRaftClientTest {
         // Start out with `voter2` as the leader
         Set<Integer> voters = Utils.mkSet(voter1, voter2, voter3);
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, voter2, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, voter2, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -1086,7 +1096,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(voter1, voter2, voter3);
         quorumStateStore.writeElectionState(ElectionState.withVotedCandidate(epoch, voter1, voters));
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withVotedCandidate(epoch, voter1, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -1271,7 +1281,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
-        KafkaRaftClient client = buildClient(Utils.mkSet(localId, otherNodeId), stateMachine);
+        KafkaRaftClient client = buildClient(Utils.mkSet(localId, otherNodeId), stateMachine, false);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
 
         assertTrue(stateMachine.isFollower());
@@ -1308,7 +1318,7 @@ public class KafkaRaftClientTest {
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
 
-        KafkaRaftClient client = buildClient(voters, stateMachine);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
         assertTrue(stateMachine.isFollower());
         assertEquals(epoch, stateMachine.epoch());
@@ -1339,8 +1349,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId, voters));
 
-        MockStateMachine stateMachine = new MockStateMachine();
-        buildClient(voters, stateMachine);
+        buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
         assertTrue(stateMachine.isFollower());
         assertEquals(epoch, stateMachine.epoch());
@@ -1362,7 +1371,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
 
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
         assertEquals(ElectionState.withElectedLeader(epoch, localId, voters), quorumStateStore.readElectionState());
 
         pollUntilSend(client);
@@ -1396,7 +1405,7 @@ public class KafkaRaftClientTest {
         long now = time.milliseconds();
 
         MockStateMachine stateMachine = new MockStateMachine();
-        KafkaRaftClient client = buildClient(Collections.singleton(localId), stateMachine);
+        KafkaRaftClient client = buildClient(Collections.singleton(localId), stateMachine, true);
         assertEquals(ElectionState.withElectedLeader(1, localId, Collections.singleton(localId)),
             quorumStateStore.readElectionState());
 
@@ -1461,7 +1470,7 @@ public class KafkaRaftClientTest {
         log.appendAsLeader(Arrays.asList(
             new SimpleRecord("baz".getBytes())), lastEpoch);
 
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClientWithInitializedState(voters);
 
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
         assertEquals(3L, log.endOffset());
