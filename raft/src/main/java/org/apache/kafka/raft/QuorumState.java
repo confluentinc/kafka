@@ -48,7 +48,7 @@ public class QuorumState {
         this.log = logContext.logger(QuorumState.class);
     }
 
-    public void initialize(OffsetAndEpoch logEndOffsetAndEpoch) throws IOException {
+    public void initialize(OffsetAndEpoch logEndOffsetAndEpoch) throws IOException, IllegalStateException {
         // We initialize in whatever state we were in on shutdown. If we were a leader
         // or candidate, probably an election was held, but we will find out about it
         // when we send Vote or BeginEpoch requests.
@@ -66,9 +66,9 @@ public class QuorumState {
             state = new FollowerState(election.epoch, voters);
         }
 
-        if (voters != election.voters()) {
+        if (!voters.equals(election.voters())) {
             throw new IllegalStateException("Configured voter set: " + voters
-                + " is different from the voter set read from the state file: " + voters +
+                + " is different from the voter set read from the state file: " + election.voters() +
                 ". Check if the quorum configuration is up to date, " +
                 "or wipe out the local state file if necessary");
         } else if (election.epoch < logEndOffsetAndEpoch.epoch) {

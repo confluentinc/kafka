@@ -39,8 +39,11 @@ public class QuorumStateTest {
     public void testInitializePrimordialEpoch() throws IOException {
         Set<Integer> voters = Utils.mkSet(localId);
         assertEquals(0, store.readElectionState().epoch);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
-        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
+//
+//        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+//        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
+
+        QuorumState state = initializeState(voters, store);
         assertTrue(state.isFollower());
         assertEquals(0, state.epoch());
         state.becomeCandidate();
@@ -77,6 +80,7 @@ public class QuorumStateTest {
         store.writeElectionState(ElectionState.withVotedCandidate(epoch, node1, voters));
 
         QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertTrue(state.isFollower());
         assertEquals(epoch, state.epoch());
@@ -127,8 +131,8 @@ public class QuorumStateTest {
     public void testBecomeLeader() throws IOException {
         Set<Integer> voters = Utils.mkSet(localId);
         assertEquals(0, store.readElectionState().epoch);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
-        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
+
+        QuorumState state = initializeState(voters, store);
         state.becomeCandidate();
         assertTrue(state.isCandidate());
 
@@ -142,6 +146,9 @@ public class QuorumStateTest {
     public void testCannotBecomeLeaderIfAlreadyLeader() throws IOException {
         Set<Integer> voters = Utils.mkSet(localId);
         assertEquals(0, store.readElectionState().epoch);
+
+        store.writeElectionState(ElectionState.withUnknownLeader(1, voters));
+
         QuorumState state = new QuorumState(localId, voters, store, new LogContext());
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeCandidate();
@@ -155,8 +162,8 @@ public class QuorumStateTest {
     public void testCannotBecomeFollowerOfSelf() throws IOException {
         Set<Integer> voters = Utils.mkSet(localId);
         assertEquals(0, store.readElectionState().epoch);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
-        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
+        QuorumState state = initializeState(voters, store);
+//        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertThrows(IllegalArgumentException.class, () -> state.becomeFetchingFollower(0, localId));
         assertThrows(IllegalArgumentException.class, () -> state.becomeVotedFollower(0, localId));
     }
@@ -167,7 +174,7 @@ public class QuorumStateTest {
         int epoch = 5;
         Set<Integer> voters = Utils.mkSet(localId, leaderId);
         store.writeElectionState(ElectionState.withVotedCandidate(epoch, leaderId, voters));
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertTrue(state.isFollower());
         assertThrows(IllegalStateException.class, () -> state.becomeLeader(0L));
@@ -177,8 +184,8 @@ public class QuorumStateTest {
     public void testCannotBecomeCandidateIfCurrentlyLeading() throws IOException {
         Set<Integer> voters = Utils.mkSet(localId);
         assertEquals(0, store.readElectionState().epoch);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
-        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
+
+        QuorumState state = initializeState(voters, store);
         state.becomeCandidate();
         state.becomeLeader(0L);
         assertTrue(state.isLeader());
@@ -189,7 +196,7 @@ public class QuorumStateTest {
     public void testCannotBecomeLeaderWithoutGrantedVote() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeCandidate();
         assertFalse(state.candidateStateOrThrow().isVoteGranted());
@@ -204,8 +211,9 @@ public class QuorumStateTest {
     public void testLeaderToFollowerOfElectedLeader() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
-        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
+
+        QuorumState state = initializeState(voters, store);
+
         state.becomeCandidate();
         state.candidateStateOrThrow().recordGrantedVote(otherNodeId);
         state.becomeLeader(0L);
@@ -215,11 +223,26 @@ public class QuorumStateTest {
         assertEquals(ElectionState.withElectedLeader(5, otherNodeId, voters), store.readElectionState());
     }
 
+    private QuorumState initializeState(Set<Integer> voters,
+                                        MockQuorumStateStore store) throws IOException {
+        return initializeState(voters, store, 0);
+    }
+
+    private QuorumState initializeState(Set<Integer> voters,
+                                        MockQuorumStateStore store,
+                                        int epoch) throws IOException {
+        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+
+        store.writeElectionState(ElectionState.withUnknownLeader(epoch, voters));
+        state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
+        return state;
+    }
+
     @Test
     public void testLeaderToUnattachedFollower() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeCandidate();
         state.candidateStateOrThrow().recordGrantedVote(otherNodeId);
@@ -234,7 +257,7 @@ public class QuorumStateTest {
     public void testLeaderToFollowerOfVotedCandidate() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeCandidate();
         state.candidateStateOrThrow().recordGrantedVote(otherNodeId);
@@ -252,7 +275,7 @@ public class QuorumStateTest {
     public void testCandidateToFollowerOfElectedLeader() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertTrue(state.becomeFetchingFollower(5, otherNodeId));
         assertEquals(5, state.epoch());
@@ -264,7 +287,7 @@ public class QuorumStateTest {
     public void testCandidateToUnattachedFollower() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertTrue(state.becomeUnattachedFollower(5));
         assertEquals(5, state.epoch());
@@ -276,7 +299,7 @@ public class QuorumStateTest {
     public void testCandidateToFollowerOfVotedCandidate() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertTrue(state.becomeVotedFollower(5, otherNodeId));
         assertEquals(5, state.epoch());
@@ -291,7 +314,7 @@ public class QuorumStateTest {
     public void testUnattachedFollowerToFollowerOfVotedCandidateSameEpoch() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeUnattachedFollower(5);
         state.becomeVotedFollower(5, otherNodeId);
@@ -306,7 +329,7 @@ public class QuorumStateTest {
     public void testUnattachedFollowerToFollowerOfVotedCandidateHigherEpoch() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeUnattachedFollower(5);
         state.becomeVotedFollower(8, otherNodeId);
@@ -322,7 +345,7 @@ public class QuorumStateTest {
         int node1 = 1;
         int node2 = 2;
         Set<Integer> voters = Utils.mkSet(localId, node1, node2);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeVotedFollower(5, node1);
         state.becomeFetchingFollower(5, node2);
@@ -339,7 +362,7 @@ public class QuorumStateTest {
         int node1 = 1;
         int node2 = 2;
         Set<Integer> voters = Utils.mkSet(localId, node1, node2);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeVotedFollower(5, node1);
         state.becomeFetchingFollower(8, node2);
@@ -356,7 +379,7 @@ public class QuorumStateTest {
         int node1 = 1;
         int node2 = 2;
         Set<Integer> voters = Utils.mkSet(localId, node1, node2);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeVotedFollower(5, node1);
         assertThrows(IllegalArgumentException.class, () -> state.becomeVotedFollower(5, node2));
@@ -372,7 +395,7 @@ public class QuorumStateTest {
         int node1 = 1;
         int node2 = 2;
         Set<Integer> voters = Utils.mkSet(localId, node1, node2);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeFetchingFollower(8, node2);
         assertThrows(IllegalArgumentException.class, () -> state.becomeFetchingFollower(8, node1));
@@ -389,7 +412,7 @@ public class QuorumStateTest {
         int node1 = 1;
         int node2 = 2;
         Set<Integer> voters = Utils.mkSet(localId, node1, node2);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeFetchingFollower(8, node2);
         assertThrows(IllegalArgumentException.class, () -> state.becomeFetchingFollower(8, node1));
@@ -405,7 +428,7 @@ public class QuorumStateTest {
     public void testCannotTransitionFromFollowerToLowerEpoch() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeUnattachedFollower(5);
         assertThrows(IllegalArgumentException.class, () -> state.becomeUnattachedFollower(4));
@@ -419,7 +442,7 @@ public class QuorumStateTest {
     public void testCannotTransitionFromCandidateToLowerEpoch() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeUnattachedFollower(5);
         state.becomeCandidate();
@@ -434,7 +457,7 @@ public class QuorumStateTest {
     public void testCannotTransitionFromLeaderToLowerEpoch() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         state.becomeUnattachedFollower(5);
         state.becomeCandidate();
@@ -452,7 +475,7 @@ public class QuorumStateTest {
         int otherNodeId = 1;
         int nonVoterId = 2;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertThrows(IllegalArgumentException.class, () -> state.becomeVotedFollower(4, nonVoterId));
         assertThrows(IllegalArgumentException.class, () -> state.becomeFetchingFollower(4, nonVoterId));
@@ -462,7 +485,7 @@ public class QuorumStateTest {
     public void testObserverCannotBecomeCandidateCandidateOrLeader() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertTrue(state.isObserver());
         assertTrue(state.isFollower());
@@ -474,7 +497,7 @@ public class QuorumStateTest {
     public void testObserverDetachLeader() throws IOException {
         int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(otherNodeId);
-        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        QuorumState state = initializeState(voters, store);
         state.initialize(new OffsetAndEpoch(0L, logEndEpoch));
         assertTrue(state.isObserver());
         assertTrue(state.isFollower());
@@ -500,5 +523,21 @@ public class QuorumStateTest {
         int epoch = 2;
         state.initialize(new OffsetAndEpoch(0L, epoch));
         assertEquals(epoch, state.epoch());
+    }
+
+    @Test
+    public void testInconsistentVotersBetweenConfigAndState() throws IOException {
+        int otherNodeId = 1;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        QuorumState state = initializeState(voters, store);
+
+        int unknownVoterId = 2;
+        Set<Integer> stateVoters = Utils.mkSet(localId, otherNodeId, unknownVoterId);
+
+        int epoch = 5;
+        store.writeElectionState(ElectionState.withElectedLeader(epoch, localId, stateVoters));
+        assertThrows(IllegalStateException.class,
+            () -> state.initialize(new OffsetAndEpoch(0L, logEndEpoch)));
     }
 }
