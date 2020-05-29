@@ -39,11 +39,12 @@ import org.apache.kafka.common.security.JaasContext
 import org.apache.kafka.common.security.scram.internals.ScramMechanism
 import org.apache.kafka.common.security.token.delegation.internals.DelegationTokenCache
 import org.apache.kafka.common.utils.{LogContext, Time, Utils}
-import org.apache.kafka.raft.{FileBasedStateStore, KafkaRaftClient, QuorumState, RaftConfig, ReplicatedCounter}
+import org.apache.kafka.raft.{FileBasedStateStore, KafkaRaftClient, NoOpReplicatedCounter, QuorumState, RaftConfig, ReplicatedCounter}
 
 import scala.jdk.CollectionConverters._
 
-class RaftServer(val config: KafkaConfig) extends Logging {
+class RaftServer(val config: KafkaConfig,
+                 val verbose: Boolean) extends Logging {
 
   private val partition = new TopicPartition("__cluster_metadata", 0)
   private val time = Time.SYSTEM
@@ -80,19 +81,32 @@ class RaftServer(val config: KafkaConfig) extends Logging {
     val metadataLog = buildMetadataLog(logDir)
     val networkChannel = buildNetworkChannel(raftConfig, logContext)
 
-    val requestHandler = new RaftRequestHandler(
-      networkChannel,
-      socketServer.dataPlaneRequestChannel,
-      time
+    val quorumState = new QuorumState(
+      config.brokerId,
+      raftConfig.bootstrapVoters,
+      new FileBasedStateStore(new File(logDir, "quorum-state")),
+      logContext
     )
 
     val raftClient = buildRaftClient(
       raftConfig,
+      quorumState,
       metadataLog,
       networkChannel,
       logContext,
       logDir
     )
+
+    val counter = new NoOpReplicatedCounter(config.brokerId, partition, logContext, verbose)
+
+    raftClient.initialize(counter)
+
+    val requestHandler = new RaftRequestHandler(
+      networkChannel,
+      socketServer.dataPlaneRequestChannel,
+      time,
+      counter,
+      partition)
 
     dataPlaneRequestHandlerPool = new KafkaRequestHandlerPool(
       config.brokerId,
@@ -106,7 +120,6 @@ class RaftServer(val config: KafkaConfig) extends Logging {
 
     socketServer.startProcessingRequests(Map.empty)
 
-    val counter = new ReplicatedCounter(config.brokerId, logContext, true)
     raftClient.initialize(counter)
 
     raftIoThread = new RaftIoThread(raftClient)
@@ -181,17 +194,11 @@ class RaftServer(val config: KafkaConfig) extends Logging {
   }
 
   private def buildRaftClient(raftConfig: RaftConfig,
+                              quorumState: QuorumState,
                               metadataLog: KafkaMetadataLog,
                               networkChannel: KafkaNetworkChannel,
                               logContext: LogContext,
                               logDir: File): KafkaRaftClient = {
-    val quorumState = new QuorumState(
-      config.brokerId,
-      raftConfig.bootstrapVoters,
-      new FileBasedStateStore(new File(logDir, "quorum-state")),
-      logContext
-    )
-
     val purgatory = new KafkaFuturePurgatory(
       config.brokerId,
       new SystemTimer("raft-purgatory-reaper"),
@@ -345,7 +352,9 @@ object RaftServer extends Logging {
     try {
       val serverProps = getPropsFromArgs(args)
       val config = KafkaConfig.fromProps(serverProps, false)
-      val server = new RaftServer(config)
+
+      val verbose = serverProps.getProperty("verbose").toBoolean
+      val server = new RaftServer(config, verbose)
 
       Exit.addShutdownHook("raft-shutdown-hook", server.shutdown)
 

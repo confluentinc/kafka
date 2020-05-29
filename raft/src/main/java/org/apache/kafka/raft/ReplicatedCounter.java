@@ -27,6 +27,7 @@ import org.apache.kafka.common.utils.LogContext;
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
+import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -38,13 +39,15 @@ public class ReplicatedCounter implements ReplicatedStateMachine {
     private final Logger log;
     private final int nodeId;
     private final AtomicInteger committed = new AtomicInteger(0);
-    private final boolean verbose;
-    private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
+    protected final boolean verbose;
+    protected OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
     private AtomicInteger uncommitted;
-    private boolean isLeader = false;
-    private RecordAppender appender = null;
+    private OptionalInt leaderId = OptionalInt.empty();
+    protected RecordAppender appender = null;
 
-    public ReplicatedCounter(int nodeId, LogContext logContext, boolean verbose) {
+    public ReplicatedCounter(int nodeId,
+                             LogContext logContext,
+                             boolean verbose) {
         this.nodeId = nodeId;
         this.log = logContext.logger(ReplicatedCounter.class);
         this.verbose = verbose;
@@ -58,13 +61,13 @@ public class ReplicatedCounter implements ReplicatedStateMachine {
     @Override
     public synchronized void becomeLeader(int epoch) {
         uncommitted = new AtomicInteger(committed.get());
-        isLeader = true;
+        leaderId = OptionalInt.of(nodeId);
     }
 
     @Override
-    public synchronized void becomeFollower(int epoch) {
+    public synchronized void becomeFollower(int epoch, int newLeaderId) {
         uncommitted = null;
-        isLeader = false;
+        leaderId = OptionalInt.of(newLeaderId);
     }
 
     @Override
@@ -87,7 +90,7 @@ public class ReplicatedCounter implements ReplicatedStateMachine {
                     committed.set(value);
 
                     if (verbose) {
-                        System.out.println(Integer.toString(value));
+                        System.out.println(value);
                     }
                 }
             }
@@ -132,11 +135,17 @@ public class ReplicatedCounter implements ReplicatedStateMachine {
         Records records = MemoryRecords.withRecords(CompressionType.NONE, serialize(incremented));
         CompletableFuture<OffsetAndEpoch> future = appender.append(records);
         return future.thenApply(offsetAndEpoch -> incremented);
-
     }
 
     public synchronized boolean isLeader() {
-        return isLeader;
+        return leaderId.isPresent() && leaderId.getAsInt() == nodeId;
+    }
+
+    /**
+     * Get the current leader id, or -1 if not defined.
+     */
+    public synchronized int leaderId() {
+        return leaderId.orElse(-1);
     }
 
     private SimpleRecord serialize(int value) {

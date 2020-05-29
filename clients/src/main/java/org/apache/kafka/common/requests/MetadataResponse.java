@@ -371,7 +371,7 @@ public class MetadataResponse extends AbstractResponse {
         @Override
         public String toString() {
             return "PartitionMetadata(" +
-                    ", error=" + error +
+                    "error=" + error +
                     ", partition=" + topicPartition +
                     ", leader=" + leaderId +
                     ", leaderEpoch=" + leaderEpoch +
