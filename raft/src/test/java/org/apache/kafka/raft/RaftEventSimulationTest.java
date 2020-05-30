@@ -48,6 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import static org.apache.kafka.raft.KafkaRaftClientTest.METADATA_PARTITION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -707,7 +708,7 @@ public class RaftEventSimulationTest {
             List<InetSocketAddress> bootstrapServers = Collections.singletonList(
                 new InetSocketAddress("localhost", 9000));
 
-            KafkaRaftClient client = new KafkaRaftClient(channel, persistentState.log, quorum, time, metrics,
+            KafkaRaftClient client = new KafkaRaftClient(channel, persistentState.log, METADATA_PARTITION, quorum, time, metrics,
                 purgatory, new InetSocketAddress("localhost", 9990 + nodeId), bootstrapServers,
                 ELECTION_TIMEOUT_MS, ELECTION_JITTER_MS, FETCH_TIMEOUT_MS, RETRY_BACKOFF_MS, REQUEST_TIMEOUT_MS,
                 FETCH_MAX_WAIT_MS, logContext, random);

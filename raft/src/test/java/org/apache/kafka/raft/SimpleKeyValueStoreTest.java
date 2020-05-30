@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static org.apache.kafka.raft.KafkaRaftClientTest.METADATA_PARTITION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -63,7 +64,7 @@ public class SimpleKeyValueStoreTest {
             .map(id -> new InetSocketAddress("localhost", 9990 + id))
             .collect(Collectors.toList());
 
-        return new KafkaRaftClient(channel, log, quorum, time, new Metrics(time), purgatory,
+        return new KafkaRaftClient(channel, log, METADATA_PARTITION, quorum, time, new Metrics(time), purgatory,
             new InetSocketAddress("localhost", 9990 + localId), bootstrapServers,
             electionTimeoutMs, electionJitterMs, fetchTimeoutMs, retryBackoffMs, requestTimeoutMs,
             fetchMaxWaitMs, logContext, new Random());

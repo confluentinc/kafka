@@ -16,8 +16,11 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
+import org.apache.kafka.common.message.DescribeQuorumResponseData;
+import org.apache.kafka.common.message.DescribeQuorumResponseData.ReplicaState;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
 import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
@@ -42,6 +45,8 @@ import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.record.SimpleRecord;
+import org.apache.kafka.common.requests.DescribeQuorumRequest;
+import org.apache.kafka.common.requests.DescribeQuorumResponse;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Utils;
@@ -90,6 +95,7 @@ public class KafkaRaftClientTest {
     private final Random random = Mockito.spy(new Random());
     private final MockStateMachine stateMachine = new MockStateMachine();
     private final QuorumStateStore quorumStateStore = new MockQuorumStateStore();
+    public static final TopicPartition METADATA_PARTITION = new TopicPartition("metadata", 0);
 
     @After
     public void cleanUp() throws IOException {
@@ -117,7 +123,7 @@ public class KafkaRaftClientTest {
             .map(this::mockAddress)
             .collect(Collectors.toList());
 
-        KafkaRaftClient client = new KafkaRaftClient(channel, log, quorum, time, metrics,
+        KafkaRaftClient client = new KafkaRaftClient(channel, log, METADATA_PARTITION, quorum, time, metrics,
             new MockFuturePurgatory<>(time), mockAddress(localId), bootstrapServers,
             electionTimeoutMs, electionJitterMs, fetchTimeoutMs, retryBackoffMs, requestTimeoutMs,
             fetchMaxWaitMs, logContext, random);
@@ -1242,6 +1248,96 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, closeFollower, laggingFollower);
         KafkaRaftClient client = initializeAsLeader(voters, epoch);
 
+//        // Bootstrap as the leader
+//        quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
+//        KafkaRaftClient client = buildClient(voters);
+
+        buildFollowerSet(client, voters, epoch, closeFollower, laggingFollower);
+
+        // Now shutdown
+        client.shutdown(electionTimeoutMs * 2);
+
+        // We should still be running until we have had a chance to send EndQuorumEpoch
+        assertTrue(client.isRunning());
+
+        // Send EndQuorumEpoch request to the close follower
+        client.poll();
+        assertTrue(client.isRunning());
+
+        List<RaftRequest.Outbound> endQuorumRequests =
+            collectEndQuorumRequests(1, OptionalInt.of(localId), Utils.mkSet(closeFollower, laggingFollower));
+
+        assertEquals(2, endQuorumRequests.size());
+    }
+
+    @Test
+    public void testDescribeQuorum() throws Exception {
+        int closeFollower = 2;
+        int laggingFollower = 1;
+        int epoch = 1;
+        Set<Integer> voters = Utils.mkSet(localId, closeFollower, laggingFollower);
+
+        // Bootstrap as the leader
+        quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
+        KafkaRaftClient client = buildClient(voters);
+
+        buildFollowerSet(client, voters, epoch, closeFollower, laggingFollower);
+
+        // Create observer
+        int observerId = 3;
+        deliverRequest(fetchQuorumRecordsRequest(epoch, observerId, 0L, 0, 0));
+
+        client.poll();
+
+        long highWatermark = 0L;
+        assertSentFetchQuorumRecordsResponse(highWatermark, epoch);
+
+        deliverRequest(DescribeQuorumRequest.singletonRequest(METADATA_PARTITION));
+
+        client.poll();
+
+        assertSentDescribeQuorumResponse(localId, epoch, highWatermark,
+            Arrays.asList(
+                new ReplicaState()
+                    .setReplicaId(laggingFollower)
+                    .setLogEndOffset(0L),
+                new ReplicaState()
+                    .setReplicaId(closeFollower)
+                    .setLogEndOffset(1L)),
+            Collections.singletonList(
+                new ReplicaState()
+                    .setReplicaId(observerId)
+                    .setLogEndOffset(0L)));
+    }
+
+    private void buildFollowerSet(KafkaRaftClient client,
+                                  Set<Integer> voters,
+                                  int epoch,
+                                  int closeFollower,
+                                  int laggingFollower) throws Exception {
+        pollUntilSend(client);
+
+        int findQuorumCorrelationId = assertSentFindQuorumRequest().correlationId;
+
+        deliverResponse(findQuorumCorrelationId, -1, findQuorumResponse(OptionalInt.of(localId), 1, voters));
+
+        // Accept connection information for followers
+        client.poll();
+
+        assertTrue(channel.drainSendQueue().isEmpty());
+
+        // Send out begin quorum to followers
+        client.poll();
+
+        List<RaftRequest.Outbound> beginEpochRequests = collectBeginEpochRequests(epoch);
+
+        assertEquals(2, beginEpochRequests.size());
+
+        for (RaftMessage message : beginEpochRequests) {
+            deliverResponse(message.correlationId(), ((RaftRequest.Outbound) message).destinationId(),
+                beginQuorumEpochResponse(epoch, localId));
+        }
+
         // The lagging follower fetches first
         deliverRequest(fetchQuorumRecordsRequest(1, laggingFollower, 0L, 0, 0));
 
@@ -1258,21 +1354,6 @@ public class KafkaRaftClientTest {
         client.poll();
 
         assertSentFetchQuorumRecordsResponse(0L, epoch);
-
-        // Now shutdown
-        client.shutdown(electionTimeoutMs * 2);
-
-        // We should still be running until we have had a chance to send EndQuorumEpoch
-        assertTrue(client.isRunning());
-
-        // Send EndQuorumEpoch request to the close follower
-        client.poll();
-        assertTrue(client.isRunning());
-
-        List<RaftRequest.Outbound> endQuorumRequests =
-            collectEndQuorumRequests(1, OptionalInt.of(localId), Utils.mkSet(closeFollower, laggingFollower));
-
-        assertEquals(2, endQuorumRequests.size());
     }
 
     @Test
@@ -1942,6 +2023,30 @@ public class KafkaRaftClientTest {
                 .setErrorCode(error.code())
                 .setLeaderEpoch(-1)
                 .setLeaderId(-1);
+    }
+
+    private int assertSentDescribeQuorumResponse(int leaderId,
+                                                 int leaderEpoch,
+                                                 long highWatermark,
+                                                 List<ReplicaState> voterStates,
+                                                 List<ReplicaState> observerStates) {
+        List<RaftMessage> sentMessages = channel.drainSendQueue();
+        assertEquals(1, sentMessages.size());
+        RaftMessage raftMessage = sentMessages.get(0);
+        assertTrue("Unexpected request type " + raftMessage.data(),
+            raftMessage.data() instanceof DescribeQuorumResponseData);
+        DescribeQuorumResponseData response = (DescribeQuorumResponseData) raftMessage.data();
+
+        DescribeQuorumResponseData expectedResponse = DescribeQuorumResponse.singletonResponse(
+            METADATA_PARTITION,
+            leaderId,
+            leaderEpoch,
+            highWatermark,
+            voterStates,
+            observerStates);
+
+        assertEquals(expectedResponse, response);
+        return raftMessage.correlationId();
     }
 
     private FetchQuorumRecordsRequestData fetchQuorumRecordsRequest(

@@ -46,7 +46,8 @@ import scala.jdk.CollectionConverters._
 class RaftServer(val config: KafkaConfig,
                  val verbose: Boolean) extends Logging {
 
-  private val partition = new TopicPartition("__cluster_metadata", 0)
+  private val metadataTopicName = "__cluster_metadata";
+  private val metadataPartition = new TopicPartition(metadataTopicName, 0)
   private val time = Time.SYSTEM
   private val shutdownLatch = new CountDownLatch(1)
 
@@ -72,7 +73,7 @@ class RaftServer(val config: KafkaConfig,
     socketServer = new SocketServer(config, metrics, time, credentialProvider)
     socketServer.startup(startProcessingRequests = false)
 
-    val logDirName = Log.logDirName(partition)
+    val logDirName = Log.logDirName(metadataPartition)
     val logDir = createLogDirectory(new File(config.logDirs.head), logDirName)
 
     val raftConfig = new RaftConfig(config.originals)
@@ -201,6 +202,7 @@ class RaftServer(val config: KafkaConfig,
       raftConfig,
       networkChannel,
       metadataLog,
+      metadataPartition,
       quorumState,
       time,
       purgatory,

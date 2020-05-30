@@ -185,7 +185,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.END_QUORUM_EPOCH => handleEndEpoch(request)
         case ApiKeys.FETCH_QUORUM_RECORDS => handleFetchRecords(request)
         case ApiKeys.FIND_QUORUM => handleFindQuorum(request)
-
+        case ApiKeys.DESCRIBE_QUORUM => handleDescribeQuorum(request)
       }
     } catch {
       case e: FatalExitError => throw e
@@ -2760,6 +2760,8 @@ class KafkaApis(val requestChannel: RequestChannel,
   def handleFetchRecords(request: RequestChannel.Request): Unit = ???
 
   def handleFindQuorum(request: RequestChannel.Request): Unit = ???
+
+  def handleDescribeQuorum(request: RequestChannel.Request): Unit = ???
 
   def allowTokenRequests(request: RequestChannel.Request): Boolean = {
     val protocol = request.context.securityProtocol
