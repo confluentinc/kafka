@@ -16,9 +16,12 @@
  */
 package org.apache.kafka.raft;
 
-import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.errors.InvalidRequestException;
+import org.apache.kafka.common.errors.KafkaRaftException;
+import org.apache.kafka.common.errors.KafkaStorageException;
+import org.apache.kafka.common.errors.NotEnoughReplicasException;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
+import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
@@ -43,7 +46,6 @@ import org.apache.kafka.raft.ConnectionCache.ConnectionState;
 import org.apache.kafka.raft.ConnectionCache.HostInfo;
 import org.slf4j.Logger;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -58,7 +60,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -117,7 +118,6 @@ public class KafkaRaftClient implements RaftClient {
     private final int electionTimeoutMs;
     private final int electionJitterMs;
     private final int fetchTimeoutMs;
-    private final int retryBackoffMs;
     private final int requestTimeoutMs;
     private final int fetchMaxWaitMs;
     private final long bootTimestamp;
@@ -129,6 +129,7 @@ public class KafkaRaftClient implements RaftClient {
     private final ConnectionCache connections;
     private final FuturePurgatory<Void> purgatory;
     private final BlockingQueue<PendingAppend> unsentAppends;
+    private final int errorShutdownTimeoutMs;
 
     private ReplicatedStateMachine stateMachine;
 
@@ -179,7 +180,6 @@ public class KafkaRaftClient implements RaftClient {
         this.purgatory = purgatory;
         this.time = time;
         this.timer = time.timer(fetchTimeoutMs);    // initialize assuming it is an observer
-        this.retryBackoffMs = retryBackoffMs;
         this.electionTimeoutMs = electionTimeoutMs;
         this.electionJitterMs = electionJitterMs;
         this.fetchTimeoutMs = fetchTimeoutMs;
@@ -189,6 +189,8 @@ public class KafkaRaftClient implements RaftClient {
         this.advertisedListener = advertisedListener;
         this.logger = logContext.logger(KafkaRaftClient.class);
         this.random = random;
+        // Set to twice the election timeout when hitting exception, to ensure leader transfer completeness.
+        this.errorShutdownTimeoutMs = electionTimeoutMs * 2;
         this.connections = new ConnectionCache(channel, bootstrapServers,
             retryBackoffMs, requestTimeoutMs, logContext);
         this.unsentAppends = new ArrayBlockingQueue<>(10);
@@ -256,8 +258,15 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
+    /**
+     * Initialize the state machine. The caller should handle any thrown {@link KafkaRaftException}
+     * to recover from a fatal state if necessary.
+     *
+     * @param stateMachine The state machine implementation
+     * @throws KafkaRaftException fatal exception during Raft client initialization
+     */
     @Override
-    public void initialize(ReplicatedStateMachine stateMachine) throws IOException {
+    public void initialize(ReplicatedStateMachine stateMachine) throws KafkaRaftException {
         this.stateMachine = stateMachine;
         quorum.initialize(new OffsetAndEpoch(log.endOffset(), log.lastFetchedEpoch()));
         stateMachine.initialize(this::append);
@@ -314,7 +323,7 @@ public class KafkaRaftClient implements RaftClient {
         log.appendAsLeader(controlRecord, quorum.epoch());
     }
 
-    private void maybeBecomeLeader(CandidateState state) throws IOException {
+    private void maybeBecomeLeader(CandidateState state) throws KafkaRaftException {
         if (state.isVoteGranted()) {
             long endOffset = log.endOffset();
             LeaderState leaderState = quorum.becomeLeader(endOffset);
@@ -322,7 +331,7 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private void becomeCandidate() throws IOException {
+    private void becomeCandidate() throws KafkaRaftException {
         // after we become candidate, we may not fetch from leader any more
         timer.reset(electionTimeoutMs + randomElectionJitterMs());
         CandidateState state = quorum.becomeCandidate();
@@ -330,7 +339,7 @@ public class KafkaRaftClient implements RaftClient {
         resetConnections();
     }
 
-    private void becomeUnattachedFollower(int epoch) throws IOException {
+    private void becomeUnattachedFollower(int epoch) throws KafkaRaftException {
         if (quorum.becomeUnattachedFollower(epoch)) {
             resetConnections();
             if (quorum.isVoter()) {
@@ -340,8 +349,8 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private void becomeVotedFollower(int candidateId, int epoch) throws IOException {
-        if (quorum.becomeVotedFollower(epoch, candidateId)) {
+    private void becomeVotedFollower(int candidateId, int epoch) throws KafkaRaftException {
+        if (quorum.becomeVotedFollower(candidateId, epoch)) {
             timer.reset(electionTimeoutMs + randomElectionJitterMs());
             resetConnections();
         }
@@ -357,13 +366,13 @@ public class KafkaRaftClient implements RaftClient {
         purgatory.completeAll(null);
     }
 
-    private void becomeFetchingFollower(int leaderId, int epoch) throws IOException {
-        if (quorum.becomeFetchingFollower(epoch, leaderId)) {
+    private void becomeFetchingFollower(int leaderId, int epoch) throws KafkaRaftException {
+        if (quorum.becomeFetchingFollower(leaderId, epoch)) {
             onBecomeFollowerOfElectedLeader(quorum.followerStateOrThrow());
         }
     }
 
-    private void becomeFollower(OptionalInt leaderId, int epoch) throws IOException {
+    private void becomeFollower(OptionalInt leaderId, int epoch) {
         if (leaderId.isPresent()) {
             becomeFetchingFollower(leaderId.getAsInt(), epoch);
         } else {
@@ -390,7 +399,7 @@ public class KafkaRaftClient implements RaftClient {
      */
     private VoteResponseData handleVoteRequest(
         RaftRequest.Inbound requestMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         VoteRequestData request = (VoteRequestData) requestMetadata.data;
         int candidateId = request.candidateId();
         int candidateEpoch = request.candidateEpoch();
@@ -450,7 +459,7 @@ public class KafkaRaftClient implements RaftClient {
 
     private boolean handleVoteResponse(
         RaftResponse.Inbound responseMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         int remoteNodeId = responseMetadata.sourceId();
         VoteResponseData response = (VoteResponseData) responseMetadata.data;
         Errors error = Errors.forCode(response.errorCode());
@@ -510,7 +519,7 @@ public class KafkaRaftClient implements RaftClient {
      */
     private BeginQuorumEpochResponseData handleBeginQuorumEpochRequest(
         RaftRequest.Inbound requestMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         BeginQuorumEpochRequestData request = (BeginQuorumEpochRequestData) requestMetadata.data;
         Optional<Errors> errorOpt = validateVoterOnlyRequest(request.leaderId(), request.leaderEpoch());
         if (errorOpt.isPresent()) {
@@ -525,7 +534,7 @@ public class KafkaRaftClient implements RaftClient {
 
     private boolean handleBeginQuorumEpochResponse(
         RaftResponse.Inbound responseMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         int remoteNodeId = responseMetadata.sourceId();
         BeginQuorumEpochResponseData response = (BeginQuorumEpochResponseData) responseMetadata.data;
         Errors error = Errors.forCode(response.errorCode());
@@ -561,7 +570,7 @@ public class KafkaRaftClient implements RaftClient {
      */
     private EndQuorumEpochResponseData handleEndQuorumEpochRequest(
         RaftRequest.Inbound requestMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         EndQuorumEpochRequestData request = (EndQuorumEpochRequestData) requestMetadata.data;
         int requestEpoch = request.leaderEpoch();
         int requestReplicaId = request.replicaId();
@@ -591,7 +600,7 @@ public class KafkaRaftClient implements RaftClient {
 
     private boolean handleEndQuorumEpochResponse(
         RaftResponse.Inbound responseMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         EndQuorumEpochResponseData response = (EndQuorumEpochResponseData) responseMetadata.data;
         Errors error = Errors.forCode(response.errorCode());
         OptionalInt responseLeaderId = optionalLeaderId(response.leaderId());
@@ -611,7 +620,7 @@ public class KafkaRaftClient implements RaftClient {
         Errors error,
         Records records,
         OptionalLong highWatermark
-    ) throws IOException {
+    ) throws KafkaRaftException {
         return buildEmptyFetchQuorumRecordsResponse(error, highWatermark)
             .setRecords(RaftUtil.serializeRecords(records));
     }
@@ -643,7 +652,7 @@ public class KafkaRaftClient implements RaftClient {
      */
     private CompletableFuture<FetchQuorumRecordsResponseData> handleFetchQuorumRecordsRequest(
         RaftRequest.Inbound requestMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         FetchQuorumRecordsRequestData request = (FetchQuorumRecordsRequestData) requestMetadata.data;
         if (request.maxWaitTimeMs() < 0
             || request.fetchOffset() < 0
@@ -687,8 +696,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private FetchQuorumRecordsResponseData tryCompleteFetchQuorumRecordsRequest(
-        FetchQuorumRecordsRequestData request
-    ) throws IOException {
+        FetchQuorumRecordsRequestData request) {
         Optional<Errors> errorOpt = validateLeaderOnlyRequest(request.leaderEpoch());
         if (errorOpt.isPresent()) {
             return buildFetchQuorumRecordsResponse(
@@ -742,7 +750,7 @@ public class KafkaRaftClient implements RaftClient {
 
     private boolean handleFetchQuorumRecordsResponse(
         RaftResponse.Inbound responseMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         FetchQuorumRecordsResponseData response = (FetchQuorumRecordsResponseData) responseMetadata.data;
         Errors error = Errors.forCode(response.errorCode());
         OptionalInt responseLeaderId = optionalLeaderId(response.leaderId());
@@ -781,14 +789,11 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private OptionalLong maybeAppendAsLeader(LeaderState state, Records records) {
-        if (state.highWatermark().isPresent() && stateMachine.accept(records)) {
-            Long baseOffset = log.appendAsLeader(records, quorum.epoch());
-            updateLeaderEndOffsetAndTimestamp(state);
-            logger.trace("Leader appended records at base offset {}, new end offset is {}", baseOffset, endOffset());
-            return OptionalLong.of(baseOffset);
-        }
-        return OptionalLong.empty();
+    private long appendAsLeader(LeaderState state, Records records) {
+        Long baseOffset = log.appendAsLeader(records, quorum.epoch());
+        updateLeaderEndOffsetAndTimestamp(state);
+        logger.trace("Leader appended records at base offset {}, new end offset is {}", baseOffset, endOffset());
+        return baseOffset;
     }
 
     /**
@@ -827,7 +832,7 @@ public class KafkaRaftClient implements RaftClient {
 
     private boolean handleFindQuorumResponse(
         RaftResponse.Inbound responseMetadata
-    ) throws IOException {
+    ) throws KafkaRaftException {
         FindQuorumResponseData response = (FindQuorumResponseData) responseMetadata.data;
         Errors error = Errors.forCode(response.errorCode());
         OptionalInt responseLeaderId = optionalLeaderId(response.leaderId());
@@ -857,7 +862,7 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private boolean hasConsistentLeader(int epoch, OptionalInt leaderId) {
+    private boolean hasConsistentLeader(OptionalInt leaderId, int epoch) {
         // Only elected leaders are sent in the request/response header, so if we have an elected
         // leaderId, it should be consistent with what is in the message.
         if (leaderId.isPresent() && leaderId.getAsInt() == quorum.localId) {
@@ -891,7 +896,7 @@ public class KafkaRaftClient implements RaftClient {
         Errors error,
         OptionalInt leaderId,
         int epoch
-    ) throws IOException {
+    ) throws KafkaRaftException {
         if (epoch < quorum.epoch()) {
             // We have a larger epoch, so the response is no longer relevant
             return Optional.of(true);
@@ -912,9 +917,9 @@ public class KafkaRaftClient implements RaftClient {
             // reassignment, this error could suggest that either we or the recipient of
             // the request just has stale voter information, which means we can retry
             // after backing off.
-            throw new IllegalStateException("Received error indicating inconsistent voter sets");
+            throw new KafkaRaftException("Received error indicating inconsistent voter sets");
         } else if (error == Errors.INVALID_REQUEST) {
-            throw new IllegalStateException("Received unexpected invalid request error");
+            throw new KafkaRaftException("Received unexpected invalid request error from response");
         }
 
         return Optional.empty();
@@ -923,9 +928,9 @@ public class KafkaRaftClient implements RaftClient {
     private void maybeBecomeFollower(
         OptionalInt leaderId,
         int epoch
-    ) throws IOException {
-        if (!hasConsistentLeader(epoch, leaderId)) {
-            throw new IllegalStateException("Received request or response with leader " + leaderId +
+    ) throws KafkaRaftException {
+        if (!hasConsistentLeader(leaderId, epoch)) {
+            throw new KafkaRaftException("Received request or response with leader " + leaderId +
                 " and epoch " + epoch + " which is inconsistent with current leader " +
                 quorum.leaderId() + " and epoch " + quorum.epoch());
         } else if (epoch > quorum.epoch()) {
@@ -950,7 +955,7 @@ public class KafkaRaftClient implements RaftClient {
         return false;
     }
 
-    private void handleResponse(RaftResponse.Inbound response, long currentTimeMs) throws IOException {
+    private void handleResponse(RaftResponse.Inbound response, long currentTimeMs) throws KafkaRaftException {
         // The response epoch matches the local epoch, so we can handle the response
         ApiKeys apiKey = ApiKeys.forId(response.data.apiKey());
         final boolean handledSuccessfully;
@@ -1032,7 +1037,7 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private void handleRequest(RaftRequest.Inbound request) throws IOException {
+    private void handleRequest(RaftRequest.Inbound request) throws KafkaRaftException {
         ApiKeys apiKey = ApiKeys.forId(request.data.apiKey());
         final CompletableFuture<? extends ApiMessage> responseFuture;
 
@@ -1073,12 +1078,17 @@ public class KafkaRaftClient implements RaftClient {
         });
     }
 
-    private void handleInboundMessage(RaftMessage message, long currentTimeMs) throws IOException {
+    private void handleInboundMessage(RaftMessage message, long currentTimeMs) throws KafkaRaftException {
         logger.trace("Received inbound message {}", message);
 
         if (message instanceof RaftRequest.Inbound) {
             RaftRequest.Inbound request = (RaftRequest.Inbound) message;
-            handleRequest(request);
+            try {
+                handleRequest(request);
+            } catch (KafkaRaftException e) {
+                // For request triggered internal exception, we shall just swallow and continue.
+                logger.error("Ignore known exception while handling incoming request {}", request, e);
+            }
         } else if (message instanceof RaftResponse.Inbound) {
             RaftResponse.Inbound response = (RaftResponse.Inbound) message;
             handleResponse(response, currentTimeMs);
@@ -1096,7 +1106,7 @@ public class KafkaRaftClient implements RaftClient {
         long currentTimeMs,
         int destinationId,
         Supplier<ApiMessage> requestData
-    ) throws IOException {
+    ) throws KafkaRaftException {
         ConnectionState connection = connections.getOrCreate(destinationId);
         if (quorum.isObserver() && connection.hasRequestTimedOut(currentTimeMs)) {
             // Observers need to proactively find the leader if there is a request timeout
@@ -1118,7 +1128,7 @@ public class KafkaRaftClient implements RaftClient {
                 .setLeaderEpoch(quorum.epoch());
     }
 
-    private void maybeSendEndQuorumEpoch(long currentTimeMs) throws IOException {
+    private void maybeSendEndQuorumEpoch(long currentTimeMs) throws KafkaRaftException {
         for (Integer voterId : quorum.remoteVoters()) {
             maybeSendRequest(currentTimeMs, voterId, this::buildEndQuorumEpochRequest);
         }
@@ -1130,7 +1140,7 @@ public class KafkaRaftClient implements RaftClient {
                 .setLeaderEpoch(quorum.epoch());
     }
 
-    private void maybeSendBeginQuorumEpochToFollowers(long currentTimeMs, LeaderState state) throws IOException {
+    private void maybeSendBeginQuorumEpochToFollowers(long currentTimeMs, LeaderState state) throws KafkaRaftException {
         for (Integer followerId : state.nonEndorsingFollowers()) {
             maybeSendRequest(currentTimeMs, followerId, this::buildBeginQuorumEpochRequest);
         }
@@ -1145,7 +1155,7 @@ public class KafkaRaftClient implements RaftClient {
                 .setLastEpochEndOffset(endOffset.offset);
     }
 
-    private void maybeSendVoteRequestToVoters(long currentTimeMs, CandidateState state) throws IOException {
+    private void maybeSendVoteRequestToVoters(long currentTimeMs, CandidateState state) throws KafkaRaftException {
         for (Integer voterId : state.unrecordedVoters()) {
             maybeSendRequest(currentTimeMs, voterId, this::buildVoteRequest);
         }
@@ -1160,7 +1170,7 @@ public class KafkaRaftClient implements RaftClient {
             .setMaxWaitTimeMs(fetchMaxWaitMs);
     }
 
-    private void maybeSendFetchQuorumRecords(long currentTimeMs, int leaderId) throws IOException {
+    private void maybeSendFetchQuorumRecords(long currentTimeMs, int leaderId) throws KafkaRaftException {
         maybeSendRequest(currentTimeMs, leaderId, this::buildFetchQuorumRecordsRequest);
     }
 
@@ -1172,7 +1182,7 @@ public class KafkaRaftClient implements RaftClient {
             .setBootTimestamp(bootTimestamp);
     }
 
-    private void maybeSendFindQuorum(long currentTimeMs) throws IOException {
+    private void maybeSendFindQuorum(long currentTimeMs) throws KafkaRaftException {
         // Find a ready member of the quorum to send FindLeader to. Any voter can receive the
         // FindQuorum, but we only send one request at a time.
         OptionalInt readyNodeIdOpt = connections.findReadyBootstrapServer(currentTimeMs);
@@ -1181,7 +1191,7 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private void maybeSendRequests(long currentTimeMs) throws IOException {
+    private void maybeSendRequests(long currentTimeMs) throws KafkaRaftException {
         if (quorum.isLeader()) {
             LeaderState state = quorum.leaderStateOrThrow();
             maybeSendBeginQuorumEpochToFollowers(currentTimeMs, state);
@@ -1211,7 +1221,7 @@ public class KafkaRaftClient implements RaftClient {
         return gracefulShutdown == null || !gracefulShutdown.isFinished();
     }
 
-    private void pollShutdown(GracefulShutdown shutdown) throws IOException {
+    private void pollShutdown(GracefulShutdown shutdown) throws KafkaRaftException {
         // Graceful shutdown allows a leader or candidate to resign its leadership without
         // awaiting expiration of the election timeout. During shutdown, we no longer update
         // quorum state. All we do is check for epoch updates and try to send EndQuorumEpoch request
@@ -1233,20 +1243,26 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    public void poll() throws IOException {
+    public void poll() throws KafkaRaftException {
         GracefulShutdown gracefulShutdown = shutdown.get();
         if (gracefulShutdown != null) {
-            pollShutdown(gracefulShutdown);
-        } else {
-            timer.update();
-
-            if (quorum.isVoter() && !quorum.isLeader() && timer.isExpired()) {
-                logger.debug("Become candidate due to fetch timeout");
-                becomeCandidate();
-            } else if (quorum.isCandidate() && timer.isExpired()) {
-                logger.debug("Re-elect as candidate due to election timeout");
-                becomeCandidate();
+            try {
+                pollShutdown(gracefulShutdown);
+            } catch (KafkaRaftException e) {
+                logger.warn("Ignore known exception during shut down period.", e);
             }
+        } else {
+            try {
+                timer.update();
+
+                if (quorum.isVoter() && !quorum.isLeader() && timer.isExpired()) {
+                    logger.debug("Become candidate due to fetch timeout");
+                    becomeCandidate();
+                } else if (quorum.isCandidate() && timer.isExpired()) {
+                    logger.debug("Re-elect as candidate due to election timeout");
+                    becomeCandidate();
+                }
+
 
             maybeSendRequests(timer.currentTimeMs());
             handlePendingAppends(timer.currentTimeMs());
@@ -1257,6 +1273,10 @@ public class KafkaRaftClient implements RaftClient {
 
             for (RaftMessage message : inboundMessages)
                 handleInboundMessage(message, timer.currentTimeMs());
+        } catch (KafkaRaftException e) {
+            // Discovered known fatal exception during normal processing, start graceful shutdown.
+            shutdown.set(new GracefulShutdown(errorShutdownTimeoutMs, quorum.epoch()));
+            }
         }
     }
 
@@ -1265,22 +1285,24 @@ public class KafkaRaftClient implements RaftClient {
         if (unsentAppend == null || unsentAppend.isCancelled())
             return;
 
-        if (quorum.isLeader()) {
-            if (unsentAppend.isTimedOut(currentTimeMs)) {
-                unsentAppend.fail(new TimeoutException());
-            } else {
-                LeaderState leaderState = quorum.leaderStateOrThrow();
-                int epoch = quorum.epoch();
-                OptionalLong baseOffsetOpt = maybeAppendAsLeader(leaderState, unsentAppend.records);
-                if (baseOffsetOpt.isPresent()) {
-                    unsentAppend.complete(new OffsetAndEpoch(baseOffsetOpt.getAsLong(), epoch));
-                } else {
-                    unsentAppend.fail(new InvalidRequestException("Leader refused the append"));
-                }
-            }
+        if (!quorum.isLeader()) {
+            unsentAppend.fail(new NotLeaderForPartitionException(
+                "Append refused since this node is no longer the leader"));
+        } else if (unsentAppend.isTimedOut(currentTimeMs)) {
+            unsentAppend.fail(new TimeoutException("Append request timeout"));
         } else {
-            unsentAppend.fail(new NotLeaderForPartitionException("Append refused since this node is no longer " +
-                "the leader"));
+            LeaderState leaderState = quorum.leaderStateOrThrow();
+            int epoch = quorum.epoch();
+
+            if (!leaderState.highWatermark().isPresent()) {
+                unsentAppend.fail(new NotEnoughReplicasException(
+                    "Leader refused the append due to not enough replicas have caught up to high watermark"));
+            } else if (!stateMachine.accept(unsentAppend.records)) {
+                unsentAppend.fail(new InvalidRequestException("State machine rejected the record append"));
+            } else {
+                long baseOffset = appendAsLeader(leaderState, unsentAppend.records);
+                unsentAppend.complete(new OffsetAndEpoch(baseOffset, epoch));
+            }
         }
     }
 
@@ -1300,7 +1322,7 @@ public class KafkaRaftClient implements RaftClient {
             records, future, time.milliseconds(), requestTimeoutMs);
 
         if (!unsentAppends.offer(pendingAppend)) {
-            future.completeExceptionally(new KafkaException("Failed to append records since the unsent " +
+            future.completeExceptionally(new KafkaStorageException("Failed to append records since the unsent " +
                 "append queue is full"));
         }
         channel.wakeup();
@@ -1316,8 +1338,9 @@ public class KafkaRaftClient implements RaftClient {
     private Records readCommitted(OffsetAndEpoch offsetAndEpoch, long highWatermark) {
         Optional<OffsetAndEpoch> endOffset = log.endOffsetForEpoch(offsetAndEpoch.epoch);
         if (!endOffset.isPresent() || offsetAndEpoch.offset > endOffset.get().offset) {
-            throw new LogTruncationException("The requested offset and epoch " + offsetAndEpoch +
-                    " are not in range. The closest offset we found is " + endOffset + ".");
+            throw new KafkaRaftException("Fatal log truncation error",
+                new LogTruncationException("The requested offset and epoch " +
+                    offsetAndEpoch + " are not in range. The closest offset we found is " + endOffset + "."));
         }
         return log.read(offsetAndEpoch.offset, OptionalLong.of(highWatermark));
     }
@@ -1390,7 +1413,7 @@ public class KafkaRaftClient implements RaftClient {
         }
 
         public boolean isTimedOut(long currentTimeMs) {
-            return currentTimeMs > createTimeMs + requestTimeoutMs;
+            return currentTimeMs >= createTimeMs + requestTimeoutMs;
         }
 
         public boolean isCancelled() {

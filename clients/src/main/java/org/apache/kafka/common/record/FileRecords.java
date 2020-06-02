@@ -56,11 +56,11 @@ public class FileRecords extends AbstractRecords implements Closeable {
      * The {@code FileRecords.open} methods should be used instead of this constructor whenever possible.
      * The constructor is visible for tests.
      */
-    FileRecords(File file,
-                FileChannel channel,
-                int start,
-                int end,
-                boolean isSlice) throws IOException {
+    protected FileRecords(File file,
+                          FileChannel channel,
+                          int start,
+                          int end,
+                          boolean isSlice) throws IOException {
         this.file = file;
         this.channel = channel;
         this.start = start;

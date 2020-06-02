@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.errors.KafkaRaftException;
 import org.apache.kafka.common.message.FindQuorumResponseData;
 import org.apache.kafka.common.protocol.types.Type;
 import org.apache.kafka.common.utils.LogContext;
@@ -92,7 +93,7 @@ public class RaftEventSimulationTest {
 
             cluster.startAll();
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliverAll, 0, 2, 1);
+            scheduler.schedule(cluster, router::deliverAll, 0, 2, 1);
             scheduler.runUntil(() -> {
                 try {
                     return cluster.hasConsistentLeader();
@@ -141,8 +142,8 @@ public class RaftEventSimulationTest {
             assertTrue(cluster.hasConsistentLeader());
 
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliverAll, 0, 2, 0);
-            scheduler.schedule(new SequentialAppendAction(cluster), 0, 2, 3);
+            scheduler.schedule(cluster, router::deliverAll, 0, 2, 0);
+            scheduler.schedule(cluster, new SequentialAppendAction(), 0, 2, 3);
             scheduler.runUntil(() -> cluster.anyReachedHighWatermark(10));
         }
     }
@@ -178,6 +179,48 @@ public class RaftEventSimulationTest {
     }
 
     private void testElectionAfterLeaderFailure(QuorumConfig config) throws IOException {
+        testElectionAfterNodeStop(config, new KillNodeAction(1), Collections.emptySet());
+    }
+
+    @Test
+    public void testElectionAfterLeaderShutdownQuorumSizeThree() throws IOException {
+        testElectionAfterLeaderShutdown(new QuorumConfig(3, 0));
+    }
+
+    @Test
+    public void testElectionAfterLeaderShutdownQuorumSizeThreeAndTwoObservers() throws IOException {
+        testElectionAfterLeaderShutdown(new QuorumConfig(3, 2));
+    }
+
+    @Test
+    public void testElectionAfterLeaderShutdownQuorumSizeFour() throws IOException {
+        testElectionAfterLeaderShutdown(new QuorumConfig(4, 0));
+    }
+
+    @Test
+    public void testElectionAfterLeaderShutdownQuorumSizeFourAndTwoObservers() throws IOException {
+        testElectionAfterLeaderShutdown(new QuorumConfig(4, 2));
+    }
+
+    @Test
+    public void testElectionAfterLeaderShutdownQuorumSizeFive() throws IOException {
+        testElectionAfterLeaderShutdown(new QuorumConfig(5, 0));
+    }
+
+    @Test
+    public void testElectionAfterLeaderShutdownQuorumSizeFiveAndThreeObservers() throws IOException {
+        testElectionAfterLeaderShutdown(new QuorumConfig(5, 3));
+    }
+
+    private void testElectionAfterLeaderShutdown(QuorumConfig config) throws IOException {
+        testElectionAfterNodeStop(config, new GracefulShutdownAction(1), Collections.singleton(1));
+    }
+
+    private void testElectionAfterNodeStop(
+        QuorumConfig config,
+        Action stopAction,
+        Set<Integer> shutdownNodes
+    ) throws IOException {
         // We need at least three voters to run this tests
         assumeTrue(config.numVoters > 2);
 
@@ -194,14 +237,18 @@ public class RaftEventSimulationTest {
 
             // Seed the cluster with some data
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliverAll, 0, 2, 1);
-            scheduler.schedule(new SequentialAppendAction(cluster), 0, 2, 3);
+            scheduler.schedule(cluster, router::deliverAll, 0, 2, 1);
+            scheduler.schedule(cluster, new SequentialAppendAction(), 0, 2, 3);
             scheduler.runUntil(() -> cluster.anyReachedHighWatermark(10));
 
             // Kill the leader and write some more data. We can verify the new leader has been elected
             // by verifying that the high watermark can still advance.
-            cluster.kill(1);
-            scheduler.runUntil(() -> cluster.allReachedHighWatermark(20));
+            stopAction.execute(cluster);
+
+            Set<Integer> liveNodes = new HashSet<>(cluster.nodes());
+            liveNodes.remove(1);
+
+            scheduler.runUntil(() -> cluster.allReachedHighWatermark(20, liveNodes));
         }
     }
 
@@ -252,8 +299,8 @@ public class RaftEventSimulationTest {
 
             // Seed the cluster with some data
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliverAll, 0, 2, 2);
-            scheduler.schedule(new SequentialAppendAction(cluster), 0, 2, 3);
+            scheduler.schedule(cluster, router::deliverAll, 0, 2, 2);
+            scheduler.schedule(cluster, new SequentialAppendAction(), 0, 2, 3);
             scheduler.runUntil(() -> cluster.anyReachedHighWatermark(10));
 
             // The leader gets partitioned off. We can verify the new leader has been elected
@@ -294,8 +341,8 @@ public class RaftEventSimulationTest {
 
             // Seed the cluster with some data
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliverAll, 0, 2, 2);
-            scheduler.schedule(new SequentialAppendAction(cluster), 0, 2, 3);
+            scheduler.schedule(cluster, router::deliverAll, 0, 2, 2);
+            scheduler.schedule(cluster, new SequentialAppendAction(), 0, 2, 3);
             scheduler.runUntil(() -> cluster.anyReachedHighWatermark(10));
 
             // Partition the nodes into two sets. Nodes are reachable within each set, but the
@@ -338,29 +385,34 @@ public class RaftEventSimulationTest {
                                  int pollJitterMs) {
         int delayMs = 0;
         for (int nodeId : cluster.nodes()) {
-            scheduler.schedule(() -> cluster.pollIfRunning(nodeId), delayMs, pollIntervalMs, pollJitterMs);
+            scheduler.schedule(cluster,
+                clusterForEvent -> clusterForEvent.pollIfRunning(nodeId),
+                delayMs, pollIntervalMs, pollJitterMs);
             delayMs++;
         }
     }
 
     @FunctionalInterface
     private interface Action {
-        void execute();
+        void execute(Cluster cluster);
     }
 
     private static abstract class Event implements Comparable<Event> {
         final int eventId;
         final long deadlineMs;
+        final Cluster cluster;
         final Action action;
 
-        protected Event(Action action, int eventId, long deadlineMs) {
+
+        protected Event(Cluster cluster, Action action, int eventId, long deadlineMs) {
+            this.cluster = cluster;
             this.action = action;
             this.eventId = eventId;
             this.deadlineMs = deadlineMs;
         }
 
         void execute(EventScheduler scheduler) {
-            action.execute();
+            action.execute(cluster);
         }
 
         public int compareTo(Event other) {
@@ -376,13 +428,14 @@ public class RaftEventSimulationTest {
         final int periodMs;
         final int jitterMs;
 
-        protected PeriodicEvent(Action action,
+        protected PeriodicEvent(Cluster cluster,
+                                Action action,
                                 int eventId,
                                 Random random,
                                 long deadlineMs,
                                 int periodMs,
                                 int jitterMs) {
-            super(action, eventId, deadlineMs);
+            super(cluster, action, eventId, deadlineMs);
             this.random = random;
             this.periodMs = periodMs;
             this.jitterMs = jitterMs;
@@ -392,20 +445,41 @@ public class RaftEventSimulationTest {
         void execute(EventScheduler scheduler) {
             super.execute(scheduler);
             int nextExecDelayMs = periodMs + (jitterMs == 0 ? 0 : random.nextInt(jitterMs));
-            scheduler.schedule(action, nextExecDelayMs, periodMs, jitterMs);
+            scheduler.schedule(cluster, action, nextExecDelayMs, periodMs, jitterMs);
         }
     }
 
     private static class SequentialAppendAction implements Action {
-        final Cluster cluster;
 
-        private SequentialAppendAction(Cluster cluster) {
-            this.cluster = cluster;
+        @Override
+        public void execute(Cluster cluster) {
+            cluster.withCurrentLeader(node -> node.counter.increment());
+        }
+    }
+
+    private static class KillNodeAction implements Action {
+        final int nodeId;
+
+        private KillNodeAction(int nodeId) {
+            this.nodeId = nodeId;
         }
 
         @Override
-        public void execute() {
-            cluster.withCurrentLeader(node -> node.counter.increment());
+        public void execute(Cluster cluster) {
+            cluster.kill(nodeId);
+        }
+    }
+
+    private static class GracefulShutdownAction implements Action {
+        final int nodeId;
+
+        private GracefulShutdownAction(int nodeId) {
+            this.nodeId = nodeId;
+        }
+
+        @Override
+        public void execute(Cluster cluster) {
+            cluster.shutdown(nodeId);
         }
     }
 
@@ -430,10 +504,15 @@ public class RaftEventSimulationTest {
             invariants.add(invariant);
         }
 
-        void schedule(Action action, int delayMs, int periodMs, int jitterMs) {
+        void schedule(Cluster cluster,
+                      Action action,
+                      int delayMs,
+                      int periodMs,
+                      int jitterMs) {
             long initialDeadlineMs = time.milliseconds() + delayMs;
             int eventId = eventIdGenerator.incrementAndGet();
-            PeriodicEvent event = new PeriodicEvent(action, eventId, random, initialDeadlineMs, periodMs, jitterMs);
+            PeriodicEvent event = new PeriodicEvent(cluster, action,
+                eventId, random, initialDeadlineMs, periodMs, jitterMs);
             queue.offer(event);
         }
 
@@ -568,6 +647,13 @@ public class RaftEventSimulationTest {
             running.remove(nodeId);
         }
 
+        void shutdown(int nodeId) {
+            if (!running.containsKey(nodeId)) {
+                throw new IllegalStateException("Unknown node id " + nodeId);
+            }
+            running.get(nodeId).client.shutdown(1000);
+        }
+
         void pollIfRunning(int nodeId) {
             ifRunning(nodeId, RaftNode::poll);
         }
@@ -679,7 +765,7 @@ public class RaftEventSimulationTest {
             this.counter = new ReplicatedCounter(nodeId, logContext, false);
             try {
                 client.initialize(counter);
-            } catch (IOException e) {
+            } catch (KafkaRaftException e) {
                 throw new RuntimeException(e);
             }
         }
@@ -687,7 +773,7 @@ public class RaftEventSimulationTest {
         void poll() {
             try {
                 client.poll();
-            } catch (IOException e) {
+            } catch (KafkaRaftException e) {
                 throw new RuntimeException(e);
             }
         }
@@ -942,7 +1028,7 @@ public class RaftEventSimulationTest {
             node.channel.drainSendQueue().forEach(msg -> deliver(node.nodeId, msg));
         }
 
-        void deliverAll() {
+        void deliverAll(Cluster cluster) {
             for (RaftNode node : cluster.running()) {
                 deliverTo(node);
             }

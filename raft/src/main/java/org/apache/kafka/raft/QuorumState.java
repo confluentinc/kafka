@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.errors.KafkaRaftException;
 import org.apache.kafka.common.utils.LogContext;
 import org.slf4j.Logger;
 
@@ -30,6 +31,14 @@ import java.util.stream.Collectors;
 /**
  * This class is responsible for managing the current state of this node and ensuring only
  * valid state transitions.
+ *
+ * For exceptions thrown from this class, the general rules are:
+ *
+ * 1. For passed-in illegal state just as wrong leader id, candidate id, etc, throw
+ *    {@link KafkaRaftException} to trigger graceful shutdown.
+ * 2. For local election state read exception, cleanup the state and continue
+ * 3. For election state materialize exception, throw {@link KafkaRaftException}.
+ * 2. For other internal illegal state exception, just throw fatal exception.
  */
 public class QuorumState {
     public final int localId;
@@ -48,7 +57,7 @@ public class QuorumState {
         this.log = logContext.logger(QuorumState.class);
     }
 
-    public void initialize(OffsetAndEpoch logEndOffsetAndEpoch) throws IOException, IllegalStateException {
+    public void initialize(OffsetAndEpoch logEndOffsetAndEpoch) throws KafkaRaftException, IllegalStateException {
         // We initialize in whatever state we were in on shutdown. If we were a leader
         // or candidate, probably an election was held, but we will find out about it
         // when we send Vote or BeginEpoch requests.
@@ -62,8 +71,14 @@ public class QuorumState {
         } catch (final IOException e) {
             // For exceptions during state file loading (missing or not readable),
             // we could assume the file is corrupted already and should be cleaned up.
-            log.warn("Clear local quorum state store {}", store.toString(), e);
-            store.clear();
+            log.warn("Clear local quorum state store {} due to exception", store.toString(), e);
+
+            try {
+                store.clear();
+            } catch (IOException cleanupException) {
+                throw new KafkaRaftException("Cleanup local state failed", cleanupException);
+            }
+
             election = ElectionState.withUnknownLeader(0, voters);
         }
 
@@ -85,9 +100,9 @@ public class QuorumState {
         } else {
             state = new FollowerState(election.epoch, voters);
             if (election.hasLeader()) {
-                becomeFetchingFollower(election.epoch, election.leaderId());
+                becomeFetchingFollower(election.leaderId(), election.epoch);
             } else if (election.hasVoted()) {
-                becomeVotedFollower(election.epoch, election.votedId());
+                becomeVotedFollower(election.votedId(), election.epoch);
             } else {
                 becomeUnattachedFollower(election.epoch);
             }
@@ -146,7 +161,7 @@ public class QuorumState {
         return !isVoter();
     }
 
-    public boolean becomeUnattachedFollower(int epoch) throws IOException {
+    public boolean becomeUnattachedFollower(int epoch) throws KafkaRaftException {
         if (isObserver())
             return becomeFollower(epoch, FollowerState::detachLeader);
 
@@ -162,12 +177,12 @@ public class QuorumState {
      * we do not begin fetching until the election has concluded and {@link #becomeFetchingFollower(int, int)}
      * is invoked.
      */
-    public boolean becomeVotedFollower(int epoch, int candidateId) throws IOException {
+    public boolean becomeVotedFollower(int candidateId, int epoch) throws KafkaRaftException {
         if (candidateId == localId)
-            throw new IllegalArgumentException("Cannot become a follower of " + candidateId +
+            throw new KafkaRaftException("Cannot become a follower of " + candidateId +
                 " since that matches the local `broker.id`");
         if (!isVoter(candidateId))
-            throw new IllegalArgumentException("Cannot become follower of non-voter " + candidateId);
+            throw new KafkaRaftException("Cannot become follower of non-voter " + candidateId);
 
         boolean transitioned = becomeFollower(epoch, state -> state.grantVoteTo(candidateId));
         if (transitioned)
@@ -178,12 +193,12 @@ public class QuorumState {
     /**
      * Become a follower of an elected leader so that we can begin fetching.
      */
-    public boolean becomeFetchingFollower(int epoch, int leaderId) throws IOException {
+    public boolean becomeFetchingFollower(int leaderId, int epoch) throws KafkaRaftException {
         if (leaderId == localId)
-            throw new IllegalArgumentException("Cannot become a follower of " + leaderId +
+            throw new KafkaRaftException("Cannot become a follower of " + leaderId +
                 " since that matches the local `broker.id`");
         if (!isVoter(leaderId))
-            throw new IllegalArgumentException("Cannot become follower of non-voter " + leaderId);
+            throw new KafkaRaftException("Cannot become follower of non-voter " + leaderId);
         boolean transitioned = becomeFollower(epoch, state -> state.acknowledgeLeader(leaderId));
         if (transitioned) {
             log.info("Become follower of leader {} in epoch {}", leaderId, epoch);
@@ -192,7 +207,7 @@ public class QuorumState {
         return transitioned;
     }
 
-    private boolean becomeFollower(int newEpoch, Function<FollowerState, Boolean> func) throws IOException {
+    private boolean becomeFollower(int newEpoch, Function<FollowerState, Boolean> func) throws KafkaRaftException {
         int currentEpoch = epoch();
         boolean stateChanged = false;
 
@@ -209,13 +224,21 @@ public class QuorumState {
 
         FollowerState followerState = followerStateOrThrow();
         if (func.apply(followerState) || stateChanged) {
-            store.writeElectionState(followerState.election());
+            materializeStateOrThrow(followerState.election());
             return true;
         }
         return false;
     }
 
-    public CandidateState becomeCandidate() throws IOException {
+    private void materializeStateOrThrow(ElectionState electionState) {
+        try {
+            store.writeElectionState(electionState);
+        } catch (IOException e) {
+            throw new KafkaRaftException("Write election state failed", e);
+        }
+    }
+
+    public CandidateState becomeCandidate() throws KafkaRaftException {
         if (isObserver())
             throw new IllegalStateException("Cannot become candidate since we are not a voter");
         if (isLeader())
@@ -224,12 +247,12 @@ public class QuorumState {
         int newEpoch = epoch() + 1;
         log.info("Become candidate in epoch {}", newEpoch);
         CandidateState state = new CandidateState(localId, newEpoch, voters);
-        store.writeElectionState(state.election());
+        materializeStateOrThrow(state.election());
         this.state = state;
         return state;
     }
 
-    public LeaderState becomeLeader(long epochStartOffset) throws IOException {
+    public LeaderState becomeLeader(long epochStartOffset) throws KafkaRaftException {
         if (isObserver())
             throw new IllegalStateException("Cannot become candidate since we are not a voter");
 
@@ -239,7 +262,7 @@ public class QuorumState {
 
         log.info("Become leader in epoch {}", epoch());
         LeaderState state = new LeaderState(localId, epoch(), epochStartOffset, voters);
-        store.writeElectionState(state.election());
+        materializeStateOrThrow(state.election());
         this.state = state;
         return state;
     }

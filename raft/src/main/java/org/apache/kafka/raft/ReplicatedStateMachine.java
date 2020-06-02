@@ -26,7 +26,6 @@ import org.apache.kafka.common.record.Records;
  */
 public interface ReplicatedStateMachine extends AutoCloseable {
 
-
     /**
      * Initialize the state machine.
      *

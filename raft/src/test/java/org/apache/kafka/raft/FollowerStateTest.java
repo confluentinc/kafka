@@ -17,6 +17,7 @@
 package org.apache.kafka.raft;
 
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.common.errors.KafkaRaftException;
 import org.junit.Test;
 
 import java.util.OptionalLong;
@@ -49,7 +50,7 @@ public class FollowerStateTest {
         int votedId = 1;
         int otherCandidateId = 2;
         assertTrue(state.grantVoteTo(votedId));
-        assertThrows(IllegalArgumentException.class, () -> state.grantVoteTo(otherCandidateId));
+        assertThrows(KafkaRaftException.class, () -> state.grantVoteTo(otherCandidateId));
     }
 
     @Test
@@ -69,6 +70,8 @@ public class FollowerStateTest {
         int candidateId = 2;
         state.acknowledgeLeader(leaderId);
         assertFalse(state.hasVoted());
+
+        assertThrows(KafkaRaftException.class, () -> state.grantVoteTo(-1));
         assertThrows(IllegalArgumentException.class, () -> state.grantVoteTo(candidateId));
         assertFalse(state.hasVoted());
         assertEquals(leaderId, state.leaderId());
@@ -102,7 +105,7 @@ public class FollowerStateTest {
         int leaderId = 1;
         int otherLeaderId = 2;
         assertTrue(state.acknowledgeLeader(leaderId));
-        assertThrows(IllegalArgumentException.class, () -> state.acknowledgeLeader(otherLeaderId));
+        assertThrows(KafkaRaftException.class, () -> state.acknowledgeLeader(otherLeaderId));
         assertTrue(state.hasLeader());
         assertEquals(leaderId, state.leaderId());
     }
@@ -143,5 +146,4 @@ public class FollowerStateTest {
         state.updateHighWatermark(highWatermark);
         assertEquals(highWatermark, state.highWatermark());
     }
-
 }

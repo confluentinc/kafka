@@ -16,6 +16,8 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.errors.KafkaRaftException;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -137,7 +139,7 @@ public class LeaderState implements EpochState {
     private ReplicaState ensureValidVoter(int remoteNodeId) {
         ReplicaState state = voterReplicaStates.get(remoteNodeId);
         if (state == null)
-            throw new IllegalArgumentException("Unexpected endorsement from non-voter " + remoteNodeId);
+            throw new KafkaRaftException("Unexpected endorsement from non-voter " + remoteNodeId);
         return state;
     }
 
