@@ -36,6 +36,7 @@ import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
+import org.apache.kafka.common.utils.KafkaThread;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
@@ -132,6 +133,7 @@ public class KafkaRaftClient implements RaftClient {
     private final BlockingQueue<PendingAppend> unsentAppends;
 
     private ReplicatedStateMachine stateMachine;
+    private final CommittedRecordsHandler committedRecordsHandler;
 
     public KafkaRaftClient(RaftConfig raftConfig,
                            NetworkChannel channel,
@@ -194,59 +196,59 @@ public class KafkaRaftClient implements RaftClient {
             retryBackoffMs, requestTimeoutMs, logContext);
         this.unsentAppends = new ArrayBlockingQueue<>(10);
         this.connections.maybeUpdate(quorum.localId, new HostInfo(advertisedListener, bootTimestamp));
-    }
-
-    private void applyCommittedRecordsToStateMachine() {
-        quorum.highWatermark().ifPresent(highWatermark -> {
-            log.updateHighWatermark(highWatermark);
-
-            logger.debug("Applying committed entries up to high watermark {}. " +
-                "Current position is {}", highWatermark, stateMachine.position());
-
-            while (stateMachine.position().offset < highWatermark && shutdown.get() == null) {
-                OffsetAndEpoch position = stateMachine.position();
-                Records records = readCommitted(position, highWatermark);
-                logger.trace("Applying committed records at offset {} of size {} to the state machine",
-                    position, records.sizeInBytes());
-                stateMachine.apply(records);
-                logger.trace("Applied committed records at {} to the state machine; position " +
-                    "updated to {}", position, stateMachine.position());
-            }
-        });
+        this.committedRecordsHandler = new CommittedRecordsHandler(logContext);
     }
 
     private void updateFollowerHighWatermark(FollowerState state, OptionalLong highWatermarkOpt) {
         highWatermarkOpt.ifPresent(highWatermark -> {
-            long newHighWatermark = Math.min(endOffset().offset, highWatermark);
-            state.updateHighWatermark(OptionalLong.of(newHighWatermark));
-            logger.debug("Follower high watermark updated to {}", newHighWatermark);
-            applyCommittedRecordsToStateMachine();
+            synchronized (this) {
+                long newHighWatermark = Math.min(endOffset().offset, highWatermark);
+                state.updateHighWatermark(OptionalLong.of(newHighWatermark));
+                logger.debug("Follower high watermark updated to {}", newHighWatermark);
+
+                updateHighWatermarkIfNeeded();
+            }
         });
     }
 
-    private void updateLeaderEndOffsetAndTimestamp(LeaderState state) {
-        if (state.updateLocalEndOffset(log.endOffset())) {
-            logger.debug("Leader high watermark updated to {} after end offset updated to {}",
+    private synchronized void updateLeaderEndOffsetAndTimestamp(LeaderState state) {
+        synchronized (this) {
+            if (state.updateLocalEndOffset(log.endOffset())) {
+                logger.debug("Leader high watermark updated to {} after end offset updated to {}",
                     state.highWatermark(), log.endOffset());
-            applyCommittedRecordsToStateMachine();
+            }
+
+            updateHighWatermarkIfNeeded();
         }
+
 
         maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, state.localId());
 
         // We may have pending fetches that can be completed by the advancement
         // of the log end offset
         purgatory.completeAll(null);
+
     }
 
     private void updateReplicaEndOffset(LeaderState state, int replicaId, long endOffset) {
-        if (state.updateEndOffset(replicaId, endOffset)) {
-            logger.debug("Leader high watermark updated to {} after replica {} end offset updated to {}",
+        synchronized (this) {
+            if (state.updateEndOffset(replicaId, endOffset)) {
+                logger.debug("Leader high watermark updated to {} after replica {} end offset updated to {}",
                     state.highWatermark(), replicaId, endOffset);
-            applyCommittedRecordsToStateMachine();
+
+                updateHighWatermarkIfNeeded();
+            }
         }
 
         // maybe extend the fetch timer with the majority of voter-fetching timestamps
         maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, replicaId);
+    }
+
+    private void updateHighWatermarkIfNeeded() {
+        highWatermark().ifPresent(offset -> {
+            log.updateHighWatermark(offset);
+            notifyAll();
+        });
     }
 
     private void maybeUpdateFetchTimerWithRemoteFetchTimestamp(LeaderState state, int replicaId) {
@@ -279,6 +281,8 @@ public class KafkaRaftClient implements RaftClient {
                     onBecomeFollowerOfElectedLeader(quorum.followerStateOrThrow());
             }
         }
+
+        committedRecordsHandler.start();
     }
 
     private OffsetAndEpoch endOffset() {
@@ -1342,6 +1346,7 @@ public class KafkaRaftClient implements RaftClient {
         // TODO: Safe to access epoch? Need to reset connections to be able to send EndQuorumEpoch? Block until shutdown completes?
         shutdown.set(new GracefulShutdown(timeoutMs, quorum.epoch()));
         channel.wakeup();
+        committedRecordsHandler.close();
     }
 
     public OptionalLong highWatermark() {
@@ -1418,4 +1423,61 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
+    private class CommittedRecordsHandler extends KafkaThread {
+
+        private final Logger logger;
+        private OptionalLong appliedOffset = OptionalLong.empty();
+
+        CommittedRecordsHandler(final LogContext logContext) {
+            super("CommittedRecordsHandlerThread", false);
+            this.logger = logContext.logger(CommittedRecordsHandler.class);
+        }
+
+        private boolean closed = false;
+
+        @Override
+        public void run() {
+            try {
+                logger.info("Started.");
+                while (!closed) {
+                    runOnce();
+                }
+                logger.info("Closed.");
+            } catch (InterruptedException ignore) {
+            }
+        }
+
+        private void runOnce() throws InterruptedException {
+            final long nextAppliedOffset;
+            synchronized (KafkaRaftClient.class) {
+                while (appliedOffset == highWatermark() || !closed) {
+                    KafkaRaftClient.this.wait();
+                }
+
+                OptionalLong newHighWatermark = highWatermark();
+                if (!newHighWatermark.isPresent()) {
+                    throw new IllegalStateException("The updated high watermark should not be empty");
+                }
+                nextAppliedOffset = newHighWatermark.getAsLong();
+            }
+
+            while (stateMachine.position().offset < nextAppliedOffset && shutdown.get() == null) {
+               OffsetAndEpoch position = stateMachine.position();
+               Records records = readCommitted(position, nextAppliedOffset);
+               stateMachine.apply(records);
+            }
+
+            appliedOffset = OptionalLong.of(nextAppliedOffset);
+        }
+
+        /**
+         * Called by the main thread to exit the commit handler thread.
+         */
+        void close() {
+            synchronized (KafkaRaftClient.class) {
+                this.closed = true;
+                notifyAll();
+            }
+        }
+    }
 }
