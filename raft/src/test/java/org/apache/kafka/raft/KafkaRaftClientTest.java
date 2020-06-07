@@ -293,7 +293,7 @@ public class KafkaRaftClientTest {
     }
 
     @Test
-    public void testEndQuorumStartsNewElectionAfterJitterIfReceivedFromVotedCandidate() throws Exception {
+    public void testEndQuorumStartsNewElectionImmediatelyIfReceivedFromVotedCandidate() throws Exception {
         int otherNodeId = 1;
         int epoch = 2;
 
@@ -309,18 +309,13 @@ public class KafkaRaftClientTest {
         client.poll();
         assertSentEndQuorumEpochResponse(Errors.NONE, epoch, OptionalInt.empty());
 
-        // The other node will still be considered the voted candidate until expiration of jitter
-        time.sleep(jitterMs - 1);
-        client.poll();
-        assertEquals(ElectionState.withVotedCandidate(epoch, otherNodeId, voters), quorumStateStore.readElectionState());
-
         time.sleep(1);
         client.poll();
         assertEquals(ElectionState.withVotedCandidate(epoch + 1, localId, voters), quorumStateStore.readElectionState());
     }
 
     @Test
-    public void testEndQuorumStartsNewElectionAfterJitterIfFollowerUnattached() throws Exception {
+    public void testEndQuorumStartsNewElectionImmediatelyIfFollowerUnattached() throws Exception {
         int voter2 = localId + 1;
         int voter3 = localId + 2;
         int epoch = 2;
@@ -337,12 +332,7 @@ public class KafkaRaftClientTest {
         client.poll();
         assertSentEndQuorumEpochResponse(Errors.NONE, epoch, OptionalInt.of(voter2));
 
-        // We should still update the current leader when we receive the EndQuorumEpoch
-        time.sleep(jitterMs - 1);
-        client.poll();
-        assertEquals(ElectionState.withElectedLeader(epoch, voter2, voters), quorumStateStore.readElectionState());
-
-        // Once jitter expires, we should become a candidate
+        // Should become a candidate immediately
         time.sleep(1);
         client.poll();
         assertEquals(ElectionState.withVotedCandidate(epoch + 1, localId, voters), quorumStateStore.readElectionState());
@@ -406,14 +396,14 @@ public class KafkaRaftClientTest {
 
         deliverResponse(findQuorumCorrelationId, -1, findQuorumResponse(OptionalInt.of(localId), leaderEpoch, voters));
 
-        // The election won't trigger by one round election jitter
-        time.sleep(electionJitterMs);
+        // The election won't trigger by one round retry backoff
+        time.sleep(1);
 
         pollUntilSend(client);
 
         assertSentFetchQuorumRecordsRequest(leaderEpoch, 0, 0);
 
-        time.sleep(electionJitterMs);
+        time.sleep(retryBackoffMs);
 
         pollUntilSend(client);
 

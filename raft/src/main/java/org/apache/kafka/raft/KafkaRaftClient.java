@@ -118,6 +118,7 @@ public class KafkaRaftClient implements RaftClient {
     private final int electionJitterMs;
     private final int fetchTimeoutMs;
     private final int retryBackoffMs;
+    private final int retryBackOffMaxMs = 1000;
     private final int requestTimeoutMs;
     private final int fetchMaxWaitMs;
     private final long bootTimestamp;
@@ -487,11 +488,6 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private int positiveRandomElectionJitterMs() {
-        final int randomJitterMs = randomElectionJitterMs();
-        return randomJitterMs == 0 ? 1 : randomJitterMs;
-    }
-
     private int randomElectionJitterMs() {
         if (electionJitterMs == 0)
             return 0;
@@ -590,10 +586,11 @@ public class KafkaRaftClient implements RaftClient {
                 if (!preferredSuccessors.contains(quorum.localId)) {
                     return buildEndQuorumEpochResponse(Errors.INCONSISTENT_VOTER_SET);
                 }
+                final int position = preferredSuccessors.indexOf(quorum.localId);
                 // Based on the priority inside the preferred successors, choose the corresponding delayed
                 // election time so that the most up-to-date voter has a higher chance to be elected.
-                // The reasoning for always making it positive is for deterministic unit testing.
-                timer.reset(electionJitterMs * preferredSuccessors.indexOf(quorum.localId) + positiveRandomElectionJitterMs());
+                timer.reset(position <= 0 ? 0 :
+                    Math.min(retryBackOffMaxMs, retryBackoffMs * (long) Math.pow(2, position - 1)));
             }
         } // else if we are already leader or a candidate, then we take no action
 
