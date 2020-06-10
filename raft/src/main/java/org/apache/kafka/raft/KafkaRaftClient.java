@@ -588,9 +588,14 @@ public class KafkaRaftClient implements RaftClient {
                 }
                 final int position = preferredSuccessors.indexOf(quorum.localId);
                 // Based on the priority inside the preferred successors, choose the corresponding delayed
-                // election time so that the most up-to-date voter has a higher chance to be elected.
-                timer.reset(position <= 0 ? 0 :
-                    Math.min(retryBackOffMaxMs, retryBackoffMs * (long) Math.pow(2, position - 1)));
+                // election time so that the most up-to-date voter has a higher chance to be elected. If
+                // the node's priority is highest, become candidate immediately instead of waiting for next poll.
+                if (position == 0) {
+                    becomeCandidate();
+                } else {
+                    timer.reset(Math.min(retryBackOffMaxMs, retryBackoffMs * (long) Math.pow(2, position - 1)));
+                }
+
             }
         } // else if we are already leader or a candidate, then we take no action
 

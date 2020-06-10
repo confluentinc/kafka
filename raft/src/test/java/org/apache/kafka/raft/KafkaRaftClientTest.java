@@ -307,10 +307,7 @@ public class KafkaRaftClientTest {
         deliverRequest(endEpochRequest(epoch, OptionalInt.empty(), otherNodeId, Collections.singletonList(localId)));
 
         client.poll();
-        assertSentEndQuorumEpochResponse(Errors.NONE, epoch, OptionalInt.empty());
-
-        time.sleep(1);
-        client.poll();
+        assertSentEndQuorumEpochResponse(Errors.NONE, epoch + 1, OptionalInt.empty());
         assertEquals(ElectionState.withVotedCandidate(epoch + 1, localId, voters), quorumStateStore.readElectionState());
     }
 
@@ -330,11 +327,9 @@ public class KafkaRaftClientTest {
         deliverRequest(endEpochRequest(epoch, OptionalInt.of(voter2), voter2, Arrays.asList(localId, voter3)));
 
         client.poll();
-        assertSentEndQuorumEpochResponse(Errors.NONE, epoch, OptionalInt.of(voter2));
 
         // Should become a candidate immediately
-        time.sleep(1);
-        client.poll();
+        assertSentEndQuorumEpochResponse(Errors.NONE, epoch + 1, OptionalInt.empty());
         assertEquals(ElectionState.withVotedCandidate(epoch + 1, localId, voters), quorumStateStore.readElectionState());
     }
 
@@ -352,15 +347,9 @@ public class KafkaRaftClientTest {
 
         deliverRequest(endEpochRequest(leaderEpoch, OptionalInt.of(oldLeaderId), oldLeaderId, Collections.singletonList(localId)));
         client.poll();
-        assertSentEndQuorumEpochResponse(Errors.NONE, leaderEpoch, OptionalInt.of(oldLeaderId));
-
-        time.sleep(electionJitterMs);
-
-        pollUntilSend(client);
-
-        assertSentVoteRequest(leaderEpoch + 1, 0, 0);
 
         // Should have already done self-voting
+        assertSentEndQuorumEpochResponse(Errors.NONE, leaderEpoch + 1, OptionalInt.empty());
         assertEquals(ElectionState.withVotedCandidate(leaderEpoch + 1, localId, voters),
             quorumStateStore.readElectionState());
     }
