@@ -71,6 +71,7 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
         CompletableFuture<OffsetAndEpoch> appendFuture = appender.append(buildRecords(map));
         return appendFuture.thenCompose(offsetAndEpoch -> {
             synchronized (this) {
+                System.out.println("append future complete");
                 // It is possible when this is invoked that the operation has already been applied to
                 // the state machine
                 if (offsetAndEpoch.compareTo(currentPosition) < 0) {

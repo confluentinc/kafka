@@ -210,7 +210,7 @@ public class KafkaRaftClient implements RaftClient {
         });
     }
 
-    private synchronized void updateLeaderEndOffsetAndTimestamp(LeaderState state) {
+    private void updateLeaderEndOffsetAndTimestamp(LeaderState state) {
         synchronized (this) {
             if (state.updateLocalEndOffset(log.endOffset())) {
                 logger.debug("Leader high watermark updated to {} after end offset updated to {}",
@@ -1343,11 +1343,11 @@ public class KafkaRaftClient implements RaftClient {
     @Override
     public void shutdown(int timeoutMs) {
         // TODO: Safe to access epoch? Need to reset connections to be able to send EndQuorumEpoch? Block until shutdown completes?
-        shutdown.set(new GracefulShutdown(timeoutMs, quorum.epoch()));
         channel.wakeup();
 
         synchronized (this) {
-            committedRecordsHandler.close();
+            shutdown.set(new GracefulShutdown(timeoutMs, quorum.epoch()));
+//            committedRecordsHandler.close();
             notifyAll();
         }
     }
@@ -1436,32 +1436,40 @@ public class KafkaRaftClient implements RaftClient {
             this.logger = logContext.logger(CommittedRecordsHandler.class);
         }
 
-        private boolean closed = false;
-
         @Override
         public void run() {
             try {
                 logger.info("Started.");
-                while (!closed) {
+                while (shutdown.get() == null) {
                     runOnce();
                 }
                 logger.info("Closed.");
+                System.out.println("Commit handler thread closed");
             } catch (InterruptedException ignore) {
             }
         }
 
         private void runOnce() throws InterruptedException {
             final long nextAppliedOffset;
+//            final long stateMachinePosition;
             synchronized (KafkaRaftClient.this) {
-                while (appliedOffset == highWatermark() || !closed) {
+                while (appliedOffset == highWatermark() || shutdown.get() != null) {
                     KafkaRaftClient.this.wait();
                 }
+                // || !closed
+//                System.out.println("Pass the run once");
 
                 OptionalLong newHighWatermark = highWatermark();
-                if (!newHighWatermark.isPresent()) {
-                    throw new IllegalStateException("The updated high watermark should not be empty");
-                }
-                nextAppliedOffset = newHighWatermark.getAsLong();
+//                if (!newHighWatermark.isPresent()) {
+//                    throw new IllegalStateException("The updated high watermark should not be empty");
+//                L
+                nextAppliedOffset = newHighWatermark.orElse(-1L);
+            }
+
+            if (nextAppliedOffset < 0) {
+                System.out.println("Encountered empty hw");
+                logger.debug("Skipping update for empty offset");
+                return;
             }
 
             logger.debug("Applying committed entries up to high watermark {}. " +
@@ -1474,13 +1482,6 @@ public class KafkaRaftClient implements RaftClient {
             }
 
             appliedOffset = OptionalLong.of(nextAppliedOffset);
-        }
-
-        /**
-         * Called by the main thread to exit the commit handler thread.
-         */
-        void close() {
-            this.closed = true;
         }
     }
 }

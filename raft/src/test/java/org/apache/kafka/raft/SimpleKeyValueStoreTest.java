@@ -79,7 +79,7 @@ public class SimpleKeyValueStoreTest {
         CompletableFuture<OffsetAndEpoch> future = store.put(0, 1);
         manager.poll();
 
-        TestUtils.waitForCondition(future::isDone, "Data should be materialized");
+        TestUtils.waitForCondition(future::isDone, 2000, "Data should be materialized");
 //        assertTrue(future.isDone());
         // The control record takes up one offset.
         assertEquals(new OffsetAndEpoch(1L, epoch), future.get());
