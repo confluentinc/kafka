@@ -201,13 +201,12 @@ public class KafkaRaftClient implements RaftClient {
 
     private void updateFollowerHighWatermark(FollowerState state, OptionalLong highWatermarkOpt) {
         highWatermarkOpt.ifPresent(highWatermark -> {
+            long newHighWatermark = Math.min(endOffset().offset, highWatermark);
             synchronized (this) {
-                long newHighWatermark = Math.min(endOffset().offset, highWatermark);
                 state.updateHighWatermark(OptionalLong.of(newHighWatermark));
-                logger.debug("Follower high watermark updated to {}", newHighWatermark);
-
-                updateHighWatermarkIfNeeded();
+                updateLogHighWatermarkIfNeeded();
             }
+            logger.debug("Follower high watermark updated to {}", newHighWatermark);
         });
     }
 
@@ -218,7 +217,7 @@ public class KafkaRaftClient implements RaftClient {
                     state.highWatermark(), log.endOffset());
             }
 
-            updateHighWatermarkIfNeeded();
+            updateLogHighWatermarkIfNeeded();
         }
 
 
@@ -236,7 +235,7 @@ public class KafkaRaftClient implements RaftClient {
                 logger.debug("Leader high watermark updated to {} after replica {} end offset updated to {}",
                     state.highWatermark(), replicaId, endOffset);
 
-                updateHighWatermarkIfNeeded();
+                updateLogHighWatermarkIfNeeded();
             }
         }
 
@@ -244,7 +243,7 @@ public class KafkaRaftClient implements RaftClient {
         maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, replicaId);
     }
 
-    private void updateHighWatermarkIfNeeded() {
+    private void updateLogHighWatermarkIfNeeded() {
         highWatermark().ifPresent(offset -> {
             log.updateHighWatermark(offset);
             notifyAll();
@@ -1346,7 +1345,11 @@ public class KafkaRaftClient implements RaftClient {
         // TODO: Safe to access epoch? Need to reset connections to be able to send EndQuorumEpoch? Block until shutdown completes?
         shutdown.set(new GracefulShutdown(timeoutMs, quorum.epoch()));
         channel.wakeup();
-        committedRecordsHandler.close();
+
+        synchronized (this) {
+            committedRecordsHandler.close();
+            notifyAll();
+        }
     }
 
     public OptionalLong highWatermark() {
@@ -1461,6 +1464,9 @@ public class KafkaRaftClient implements RaftClient {
                 nextAppliedOffset = newHighWatermark.getAsLong();
             }
 
+            logger.debug("Applying committed entries up to high watermark {}. " +
+                "Current position is {}", nextAppliedOffset, stateMachine.position());
+
             while (stateMachine.position().offset < nextAppliedOffset && shutdown.get() == null) {
                OffsetAndEpoch position = stateMachine.position();
                Records records = readCommitted(position, nextAppliedOffset);
@@ -1474,10 +1480,7 @@ public class KafkaRaftClient implements RaftClient {
          * Called by the main thread to exit the commit handler thread.
          */
         void close() {
-            synchronized (KafkaRaftClient.class) {
-                this.closed = true;
-                notifyAll();
-            }
+            this.closed = true;
         }
     }
 }
