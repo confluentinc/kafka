@@ -19,6 +19,7 @@ package org.apache.kafka.raft;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.test.TestUtils;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -78,7 +79,8 @@ public class SimpleKeyValueStoreTest {
         CompletableFuture<OffsetAndEpoch> future = store.put(0, 1);
         manager.poll();
 
-        assertTrue(future.isDone());
+        TestUtils.waitForCondition(future::isDone, "Data should be materialized");
+//        assertTrue(future.isDone());
         // The control record takes up one offset.
         assertEquals(new OffsetAndEpoch(1L, epoch), future.get());
         assertEquals(1, store.get(0).intValue());

@@ -1452,7 +1452,7 @@ public class KafkaRaftClient implements RaftClient {
 
         private void runOnce() throws InterruptedException {
             final long nextAppliedOffset;
-            synchronized (KafkaRaftClient.class) {
+            synchronized (KafkaRaftClient.this) {
                 while (appliedOffset == highWatermark() || !closed) {
                     KafkaRaftClient.this.wait();
                 }
