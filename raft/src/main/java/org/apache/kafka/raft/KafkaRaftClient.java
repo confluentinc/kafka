@@ -35,6 +35,7 @@ import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
+import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.utils.KafkaThread;
 import org.apache.kafka.common.utils.LogContext;
@@ -307,7 +308,10 @@ public class KafkaRaftClient implements RaftClient {
                         follower -> new Voter().setVoterId(follower)).collect(Collectors.toList())))
         );
 
-        log.assignEpochStartOffset(quorum.epoch(), log.endOffset());
+        synchronized (this) {
+            log.assignEpochStartOffset(quorum.epoch(), log.endOffset());
+        }
+
         timer.reset(fetchTimeoutMs);
         resetConnections();
     }
@@ -315,7 +319,9 @@ public class KafkaRaftClient implements RaftClient {
     private void appendControlRecord(Records controlRecord) {
         if (shutdown.get() != null)
             throw new IllegalStateException("Cannot append records while we are shutting down");
-        log.appendAsLeader(controlRecord, quorum.epoch());
+        synchronized (this) {
+            log.appendAsLeader(controlRecord, quorum.epoch());
+        }
     }
 
     private void maybeBecomeLeader(CandidateState state) throws IOException {
@@ -776,13 +782,17 @@ public class KafkaRaftClient implements RaftClient {
                 OffsetAndEpoch nextFetchOffsetAndEpoch = new OffsetAndEpoch(
                     response.nextFetchOffset(), response.nextFetchOffsetEpoch());
 
-                log.truncateToEndOffset(nextFetchOffsetAndEpoch).ifPresent(truncationOffset -> {
-                    logger.info("Truncated to offset {} after out of range error from leader {}",
-                        truncationOffset, quorum.leaderIdOrNil());
-                });
+                synchronized (this) {
+                    log.truncateToEndOffset(nextFetchOffsetAndEpoch).ifPresent(truncationOffset -> {
+                        logger.info("Truncated to offset {} after out of range error from leader {}",
+                            truncationOffset, quorum.leaderIdOrNil());
+                    });
+                }
             } else {
                 ByteBuffer recordsBuffer = response.records();
-                log.appendAsFollower(MemoryRecords.readableRecords(recordsBuffer));
+                synchronized (this) {
+                    log.appendAsFollower(MemoryRecords.readableRecords(recordsBuffer));
+                }
 
                 OptionalLong highWatermark = response.highWatermark() < 0 ?
                     OptionalLong.empty() : OptionalLong.of(response.highWatermark());
@@ -799,7 +809,11 @@ public class KafkaRaftClient implements RaftClient {
 
     private OptionalLong maybeAppendAsLeader(LeaderState state, Records records) {
         if (state.highWatermark().isPresent() && stateMachine.accept(records)) {
-            Long baseOffset = log.appendAsLeader(records, quorum.epoch());
+            final Long baseOffset;
+            synchronized (this) {
+                baseOffset = log.appendAsLeader(records, quorum.epoch());
+            }
+
             updateLeaderEndOffsetAndTimestamp(state);
             logger.trace("Leader appended records at base offset {}, new end offset is {}", baseOffset, endOffset());
             return OptionalLong.of(baseOffset);
@@ -1302,6 +1316,69 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
+    private class CommittedRecordsHandler extends KafkaThread {
+
+        private final Logger logger;
+        private OptionalLong appliedOffset = OptionalLong.empty();
+
+        CommittedRecordsHandler(final LogContext logContext) {
+            super("CommittedRecordsHandlerThread", false);
+            this.logger = logContext.logger(CommittedRecordsHandler.class);
+        }
+
+        @Override
+        public void run() {
+            try {
+                logger.info("Started.");
+                while (shutdown.get() == null) {
+                    runOnce();
+                }
+                logger.info("Closed.");
+            } catch (InterruptedException ignore) {
+            }
+        }
+
+        private void runOnce() throws InterruptedException {
+            final long nextAppliedOffset;
+            final List<Records> recordsToApply = new ArrayList<>();
+
+            synchronized (KafkaRaftClient.this) {
+                while (appliedOffset == highWatermark() || shutdown.get() != null) {
+                    KafkaRaftClient.this.wait();
+                }
+
+                OptionalLong newHighWatermark = highWatermark();
+                nextAppliedOffset = newHighWatermark.orElse(-1L);
+
+                OffsetAndEpoch position = new OffsetAndEpoch(stateMachine.position().offset,
+                    stateMachine.position().epoch);
+                while (position.offset < nextAppliedOffset && shutdown.get() == null) {
+                    Records records = readCommitted(position, nextAppliedOffset);
+                    long lastOffset = -1L;
+                    for (RecordBatch batch : records.batches()) {
+                        lastOffset = batch.lastOffset() + 1;
+                    }
+                    position = new OffsetAndEpoch(lastOffset + 1, position.epoch);
+                    recordsToApply.add(records);
+                }
+            }
+
+            if (nextAppliedOffset < 0) {
+                logger.debug("Skipping update for empty offset");
+                return;
+            }
+
+            logger.debug("Applying committed entries up to high watermark {}. " +
+                "Current position is {}", nextAppliedOffset, stateMachine.position());
+
+            for (Records records : recordsToApply) {
+                stateMachine.apply(records);
+            }
+
+            appliedOffset = OptionalLong.of(nextAppliedOffset);
+        }
+    }
+
     /**
      * Append a set of records to the log. Successful completion of the future indicates a success of
      * the append, with the uncommitted base offset and epoch.
@@ -1423,65 +1500,6 @@ public class KafkaRaftClient implements RaftClient {
 
         public boolean isCancelled() {
             return future.isCancelled();
-        }
-    }
-
-    private class CommittedRecordsHandler extends KafkaThread {
-
-        private final Logger logger;
-        private OptionalLong appliedOffset = OptionalLong.empty();
-
-        CommittedRecordsHandler(final LogContext logContext) {
-            super("CommittedRecordsHandlerThread", false);
-            this.logger = logContext.logger(CommittedRecordsHandler.class);
-        }
-
-        @Override
-        public void run() {
-            try {
-                logger.info("Started.");
-                while (shutdown.get() == null) {
-                    runOnce();
-                }
-                logger.info("Closed.");
-                System.out.println("Commit handler thread closed");
-            } catch (InterruptedException ignore) {
-            }
-        }
-
-        private void runOnce() throws InterruptedException {
-            final long nextAppliedOffset;
-//            final long stateMachinePosition;
-            synchronized (KafkaRaftClient.this) {
-                while (appliedOffset == highWatermark() || shutdown.get() != null) {
-                    KafkaRaftClient.this.wait();
-                }
-                // || !closed
-//                System.out.println("Pass the run once");
-
-                OptionalLong newHighWatermark = highWatermark();
-//                if (!newHighWatermark.isPresent()) {
-//                    throw new IllegalStateException("The updated high watermark should not be empty");
-//                L
-                nextAppliedOffset = newHighWatermark.orElse(-1L);
-            }
-
-            if (nextAppliedOffset < 0) {
-                System.out.println("Encountered empty hw");
-                logger.debug("Skipping update for empty offset");
-                return;
-            }
-
-            logger.debug("Applying committed entries up to high watermark {}. " +
-                "Current position is {}", nextAppliedOffset, stateMachine.position());
-
-            while (stateMachine.position().offset < nextAppliedOffset && shutdown.get() == null) {
-               OffsetAndEpoch position = stateMachine.position();
-               Records records = readCommitted(position, nextAppliedOffset);
-               stateMachine.apply(records);
-            }
-
-            appliedOffset = OptionalLong.of(nextAppliedOffset);
         }
     }
 }

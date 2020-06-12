@@ -32,7 +32,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 public class SimpleKeyValueStoreTest {
 
@@ -80,7 +79,7 @@ public class SimpleKeyValueStoreTest {
         manager.poll();
 
         TestUtils.waitForCondition(future::isDone, 2000, "Data should be materialized");
-//        assertTrue(future.isDone());
+
         // The control record takes up one offset.
         assertEquals(new OffsetAndEpoch(1L, epoch), future.get());
         assertEquals(1, store.get(0).intValue());
