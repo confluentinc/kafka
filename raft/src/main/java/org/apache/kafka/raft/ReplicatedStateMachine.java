@@ -64,7 +64,7 @@ public interface ReplicatedStateMachine extends AutoCloseable {
      *
      * @param records The records to apply to the state machine
      */
-    void apply(Records records);
+    void apply(Records records, long baseOffset);
 
     /**
      * This is only invoked by leaders. The leader is guaranteed to have the full committed

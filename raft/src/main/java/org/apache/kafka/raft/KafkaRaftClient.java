@@ -139,7 +139,7 @@ public class KafkaRaftClient implements RaftClient {
     // unwritten appends are those which have not been applied to the leader's local log;
     // uncommitted appends are those which have applied to the leader's local log but have not committed among the quorum.
     private final BlockingQueue<UnwrittenAppend> unwrittenAppends;
-    private final SortedMap<OffsetAndEpoch, AppendBatchAndTime> uncommittedAppends;
+    private final SortedMap<OffsetAndEpoch, AppendedInfo> uncommittedAppends;
 
     private ReplicatedStateMachine stateMachine;
 
@@ -215,34 +215,53 @@ public class KafkaRaftClient implements RaftClient {
         quorum.highWatermark().ifPresent(highWatermark -> {
             log.updateHighWatermark(highWatermark);
             maybeCommitPendingAppends(highWatermark, time.milliseconds());
-
-            logger.debug("Applying committed entries up to high watermark {}. " +
-                "Current position is {}", highWatermark, stateMachine.position());
-
-            while (stateMachine.position().offset < highWatermark && shutdown.get() == null) {
-                OffsetAndEpoch position = stateMachine.position();
-                Records records = readCommitted(position, highWatermark);
-
-                stateMachine.apply(records);
-                logger.trace("Applied committed records at {} to the state machine; position " +
-                    "updated to {}", position, stateMachine.position());
-            }
         });
     }
 
     private void maybeCommitPendingAppends(long highWatermark, long currentTimeMs) {
-        Iterator<Map.Entry<OffsetAndEpoch, AppendBatchAndTime>> iter = uncommittedAppends.entrySet().iterator();
-        while (iter.hasNext()) {
-            Map.Entry<OffsetAndEpoch, AppendBatchAndTime> entry = iter.next();
-            OffsetAndEpoch offsetAndEpoch = entry.getKey();
-            if (offsetAndEpoch.offset < highWatermark) {
-                AppendBatchAndTime appendBatchAndTime = entry.getValue();
-                long elapsedTime = Math.max(0, currentTimeMs - appendBatchAndTime.appendTimeMs);
-                double elapsedTimePerRecord = elapsedTime / (double) appendBatchAndTime.numRecords;
-                kafkaRaftMetrics.updateCommitLatency(elapsedTimePerRecord, currentTimeMs);
-                iter.remove();
+        logger.debug("Applying committed entries up to high watermark {}. " +
+                "Current position is {}", highWatermark, stateMachine.position());
+
+        Iterator<Map.Entry<OffsetAndEpoch, AppendedInfo>> iter = uncommittedAppends.entrySet().iterator();
+        while (stateMachine.position().offset < highWatermark && shutdown.get() == null) {
+            OffsetAndEpoch position = stateMachine.position();
+
+            if (iter.hasNext()) {
+                Map.Entry<OffsetAndEpoch, AppendedInfo> entry = iter.next();
+                AppendedInfo appendedInfo = entry.getValue();
+
+                if (appendedInfo.baseOffset < position.offset) {
+                    iter.remove();
+                } else if (appendedInfo.baseOffset > position.offset) {
+                    // the cached uncommitted appends may be lost when, e.g. the client crashed;
+                    // in this case we'd still have to read from the local log
+                    Records records = readCommitted(position, highWatermark);
+
+                    // TODO: when we have log compaction, this logic needs to be updated
+                    stateMachine.apply(records, 0);
+                    logger.trace("Applied committed records at {} to the state machine; position " +
+                            "updated to {}", position, stateMachine.position());
+                } else if (appendedInfo.lastOffset < highWatermark) {
+                    // note we assume that the high-watermark would never advances partial batches, but would always
+                    // on batch boundaries; if it is not the case then this logic would break
+                    double elapsedTimePerRecord = (currentTimeMs - appendedInfo.appendTimeMs) / (double) appendedInfo.numRecords;
+                    kafkaRaftMetrics.updateCommitLatency(elapsedTimePerRecord, currentTimeMs);
+
+                    Records records = appendedInfo.records;
+                    long baseOffset = appendedInfo.baseOffset - records.records().iterator().next().offset();
+                    stateMachine.apply(records, baseOffset);
+                    logger.trace("Applied committed records at {} to the state machine; position " +
+                            "updated to {}", position, stateMachine.position());
+
+                    iter.remove();
+                }
             } else {
-                break;
+                Records records = readCommitted(position, highWatermark);
+
+                // TODO: when we have log compaction, this logic needs to be updated
+                stateMachine.apply(records, 0);
+                logger.trace("Applied committed records at {} to the state machine; position " +
+                        "updated to {}", position, stateMachine.position());
             }
         }
     }
@@ -347,9 +366,13 @@ public class KafkaRaftClient implements RaftClient {
     private void appendControlRecord(Records controlRecord) {
         if (shutdown.get() != null)
             throw new IllegalStateException("Cannot append records while we are shutting down");
-        log.appendAsLeader(controlRecord, quorum.epoch());
+        LogAppendInfo logAppendInfo = log.appendAsLeader(controlRecord, quorum.epoch());
+
         kafkaRaftMetrics.updateAppendRecords(1);
         kafkaRaftMetrics.updateLogEnd(endOffset());
+
+        AppendedInfo appendedInfo = new AppendedInfo(controlRecord, logAppendInfo.firstOffset, logAppendInfo.lastOffset, time.milliseconds());
+        uncommittedAppends.put(new OffsetAndEpoch(logAppendInfo.lastOffset, quorum.epoch()), appendedInfo);
     }
 
     private void maybeBecomeLeader(CandidateState state) throws IOException {
@@ -402,8 +425,6 @@ public class KafkaRaftClient implements RaftClient {
 
         // TODO: we may only return the future when the append is committed not appended locally,
         //       in which case we would change this logic
-        uncommittedAppends.clear();
-
         for (UnwrittenAppend unwrittenAppend: unwrittenAppends) {
             if (!unwrittenAppend.isCancelled()) {
                 unwrittenAppend.fail(new NotLeaderForPartitionException("Append refused since this node is no longer " +
@@ -842,6 +863,21 @@ public class KafkaRaftClient implements RaftClient {
                     logger.info("Truncated to offset {} after out of range error from leader {}",
                         truncationOffset, quorum.leaderIdOrNil());
                 });
+
+                Iterator<Map.Entry<OffsetAndEpoch, AppendedInfo>> iter = uncommittedAppends.entrySet().iterator();
+                while (iter.hasNext()) {
+                    Map.Entry<OffsetAndEpoch, AppendedInfo> entry = iter.next();
+                    OffsetAndEpoch offsetAndEpoch = entry.getKey();
+                    if (offsetAndEpoch.offset >= nextFetchOffsetAndEpoch.offset && shutdown.get() == null) {
+                        AppendedInfo appendedInfo = entry.getValue();
+
+                        logger.trace("Dropped uncommitted records at {}, the state machine would not be applied", appendedInfo.baseOffset);
+
+                        iter.remove();
+                    } else {
+                        break;
+                    }
+                }
             } else {
                 ByteBuffer recordsBuffer = response.records();
                 MemoryRecords records = MemoryRecords.readableRecords(recordsBuffer);
@@ -849,6 +885,10 @@ public class KafkaRaftClient implements RaftClient {
                 OffsetAndEpoch endOffset = endOffset();
                 kafkaRaftMetrics.updateFetchedRecords(info.lastOffset - info.firstOffset + 1);
                 kafkaRaftMetrics.updateLogEnd(endOffset);
+
+                AppendedInfo appendedInfo = new AppendedInfo(records, info.firstOffset, info.lastOffset, time.milliseconds());
+                uncommittedAppends.put(new OffsetAndEpoch(info.lastOffset, quorum.epoch()), appendedInfo);
+
                 OptionalLong highWatermark = response.highWatermark() < 0 ?
                     OptionalLong.empty() : OptionalLong.of(response.highWatermark());
                 updateFollowerHighWatermark(state, highWatermark);
@@ -1353,6 +1393,7 @@ public class KafkaRaftClient implements RaftClient {
             currentTimeMs = timer.currentTimeMs();
             kafkaRaftMetrics.updatePollStart(currentTimeMs);
             // TODO: Receive time needs to take into account backing off operations that still need doing
+            kafkaRaftMetrics.updatePollStart(currentTimeMs);
             List<RaftMessage> inboundMessages = channel.receive(timer.remainingMs());
             timer.update();
             currentTimeMs = timer.currentTimeMs();
@@ -1378,7 +1419,7 @@ public class KafkaRaftClient implements RaftClient {
                 if (info != null) {
                     OffsetAndEpoch offsetAndEpoch = new OffsetAndEpoch(info.lastOffset, epoch);
                     unwrittenAppend.complete(offsetAndEpoch);
-                    uncommittedAppends.put(offsetAndEpoch, new AppendBatchAndTime(info.lastOffset - info.firstOffset + 1, currentTimeMs));
+                    uncommittedAppends.put(offsetAndEpoch, new AppendedInfo(unwrittenAppend.records, info.firstOffset, info.lastOffset, currentTimeMs));
                 } else {
                     unwrittenAppend.fail(new InvalidRequestException("Leader refused the append"));
                 }
@@ -1509,17 +1550,23 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private static class AppendBatchAndTime {
+    private static class AppendedInfo {
+        private final Records records;
+        private final long baseOffset;
+        private final long lastOffset;
         private final long numRecords;
         private final long appendTimeMs;
 
-        private AppendBatchAndTime(long numRecords, long appendTimeMs) {
+        private AppendedInfo(Records records, long baseOffset, long lastOffset, long appendTimeMs) {
+            this.numRecords = lastOffset - baseOffset + 1;
             if (numRecords <= 0) {
                 throw new IllegalArgumentException("Number of records appended in this batch should always be positive");
             }
 
+            this.records = records;
             this.appendTimeMs = appendTimeMs;
-            this.numRecords = numRecords;
+            this.baseOffset = baseOffset;
+            this.lastOffset = lastOffset;
         }
     }
 }

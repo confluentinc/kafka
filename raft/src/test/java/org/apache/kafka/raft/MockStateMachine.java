@@ -60,9 +60,9 @@ public class MockStateMachine implements ReplicatedStateMachine {
     }
 
     @Override
-    public synchronized void apply(Records records) {
+    public synchronized void apply(Records records, long baseOffset) {
         for (RecordBatch batch : records.batches()) {
-            this.position = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
+            this.position = new OffsetAndEpoch(baseOffset + batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
     }
 

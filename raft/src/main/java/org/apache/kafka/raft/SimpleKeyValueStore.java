@@ -104,7 +104,7 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
     }
 
     @Override
-    public synchronized void apply(Records records) {
+    public synchronized void apply(Records records, long baseOffset) {
         withRecords(records, (key, value) -> {
             uncommitted.remove(key, value);
             committed.put(key, value);
@@ -112,7 +112,7 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
 
         for (RecordBatch batch : records.batches()) {
             maybeCompletePendingCommit(batch);
-            currentPosition = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
+            currentPosition = new OffsetAndEpoch(baseOffset + batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
     }
 
