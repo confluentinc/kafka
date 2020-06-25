@@ -27,16 +27,16 @@ import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.message.MetadataResponseData
 import org.apache.kafka.common.message.MetadataResponseData.{MetadataResponsePartition, MetadataResponseTopic}
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
-import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse, ApiVersionsResponse, MetadataResponse, ProduceRequest, ProduceResponse}
+import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse, ApiVersionsResponse, MetadataRequest, MetadataResponse, ProduceRequest, ProduceResponse}
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.raft.{NoOpReplicatedCounter, ReplicatedCounter}
+import org.apache.kafka.raft.NoOpReplicatedCounter
 
 import scala.jdk.CollectionConverters._
 
 class RaftRequestHandler(networkChannel: KafkaNetworkChannel,
                          requestChannel: RequestChannel,
                          time: Time,
-                         counter: ReplicatedCounter,
+                         counter: NoOpReplicatedCounter,
                          metadataPartition: TopicPartition)
   extends ApiRequestHandler with Logging {
 
@@ -60,6 +60,13 @@ class RaftRequestHandler(networkChannel: KafkaNetworkChannel,
           sendResponse(request, Option(ApiVersionsResponse.apiVersionsResponse(0, 2)))
 
         case ApiKeys.METADATA =>
+          val metadataRequest = request.body[MetadataRequest]
+          if (metadataRequest.data().topics().size() != 1 ||
+            !metadataRequest.data().topics().get(0).name().equals(metadataPartition.topic())) {
+            throw new IllegalArgumentException(s"Should only handle metadata request querying for " +
+              s"cluster metadata, but get ${metadataRequest.data().topics()}")
+          }
+
           val topics = new MetadataResponseData.MetadataResponseTopicCollection
           val leaderConnection = networkChannel.getConnectionInfo(counter.leaderId())
           if (leaderConnection != null) {
@@ -89,12 +96,8 @@ class RaftRequestHandler(networkChannel: KafkaNetworkChannel,
 
         case ApiKeys.PRODUCE =>
           val produceRequest = request.body[ProduceRequest]
-          if (!counter.isInstanceOf[NoOpReplicatedCounter]) {
-            throw new IllegalStateException("Should use a no-op replicated counter for produce")
-          }
 
-          counter.asInstanceOf[NoOpReplicatedCounter].appendRecords(
-            produceRequest.partitionRecordsOrFail().get(metadataPartition))
+          counter.appendRecords(produceRequest.partitionRecordsOrFail().get(metadataPartition))
             .whenComplete { (_, exception) =>
               val error = if (exception == null)
                 Errors.NONE

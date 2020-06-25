@@ -62,7 +62,7 @@ You need to use a `VerifiableProducer` to produce monolithic increasing records 
     ./bin/kafka-run-class.sh org.apache.kafka.tools.VerifiableProducer --bootstrap-server http://localhost:9092 \
     --topic __cluster_metadata --producer.config config/producer.properties --max-messages 2000 --throughput 1
 ### Run Performance Test ###
-You need to turn off the printing by setting `verbose=false` in the property 
+Make sure to turn off the printing by setting `verbose=false` in the property 
 files `config/raft-*.properties`, to ensure minimum affection to the performance.
 
 Then run the `ProducerPerformance` module using this example command:
