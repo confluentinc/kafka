@@ -17,7 +17,7 @@ Create 3 separate raft quorum properties as the following:
     quorum.bootstrap.servers=localhost:9092,localhost:9093,localhost:9094
     quorum.bootstrap.voters=1,2,3
     log.dirs=/tmp/raft-logs-1
-    verbose=false
+    verbose=true
     
     zookeeper.connect=localhost:2181
     EOF
@@ -29,7 +29,7 @@ Create 3 separate raft quorum properties as the following:
     quorum.bootstrap.servers=localhost:9092,localhost:9093,localhost:9094
     quorum.bootstrap.voters=1,2,3
     log.dirs=/tmp/raft-logs-2
-    verbose=false
+    verbose=true
     
     zookeeper.connect=localhost:2181
     EOF
@@ -41,7 +41,7 @@ Create 3 separate raft quorum properties as the following:
     quorum.bootstrap.servers=localhost:9092,localhost:9093,localhost:9094
     quorum.bootstrap.voters=1,2,3
     log.dirs=/tmp/raft-logs-3
-    verbose=false
+    verbose=true
     
     zookeeper.connect=localhost:2181
     EOF
@@ -52,15 +52,13 @@ Open up 3 separate terminals, and run individual commands:
     bin/raft-server-start.sh config/raft-quorum-2.properties
     bin/raft-server-start.sh config/raft-quorum-3.properties
     
-This would setup a three node Raft quorum with node id 1,2,3 with different endpoints and log dirs. 
-If you want to visualize the counter increment, you need to set the config 
-`verbose` to true.
+This would setup a three node Raft quorum with node id 1,2,3 using different endpoints and log dirs. 
 
 ### Simulate a distributed counter ###
 You need to use a `VerifiableProducer` to produce monolithic increasing records to the replicated state machine.
 
     ./bin/kafka-run-class.sh org.apache.kafka.tools.VerifiableProducer --bootstrap-server http://localhost:9092 \
-    --topic __cluster_metadata --producer.config config/producer.properties --max-messages 2000 --throughput 1
+    --topic __cluster_metadata --max-messages 2000 --throughput 1 --producer.config config/producer.properties
 ### Run Performance Test ###
 Make sure to turn off the printing by setting `verbose=false` in the property 
 files `config/raft-*.properties`, to ensure minimum affection to the performance.
@@ -68,5 +66,4 @@ files `config/raft-*.properties`, to ensure minimum affection to the performance
 Then run the `ProducerPerformance` module using this example command:
 
     ./bin/kafka-producer-perf-test.sh --topic __cluster_metadata --num-records 2000 --throughput -1 --record-size 10 --producer.config config/producer.properties 
-
-And collect the print out throughput to compare with Kafka performance.
+Collect the print out throughput to compare with Kafka performance.

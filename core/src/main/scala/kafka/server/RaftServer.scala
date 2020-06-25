@@ -21,7 +21,7 @@ import java.io.File
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.file.Files
 import java.util.Properties
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.CountDownLatch
 
 import joptsimple.OptionParser
 import kafka.log.{Log, LogConfig, LogManager}
@@ -39,7 +39,7 @@ import org.apache.kafka.common.security.JaasContext
 import org.apache.kafka.common.security.scram.internals.ScramMechanism
 import org.apache.kafka.common.security.token.delegation.internals.DelegationTokenCache
 import org.apache.kafka.common.utils.{LogContext, Time, Utils}
-import org.apache.kafka.raft.{FileBasedStateStore, KafkaRaftClient, NoOpReplicatedCounter, QuorumState, RaftConfig, ReplicatedCounter}
+import org.apache.kafka.raft.{FileBasedStateStore, KafkaRaftClient, NoOpReplicatedCounter, QuorumState, RaftConfig}
 
 import scala.jdk.CollectionConverters._
 
@@ -57,7 +57,6 @@ class RaftServer(val config: KafkaConfig,
   var scheduler: KafkaScheduler = _
   var metrics: Metrics = _
   var raftIoThread: RaftIoThread = _
-  var incrementCounterThread: IncrementCounterThread = _
   var networkChannel: KafkaNetworkChannel = _
   var metadataLog: KafkaMetadataLog = _
 
@@ -81,16 +80,8 @@ class RaftServer(val config: KafkaConfig,
     val metadataLog = buildMetadataLog(logDir)
     val networkChannel = buildNetworkChannel(raftConfig, logContext)
 
-    val quorumState = new QuorumState(
-      config.brokerId,
-      raftConfig.bootstrapVoters,
-      new FileBasedStateStore(new File(logDir, "quorum-state")),
-      logContext
-    )
-
     val raftClient = buildRaftClient(
       raftConfig,
-      quorumState,
       metadataLog,
       networkChannel,
       logContext,
@@ -125,13 +116,9 @@ class RaftServer(val config: KafkaConfig,
     raftIoThread = new RaftIoThread(raftClient)
     raftIoThread.start()
 
-    incrementCounterThread = new IncrementCounterThread(counter)
-    incrementCounterThread.start()
   }
 
   def shutdown(): Unit = {
-    if (incrementCounterThread != null)
-      CoreUtils.swallow(incrementCounterThread.shutdown(), this)
     if (raftIoThread != null)
       CoreUtils.swallow(raftIoThread.shutdown(), this)
     if (dataPlaneRequestHandlerPool != null)
@@ -194,11 +181,17 @@ class RaftServer(val config: KafkaConfig,
   }
 
   private def buildRaftClient(raftConfig: RaftConfig,
-                              quorumState: QuorumState,
                               metadataLog: KafkaMetadataLog,
                               networkChannel: KafkaNetworkChannel,
                               logContext: LogContext,
                               logDir: File): KafkaRaftClient = {
+    val quorumState = new QuorumState(
+      config.brokerId,
+      raftConfig.bootstrapVoters,
+      new FileBasedStateStore(new File(logDir, "quorum-state")),
+      logContext
+    )
+
     val purgatory = new KafkaFuturePurgatory(
       config.brokerId,
       new SystemTimer("raft-purgatory-reaper"),
@@ -274,15 +267,6 @@ class RaftServer(val config: KafkaConfig,
       .getOrElse(InetAddress.getLocalHost.getCanonicalHostName)
     val port = socketServer.boundPort(config.interBrokerListenerName)
     new InetSocketAddress(host, port)
-  }
-
-  class IncrementCounterThread(counter: ReplicatedCounter) extends ShutdownableThread("counter-incrementer") {
-    override def doWork(): Unit = {
-      if (counter.isLeader) {
-        counter.increment()
-      }
-      pause(500, TimeUnit.MILLISECONDS)
-    }
   }
 
   class RaftIoThread(client: KafkaRaftClient) extends ShutdownableThread("raft-io-thread") {
