@@ -39,7 +39,7 @@ import org.apache.kafka.common.security.JaasContext
 import org.apache.kafka.common.security.scram.internals.ScramMechanism
 import org.apache.kafka.common.security.token.delegation.internals.DelegationTokenCache
 import org.apache.kafka.common.utils.{LogContext, Time, Utils}
-import org.apache.kafka.raft.{FileBasedStateStore, KafkaRaftClient, NoOpReplicatedCounter, QuorumState, RaftConfig}
+import org.apache.kafka.raft.{FileBasedStateStore, KafkaRaftClient, NoOpStateMachine, QuorumState, RaftConfig}
 
 import scala.jdk.CollectionConverters._
 
@@ -88,15 +88,15 @@ class RaftServer(val config: KafkaConfig,
       logDir
     )
 
-    val counter = new NoOpReplicatedCounter(config.brokerId, partition, logContext, verbose)
+    val stateMachine = new NoOpStateMachine(config.brokerId, partition, verbose)
 
-    raftClient.initialize(counter)
+    raftClient.initialize(stateMachine)
 
     val requestHandler = new RaftRequestHandler(
       networkChannel,
       socketServer.dataPlaneRequestChannel,
       time,
-      counter,
+      stateMachine,
       partition)
 
     dataPlaneRequestHandlerPool = new KafkaRequestHandlerPool(
@@ -111,7 +111,7 @@ class RaftServer(val config: KafkaConfig,
 
     socketServer.startProcessingRequests(Map.empty)
 
-    raftClient.initialize(counter)
+    raftClient.initialize(stateMachine)
 
     raftIoThread = new RaftIoThread(raftClient)
     raftIoThread.start()

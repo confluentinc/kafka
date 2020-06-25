@@ -21,26 +21,33 @@ import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Utils;
 
+import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * A replicated counter who accepts whatever records produced,
+ * A no-op replicated state machine  who accepts whatever records produced,
  * without data validation on the sequence order.
  */
-public class NoOpReplicatedCounter extends ReplicatedCounter {
+public class NoOpStateMachine implements ReplicatedStateMachine {
 
     private final StringDeserializer stringDeserializer = new StringDeserializer();
-    private final TopicPartition partition;
 
-    public NoOpReplicatedCounter(int nodeId,
-                                 TopicPartition partition,
-                                 LogContext logContext,
-                                 boolean verbose) {
-        super(nodeId, logContext, verbose);
+    private final int nodeId;
+    private final TopicPartition partition;
+    private final boolean verbose;
+
+    private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
+    private RecordAppender appender = null;
+    private OptionalInt leaderId = OptionalInt.empty();
+
+    public NoOpStateMachine(int nodeId,
+                            TopicPartition partition,
+                            boolean verbose) {
+        this.nodeId = nodeId;
         this.partition = partition;
+        this.verbose = verbose;
     }
 
     @Override
@@ -49,15 +56,42 @@ public class NoOpReplicatedCounter extends ReplicatedCounter {
     }
 
     @Override
+    public void initialize(RecordAppender recordAppender) {
+        appender = recordAppender;
+    }
+
+    @Override
+    public synchronized void becomeLeader(int epoch) {
+        leaderId = OptionalInt.of(nodeId);
+    }
+
+    @Override
+    public synchronized void becomeFollower(int epoch, int newLeaderId) {
+        leaderId = OptionalInt.of(newLeaderId);
+    }
+
+    @Override
+    public synchronized OffsetAndEpoch position() {
+        return position;
+    }
+
+    /**
+     * Get the current leader id, or -1 if not defined.
+     */
+    public synchronized int leaderId() {
+        return leaderId.orElse(-1);
+    }
+
+    @Override
     public synchronized void apply(Records records) {
         for (RecordBatch batch : records.batches()) {
-            if (super.verbose) {
+            if (verbose) {
                 for (Record record : batch) {
                     System.out.println(stringDeserializer.deserialize(partition.topic(),
                         Utils.toArray(record.value())));
                 }
             }
-            super.position = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
+            position = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
     }
 

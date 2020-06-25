@@ -54,7 +54,7 @@ Open up 3 separate terminals, and run individual commands:
     
 This would setup a three node Raft quorum with node id 1,2,3 using different endpoints and log dirs. 
 
-### Simulate a distributed counter ###
+### Simulate a distributed state machine ###
 You need to use a `VerifiableProducer` to produce monolithic increasing records to the replicated state machine.
 
     ./bin/kafka-run-class.sh org.apache.kafka.tools.VerifiableProducer --bootstrap-server http://localhost:9092 \

@@ -29,14 +29,14 @@ import org.apache.kafka.common.message.MetadataResponseData.{MetadataResponsePar
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse, ApiVersionsResponse, MetadataRequest, MetadataResponse, ProduceRequest, ProduceResponse}
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.raft.NoOpReplicatedCounter
+import org.apache.kafka.raft.NoOpStateMachine
 
 import scala.jdk.CollectionConverters._
 
 class RaftRequestHandler(networkChannel: KafkaNetworkChannel,
                          requestChannel: RequestChannel,
                          time: Time,
-                         counter: NoOpReplicatedCounter,
+                         counter: NoOpStateMachine,
                          metadataPartition: TopicPartition)
   extends ApiRequestHandler with Logging {
 
