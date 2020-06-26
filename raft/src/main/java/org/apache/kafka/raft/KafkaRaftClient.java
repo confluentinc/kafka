@@ -22,6 +22,7 @@ import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
+import org.apache.kafka.common.message.DescribeQuorumRequestData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.DescribeQuorumPartitionResponse;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.DescribeQuorumTopicResponse;
@@ -41,6 +42,7 @@ import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
+import org.apache.kafka.common.requests.DescribeQuorumRequest;
 import org.apache.kafka.common.requests.DescribeQuorumResponse;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
@@ -952,7 +954,16 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private DescribeQuorumResponseData handleDescribeQuorumRequest() {
+    private DescribeQuorumResponseData handleDescribeQuorumRequest(
+        RaftRequest.Inbound requestMetadata
+    ) {
+        DescribeQuorumRequestData describeQuorumRequestData = (DescribeQuorumRequestData) requestMetadata.data;
+        if (describeQuorumRequestData.topics().size() != 1 ||
+                !describeQuorumRequestData.topics().get(0).topicName().equals(metadataTopicPartition.topic())) {
+            return DescribeQuorumRequest.getErrorResponse(
+                describeQuorumRequestData, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
+        }
+
         if (!quorum.isLeader()) {
             return new DescribeQuorumResponseData()
                        .setTopics(Collections.singletonList(new DescribeQuorumTopicResponse()
@@ -968,7 +979,7 @@ public class KafkaRaftClient implements RaftClient {
             leaderState.epoch(),
             leaderState.highWatermark().isPresent() ? leaderState.highWatermark().get().offset : -1,
             leaderState.getVoterStates(),
-            leaderState.getObserverStates());
+            leaderState.getObserverStates(time.milliseconds()));
     }
 
     private void updateVoterConnections(FindQuorumResponseData response) {
@@ -1176,7 +1187,7 @@ public class KafkaRaftClient implements RaftClient {
                 break;
 
             case DESCRIBE_QUORUM:
-                responseFuture = completedFuture(handleDescribeQuorumRequest());
+                responseFuture = completedFuture(handleDescribeQuorumRequest(request));
                 break;
 
             default:

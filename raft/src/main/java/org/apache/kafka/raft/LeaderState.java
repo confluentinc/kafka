@@ -189,8 +189,8 @@ public class LeaderState implements EpochState {
         return convertReplicaStates(voterReplicaStates);
     }
 
-    List<DescribeQuorumResponseData.ReplicaState> getObserverStates() {
-        clearInactiveObservers();
+    List<DescribeQuorumResponseData.ReplicaState> getObserverStates(final long currentTimeMs) {
+        clearInactiveObservers(currentTimeMs);
         return convertReplicaStates(observerReplicaStates);
     }
 
@@ -205,8 +205,7 @@ public class LeaderState implements EpochState {
                    .collect(Collectors.toList());
     }
 
-    private void clearInactiveObservers() {
-        final long currentTimeMs = System.currentTimeMillis();
+    private void clearInactiveObservers(final long currentTimeMs) {
         observerReplicaStates.entrySet().removeIf(
             integerReplicaStateEntry ->
                 currentTimeMs - integerReplicaStateEntry.getValue().lastFetchTimestamp.orElse(-1)

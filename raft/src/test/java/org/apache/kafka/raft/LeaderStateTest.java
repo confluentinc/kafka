@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.Test;
 
@@ -24,6 +25,7 @@ import java.util.Collections;
 import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 
 public class LeaderStateTest {
@@ -124,13 +126,97 @@ public class LeaderStateTest {
     public void testGetNonLeaderFollowersByFetchOffsetDescending() {
         int node1 = 1;
         int node2 = 2;
-        LeaderState state = new LeaderState(localId, epoch, 10L, Utils.mkSet(localId, node1, node2));
-        state.updateLocalEndOffset(new LogOffsetMetadata(15L));
-        assertEquals(Optional.empty(), state.highWatermark());
-        state.updateEndOffset(node1, new LogOffsetMetadata(10L));
-        state.updateEndOffset(node2, new LogOffsetMetadata(15L));
+        long leaderStartOffset = 10L;
+        long leaderEndOffset = 15L;
+
+        LeaderState state = setUpLeaderAndFollowers(node1, node2, leaderStartOffset, leaderEndOffset);
 
         // Leader should not be included; the follower with larger offset should be prioritized.
         assertEquals(Arrays.asList(node2, node1), state.nonLeaderVotersByDescendingFetchOffset());
+    }
+
+    @Test
+    public void testGetVoterStates() {
+        int node1 = 1;
+        int node2 = 2;
+        long leaderStartOffset = 10L;
+        long leaderEndOffset = 15L;
+
+        LeaderState state = setUpLeaderAndFollowers(node1, node2, leaderStartOffset, leaderEndOffset);
+
+        assertEquals(Arrays.asList(
+            new DescribeQuorumResponseData.ReplicaState()
+                .setReplicaId(localId)
+                .setLogEndOffset(leaderEndOffset),
+            new DescribeQuorumResponseData.ReplicaState()
+                .setReplicaId(node1)
+                .setLogEndOffset(leaderStartOffset),
+            new DescribeQuorumResponseData.ReplicaState()
+                .setReplicaId(node2)
+                .setLogEndOffset(leaderEndOffset)
+        ), state.getVoterStates());
+    }
+
+    private LeaderState setUpLeaderAndFollowers(int follower1,
+                                                int follower2,
+                                                long leaderStartOffset,
+                                                long leaderEndOffset) {
+        LeaderState state = new LeaderState(localId, epoch, leaderStartOffset, Utils.mkSet(localId, follower1, follower2));
+        state.updateLocalEndOffset(new LogOffsetMetadata(leaderEndOffset));
+        assertEquals(Optional.empty(), state.highWatermark());
+        state.updateEndOffset(follower1, new LogOffsetMetadata(leaderStartOffset));
+        state.updateEndOffset(follower2, new LogOffsetMetadata(leaderEndOffset));
+        return state;
+    }
+
+    @Test
+    public void testGetObserverStatesWithCatchingUpObserver() {
+        int observerId = 10;
+        long endOffset = 10L;
+
+        LeaderState state = new LeaderState(localId, epoch, endOffset, Utils.mkSet(localId));
+        assertFalse(state.updateEndOffset(observerId, new LogOffsetMetadata(endOffset)));
+        long timestamp = 20L;
+        state.updateReplicaFetchState(observerId, endOffset, endOffset, timestamp);
+
+        assertEquals(Collections.singletonList(
+            new DescribeQuorumResponseData.ReplicaState()
+                .setReplicaId(observerId)
+                .setLogEndOffset(endOffset)
+                .setLastCaughtUpTimeMs(timestamp)
+        ), state.getObserverStates(timestamp));
+    }
+
+    @Test
+    public void testGetObserverStatesWithPreviouslyCatchingUpObserver() {
+        int observerId = 10;
+        long firstEndOffset = 10L;
+
+        LeaderState state = new LeaderState(localId, epoch, firstEndOffset, Utils.mkSet(localId));
+        assertFalse(state.updateEndOffset(observerId, new LogOffsetMetadata(firstEndOffset)));
+        long firstFetchTimestamp = 5L;
+        state.updateReplicaFetchState(observerId, firstEndOffset - 5, firstEndOffset, firstFetchTimestamp);
+
+        // Catch up with previous end offset.
+        long secondFetchTimestamp = 20L;
+        state.updateReplicaFetchState(observerId, firstEndOffset, firstEndOffset + 10, firstFetchTimestamp);
+
+        assertEquals(Collections.singletonList(
+            new DescribeQuorumResponseData.ReplicaState()
+                .setReplicaId(observerId)
+                .setLogEndOffset(firstEndOffset)
+                .setLastCaughtUpTimeMs(firstFetchTimestamp)
+        ), state.getObserverStates(secondFetchTimestamp));
+    }
+
+    @Test
+    public void testNoOpForNegativeRemoteNodeId() {
+        int observerId = -1;
+        long endOffset = 10L;
+
+        LeaderState state = new LeaderState(localId, epoch, endOffset, Utils.mkSet(localId));
+        assertFalse(state.updateEndOffset(observerId, new LogOffsetMetadata(endOffset)));
+
+        assertEquals(Collections.emptyList(), state.getObserverStates(10));
     }
 }

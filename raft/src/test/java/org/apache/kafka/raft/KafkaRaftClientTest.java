@@ -1248,11 +1248,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, closeFollower, laggingFollower);
         KafkaRaftClient client = initializeAsLeader(voters, epoch);
 
-//        // Bootstrap as the leader
-//        quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-//        KafkaRaftClient client = buildClient(voters);
-
-        buildFollowerSet(client, voters, epoch, closeFollower, laggingFollower);
+        buildFollowerSet(client, epoch, closeFollower, laggingFollower);
 
         // Now shutdown
         client.shutdown(electionTimeoutMs * 2);
@@ -1277,11 +1273,9 @@ public class KafkaRaftClientTest {
         int epoch = 1;
         Set<Integer> voters = Utils.mkSet(localId, closeFollower, laggingFollower);
 
-        // Bootstrap as the leader
-        quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId, voters));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = initializeAsLeader(voters, epoch);
 
-        buildFollowerSet(client, voters, epoch, closeFollower, laggingFollower);
+        buildFollowerSet(client, epoch, closeFollower, laggingFollower);
 
         // Create observer
         int observerId = 3;
@@ -1299,6 +1293,12 @@ public class KafkaRaftClientTest {
         assertSentDescribeQuorumResponse(localId, epoch, highWatermark,
             Arrays.asList(
                 new ReplicaState()
+                    .setReplicaId(localId)
+                    // As we are appending the records directly to the log,
+                    // the leader end offset hasn't been updated yet.
+                    .setLogEndOffset(0L)
+                    .setLastCaughtUpTimeMs(time.milliseconds()),
+                new ReplicaState()
                     .setReplicaId(laggingFollower)
                     .setLogEndOffset(0L),
                 new ReplicaState()
@@ -1311,33 +1311,9 @@ public class KafkaRaftClientTest {
     }
 
     private void buildFollowerSet(KafkaRaftClient client,
-                                  Set<Integer> voters,
                                   int epoch,
                                   int closeFollower,
                                   int laggingFollower) throws Exception {
-        pollUntilSend(client);
-
-        int findQuorumCorrelationId = assertSentFindQuorumRequest().correlationId;
-
-        deliverResponse(findQuorumCorrelationId, -1, findQuorumResponse(OptionalInt.of(localId), 1, voters));
-
-        // Accept connection information for followers
-        client.poll();
-
-        assertTrue(channel.drainSendQueue().isEmpty());
-
-        // Send out begin quorum to followers
-        client.poll();
-
-        List<RaftRequest.Outbound> beginEpochRequests = collectBeginEpochRequests(epoch);
-
-        assertEquals(2, beginEpochRequests.size());
-
-        for (RaftMessage message : beginEpochRequests) {
-            deliverResponse(message.correlationId(), ((RaftRequest.Outbound) message).destinationId(),
-                beginQuorumEpochResponse(epoch, localId));
-        }
-
         // The lagging follower fetches first
         deliverRequest(fetchQuorumRecordsRequest(1, laggingFollower, 0L, 0, 0));
 

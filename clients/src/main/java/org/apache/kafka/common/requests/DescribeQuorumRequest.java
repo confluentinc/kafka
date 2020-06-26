@@ -64,6 +64,10 @@ public class DescribeQuorumRequest extends AbstractRequest {
         this.data = new DescribeQuorumRequestData(struct, version);
     }
 
+    public DescribeQuorumRequest(DescribeQuorumRequestData data) {
+        this(data, (short) (DescribeQuorumRequestData.SCHEMAS.length - 1));
+    }
+
     public static DescribeQuorumRequestData singletonRequest(TopicPartition topicPartition) {
         return new DescribeQuorumRequestData()
             .setTopics(Collections.singletonList(
@@ -81,11 +85,15 @@ public class DescribeQuorumRequest extends AbstractRequest {
     }
 
     @Override
-    public DescribeQuorumResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        short errorCode = Errors.forException(e).code();
+    public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
+        return getErrorResponse(this.data, Errors.forException(e));
+    }
+
+    public static DescribeQuorumResponse getErrorResponse(DescribeQuorumRequestData data, Errors error) {
+        short errorCode = error.code();
 
         List<DescribeQuorumTopicResponse> topicResponses = new ArrayList<>();
-        for (DescribeQuorumTopicRequest topic : this.data.topics()) {
+        for (DescribeQuorumTopicRequest topic : data.topics()) {
             topicResponses.add(
                 new DescribeQuorumTopicResponse()
                     .setTopicName(topic.topicName())

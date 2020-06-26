@@ -21,7 +21,6 @@ import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.DescribeQuorumPartitionResponse;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.DescribeQuorumTopicResponse;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.ReplicaState;
-import org.apache.kafka.common.message.FindQuorumResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.Struct;
@@ -41,11 +40,6 @@ public class DescribeQuorumResponse extends AbstractResponse {
 
     public DescribeQuorumResponse(Struct struct, short version) {
         this.data = new DescribeQuorumResponseData(struct, version);
-    }
-
-    public DescribeQuorumResponse(Struct struct) {
-        short latestVersion = (short) (FindQuorumResponseData.SCHEMAS.length - 1);
-        this.data = new DescribeQuorumResponseData(struct, latestVersion);
     }
 
     @Override
@@ -83,7 +77,7 @@ public class DescribeQuorumResponse extends AbstractResponse {
                     .setObservers(observerStates)))));
     }
 
-    public static FindQuorumResponse parse(ByteBuffer buffer, short version) {
-        return new FindQuorumResponse(ApiKeys.FIND_QUORUM.responseSchema(version).read(buffer), version);
+    public static DescribeQuorumResponse parse(ByteBuffer buffer, short version) {
+        return new DescribeQuorumResponse(ApiKeys.DESCRIBE_QUORUM.responseSchema(version).read(buffer), version);
     }
 }
