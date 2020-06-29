@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.OffsetOutOfRangeException;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.MemoryRecords;
@@ -42,6 +43,7 @@ import java.util.stream.Collectors;
 public class MockLog implements ReplicatedLog {
     private final List<EpochStartOffset> epochStartOffsets = new ArrayList<>();
     private final List<LogBatch> log = new ArrayList<>();
+    private final TopicPartition partition = new TopicPartition("mock-topic", 0);
 
     private UUID nextId = UUID.randomUUID();
     private LogOffsetMetadata highWatermark = new LogOffsetMetadata(0L, Optional.of(new MockOffsetMetadata(nextId)));
@@ -72,6 +74,11 @@ public class MockLog implements ReplicatedLog {
 
         assertValidHighWatermarkMetadata(offsetMetadata);
         this.highWatermark = offsetMetadata;
+    }
+
+    @Override
+    public TopicPartition topicPartition() {
+        return partition;
     }
 
     private Optional<OffsetMetadata> metadataForOffset(long offset) {

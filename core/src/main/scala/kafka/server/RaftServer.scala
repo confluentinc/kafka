@@ -170,7 +170,7 @@ class RaftServer(val config: KafkaConfig,
       producerIdExpirationCheckIntervalMs = LogManager.ProducerIdExpirationCheckIntervalMs,
       logDirFailureChannel = new LogDirFailureChannel(5)
     )
-    new KafkaMetadataLog(log)
+    new KafkaMetadataLog(log, partition)
   }
 
   private def createLogDirectory(logDir: File, logDirName: String): File = {
@@ -201,7 +201,6 @@ class RaftServer(val config: KafkaConfig,
       raftConfig,
       networkChannel,
       metadataLog,
-      partition,
       quorumState,
       time,
       purgatory,

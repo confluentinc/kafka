@@ -17,7 +17,6 @@
 package org.apache.kafka.raft;
 
 import org.apache.kafka.common.KafkaException;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
@@ -138,7 +137,6 @@ public class KafkaRaftClient implements RaftClient {
     private final InetSocketAddress advertisedListener;
     private final NetworkChannel channel;
     private final ReplicatedLog log;
-    private final TopicPartition metadataTopicPartition;
     private final QuorumState quorum;
     private final Random random;
     private final ConnectionCache connections;
@@ -154,7 +152,6 @@ public class KafkaRaftClient implements RaftClient {
     public KafkaRaftClient(RaftConfig raftConfig,
                            NetworkChannel channel,
                            ReplicatedLog log,
-                           TopicPartition metadataTopicPartition,
                            QuorumState quorum,
                            Time time,
                            FuturePurgatory<Void> purgatory,
@@ -162,7 +159,6 @@ public class KafkaRaftClient implements RaftClient {
                            LogContext logContext) {
         this(channel,
             log,
-            metadataTopicPartition,
             quorum,
             time,
             new Metrics(time),
@@ -181,7 +177,6 @@ public class KafkaRaftClient implements RaftClient {
 
     public KafkaRaftClient(NetworkChannel channel,
                            ReplicatedLog log,
-                           TopicPartition metadataTopicPartition,
                            QuorumState quorum,
                            Time time,
                            Metrics metrics,
@@ -199,7 +194,6 @@ public class KafkaRaftClient implements RaftClient {
         this.channel = channel;
         Objects.requireNonNull(log, "Log instance cannot be null");
         this.log = log;
-        this.metadataTopicPartition = metadataTopicPartition;
         this.quorum = quorum;
         this.purgatory = purgatory;
         this.time = time;
@@ -958,7 +952,8 @@ public class KafkaRaftClient implements RaftClient {
     ) {
         DescribeQuorumRequestData describeQuorumRequestData = (DescribeQuorumRequestData) requestMetadata.data;
         if (describeQuorumRequestData.topics().size() != 1 ||
-                !describeQuorumRequestData.topics().get(0).topicName().equals(metadataTopicPartition.topic())) {
+                !describeQuorumRequestData.topics().get(0).topicName()
+                     .equals(log.topicPartition().topic())) {
             return DescribeQuorumRequest.getErrorResponse(
                 describeQuorumRequestData, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
         }
@@ -966,14 +961,14 @@ public class KafkaRaftClient implements RaftClient {
         if (!quorum.isLeader()) {
             return new DescribeQuorumResponseData()
                        .setTopics(Collections.singletonList(new DescribeQuorumTopicResponse()
-                       .setTopicName(metadataTopicPartition.topic())
+                       .setTopicName(log.topicPartition().topic())
                        .setPartitions(Collections.singletonList(
                            new DescribeQuorumPartitionResponse()
                                .setErrorCode(Errors.INVALID_REQUEST.code())))));
         }
 
         LeaderState leaderState = quorum.leaderStateOrThrow();
-        return DescribeQuorumResponse.singletonResponse(metadataTopicPartition,
+        return DescribeQuorumResponse.singletonResponse(log.topicPartition(),
             leaderState.localId(),
             leaderState.epoch(),
             leaderState.highWatermark().isPresent() ? leaderState.highWatermark().get().offset : -1,

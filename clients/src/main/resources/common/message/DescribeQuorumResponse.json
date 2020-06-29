@@ -40,7 +40,7 @@
       ]}
     ]}],
   "commonStructs": [
-    {"name": "ReplicaState", "versions": "0+", "fields": [
+    { "name": "ReplicaState", "versions": "0+", "fields": [
       { "name": "ReplicaId", "type": "int32", "versions": "0+"},
       { "name": "LogEndOffset", "type": "int64", "versions": "0+",
         "about": "The last known log end offset of the follower or -1 if it is unknown"}
