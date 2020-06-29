@@ -75,7 +75,7 @@ public class DescribeQuorumRequest extends AbstractRequest {
                     .setTopicName(topicPartition.topic())
                     .setPartitions(Collections.singletonList(
                         new DescribeQuorumPartitionRequest()
-                        .setPartitionIndex(topicPartition.partition()))
+                            .setPartitionIndex(topicPartition.partition()))
             )));
     }
 

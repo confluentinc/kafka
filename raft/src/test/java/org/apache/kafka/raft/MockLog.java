@@ -43,10 +43,14 @@ import java.util.stream.Collectors;
 public class MockLog implements ReplicatedLog {
     private final List<EpochStartOffset> epochStartOffsets = new ArrayList<>();
     private final List<LogBatch> log = new ArrayList<>();
-    private final TopicPartition partition = new TopicPartition("mock-topic", 0);
 
     private UUID nextId = UUID.randomUUID();
     private LogOffsetMetadata highWatermark = new LogOffsetMetadata(0L, Optional.of(new MockOffsetMetadata(nextId)));
+    private final TopicPartition topicPartition;
+
+    public MockLog(TopicPartition topicPartition) {
+        this.topicPartition = topicPartition;
+    }
 
     @Override
     public void truncateTo(long offset) {
@@ -78,7 +82,7 @@ public class MockLog implements ReplicatedLog {
 
     @Override
     public TopicPartition topicPartition() {
-        return partition;
+        return topicPartition;
     }
 
     private Optional<OffsetMetadata> metadataForOffset(long offset) {

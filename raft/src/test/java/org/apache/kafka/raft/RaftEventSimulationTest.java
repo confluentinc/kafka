@@ -532,7 +532,7 @@ public class RaftEventSimulationTest {
 
     private static class PersistentState {
         final MockQuorumStateStore store = new MockQuorumStateStore();
-        final MockLog log = new MockLog();
+        final MockLog log = new MockLog(METADATA_PARTITION);
     }
 
     private static class Cluster {
@@ -708,7 +708,7 @@ public class RaftEventSimulationTest {
             List<InetSocketAddress> bootstrapServers = Collections.singletonList(
                 new InetSocketAddress("localhost", 9000));
 
-            KafkaRaftClient client = new KafkaRaftClient(channel, persistentState.log, METADATA_PARTITION, quorum, time, metrics,
+            KafkaRaftClient client = new KafkaRaftClient(channel, persistentState.log, quorum, time, metrics,
                 purgatory, new InetSocketAddress("localhost", 9990 + nodeId), bootstrapServers,
                 ELECTION_TIMEOUT_MS, ELECTION_JITTER_MS, FETCH_TIMEOUT_MS, RETRY_BACKOFF_MS, REQUEST_TIMEOUT_MS,
                 FETCH_MAX_WAIT_MS, logContext, random);

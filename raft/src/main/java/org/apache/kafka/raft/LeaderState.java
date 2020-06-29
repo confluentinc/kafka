@@ -112,10 +112,9 @@ public class LeaderState implements EpochState {
 
     /**
      * @return The updated lower bound of fetch timestamps for a majority of quorum; -1 indicating that we have
-     *         not received fetch from the majority yet
+     *         not received fetch from the majority yet, or the fetch is from an observer
      */
-    public OptionalLong updateReplicaFetchState(int nodeId,
-                                                long timestamp) {
+    public OptionalLong updateFetchTimestamp(int nodeId, long timestamp) {
         ReplicaState state = getReplicaState(nodeId);
 
         state.updateFetchTimestamp(timestamp);

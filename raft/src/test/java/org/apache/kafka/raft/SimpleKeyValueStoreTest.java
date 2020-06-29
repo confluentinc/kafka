@@ -55,7 +55,7 @@ public class SimpleKeyValueStoreTest {
 
         store.writeElectionState(ElectionState.withElectedLeader(epoch, localId, Collections.singleton(localId)));
 
-        ReplicatedLog log = new MockLog();
+        ReplicatedLog log = new MockLog(METADATA_PARTITION);
         NetworkChannel channel = new MockNetworkChannel();
         LogContext logContext = new LogContext();
         QuorumState quorum = new QuorumState(localId, voters, store, logContext);
@@ -64,7 +64,7 @@ public class SimpleKeyValueStoreTest {
             .map(id -> new InetSocketAddress("localhost", 9990 + id))
             .collect(Collectors.toList());
 
-        return new KafkaRaftClient(channel, log, METADATA_PARTITION, quorum, time, new Metrics(time), purgatory,
+        return new KafkaRaftClient(channel, log, quorum, time, new Metrics(time), purgatory,
             new InetSocketAddress("localhost", 9990 + localId), bootstrapServers,
             electionTimeoutMs, electionJitterMs, fetchTimeoutMs, retryBackoffMs, requestTimeoutMs,
             fetchMaxWaitMs, logContext, new Random());

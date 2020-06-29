@@ -90,12 +90,13 @@ public class KafkaRaftClientTest {
     private final int requestTimeoutMs = 5000;
     private final int fetchMaxWaitMs = 0;
     private final MockTime time = new MockTime();
-    private final MockLog log = new MockLog();
+    public static final TopicPartition METADATA_PARTITION = new TopicPartition("metadata", 0);
+
+    private final MockLog log = new MockLog(METADATA_PARTITION);
     private final MockNetworkChannel channel = new MockNetworkChannel();
     private final Random random = Mockito.spy(new Random());
     private final MockStateMachine stateMachine = new MockStateMachine();
     private final QuorumStateStore quorumStateStore = new MockQuorumStateStore();
-    public static final TopicPartition METADATA_PARTITION = new TopicPartition("metadata", 0);
 
     @After
     public void cleanUp() throws IOException {
@@ -123,7 +124,7 @@ public class KafkaRaftClientTest {
             .map(this::mockAddress)
             .collect(Collectors.toList());
 
-        KafkaRaftClient client = new KafkaRaftClient(channel, log, METADATA_PARTITION, quorum, time, metrics,
+        KafkaRaftClient client = new KafkaRaftClient(channel, log, quorum, time, metrics,
             new MockFuturePurgatory<>(time), mockAddress(localId), bootstrapServers,
             electionTimeoutMs, electionJitterMs, fetchTimeoutMs, retryBackoffMs, requestTimeoutMs,
             fetchMaxWaitMs, logContext, random);

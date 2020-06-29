@@ -177,7 +177,7 @@ public class LeaderStateTest {
         LeaderState state = new LeaderState(localId, epoch, endOffset, Utils.mkSet(localId));
         assertFalse(state.updateEndOffset(observerId, new LogOffsetMetadata(endOffset)));
         long timestamp = 20L;
-        state.updateReplicaFetchState(observerId, timestamp);
+        state.updateFetchTimestamp(observerId, timestamp);
 
         assertEquals(Collections.singletonList(
             new DescribeQuorumResponseData.ReplicaState()

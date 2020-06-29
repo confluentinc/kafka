@@ -291,7 +291,7 @@ public class KafkaRaftClient implements RaftClient {
 
     private void maybeUpdateFetchTimerWithRemoteFetchTimestamp(LeaderState state, int replicaId) {
         final long timestamp = time.milliseconds();
-        final OptionalLong lastFetchTimestamp = state.updateReplicaFetchState(replicaId, timestamp);
+        final OptionalLong lastFetchTimestamp = state.updateFetchTimestamp(replicaId, timestamp);
 
         if (lastFetchTimestamp.isPresent()) {
             timer.resetDeadline(lastFetchTimestamp.getAsLong() + fetchTimeoutMs);
