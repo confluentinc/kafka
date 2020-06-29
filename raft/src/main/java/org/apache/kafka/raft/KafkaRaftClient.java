@@ -277,14 +277,14 @@ public class KafkaRaftClient implements RaftClient {
             applyCommittedRecordsToStateMachine();
         }
 
-        maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, log.endOffset().offset, state.localId());
+        maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, state.localId());
 
         // We may have pending fetches that can be completed by the advancement
         // of the log end offset
         purgatory.completeAll(null);
     }
 
-    private void updateReplicaEndOffset(LeaderState state, int replicaId, LogOffsetMetadata endOffsetMetadata, long fetchOffset) {
+    private void updateReplicaEndOffset(LeaderState state, int replicaId, LogOffsetMetadata endOffsetMetadata) {
         if (state.updateEndOffset(replicaId, endOffsetMetadata)) {
             logger.debug("Leader high watermark updated to {} after replica {} end offset updated to {}",
                     state.highWatermark(), replicaId, endOffsetMetadata);
@@ -292,13 +292,12 @@ public class KafkaRaftClient implements RaftClient {
         }
 
         // maybe extend the fetch timer with the majority of voter-fetching timestamps
-        maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, fetchOffset, replicaId);
+        maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, replicaId);
     }
 
-    private void maybeUpdateFetchTimerWithRemoteFetchTimestamp(LeaderState state, long fetchOffset, int replicaId) {
+    private void maybeUpdateFetchTimerWithRemoteFetchTimestamp(LeaderState state, int replicaId) {
         final long timestamp = time.milliseconds();
-        final OptionalLong lastFetchTimestamp = state.updateReplicaFetchState(replicaId,
-            fetchOffset, log.endOffset().offset, timestamp);
+        final OptionalLong lastFetchTimestamp = state.updateReplicaFetchState(replicaId, timestamp);
 
         if (lastFetchTimestamp.isPresent()) {
             timer.resetDeadline(lastFetchTimestamp.getAsLong() + fetchTimeoutMs);
@@ -803,7 +802,7 @@ public class KafkaRaftClient implements RaftClient {
                 .setNextFetchOffsetEpoch(nextOffsetAndEpoch.epoch);
         } else {
             LogFetchInfo info = log.read(fetchOffset, OptionalLong.empty());
-            updateReplicaEndOffset(state, replicaId, info.startOffsetMetadata, fetchOffset);
+            updateReplicaEndOffset(state, replicaId, info.startOffsetMetadata);
 
             return buildFetchQuorumRecordsResponse(
                     Errors.NONE,

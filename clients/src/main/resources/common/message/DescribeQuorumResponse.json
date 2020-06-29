@@ -43,9 +43,7 @@
     {"name": "ReplicaState", "versions": "0+", "fields": [
       { "name": "ReplicaId", "type": "int32", "versions": "0+"},
       { "name": "LogEndOffset", "type": "int64", "versions": "0+",
-        "about": "The last known log end offset of the follower or -1 if it is unknown"},
-      { "name": "LastCaughtUpTimeMs", "type": "int64", "versions": "0+",
-        "about": "The last time the replica was caught up to the high watermark"}
+        "about": "The last known log end offset of the follower or -1 if it is unknown"}
     ]}
   ]
 }

@@ -1296,8 +1296,7 @@ public class KafkaRaftClientTest {
                     .setReplicaId(localId)
                     // As we are appending the records directly to the log,
                     // the leader end offset hasn't been updated yet.
-                    .setLogEndOffset(0L)
-                    .setLastCaughtUpTimeMs(time.milliseconds()),
+                    .setLogEndOffset(0L),
                 new ReplicaState()
                     .setReplicaId(laggingFollower)
                     .setLogEndOffset(0L),

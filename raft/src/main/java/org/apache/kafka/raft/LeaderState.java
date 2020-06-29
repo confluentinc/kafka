@@ -46,7 +46,7 @@ public class LeaderState implements EpochState {
 
         for (int voterId : voters) {
             boolean hasEndorsedLeader = voterId == localId;
-            this.voterReplicaStates.put(voterId, new VoterState(voterId, epochStartOffset, hasEndorsedLeader));
+            this.voterReplicaStates.put(voterId, new VoterState(voterId, hasEndorsedLeader));
         }
     }
 
@@ -115,12 +115,10 @@ public class LeaderState implements EpochState {
      *         not received fetch from the majority yet
      */
     public OptionalLong updateReplicaFetchState(int nodeId,
-                                                long fetchOffset,
-                                                long leaderEndOffset,
                                                 long timestamp) {
-        ReplicaState state = getReplicaState(nodeId, leaderEndOffset);
+        ReplicaState state = getReplicaState(nodeId);
 
-        state.updateFetchState(fetchOffset, leaderEndOffset, timestamp);
+        state.updateFetchTimestamp(timestamp);
 
         return isVoter(nodeId) ? quorumMajorityFetchTimestamp() : OptionalLong.empty();
     }
@@ -147,7 +145,7 @@ public class LeaderState implements EpochState {
             return false;
         }
 
-        ReplicaState state = getReplicaState(remoteNodeId, endOffsetMetadata.offset);
+        ReplicaState state = getReplicaState(remoteNodeId);
 
         state.endOffset.ifPresent(currentEndOffset -> {
             if (currentEndOffset.offset > endOffsetMetadata.offset)
@@ -176,10 +174,10 @@ public class LeaderState implements EpochState {
         return state;
     }
 
-    ReplicaState getReplicaState(int remoteNodeId, long leaderEndOffset) {
+    ReplicaState getReplicaState(int remoteNodeId) {
         ReplicaState state = voterReplicaStates.get(remoteNodeId);
         if (state == null) {
-            observerReplicaStates.putIfAbsent(remoteNodeId, new ReplicaState(remoteNodeId, leaderEndOffset));
+            observerReplicaStates.putIfAbsent(remoteNodeId, new ReplicaState(remoteNodeId));
             return observerReplicaStates.get(remoteNodeId);
         }
         return state;
@@ -200,8 +198,7 @@ public class LeaderState implements EpochState {
                    .map(entry -> new DescribeQuorumResponseData.ReplicaState()
                                      .setReplicaId(entry.getKey())
                                      .setLogEndOffset(entry.getValue().endOffset
-                                         .map(logOffsetMetadata -> logOffsetMetadata.offset).orElse(-1L))
-                                     .setLastCaughtUpTimeMs(entry.getValue().lastCaughtUpTimeMs))
+                                         .map(logOffsetMetadata -> logOffsetMetadata.offset).orElse(-1L)))
                    .collect(Collectors.toList());
     }
 
@@ -233,31 +230,18 @@ public class LeaderState implements EpochState {
         Optional<LogOffsetMetadata> endOffset;
 
         OptionalLong lastFetchTimestamp;
-        long lastCaughtUpTimeMs = 0L;
-        long lastFetchLeaderLogEndOffset;
 
-        public ReplicaState(int nodeId,
-                            long lastLeaderLogEndOffset) {
+        public ReplicaState(int nodeId) {
             this.nodeId = nodeId;
             this.endOffset = Optional.empty();
 
             this.lastFetchTimestamp = OptionalLong.empty();
-            this.lastFetchLeaderLogEndOffset = lastLeaderLogEndOffset;
         }
 
-        void updateFetchState(long currentFetchOffset,
-                              long currentLeaderEndOffset,
-                              long currentFetchTimeMs) {
-            if (currentFetchOffset >= currentLeaderEndOffset) {
-                lastCaughtUpTimeMs = currentFetchTimeMs;
-            } else if (currentFetchOffset >= lastFetchLeaderLogEndOffset) {
-                lastCaughtUpTimeMs = lastFetchTimestamp.orElse(0L);
-            }
-
+        void updateFetchTimestamp(long currentFetchTimeMs) {
             // To be resilient to system time shifts we do not strictly
             // require the timestamp be monotonically increasing.
             lastFetchTimestamp = OptionalLong.of(Math.max(lastFetchTimestamp.orElse(-1L), currentFetchTimeMs));
-            lastFetchLeaderLogEndOffset = currentLeaderEndOffset;
         }
 
         @Override
@@ -277,9 +261,8 @@ public class LeaderState implements EpochState {
         boolean hasEndorsedLeader;
 
         public VoterState(int nodeId,
-                          long lastLeaderLogEndOffset,
                           boolean hasEndorsedLeader) {
-            super(nodeId, lastLeaderLogEndOffset);
+            super(nodeId);
             this.hasEndorsedLeader = hasEndorsedLeader;
         }
     }

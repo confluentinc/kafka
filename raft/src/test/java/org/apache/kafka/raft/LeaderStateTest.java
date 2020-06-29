@@ -170,43 +170,20 @@ public class LeaderStateTest {
     }
 
     @Test
-    public void testGetObserverStatesWithCatchingUpObserver() {
+    public void testGetObserverStatesWithObserver() {
         int observerId = 10;
         long endOffset = 10L;
 
         LeaderState state = new LeaderState(localId, epoch, endOffset, Utils.mkSet(localId));
         assertFalse(state.updateEndOffset(observerId, new LogOffsetMetadata(endOffset)));
         long timestamp = 20L;
-        state.updateReplicaFetchState(observerId, endOffset, endOffset, timestamp);
+        state.updateReplicaFetchState(observerId, timestamp);
 
         assertEquals(Collections.singletonList(
             new DescribeQuorumResponseData.ReplicaState()
                 .setReplicaId(observerId)
                 .setLogEndOffset(endOffset)
-                .setLastCaughtUpTimeMs(timestamp)
         ), state.getObserverStates(timestamp));
-    }
-
-    @Test
-    public void testGetObserverStatesWithPreviouslyCatchingUpObserver() {
-        int observerId = 10;
-        long firstEndOffset = 10L;
-
-        LeaderState state = new LeaderState(localId, epoch, firstEndOffset, Utils.mkSet(localId));
-        assertFalse(state.updateEndOffset(observerId, new LogOffsetMetadata(firstEndOffset)));
-        long firstFetchTimestamp = 5L;
-        state.updateReplicaFetchState(observerId, firstEndOffset - 5, firstEndOffset, firstFetchTimestamp);
-
-        // Catch up with previous end offset.
-        long secondFetchTimestamp = 20L;
-        state.updateReplicaFetchState(observerId, firstEndOffset, firstEndOffset + 10, firstFetchTimestamp);
-
-        assertEquals(Collections.singletonList(
-            new DescribeQuorumResponseData.ReplicaState()
-                .setReplicaId(observerId)
-                .setLogEndOffset(firstEndOffset)
-                .setLastCaughtUpTimeMs(firstFetchTimestamp)
-        ), state.getObserverStates(secondFetchTimestamp));
     }
 
     @Test
