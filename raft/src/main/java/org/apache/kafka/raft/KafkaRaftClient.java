@@ -265,13 +265,12 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void updateLeaderEndOffsetAndTimestamp(LeaderState state) {
-        if (state.updateLocalEndOffset(log.endOffset())) {
+        if (state.updateLocalState(time.milliseconds(),
+            this::resetFetchTimeout, log.endOffset())) {
             logger.debug("Leader high watermark updated to {} after end offset updated to {}",
                     state.highWatermark(), log.endOffset());
             applyCommittedRecordsToStateMachine();
         }
-
-        maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, state.localId());
 
         // We may have pending fetches that can be completed by the advancement
         // of the log end offset
@@ -279,23 +278,16 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void updateReplicaEndOffset(LeaderState state, int replicaId, LogOffsetMetadata endOffsetMetadata) {
-        if (state.updateEndOffset(replicaId, endOffsetMetadata)) {
+        if (state.updateReplicaState(replicaId, time.milliseconds(),
+            this::resetFetchTimeout, endOffsetMetadata)) {
             logger.debug("Leader high watermark updated to {} after replica {} end offset updated to {}",
                     state.highWatermark(), replicaId, endOffsetMetadata);
             applyCommittedRecordsToStateMachine();
         }
-
-        // maybe extend the fetch timer with the majority of voter-fetching timestamps
-        maybeUpdateFetchTimerWithRemoteFetchTimestamp(state, replicaId);
     }
 
-    private void maybeUpdateFetchTimerWithRemoteFetchTimestamp(LeaderState state, int replicaId) {
-        final long timestamp = time.milliseconds();
-        final OptionalLong lastFetchTimestamp = state.updateFetchTimestamp(replicaId, timestamp);
-
-        if (lastFetchTimestamp.isPresent()) {
-            timer.resetDeadline(lastFetchTimestamp.getAsLong() + fetchTimeoutMs);
-        }
+    private void resetFetchTimeout(long updatedFetchTimestamp) {
+        timer.resetDeadline(updatedFetchTimestamp + fetchTimeoutMs);
     }
 
     @Override
@@ -951,9 +943,7 @@ public class KafkaRaftClient implements RaftClient {
         RaftRequest.Inbound requestMetadata
     ) {
         DescribeQuorumRequestData describeQuorumRequestData = (DescribeQuorumRequestData) requestMetadata.data;
-        if (describeQuorumRequestData.topics().size() != 1 ||
-                !describeQuorumRequestData.topics().get(0).topicName()
-                     .equals(log.topicPartition().topic())) {
+        if (validateRequestTopicPartition(describeQuorumRequestData)) {
             return DescribeQuorumRequest.getErrorResponse(
                 describeQuorumRequestData, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
         }
@@ -974,6 +964,16 @@ public class KafkaRaftClient implements RaftClient {
             leaderState.highWatermark().isPresent() ? leaderState.highWatermark().get().offset : -1,
             leaderState.getVoterStates(),
             leaderState.getObserverStates(time.milliseconds()));
+    }
+
+    /**
+     * @return true if the topic partition info matches the replicated log
+     */
+    private boolean validateRequestTopicPartition(DescribeQuorumRequestData data) {
+        return data.topics().size() != 1 ||
+                   !data.topics().get(0).topicName().equals(log.topicPartition().topic()) ||
+                   data.topics().get(0).partitions().size() != 1 ||
+                   data.topics().get(0).partitions().get(0).partitionIndex() != log.topicPartition().partition();
     }
 
     private void updateVoterConnections(FindQuorumResponseData response) {
