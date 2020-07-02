@@ -25,6 +25,7 @@ import org.apache.kafka.common.message.DescribeQuorumRequestData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.DescribeQuorumPartitionResponse;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.DescribeQuorumTopicResponse;
+import org.apache.kafka.common.message.DescribeQuorumResponseData.ReplicaState;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
 import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
@@ -266,7 +267,8 @@ public class KafkaRaftClient implements RaftClient {
 
     private void updateLeaderEndOffsetAndTimestamp(LeaderState state) {
         if (state.updateLocalState(time.milliseconds(),
-            this::resetFetchTimeout, log.endOffset())) {
+            this::resetFetchTimeout,
+            log.endOffset())) {
             logger.debug("Leader high watermark updated to {} after end offset updated to {}",
                     state.highWatermark(), log.endOffset());
             applyCommittedRecordsToStateMachine();
@@ -278,8 +280,10 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void updateReplicaEndOffset(LeaderState state, int replicaId, LogOffsetMetadata endOffsetMetadata) {
-        if (state.updateReplicaState(replicaId, time.milliseconds(),
-            this::resetFetchTimeout, endOffsetMetadata)) {
+        if (state.updateReplicaState(replicaId,
+            time.milliseconds(),
+            this::resetFetchTimeout,
+            endOffsetMetadata)) {
             logger.debug("Leader high watermark updated to {} after replica {} end offset updated to {}",
                     state.highWatermark(), replicaId, endOffsetMetadata);
             applyCommittedRecordsToStateMachine();
@@ -962,8 +966,17 @@ public class KafkaRaftClient implements RaftClient {
             leaderState.localId(),
             leaderState.epoch(),
             leaderState.highWatermark().isPresent() ? leaderState.highWatermark().get().offset : -1,
-            leaderState.getVoterStates(),
-            leaderState.getObserverStates(time.milliseconds()));
+            convertToReplicaStates(leaderState.getVoterEndOffsets()),
+            convertToReplicaStates(leaderState.getObserverStates(time.milliseconds()))
+        );
+    }
+
+    List<ReplicaState> convertToReplicaStates(Map<Integer, Long> replicaEndOffsets) {
+        return replicaEndOffsets.entrySet().stream()
+                   .map(entry -> new ReplicaState()
+                                     .setReplicaId(entry.getKey())
+                                     .setLogEndOffset(entry.getValue()))
+                   .collect(Collectors.toList());
     }
 
     /**

@@ -16,8 +16,6 @@
  */
 package org.apache.kafka.raft;
 
-import org.apache.kafka.common.message.DescribeQuorumResponseData;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -113,7 +111,8 @@ public class LeaderState implements EpochState {
 
     /**
      * Update the local replica state.
-     * See as {@link #updateReplicaState(int, long, Consumer, LogOffsetMetadata)}
+     *
+     * See {@link #updateReplicaState(int, long, Consumer, LogOffsetMetadata)}
      */
     public boolean updateLocalState(long fetchTimestamp,
                                     java.util.function.Consumer<Long> onMajorityFetchTimeUpdated,
@@ -201,23 +200,22 @@ public class LeaderState implements EpochState {
         return state;
     }
 
-    List<DescribeQuorumResponseData.ReplicaState> getVoterStates() {
-        return convertReplicaStates(voterReplicaStates);
+    Map<Integer, Long> getVoterEndOffsets() {
+        return getReplicaEndOffsets(voterReplicaStates);
     }
 
-    List<DescribeQuorumResponseData.ReplicaState> getObserverStates(final long currentTimeMs) {
+    Map<Integer, Long> getObserverStates(final long currentTimeMs) {
         clearInactiveObservers(currentTimeMs);
-        return convertReplicaStates(observerReplicaStates);
+        return getReplicaEndOffsets(observerReplicaStates);
     }
 
-    private static <R extends ReplicaState> List<DescribeQuorumResponseData.ReplicaState> convertReplicaStates(
+    private static <R extends ReplicaState> Map<Integer, Long> getReplicaEndOffsets(
         Map<Integer, R> replicaStates) {
         return replicaStates.entrySet().stream()
-                   .map(entry -> new DescribeQuorumResponseData.ReplicaState()
-                                     .setReplicaId(entry.getKey())
-                                     .setLogEndOffset(entry.getValue().endOffset
-                                         .map(logOffsetMetadata -> logOffsetMetadata.offset).orElse(-1L)))
-                   .collect(Collectors.toList());
+                   .collect(Collectors.toMap(Map.Entry::getKey,
+                       e -> e.getValue().endOffset.map(
+                           logOffsetMetadata -> logOffsetMetadata.offset).orElse(-1L))
+                   );
     }
 
     private void clearInactiveObservers(final long currentTimeMs) {
@@ -233,15 +231,12 @@ public class LeaderState implements EpochState {
 
     private static class ReplicaState implements Comparable<ReplicaState> {
         final int nodeId;
-
         Optional<LogOffsetMetadata> endOffset;
-
         OptionalLong lastFetchTimestamp;
 
         public ReplicaState(int nodeId) {
             this.nodeId = nodeId;
             this.endOffset = Optional.empty();
-
             this.lastFetchTimestamp = OptionalLong.empty();
         }
 
