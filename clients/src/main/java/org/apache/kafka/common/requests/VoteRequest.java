@@ -16,11 +16,17 @@
  */
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.common.message.DescribeQuorumRequestData;
+import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.VoteRequestData;
 import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.Struct;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class VoteRequest extends AbstractRequest {
     public static class Builder extends AbstractRequest.Builder<VoteRequest> {
@@ -60,10 +66,26 @@ public class VoteRequest extends AbstractRequest {
     }
 
     @Override
-    public VoteResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        VoteResponseData data = new VoteResponseData();
-        data.setErrorCode(Errors.forException(e).code());
-        return new VoteResponse(data);
+    public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
+        return getErrorResponse(this.data, Errors.forException(e));
     }
 
+    public static VoteResponse getErrorResponse(VoteRequestData data, Errors error) {
+        short errorCode = error.code();
+
+        List<VoteResponseData.VoteTopicResponse> topicResponses = new ArrayList<>();
+        for (VoteRequestData.VoteTopicRequest topic : data.topics()) {
+            topicResponses.add(
+                new VoteResponseData.VoteTopicResponse()
+                    .setTopicName(topic.topicName())
+                    .setPartitions(topic.partitions().stream().map(
+                        requestPartition -> new VoteResponseData.VotePartitionResponse()
+                                                .setPartitionIndex(requestPartition.partitionIndex())
+                                                .setErrorCode(errorCode)
+                    ).collect(Collectors.toList())));
+        }
+
+        return new VoteResponse(
+            new VoteResponseData().setTopics(topicResponses));
+    }
 }

@@ -44,6 +44,7 @@ import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.requests.DescribeQuorumRequest;
 import org.apache.kafka.common.requests.DescribeQuorumResponse;
+import org.apache.kafka.common.requests.VoteRequest;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
@@ -481,7 +482,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private VoteResponseData buildVoteResponse(Errors error, boolean voteGranted) {
-        return new VoteResponseData()
+        return VoteRequest.getErrorResponse()
                 .setErrorCode(error.code())
                 .setLeaderEpoch(quorum.epoch())
                 .setLeaderId(quorum.leaderIdOrNil())
@@ -501,11 +502,20 @@ public class KafkaRaftClient implements RaftClient {
         RaftRequest.Inbound requestMetadata
     ) throws IOException {
         VoteRequestData request = (VoteRequestData) requestMetadata.data;
-        int candidateId = request.candidateId();
-        int candidateEpoch = request.candidateEpoch();
 
-        int lastEpoch = request.lastEpoch();
-        long lastEpochEndOffset = request.lastEpochEndOffset();
+        if (validateRequestTopicPartition(request)) {
+            return VoteRequest.getErrorResponse(
+                request, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
+        }
+
+        VoteRequestData.VotePartitionRequest partitionRequest =
+            request.topics().get(0).partitions().get(0);
+
+        int candidateId = partitionRequest.candidateId();
+        int candidateEpoch = partitionRequest.candidateEpoch();
+
+        int lastEpoch = partitionRequest.lastOffsetEpoch();
+        long lastEpochEndOffset = partitionRequest.lastOffset();
         if (lastEpochEndOffset < 0 || lastEpoch < 0 || lastEpoch >= candidateEpoch) {
             return buildVoteResponse(Errors.INVALID_REQUEST, false);
         }
@@ -562,6 +572,7 @@ public class KafkaRaftClient implements RaftClient {
     ) throws IOException {
         int remoteNodeId = responseMetadata.sourceId();
         VoteResponseData response = (VoteResponseData) responseMetadata.data;
+
         Errors error = Errors.forCode(response.errorCode());
         OptionalInt responseLeaderId = optionalLeaderId(response.leaderId());
         int responseEpoch = response.leaderEpoch();
@@ -1045,6 +1056,13 @@ public class KafkaRaftClient implements RaftClient {
      * @return true if the topic partition info matches the replicated log
      */
     private boolean validateRequestTopicPartition(DescribeQuorumRequestData data) {
+        return data.topics().size() != 1 ||
+                   !data.topics().get(0).topicName().equals(log.topicPartition().topic()) ||
+                   data.topics().get(0).partitions().size() != 1 ||
+                   data.topics().get(0).partitions().get(0).partitionIndex() != log.topicPartition().partition();
+    }
+
+    private boolean validateRequestTopicPartition(VoteRequestData data) {
         return data.topics().size() != 1 ||
                    !data.topics().get(0).topicName().equals(log.topicPartition().topic()) ||
                    data.topics().get(0).partitions().size() != 1 ||
