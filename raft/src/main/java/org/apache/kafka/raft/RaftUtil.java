@@ -16,10 +16,13 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
+import org.apache.kafka.common.message.DescribeQuorumRequestData;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
 import org.apache.kafka.common.message.FetchQuorumRecordsResponseData;
 import org.apache.kafka.common.message.FindQuorumResponseData;
+import org.apache.kafka.common.message.VoteRequestData;
 import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ApiMessage;
@@ -27,12 +30,15 @@ import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.FileRecords;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
+import org.apache.kafka.common.requests.VoteResponse;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.OptionalInt;
 
 public class RaftUtil {
+
+    static final TopicPartition METADATA_PARTITION = new TopicPartition("metadata", 0);
 
     public static ByteBuffer serializeRecords(Records records) throws IOException {
         if (records instanceof MemoryRecords) {
@@ -49,10 +55,11 @@ public class RaftUtil {
     }
 
     public static ApiMessage errorResponse(ApiKeys apiKey, Errors error) {
-        return errorResponse(apiKey, error, 0, OptionalInt.empty());
+        return errorResponse(METADATA_PARTITION, apiKey, error, 0, OptionalInt.empty());
     }
 
     public static ApiMessage errorResponse(
+        TopicPartition topicPartition,
         ApiKeys apiKey,
         Errors error,
         int epoch,
@@ -61,11 +68,13 @@ public class RaftUtil {
         int leaderId = leaderIdOpt.orElse(-1);
         switch (apiKey) {
             case VOTE:
-                return new VoteResponseData()
-                    .setErrorCode(error.code())
-                    .setVoteGranted(false)
-                    .setLeaderEpoch(epoch)
-                    .setLeaderId(leaderId);
+                return VoteResponse.singletonResponse(
+                    topicPartition,
+                    error,
+                    epoch,
+                    leaderId,
+                    false
+                );
             case BEGIN_QUORUM_EPOCH:
                 return new BeginQuorumEpochResponseData()
                     .setErrorCode(error.code())
@@ -93,4 +102,24 @@ public class RaftUtil {
         }
     }
 
+    static boolean invalidVoteResponseTopicPartition(VoteResponseData data, TopicPartition topicPartition) {
+        return data.topics().size() != 1 ||
+                   !data.topics().get(0).topicName().equals(topicPartition.topic()) ||
+                   data.topics().get(0).partitions().size() != 1 ||
+                   data.topics().get(0).partitions().get(0).partitionIndex() != topicPartition.partition();
+    }
+
+    static boolean invalidVoteRequestTopicPartition(VoteRequestData data, TopicPartition topicPartition) {
+        return data.topics().size() != 1 ||
+                   !data.topics().get(0).topicName().equals(topicPartition.topic()) ||
+                   data.topics().get(0).partitions().size() != 1 ||
+                   data.topics().get(0).partitions().get(0).partitionIndex() != topicPartition.partition();
+    }
+
+    static boolean invalidDescribeQuorumRequestTopicPartition(DescribeQuorumRequestData data, TopicPartition topicPartition) {
+        return data.topics().size() != 1 ||
+                   !data.topics().get(0).topicName().equals(topicPartition.topic()) ||
+                   data.topics().get(0).partitions().size() != 1 ||
+                   data.topics().get(0).partitions().get(0).partitionIndex() != topicPartition.partition();
+    }
 }

@@ -18,7 +18,6 @@
 package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
@@ -27,7 +26,6 @@ import org.apache.kafka.common.protocol.types.Struct;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class VoteResponse extends AbstractResponse {
@@ -52,18 +50,19 @@ public class VoteResponse extends AbstractResponse {
     }
 
     public static VoteResponseData singletonResponse(TopicPartition topicPartition,
+                                                     Errors error,
+                                                     int leaderEpoch,
                                                      int leaderId,
-                                                               int leaderEpoch,
-                                                               long highWatermark,
-                                                               List<DescribeQuorumResponseData.ReplicaState> voterStates,
-                                                               List<DescribeQuorumResponseData.ReplicaState> observerStates) {
-        return new VoteResponseData()
-                   .setTopics(Collections.singletonList(new VoteResponseData.VoteTopicResponse()
-                                                            .setTopicName(topicPartition.topic())
-                                                            .setPartitions(Collections.singletonList(new VoteResponseData.VotePartitionResponse()
-                                                                                                         .setErrorCode(Errors.NONE.code())
-                                                                                                         .setLeaderId(leaderId)
-                                                                                                         .setLeaderEpoch(leaderEpoch)))));
+                                                     boolean voteGranted) {
+        return new VoteResponseData().setTopics(Collections.singletonList(
+            new VoteResponseData.VoteTopicResponse()
+                .setTopicName(topicPartition.topic())
+                .setPartitions(Collections.singletonList(
+                    new VoteResponseData.VotePartitionResponse()
+                        .setErrorCode(error.code())
+                        .setLeaderId(leaderId)
+                        .setLeaderEpoch(leaderEpoch)
+                        .setVoteGranted(voteGranted)))));
     }
 
     @Override

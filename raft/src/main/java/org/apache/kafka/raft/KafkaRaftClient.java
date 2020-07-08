@@ -36,6 +36,7 @@ import org.apache.kafka.common.message.LeaderChangeMessage;
 import org.apache.kafka.common.message.LeaderChangeMessage.Voter;
 import org.apache.kafka.common.message.VoteRequestData;
 import org.apache.kafka.common.message.VoteResponseData;
+import org.apache.kafka.common.message.VoteResponseData.VotePartitionResponse;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ApiMessage;
@@ -45,6 +46,7 @@ import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.requests.DescribeQuorumRequest;
 import org.apache.kafka.common.requests.DescribeQuorumResponse;
 import org.apache.kafka.common.requests.VoteRequest;
+import org.apache.kafka.common.requests.VoteResponse;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
@@ -78,6 +80,9 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.apache.kafka.raft.RaftUtil.invalidDescribeQuorumRequestTopicPartition;
+import static org.apache.kafka.raft.RaftUtil.invalidVoteRequestTopicPartition;
+import static org.apache.kafka.raft.RaftUtil.invalidVoteResponseTopicPartition;
 
 /**
  * This class implements a Kafkaesque version of the Raft protocol. Leader election
@@ -482,11 +487,12 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private VoteResponseData buildVoteResponse(Errors error, boolean voteGranted) {
-        return VoteRequest.getErrorResponse()
-                .setErrorCode(error.code())
-                .setLeaderEpoch(quorum.epoch())
-                .setLeaderId(quorum.leaderIdOrNil())
-                .setVoteGranted(voteGranted);
+        return VoteResponse.singletonResponse(
+            log.topicPartition(),
+            error,
+            quorum.epoch(),
+            quorum.leaderIdOrNil(),
+            voteGranted);
     }
 
     /**
@@ -503,7 +509,7 @@ public class KafkaRaftClient implements RaftClient {
     ) throws IOException {
         VoteRequestData request = (VoteRequestData) requestMetadata.data;
 
-        if (validateRequestTopicPartition(request)) {
+        if (invalidVoteRequestTopicPartition(request, log.topicPartition())) {
             return VoteRequest.getErrorResponse(
                 request, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
         }
@@ -544,19 +550,7 @@ public class KafkaRaftClient implements RaftClient {
                     request, candidateEpoch);
             voteGranted = false;
         } else {
-            FollowerState state = quorum.followerStateOrThrow();
-
-            if (state.hasLeader()) {
-                logger.debug("Rejecting vote request {} with epoch {} since we already have a leader {} on that epoch",
-                        request, candidateEpoch, state.leaderId());
-                voteGranted = false;
-            } else if (state.hasVoted()) {
-                voteGranted = state.hasVotedFor(candidateId);
-                if (!voteGranted) {
-                    logger.debug("Rejecting vote request {} with epoch {} since we already have voted for " +
-                            "another candidate {} on that epoch", request, candidateEpoch, state.votedId());
-                }
-            }
+            voteGranted = hasVotedAsFollower(request, candidateId, candidateEpoch, voteGranted);
         }
 
         if (voteGranted) {
@@ -567,15 +561,45 @@ public class KafkaRaftClient implements RaftClient {
         return buildVoteResponse(Errors.NONE, voteGranted);
     }
 
+    private boolean hasVotedAsFollower(
+        VoteRequestData request,
+        int candidateId,
+        int candidateEpoch,
+        boolean voteGrantedByOffsetComparison
+    ) {
+        FollowerState state = quorum.followerStateOrThrow();
+
+        if (state.hasVoted()) {
+            boolean hasVotedAlready = state.hasVotedFor(candidateId);
+            if (!hasVotedAlready) {
+                logger.debug("Rejecting vote request {} with epoch {} since we already have voted for " +
+                    "another candidate {} on that epoch", request, candidateEpoch, state.votedId());
+            }
+            return hasVotedAlready;
+        } else if (state.hasLeader()) {
+            logger.debug("Rejecting vote request {} with epoch {} since we already have a leader {} on that epoch",
+                request, candidateEpoch, state.leaderId());
+            return false;
+        } else {
+            return voteGrantedByOffsetComparison;
+        }
+    }
+
     private boolean handleVoteResponse(
         RaftResponse.Inbound responseMetadata
     ) throws IOException {
         int remoteNodeId = responseMetadata.sourceId();
         VoteResponseData response = (VoteResponseData) responseMetadata.data;
 
-        Errors error = Errors.forCode(response.errorCode());
-        OptionalInt responseLeaderId = optionalLeaderId(response.leaderId());
-        int responseEpoch = response.leaderEpoch();
+        if (invalidVoteResponseTopicPartition(response, log.topicPartition())) {
+            return false;
+        }
+
+        VotePartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+
+        Errors error = Errors.forCode(partitionResponse.errorCode());
+        OptionalInt responseLeaderId = optionalLeaderId(partitionResponse.leaderId());
+        int responseEpoch = partitionResponse.leaderEpoch();
 
         Optional<Boolean> handled = maybeHandleCommonResponse(error, responseLeaderId, responseEpoch);
         if (handled.isPresent()) {
@@ -583,13 +607,13 @@ public class KafkaRaftClient implements RaftClient {
         } else if (error == Errors.NONE) {
             if (quorum.isLeader()) {
                 logger.debug("Ignoring vote response {} since we already became leader for epoch {}",
-                    response, quorum.epoch());
+                    partitionResponse, quorum.epoch());
             } else if (quorum.isFollower()) {
                 logger.debug("Ignoring vote response {} since we are now a follower for epoch {}",
-                    response, quorum.epoch());
+                    partitionResponse, quorum.epoch());
             } else {
                 CandidateState state = quorum.candidateStateOrThrow();
-                if (response.voteGranted()) {
+                if (partitionResponse.voteGranted()) {
                     state.recordGrantedVote(remoteNodeId);
                     maybeBecomeLeader(state);
                 } else {
@@ -1020,7 +1044,7 @@ public class KafkaRaftClient implements RaftClient {
         RaftRequest.Inbound requestMetadata
     ) {
         DescribeQuorumRequestData describeQuorumRequestData = (DescribeQuorumRequestData) requestMetadata.data;
-        if (validateRequestTopicPartition(describeQuorumRequestData)) {
+        if (invalidDescribeQuorumRequestTopicPartition(describeQuorumRequestData, log.topicPartition())) {
             return DescribeQuorumRequest.getErrorResponse(
                 describeQuorumRequestData, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
         }
@@ -1050,23 +1074,6 @@ public class KafkaRaftClient implements RaftClient {
                                      .setReplicaId(entry.getKey())
                                      .setLogEndOffset(entry.getValue()))
                    .collect(Collectors.toList());
-    }
-
-    /**
-     * @return true if the topic partition info matches the replicated log
-     */
-    private boolean validateRequestTopicPartition(DescribeQuorumRequestData data) {
-        return data.topics().size() != 1 ||
-                   !data.topics().get(0).topicName().equals(log.topicPartition().topic()) ||
-                   data.topics().get(0).partitions().size() != 1 ||
-                   data.topics().get(0).partitions().get(0).partitionIndex() != log.topicPartition().partition();
-    }
-
-    private boolean validateRequestTopicPartition(VoteRequestData data) {
-        return data.topics().size() != 1 ||
-                   !data.topics().get(0).topicName().equals(log.topicPartition().topic()) ||
-                   data.topics().get(0).partitions().size() != 1 ||
-                   data.topics().get(0).partitions().get(0).partitionIndex() != log.topicPartition().partition();
     }
 
     private void updateVoterConnections(FindQuorumResponseData response) {
@@ -1286,8 +1293,13 @@ public class KafkaRaftClient implements RaftClient {
             if (response != null) {
                 message = response;
             } else {
-                message = RaftUtil.errorResponse(apiKey, Errors.forException(exception),
-                    quorum.epoch(), quorum.leaderId());
+                message = RaftUtil.errorResponse(
+                    log.topicPartition(),
+                    apiKey,
+                    Errors.forException(exception),
+                    quorum.epoch(),
+                    quorum.leaderId()
+                );
             }
             sendOutboundMessage(new RaftResponse.Outbound(request.correlationId(), message));
         });
@@ -1360,11 +1372,13 @@ public class KafkaRaftClient implements RaftClient {
 
     private VoteRequestData buildVoteRequest() {
         OffsetAndEpoch endOffset = endOffset();
-        return new VoteRequestData()
-                .setCandidateEpoch(quorum.epoch())
-                .setCandidateId(quorum.localId)
-                .setLastEpoch(endOffset.epoch)
-                .setLastEpochEndOffset(endOffset.offset);
+        return VoteRequest.singletonRequest(
+            log.topicPartition(),
+            quorum.epoch(),
+            quorum.localId,
+            endOffset.epoch,
+            endOffset.offset
+        );
     }
 
     private void maybeSendVoteRequestToVoters(long currentTimeMs, CandidateState state) throws IOException {

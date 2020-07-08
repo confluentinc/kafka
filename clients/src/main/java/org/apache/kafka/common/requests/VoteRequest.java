@@ -16,8 +16,7 @@
  */
 package org.apache.kafka.common.requests;
 
-import org.apache.kafka.common.message.DescribeQuorumRequestData;
-import org.apache.kafka.common.message.DescribeQuorumResponseData;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.VoteRequestData;
 import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -25,6 +24,7 @@ import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.Struct;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -70,7 +70,42 @@ public class VoteRequest extends AbstractRequest {
         return getErrorResponse(this.data, Errors.forException(e));
     }
 
-    public static VoteResponse getErrorResponse(VoteRequestData data, Errors error) {
+    public static VoteRequestData singletonRequest(TopicPartition topicPartition,
+                                                   int candidateEpoch,
+                                                   int candidateId,
+                                                   int lastEpoch,
+                                                   long lastEpochEndOffset) {
+        return singletonRequest(topicPartition,
+            null,
+            candidateEpoch,
+            candidateId,
+            lastEpoch,
+            lastEpochEndOffset);
+    }
+
+    public static VoteRequestData singletonRequest(TopicPartition topicPartition,
+                                                   String clusterId,
+                                                   int candidateEpoch,
+                                                   int candidateId,
+                                                   int lastEpoch,
+                                                   long lastEpochEndOffset) {
+        return new VoteRequestData()
+                   .setClusterId(clusterId)
+                   .setTopics(Collections.singletonList(
+                       new VoteRequestData.VoteTopicRequest()
+                           .setTopicName(topicPartition.topic())
+                           .setPartitions(Collections.singletonList(
+                               new VoteRequestData.VotePartitionRequest()
+                                   .setPartitionIndex(topicPartition.partition())
+                                   .setCandidateEpoch(candidateEpoch)
+                                   .setCandidateId(candidateId)
+                                   .setLastOffsetEpoch(lastEpoch)
+                                   .setLastOffset(lastEpochEndOffset))
+                           )));
+    }
+
+    public static VoteResponse getErrorResponse(VoteRequestData data,
+                                                Errors error) {
         short errorCode = error.code();
 
         List<VoteResponseData.VoteTopicResponse> topicResponses = new ArrayList<>();
@@ -85,7 +120,6 @@ public class VoteRequest extends AbstractRequest {
                     ).collect(Collectors.toList())));
         }
 
-        return new VoteResponse(
-            new VoteResponseData().setTopics(topicResponses));
+        return new VoteResponse(new VoteResponseData().setTopics(topicResponses));
     }
 }

@@ -31,7 +31,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static org.apache.kafka.raft.KafkaRaftClientTest.METADATA_PARTITION;
+import static org.apache.kafka.raft.RaftUtil.METADATA_PARTITION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 

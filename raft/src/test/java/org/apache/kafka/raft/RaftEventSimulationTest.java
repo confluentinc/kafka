@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import static org.apache.kafka.raft.KafkaRaftClientTest.METADATA_PARTITION;
+import static org.apache.kafka.raft.RaftUtil.METADATA_PARTITION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
