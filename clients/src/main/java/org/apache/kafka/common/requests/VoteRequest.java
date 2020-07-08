@@ -104,8 +104,8 @@ public class VoteRequest extends AbstractRequest {
                            )));
     }
 
-    public static VoteResponse getErrorResponse(VoteRequestData data,
-                                                Errors error) {
+    private static VoteResponse getErrorResponse(VoteRequestData data,
+                                                 Errors error) {
         short errorCode = error.code();
 
         List<VoteResponseData.VoteTopicResponse> topicResponses = new ArrayList<>();

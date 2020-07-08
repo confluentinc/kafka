@@ -510,8 +510,7 @@ public class KafkaRaftClient implements RaftClient {
         VoteRequestData request = (VoteRequestData) requestMetadata.data;
 
         if (invalidVoteRequestTopicPartition(request, log.topicPartition())) {
-            return VoteRequest.getErrorResponse(
-                request, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
+            return buildVoteResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, false);
         }
 
         VoteRequestData.VotePartitionRequest partitionRequest =
@@ -550,7 +549,19 @@ public class KafkaRaftClient implements RaftClient {
                     request, candidateEpoch);
             voteGranted = false;
         } else {
-            voteGranted = hasVotedAsFollower(request, candidateId, candidateEpoch, voteGranted);
+            FollowerState state = quorum.followerStateOrThrow();
+
+            if (state.hasLeader()) {
+                logger.debug("Rejecting vote request {} with epoch {} since we already have a leader {} on that epoch",
+                    request, candidateEpoch, state.leaderId());
+                voteGranted = false;
+            } else if (state.hasVoted()) {
+                voteGranted = state.hasVotedFor(candidateId);
+                if (!voteGranted) {
+                    logger.debug("Rejecting vote request {} with epoch {} since we already have voted for " +
+                        "another candidate {} on that epoch", request, candidateEpoch, state.votedId());
+                }
+            }
         }
 
         if (voteGranted) {
@@ -559,30 +570,6 @@ public class KafkaRaftClient implements RaftClient {
 
         logger.info("Vote request {} is {}", request, voteGranted ? "granted" : "rejected");
         return buildVoteResponse(Errors.NONE, voteGranted);
-    }
-
-    private boolean hasVotedAsFollower(
-        VoteRequestData request,
-        int candidateId,
-        int candidateEpoch,
-        boolean voteGrantedByOffsetComparison
-    ) {
-        FollowerState state = quorum.followerStateOrThrow();
-
-        if (state.hasVoted()) {
-            boolean hasVotedAlready = state.hasVotedFor(candidateId);
-            if (!hasVotedAlready) {
-                logger.debug("Rejecting vote request {} with epoch {} since we already have voted for " +
-                    "another candidate {} on that epoch", request, candidateEpoch, state.votedId());
-            }
-            return hasVotedAlready;
-        } else if (state.hasLeader()) {
-            logger.debug("Rejecting vote request {} with epoch {} since we already have a leader {} on that epoch",
-                request, candidateEpoch, state.leaderId());
-            return false;
-        } else {
-            return voteGrantedByOffsetComparison;
-        }
     }
 
     private boolean handleVoteResponse(
