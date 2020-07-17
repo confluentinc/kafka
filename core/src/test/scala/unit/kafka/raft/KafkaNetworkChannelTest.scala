@@ -43,8 +43,8 @@ class KafkaNetworkChannelTest {
   private val requestTimeoutMs = 30000
   private val time = new MockTime()
   private val client = new MockClient(time, new StubMetadataUpdater)
-  private val channel = new KafkaNetworkChannel(time, client, clientId, retryBackoffMs, requestTimeoutMs)
   private val topicPartition = new TopicPartition("topic", 0)
+  private val channel = new KafkaNetworkChannel(time, client, clientId, retryBackoffMs, requestTimeoutMs, topicPartition)
 
   @Test
   def testSendToUnknownDestination(): Unit = {

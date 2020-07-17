@@ -80,9 +80,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
-import static org.apache.kafka.raft.RaftUtil.invalidDescribeQuorumRequestTopicPartition;
-import static org.apache.kafka.raft.RaftUtil.invalidVoteRequestTopicPartition;
-import static org.apache.kafka.raft.RaftUtil.invalidVoteResponseTopicPartition;
+import static org.apache.kafka.raft.RaftUtil.hasValidTopicPartition;
 
 /**
  * This class implements a Kafkaesque version of the Raft protocol. Leader election
@@ -509,8 +507,8 @@ public class KafkaRaftClient implements RaftClient {
     ) throws IOException {
         VoteRequestData request = (VoteRequestData) requestMetadata.data;
 
-        if (invalidVoteRequestTopicPartition(request, log.topicPartition())) {
-            return buildVoteResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, false);
+        if (!hasValidTopicPartition(request, log.topicPartition())) {
+            return VoteRequest.getErrorResponse(request, Errors.UNKNOWN_TOPIC_OR_PARTITION);
         }
 
         VoteRequestData.VotePartitionRequest partitionRequest =
@@ -578,7 +576,7 @@ public class KafkaRaftClient implements RaftClient {
         int remoteNodeId = responseMetadata.sourceId();
         VoteResponseData response = (VoteResponseData) responseMetadata.data;
 
-        if (invalidVoteResponseTopicPartition(response, log.topicPartition())) {
+        if (!hasValidTopicPartition(response, log.topicPartition())) {
             return false;
         }
 
@@ -1031,9 +1029,9 @@ public class KafkaRaftClient implements RaftClient {
         RaftRequest.Inbound requestMetadata
     ) {
         DescribeQuorumRequestData describeQuorumRequestData = (DescribeQuorumRequestData) requestMetadata.data;
-        if (invalidDescribeQuorumRequestTopicPartition(describeQuorumRequestData, log.topicPartition())) {
+        if (!hasValidTopicPartition(describeQuorumRequestData, log.topicPartition())) {
             return DescribeQuorumRequest.getErrorResponse(
-                describeQuorumRequestData, Errors.UNKNOWN_TOPIC_OR_PARTITION).data;
+                describeQuorumRequestData, Errors.UNKNOWN_TOPIC_OR_PARTITION);
         }
 
         if (!quorum.isLeader()) {

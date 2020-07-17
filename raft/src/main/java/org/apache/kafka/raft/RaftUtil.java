@@ -38,8 +38,6 @@ import java.util.OptionalInt;
 
 public class RaftUtil {
 
-    static final TopicPartition METADATA_PARTITION = new TopicPartition("metadata", 0);
-
     public static ByteBuffer serializeRecords(Records records) throws IOException {
         if (records instanceof MemoryRecords) {
             MemoryRecords memoryRecords = (MemoryRecords) records;
@@ -54,8 +52,10 @@ public class RaftUtil {
         }
     }
 
-    public static ApiMessage errorResponse(ApiKeys apiKey, Errors error) {
-        return errorResponse(METADATA_PARTITION, apiKey, error, 0, OptionalInt.empty());
+    public static ApiMessage errorResponse(TopicPartition metadataTopicPartition,
+                                           ApiKeys apiKey,
+                                           Errors error) {
+        return errorResponse(metadataTopicPartition, apiKey, error, 0, OptionalInt.empty());
     }
 
     public static ApiMessage errorResponse(
@@ -102,24 +102,24 @@ public class RaftUtil {
         }
     }
 
-    static boolean invalidVoteResponseTopicPartition(VoteResponseData data, TopicPartition topicPartition) {
-        return data.topics().size() != 1 ||
-                   !data.topics().get(0).topicName().equals(topicPartition.topic()) ||
-                   data.topics().get(0).partitions().size() != 1 ||
-                   data.topics().get(0).partitions().get(0).partitionIndex() != topicPartition.partition();
+    static boolean hasValidTopicPartition(VoteResponseData data, TopicPartition topicPartition) {
+        return data.topics().size() == 1 &&
+                   data.topics().get(0).topicName().equals(topicPartition.topic()) &&
+                   data.topics().get(0).partitions().size() == 1 &&
+                   data.topics().get(0).partitions().get(0).partitionIndex() == topicPartition.partition();
     }
 
-    static boolean invalidVoteRequestTopicPartition(VoteRequestData data, TopicPartition topicPartition) {
-        return data.topics().size() != 1 ||
-                   !data.topics().get(0).topicName().equals(topicPartition.topic()) ||
-                   data.topics().get(0).partitions().size() != 1 ||
-                   data.topics().get(0).partitions().get(0).partitionIndex() != topicPartition.partition();
+    static boolean hasValidTopicPartition(VoteRequestData data, TopicPartition topicPartition) {
+        return data.topics().size() == 1 &&
+                   data.topics().get(0).topicName().equals(topicPartition.topic()) &&
+                   data.topics().get(0).partitions().size() == 1 &&
+                   data.topics().get(0).partitions().get(0).partitionIndex() == topicPartition.partition();
     }
 
-    static boolean invalidDescribeQuorumRequestTopicPartition(DescribeQuorumRequestData data, TopicPartition topicPartition) {
-        return data.topics().size() != 1 ||
-                   !data.topics().get(0).topicName().equals(topicPartition.topic()) ||
-                   data.topics().get(0).partitions().size() != 1 ||
-                   data.topics().get(0).partitions().get(0).partitionIndex() != topicPartition.partition();
+    static boolean hasValidTopicPartition(DescribeQuorumRequestData data, TopicPartition topicPartition) {
+        return data.topics().size() == 1 &&
+                   data.topics().get(0).topicName().equals(topicPartition.topic()) &&
+                   data.topics().get(0).partitions().size() == 1 &&
+                   data.topics().get(0).partitions().get(0).partitionIndex() == topicPartition.partition();
     }
 }

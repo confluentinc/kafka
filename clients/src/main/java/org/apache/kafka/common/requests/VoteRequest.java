@@ -67,7 +67,7 @@ public class VoteRequest extends AbstractRequest {
 
     @Override
     public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        return getErrorResponse(this.data, Errors.forException(e));
+        return new VoteResponse(getErrorResponse(this.data, Errors.forException(e)));
     }
 
     public static VoteRequestData singletonRequest(TopicPartition topicPartition,
@@ -104,10 +104,9 @@ public class VoteRequest extends AbstractRequest {
                            )));
     }
 
-    private static VoteResponse getErrorResponse(VoteRequestData data,
-                                                 Errors error) {
+    public static VoteResponseData getErrorResponse(VoteRequestData data,
+                                                    Errors error) {
         short errorCode = error.code();
-
         List<VoteResponseData.VoteTopicResponse> topicResponses = new ArrayList<>();
         for (VoteRequestData.VoteTopicRequest topic : data.topics()) {
             topicResponses.add(
@@ -120,6 +119,6 @@ public class VoteRequest extends AbstractRequest {
                     ).collect(Collectors.toList())));
         }
 
-        return new VoteResponse(new VoteResponseData().setTopics(topicResponses));
+        return new VoteResponseData().setTopics(topicResponses);
     }
 }

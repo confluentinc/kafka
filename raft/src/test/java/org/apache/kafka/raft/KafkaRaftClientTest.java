@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.raft;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData;
@@ -76,9 +77,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-import static org.apache.kafka.raft.RaftUtil.METADATA_PARTITION;
-import static org.apache.kafka.raft.RaftUtil.invalidVoteRequestTopicPartition;
-import static org.apache.kafka.raft.RaftUtil.invalidVoteResponseTopicPartition;
+import static org.apache.kafka.raft.RaftUtil.hasValidTopicPartition;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -97,6 +96,7 @@ public class KafkaRaftClientTest {
     private final int fetchMaxWaitMs = 0;
     private final MockTime time = new MockTime();
 
+    static final TopicPartition METADATA_PARTITION = new TopicPartition("metadata", 0);
     private final MockLog log = new MockLog(METADATA_PARTITION);
     private final MockNetworkChannel channel = new MockNetworkChannel();
     private final Random random = Mockito.spy(new Random());
@@ -1740,7 +1740,7 @@ public class KafkaRaftClientTest {
         RaftMessage raftMessage = sentMessages.get(0);
         assertTrue(raftMessage.data() instanceof VoteResponseData);
         VoteResponseData response = (VoteResponseData) raftMessage.data();
-        assertFalse(invalidVoteResponseTopicPartition(response, METADATA_PARTITION));
+        assertTrue(hasValidTopicPartition(response, METADATA_PARTITION));
 
         VotePartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
 
@@ -1845,7 +1845,7 @@ public class KafkaRaftClientTest {
         for (RaftMessage raftMessage : channel.drainSendQueue()) {
             if (raftMessage.data() instanceof VoteRequestData) {
                 VoteRequestData request = (VoteRequestData) raftMessage.data();
-                assertFalse(invalidVoteRequestTopicPartition(request, METADATA_PARTITION));
+                assertTrue(hasValidTopicPartition(request, METADATA_PARTITION));
 
                 VotePartitionRequest partitionRequest = request.topics().get(0).partitions().get(0);
 
