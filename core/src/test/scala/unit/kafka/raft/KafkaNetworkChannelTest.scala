@@ -44,7 +44,7 @@ class KafkaNetworkChannelTest {
   private val time = new MockTime()
   private val client = new MockClient(time, new StubMetadataUpdater)
   private val topicPartition = new TopicPartition("topic", 0)
-  private val channel = new KafkaNetworkChannel(time, client, clientId, retryBackoffMs, requestTimeoutMs, topicPartition)
+  private val channel = new KafkaNetworkChannel(time, client, clientId, retryBackoffMs, requestTimeoutMs)
 
   @Test
   def testSendToUnknownDestination(): Unit = {
@@ -203,7 +203,7 @@ class KafkaNetworkChannelTest {
           .setErrorCode(error.code)
 
       case ApiKeys.VOTE =>
-        VoteResponse.singletonResponse(topicPartition, Errors.NONE, 1, 5, false);
+        VoteResponse.singletonResponse(error, topicPartition, Errors.NONE, 1, 5, false);
 
       case ApiKeys.FETCH_QUORUM_RECORDS =>
         new FetchQuorumRecordsResponseData()
@@ -223,7 +223,7 @@ class KafkaNetworkChannelTest {
       case res: BeginQuorumEpochResponseData => res.errorCode
       case res: EndQuorumEpochResponseData => res.errorCode
       case res: FetchQuorumRecordsResponseData => res.errorCode
-      case res: VoteResponseData => res.topics.get(0).partitions.get(0).errorCode
+      case res: VoteResponseData => res.errorCode
       case res: FindQuorumResponseData => res.errorCode
     }
     Errors.forCode(code)

@@ -1954,6 +1954,7 @@ public class KafkaRaftClientTest {
 
     private VoteResponseData voteResponse(boolean voteGranted, Optional<Integer> leaderId, int epoch) {
         return VoteResponse.singletonResponse(
+            Errors.NONE,
             METADATA_PARTITION,
             Errors.NONE,
             epoch,

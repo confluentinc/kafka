@@ -28,6 +28,19 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Possible error codes.
+ *
+ * Top level errors:
+ * - {@link Errors#CLUSTER_AUTHORIZATION_FAILED}
+ * - {@link Errors#BROKER_NOT_AVAILABLE}
+ *
+ * Partition level errors:
+ * - {@link Errors#FENCED_LEADER_EPOCH}
+ * - {@link Errors#INVALID_REQUEST}
+ * - {@link Errors#INCONSISTENT_VOTER_SET}
+ * - {@link Errors#UNKNOWN_TOPIC_OR_PARTITION}
+ */
 public class VoteResponse extends AbstractResponse {
     public final VoteResponseData data;
 
@@ -49,25 +62,32 @@ public class VoteResponse extends AbstractResponse {
         return data.toStruct(version);
     }
 
-    public static VoteResponseData singletonResponse(TopicPartition topicPartition,
-                                                     Errors error,
+    public static VoteResponseData singletonResponse(Errors topLevelError,
+                                                     TopicPartition topicPartition,
+                                                     Errors partitionLevelError,
                                                      int leaderEpoch,
                                                      int leaderId,
                                                      boolean voteGranted) {
-        return new VoteResponseData().setTopics(Collections.singletonList(
-            new VoteResponseData.VoteTopicResponse()
-                .setTopicName(topicPartition.topic())
-                .setPartitions(Collections.singletonList(
-                    new VoteResponseData.VotePartitionResponse()
-                        .setErrorCode(error.code())
-                        .setLeaderId(leaderId)
-                        .setLeaderEpoch(leaderEpoch)
-                        .setVoteGranted(voteGranted)))));
+        return new VoteResponseData()
+            .setErrorCode(topLevelError.code())
+            .setTopics(Collections.singletonList(
+                new VoteResponseData.VoteTopicResponse()
+                    .setTopicName(topicPartition.topic())
+                    .setPartitions(Collections.singletonList(
+                        new VoteResponseData.VotePartitionResponse()
+                            .setErrorCode(partitionLevelError.code())
+                            .setLeaderId(leaderId)
+                            .setLeaderEpoch(leaderEpoch)
+                            .setVoteGranted(voteGranted)))));
     }
 
     @Override
     public Map<Errors, Integer> errorCounts() {
         Map<Errors, Integer> errors = new HashMap<>();
+        Errors topLevelError = Errors.forCode(data.errorCode());
+        if (topLevelError != Errors.NONE) {
+            errors.put(topLevelError, 1);
+        }
         for (VoteResponseData.VoteTopicResponse topicResponse : data.topics()) {
             for (VoteResponseData.VotePartitionResponse partitionResponse : topicResponse.partitions()) {
                 errors.compute(Errors.forCode(partitionResponse.errorCode()),

@@ -30,7 +30,7 @@ import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.FileRecords;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
-import org.apache.kafka.common.requests.VoteResponse;
+import org.apache.kafka.common.requests.VoteRequest;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -52,14 +52,12 @@ public class RaftUtil {
         }
     }
 
-    public static ApiMessage errorResponse(TopicPartition metadataTopicPartition,
-                                           ApiKeys apiKey,
+    public static ApiMessage errorResponse(ApiKeys apiKey,
                                            Errors error) {
-        return errorResponse(metadataTopicPartition, apiKey, error, 0, OptionalInt.empty());
+        return errorResponse(apiKey, error, 0, OptionalInt.empty());
     }
 
     public static ApiMessage errorResponse(
-        TopicPartition topicPartition,
         ApiKeys apiKey,
         Errors error,
         int epoch,
@@ -68,13 +66,7 @@ public class RaftUtil {
         int leaderId = leaderIdOpt.orElse(-1);
         switch (apiKey) {
             case VOTE:
-                return VoteResponse.singletonResponse(
-                    topicPartition,
-                    error,
-                    epoch,
-                    leaderId,
-                    false
-                );
+                return VoteRequest.getTopLevelErrorResponse(error);
             case BEGIN_QUORUM_EPOCH:
                 return new BeginQuorumEpochResponseData()
                     .setErrorCode(error.code())

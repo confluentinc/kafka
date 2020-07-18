@@ -86,10 +86,10 @@ public class DescribeQuorumRequest extends AbstractRequest {
 
     @Override
     public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        return new DescribeQuorumResponse(getErrorResponse(this.data, Errors.forException(e)));
+        return new DescribeQuorumResponse(getPartitionLevelErrorResponse(this.data, Errors.forException(e)));
     }
 
-    public static DescribeQuorumResponseData getErrorResponse(DescribeQuorumRequestData data, Errors error) {
+    public static DescribeQuorumResponseData getPartitionLevelErrorResponse(DescribeQuorumRequestData data, Errors error) {
         short errorCode = error.code();
 
         List<DescribeQuorumTopicResponse> topicResponses = new ArrayList<>();
@@ -105,5 +105,9 @@ public class DescribeQuorumRequest extends AbstractRequest {
         }
 
         return new DescribeQuorumResponseData().setTopics(topicResponses);
+    }
+
+    public static DescribeQuorumResponseData getTopLevelErrorResponse(Errors topLevelError) {
+        return new DescribeQuorumResponseData().setErrorCode(topLevelError.code());
     }
 }

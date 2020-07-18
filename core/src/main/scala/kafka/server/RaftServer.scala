@@ -78,7 +78,7 @@ class RaftServer(val config: KafkaConfig,
     val raftConfig = new RaftConfig(config.originals)
     val logContext = new LogContext(s"[Raft id=${config.brokerId}] ")
     val metadataLog = buildMetadataLog(logDir)
-    val networkChannel = buildNetworkChannel(raftConfig, logContext, partition)
+    val networkChannel = buildNetworkChannel(raftConfig, logContext)
 
     val raftClient = buildRaftClient(
       raftConfig,
@@ -142,12 +142,11 @@ class RaftServer(val config: KafkaConfig,
   }
 
   private def buildNetworkChannel(raftConfig: RaftConfig,
-                                  logContext: LogContext,
-                                  metadataTopicPartition: TopicPartition): KafkaNetworkChannel = {
+                                  logContext: LogContext): KafkaNetworkChannel = {
     val netClient = buildNetworkClient(raftConfig, logContext)
     val clientId = s"Raft-${config.brokerId}"
     new KafkaNetworkChannel(time, netClient, clientId,
-      raftConfig.retryBackoffMs, raftConfig.requestTimeoutMs, metadataTopicPartition)
+      raftConfig.retryBackoffMs, raftConfig.requestTimeoutMs)
   }
 
   private def buildMetadataLog(logDir: File): KafkaMetadataLog = {

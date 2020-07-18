@@ -27,7 +27,7 @@ import org.apache.kafka.common.message._
 import org.apache.kafka.common.protocol.{ApiKeys, ApiMessage, Errors}
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.common.{KafkaException, Node, TopicPartition}
+import org.apache.kafka.common.{KafkaException, Node}
 import org.apache.kafka.raft.{NetworkChannel, RaftMessage, RaftRequest, RaftResponse, RaftUtil}
 
 import scala.collection.mutable
@@ -70,8 +70,7 @@ class KafkaNetworkChannel(time: Time,
                           client: KafkaClient,
                           clientId: String,
                           retryBackoffMs: Int,
-                          requestTimeoutMs: Int,
-                          metadataTopicPartition: TopicPartition) extends NetworkChannel with Logging {
+                          requestTimeoutMs: Int) extends NetworkChannel with Logging {
   import KafkaNetworkChannel._
 
   type ResponseHandler = AbstractResponse => Unit
@@ -116,7 +115,7 @@ class KafkaNetworkChannel(time: Time,
           if (client.connectionFailed(node)) {
             pendingOutbound.poll()
             val apiKey = ApiKeys.forId(request.data.apiKey)
-            val disconnectResponse = RaftUtil.errorResponse(metadataTopicPartition, apiKey, Errors.BROKER_NOT_AVAILABLE)
+            val disconnectResponse = RaftUtil.errorResponse(apiKey, Errors.BROKER_NOT_AVAILABLE)
             val success = undelivered.offer(new RaftResponse.Inbound(
               request.correlationId, disconnectResponse, request.destinationId))
             if (!success) {
@@ -134,7 +133,7 @@ class KafkaNetworkChannel(time: Time,
         case None =>
           pendingOutbound.poll()
           val apiKey = ApiKeys.forId(request.data.apiKey)
-          val responseData = RaftUtil.errorResponse(metadataTopicPartition, apiKey, Errors.BROKER_NOT_AVAILABLE)
+          val responseData = RaftUtil.errorResponse(apiKey, Errors.BROKER_NOT_AVAILABLE)
           val response = new RaftResponse.Inbound(request.correlationId, responseData, request.destinationId)
           if (!undelivered.offer(response))
             throw new KafkaException("Undelivered queue is full")
@@ -156,9 +155,9 @@ class KafkaNetworkChannel(time: Time,
   private def buildInboundRaftResponse(response: ClientResponse): RaftResponse.Inbound = {
     val header = response.requestHeader()
     val data = if (response.authenticationException != null) {
-      RaftUtil.errorResponse(metadataTopicPartition, header.apiKey, Errors.CLUSTER_AUTHORIZATION_FAILED)
+      RaftUtil.errorResponse(header.apiKey, Errors.CLUSTER_AUTHORIZATION_FAILED)
     } else if (response.wasDisconnected) {
-      RaftUtil.errorResponse(metadataTopicPartition, header.apiKey, Errors.BROKER_NOT_AVAILABLE)
+      RaftUtil.errorResponse(header.apiKey, Errors.BROKER_NOT_AVAILABLE)
     } else {
       responseData(response.responseBody)
     }
