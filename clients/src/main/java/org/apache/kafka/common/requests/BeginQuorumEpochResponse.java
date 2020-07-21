@@ -17,7 +17,9 @@
 
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
+import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.Struct;
@@ -26,6 +28,19 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 
+/**
+ * Possible error codes.
+ *
+ * Top level errors:
+ * - {@link Errors#CLUSTER_AUTHORIZATION_FAILED}
+ * - {@link Errors#BROKER_NOT_AVAILABLE}
+ *
+ * Partition level errors:
+ * - {@link Errors#FENCED_LEADER_EPOCH}
+ * - {@link Errors#INVALID_REQUEST}
+ * - {@link Errors#INCONSISTENT_VOTER_SET}
+ * - {@link Errors#UNKNOWN_TOPIC_OR_PARTITION}
+ */
 public class BeginQuorumEpochResponse extends AbstractResponse {
     public final BeginQuorumEpochResponseData data;
 
@@ -40,6 +55,27 @@ public class BeginQuorumEpochResponse extends AbstractResponse {
     public BeginQuorumEpochResponse(Struct struct) {
         short latestVersion = (short) (BeginQuorumEpochResponseData.SCHEMAS.length - 1);
         this.data = new BeginQuorumEpochResponseData(struct, latestVersion);
+    }
+
+    public static BeginQuorumEpochResponseData singletonResponse(
+        Errors topLevelError,
+        TopicPartition topicPartition,
+        Errors partitionLevelError,
+        int leaderEpoch,
+        int leaderId
+    ) {
+        return new BeginQuorumEpochResponseData()
+                   .setErrorCode(topLevelError.code())
+                   .setTopics(Collections.singletonList(
+                       new BeginQuorumEpochResponseData.BeginQuorumTopicResponse()
+                           .setTopicName(topicPartition.topic())
+                           .setPartitions(Collections.singletonList(
+                               new BeginQuorumEpochResponseData.BeginQuorumPartitionResponse()
+                                   .setErrorCode(partitionLevelError.code())
+                                   .setLeaderId(leaderId)
+                                   .setLeaderEpoch(leaderEpoch)
+                           )))
+                   );
     }
 
     @Override

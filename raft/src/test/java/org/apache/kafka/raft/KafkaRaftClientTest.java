@@ -18,11 +18,15 @@ package org.apache.kafka.raft;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
+import org.apache.kafka.common.message.BeginQuorumEpochRequestData.BeginQuorumPartitionRequest;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
+import org.apache.kafka.common.message.BeginQuorumEpochResponseData.BeginQuorumPartitionResponse;
 import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.ReplicaState;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
+import org.apache.kafka.common.message.EndQuorumEpochRequestData.EndQuorumPartitionRequest;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
+import org.apache.kafka.common.message.EndQuorumEpochResponseData.EndQuorumPartitionResponse;
 import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
 import org.apache.kafka.common.message.FetchQuorumRecordsResponseData;
 import org.apache.kafka.common.message.FindQuorumRequestData;
@@ -47,8 +51,11 @@ import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.record.SimpleRecord;
+import org.apache.kafka.common.requests.BeginQuorumEpochRequest;
+import org.apache.kafka.common.requests.BeginQuorumEpochResponse;
 import org.apache.kafka.common.requests.DescribeQuorumRequest;
 import org.apache.kafka.common.requests.DescribeQuorumResponse;
+import org.apache.kafka.common.requests.EndQuorumEpochRequest;
 import org.apache.kafka.common.requests.VoteRequest;
 import org.apache.kafka.common.requests.VoteResponse;
 import org.apache.kafka.common.utils.LogContext;
@@ -1751,7 +1758,7 @@ public class KafkaRaftClientTest {
     }
 
     private void assertSentEndQuorumEpochResponse(
-        Errors error,
+        Errors partitionError,
         int epoch,
         OptionalInt leaderId
     ) {
@@ -1760,9 +1767,13 @@ public class KafkaRaftClientTest {
         RaftMessage raftMessage = sentMessages.get(0);
         assertTrue(raftMessage.data() instanceof EndQuorumEpochResponseData);
         EndQuorumEpochResponseData response = (EndQuorumEpochResponseData) raftMessage.data();
-        assertEquals(error, Errors.forCode(response.errorCode()));
-        assertEquals(epoch, response.leaderEpoch());
-        assertEquals(leaderId.orElse(-1), response.leaderId());
+        assertEquals(Errors.NONE, Errors.forCode(response.errorCode()));
+
+        EndQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+
+        assertEquals(epoch, partitionResponse.leaderEpoch());
+        assertEquals(leaderId.orElse(-1), partitionResponse.leaderId());
+        assertEquals(partitionError, Errors.forCode(partitionResponse.errorCode()));
     }
 
     private MemoryRecords assertSentFetchQuorumRecordsResponse(
@@ -1783,7 +1794,7 @@ public class KafkaRaftClientTest {
     }
 
     private void assertSentBeginQuorumEpochResponse(
-        Errors error,
+        Errors partitionError,
         int epoch,
         OptionalInt leaderId
     ) {
@@ -1792,9 +1803,13 @@ public class KafkaRaftClientTest {
         RaftMessage raftMessage = sentMessages.get(0);
         assertTrue(raftMessage.data() instanceof BeginQuorumEpochResponseData);
         BeginQuorumEpochResponseData response = (BeginQuorumEpochResponseData) raftMessage.data();
-        assertEquals(error, Errors.forCode(response.errorCode()));
-        assertEquals(epoch, response.leaderEpoch());
-        assertEquals(leaderId.orElse(-1), response.leaderId());
+        assertEquals(Errors.NONE, Errors.forCode(response.errorCode()));
+
+        BeginQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+
+        assertEquals(epoch, partitionResponse.leaderEpoch());
+        assertEquals(leaderId.orElse(-1), partitionResponse.leaderId());
+        assertEquals(partitionError, Errors.forCode(partitionResponse.errorCode()));
     }
 
     private int assertSentEndQuorumEpochRequest(int epoch, OptionalInt leaderId, int destinationId) {
@@ -1810,9 +1825,12 @@ public class KafkaRaftClientTest {
         for (RaftMessage raftMessage : channel.drainSendQueue()) {
             if (raftMessage.data() instanceof EndQuorumEpochRequestData) {
                 EndQuorumEpochRequestData request = (EndQuorumEpochRequestData) raftMessage.data();
-                assertEquals(epoch, request.leaderEpoch());
-                assertEquals(leaderId.orElse(-1), request.leaderId());
-                assertEquals(localId, request.replicaId());
+
+                EndQuorumPartitionRequest partitionRequest = request.topics().get(0).partitions().get(0);
+
+                assertEquals(epoch, partitionRequest.leaderEpoch());
+                assertEquals(leaderId.orElse(-1), partitionRequest.leaderId());
+                assertEquals(localId, partitionRequest.replicaId());
 
                 RaftRequest.Outbound outboundRequest = (RaftRequest.Outbound) raftMessage;
                 collectedDestinationIdSet.add(outboundRequest.destinationId());
@@ -1870,8 +1888,11 @@ public class KafkaRaftClientTest {
         for (RaftRequest.Outbound raftRequest : channel.drainSentRequests(ApiKeys.BEGIN_QUORUM_EPOCH)) {
             assertTrue(raftRequest.data() instanceof BeginQuorumEpochRequestData);
             BeginQuorumEpochRequestData request = (BeginQuorumEpochRequestData) raftRequest.data();
-            assertEquals(epoch, request.leaderEpoch());
-            assertEquals(localId, request.leaderId());
+
+            BeginQuorumPartitionRequest partitionRequest = request.topics().get(0).partitions().get(0);
+
+            assertEquals(epoch, partitionRequest.leaderEpoch());
+            assertEquals(localId, partitionRequest.leaderId());
             requests.add(raftRequest);
         }
         return requests;
@@ -1974,9 +1995,11 @@ public class KafkaRaftClientTest {
     }
 
     private BeginQuorumEpochRequestData beginEpochRequest(int epoch, int leaderId) {
-        return new BeginQuorumEpochRequestData()
-            .setLeaderId(leaderId)
-            .setLeaderEpoch(epoch);
+        return BeginQuorumEpochRequest.singletonRequest(
+            METADATA_PARTITION,
+            epoch,
+            leaderId
+        );
     }
 
     private EndQuorumEpochRequestData endEpochRequest(
@@ -1984,17 +2007,23 @@ public class KafkaRaftClientTest {
         OptionalInt leaderId,
         int replicaId,
         List<Integer> preferredSuccessors) {
-        return new EndQuorumEpochRequestData()
-            .setLeaderId(leaderId.orElse(-1))
-            .setLeaderEpoch(epoch)
-            .setReplicaId(replicaId)
-            .setPreferredSuccessors(preferredSuccessors);
+        return EndQuorumEpochRequest.singletonRequest(
+            METADATA_PARTITION,
+            replicaId,
+            epoch,
+            leaderId.orElse(-1),
+            preferredSuccessors
+        );
     }
 
     private BeginQuorumEpochResponseData beginEpochResponse(int epoch, int leaderId) {
-        return new BeginQuorumEpochResponseData()
-            .setLeaderEpoch(epoch)
-            .setLeaderId(leaderId);
+        return BeginQuorumEpochResponse.singletonResponse(
+            Errors.NONE,
+            METADATA_PARTITION,
+            Errors.NONE,
+            epoch,
+            leaderId
+        );
     }
 
     private FindQuorumResponseData findQuorumResponse(OptionalInt leaderId, int epoch, Collection<Integer> voters) {
@@ -2059,9 +2088,13 @@ public class KafkaRaftClientTest {
     }
 
     private BeginQuorumEpochResponseData beginQuorumEpochResponse(int epoch, int leaderId) {
-        return new BeginQuorumEpochResponseData()
-                   .setLeaderEpoch(epoch)
-                   .setLeaderId(leaderId);
+        return BeginQuorumEpochResponse.singletonResponse(
+            Errors.NONE,
+            METADATA_PARTITION,
+            Errors.NONE,
+            epoch,
+            leaderId
+        );
     }
 
     private void pollUntilSend(KafkaRaftClient client) throws InterruptedException {

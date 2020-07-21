@@ -17,6 +17,8 @@
 
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
@@ -26,6 +28,19 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 
+/**
+ * Possible error codes.
+ *
+ * Top level errors:
+ * - {@link Errors#CLUSTER_AUTHORIZATION_FAILED}
+ * - {@link Errors#BROKER_NOT_AVAILABLE}
+ *
+ * Partition level errors:
+ * - {@link Errors#FENCED_LEADER_EPOCH}
+ * - {@link Errors#INVALID_REQUEST}
+ * - {@link Errors#INCONSISTENT_VOTER_SET}
+ * - {@link Errors#UNKNOWN_TOPIC_OR_PARTITION}
+ */
 public class EndQuorumEpochResponse extends AbstractResponse {
     public final EndQuorumEpochResponseData data;
 
@@ -52,8 +67,28 @@ public class EndQuorumEpochResponse extends AbstractResponse {
         return Collections.singletonMap(Errors.forCode(data.errorCode()), 1);
     }
 
+    public static EndQuorumEpochResponseData singletonResponse(
+        Errors topLevelError,
+        TopicPartition topicPartition,
+        Errors partitionLevelError,
+        int leaderEpoch,
+        int leaderId
+    ) {
+        return new EndQuorumEpochResponseData()
+                   .setErrorCode(topLevelError.code())
+                   .setTopics(Collections.singletonList(
+                       new EndQuorumEpochResponseData.EndQuorumTopicResponse()
+                           .setTopicName(topicPartition.topic())
+                           .setPartitions(Collections.singletonList(
+                               new EndQuorumEpochResponseData.EndQuorumPartitionResponse()
+                                   .setErrorCode(partitionLevelError.code())
+                                   .setLeaderId(leaderId)
+                                   .setLeaderEpoch(leaderEpoch)
+                           )))
+                   );
+    }
+
     public static EndQuorumEpochResponse parse(ByteBuffer buffer, short version) {
         return new EndQuorumEpochResponse(ApiKeys.END_QUORUM_EPOCH.responseSchema(version).read(buffer), version);
     }
-
 }

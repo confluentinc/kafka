@@ -16,11 +16,17 @@
  */
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.Struct;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class BeginQuorumEpochRequest extends AbstractRequest {
     public static class Builder extends AbstractRequest.Builder<BeginQuorumEpochRequest> {
@@ -66,4 +72,49 @@ public class BeginQuorumEpochRequest extends AbstractRequest {
         return new BeginQuorumEpochResponse(data);
     }
 
+    public static BeginQuorumEpochRequestData singletonRequest(TopicPartition topicPartition,
+                                                               int leaderEpoch,
+                                                               int leaderId) {
+        return singletonRequest(topicPartition, null, leaderEpoch, leaderId);
+    }
+
+    public static BeginQuorumEpochRequestData singletonRequest(TopicPartition topicPartition,
+                                                               String clusterId,
+                                                               int leaderEpoch,
+                                                               int leaderId) {
+        return new BeginQuorumEpochRequestData()
+                   .setClusterId(clusterId)
+                   .setTopics(Collections.singletonList(
+                       new BeginQuorumEpochRequestData.BeginQuorumTopicRequest()
+                           .setTopicName(topicPartition.topic())
+                           .setPartitions(Collections.singletonList(
+                               new BeginQuorumEpochRequestData.BeginQuorumPartitionRequest()
+                                   .setPartitionIndex(topicPartition.partition())
+                                   .setLeaderEpoch(leaderEpoch)
+                                   .setLeaderId(leaderId))))
+                   );
+    }
+
+
+    public static BeginQuorumEpochResponseData getPartitionLevelErrorResponse(BeginQuorumEpochRequestData data, Errors error) {
+        short errorCode = error.code();
+        List<BeginQuorumEpochResponseData.BeginQuorumTopicResponse> topicResponses = new ArrayList<>();
+        for (BeginQuorumEpochRequestData.BeginQuorumTopicRequest topic : data.topics()) {
+            topicResponses.add(
+                new BeginQuorumEpochResponseData.BeginQuorumTopicResponse()
+                    .setTopicName(topic.topicName())
+                    .setPartitions(topic.partitions().stream().map(
+                        requestPartition -> new BeginQuorumEpochResponseData.BeginQuorumPartitionResponse()
+                                                .setPartitionIndex(requestPartition.partitionIndex())
+                                                .setErrorCode(errorCode)
+                    ).collect(Collectors.toList())));
+        }
+
+        return new BeginQuorumEpochResponseData().setTopics(topicResponses);
+    }
+
+
+    public static BeginQuorumEpochResponseData getTopLevelErrorResponse(Errors error) {
+        return new BeginQuorumEpochResponseData().setErrorCode(error.code());
+    }
 }
