@@ -481,10 +481,6 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private VoteResponseData buildVoteResponse(boolean voteGranted) {
-        return buildVoteResponse(Errors.NONE, voteGranted);
-    }
-
     private VoteResponseData buildVoteResponse(Errors partitionLevelError, boolean voteGranted) {
         return VoteResponse.singletonResponse(
             Errors.NONE,
@@ -569,7 +565,7 @@ public class KafkaRaftClient implements RaftClient {
         }
 
         logger.info("Vote request {} is {}", request, voteGranted ? "granted" : "rejected");
-        return buildVoteResponse(voteGranted);
+        return buildVoteResponse(Errors.NONE, voteGranted);
     }
 
     private boolean handleVoteResponse(
