@@ -61,15 +61,20 @@ public class DescribeQuorumResponse extends AbstractResponse {
     @Override
     public Map<Errors, Integer> errorCounts() {
         Map<Errors, Integer> errors = new HashMap<>();
-        Errors topLevelError = Errors.forCode(data.errorCode());
-        if (topLevelError != Errors.NONE) {
-            errors.put(topLevelError, 1);
-        }
+
+        int numPartitions = 0;
         for (DescribeQuorumTopicResponse topicResponse : data.topics()) {
             for (DescribeQuorumPartitionResponse partitionResponse : topicResponse.partitions()) {
                 errors.compute(Errors.forCode(partitionResponse.errorCode()),
                     (error, count) -> count == null ? 1 : count + 1);
             }
+            numPartitions += topicResponse.partitions().size();
+        }
+
+        // The top-level error applies to all partitions.
+        Errors topLevelError = Errors.forCode(data.errorCode());
+        if (topLevelError != Errors.NONE) {
+            errors.put(topLevelError, numPartitions);
         }
         return errors;
     }

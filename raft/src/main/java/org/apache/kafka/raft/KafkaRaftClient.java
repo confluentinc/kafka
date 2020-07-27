@@ -481,13 +481,13 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private VoteResponseData buildVoteResponse(Errors topLevelError, boolean voteGranted) {
-        return buildVoteResponse(topLevelError, Errors.NONE, voteGranted);
+    private VoteResponseData buildVoteResponse(boolean voteGranted) {
+        return buildVoteResponse(Errors.NONE, voteGranted);
     }
 
-    private VoteResponseData buildVoteResponse(Errors topLevelError, Errors partitionLevelError, boolean voteGranted) {
+    private VoteResponseData buildVoteResponse(Errors partitionLevelError, boolean voteGranted) {
         return VoteResponse.singletonResponse(
-            topLevelError,
+            Errors.NONE,
             log.topicPartition(),
             partitionLevelError,
             quorum.epoch(),
@@ -522,12 +522,12 @@ public class KafkaRaftClient implements RaftClient {
         int lastEpoch = partitionRequest.lastOffsetEpoch();
         long lastEpochEndOffset = partitionRequest.lastOffset();
         if (lastEpochEndOffset < 0 || lastEpoch < 0 || lastEpoch >= candidateEpoch) {
-            return buildVoteResponse(Errors.NONE, Errors.INVALID_REQUEST, false);
+            return buildVoteResponse(Errors.INVALID_REQUEST, false);
         }
 
         Optional<Errors> errorOpt = validateVoterOnlyRequest(candidateId, candidateEpoch);
         if (errorOpt.isPresent()) {
-            return buildVoteResponse(Errors.NONE, errorOpt.get(), false);
+            return buildVoteResponse(errorOpt.get(), false);
         }
 
         OffsetAndEpoch lastEpochEndOffsetAndEpoch = new OffsetAndEpoch(lastEpochEndOffset, lastEpoch);
@@ -569,7 +569,7 @@ public class KafkaRaftClient implements RaftClient {
         }
 
         logger.info("Vote request {} is {}", request, voteGranted ? "granted" : "rejected");
-        return buildVoteResponse(Errors.NONE, voteGranted);
+        return buildVoteResponse(voteGranted);
     }
 
     private boolean handleVoteResponse(

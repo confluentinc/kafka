@@ -86,7 +86,7 @@ public class DescribeQuorumRequest extends AbstractRequest {
 
     @Override
     public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        return new DescribeQuorumResponse(getPartitionLevelErrorResponse(this.data, Errors.forException(e)));
+        return new DescribeQuorumResponse(getTopLevelErrorResponse(Errors.forException(e)));
     }
 
     public static DescribeQuorumResponseData getPartitionLevelErrorResponse(DescribeQuorumRequestData data, Errors error) {
