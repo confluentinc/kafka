@@ -67,9 +67,7 @@ public class BeginQuorumEpochRequest extends AbstractRequest {
 
     @Override
     public BeginQuorumEpochResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        BeginQuorumEpochResponseData data = new BeginQuorumEpochResponseData();
-        data.setErrorCode(Errors.forException(e).code());
-        return new BeginQuorumEpochResponse(data);
+        return new BeginQuorumEpochResponse(getTopLevelErrorResponse(Errors.forException(e)));
     }
 
     public static BeginQuorumEpochRequestData singletonRequest(TopicPartition topicPartition,

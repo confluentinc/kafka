@@ -17,8 +17,6 @@
 package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
-import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -69,9 +67,7 @@ public class EndQuorumEpochRequest extends AbstractRequest {
 
     @Override
     public EndQuorumEpochResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-        EndQuorumEpochResponseData data = new EndQuorumEpochResponseData();
-        data.setErrorCode(Errors.forException(e).code());
-        return new EndQuorumEpochResponse(data);
+        return new EndQuorumEpochResponse(getTopLevelErrorResponse(Errors.forException(e)));
     }
 
     public static EndQuorumEpochRequestData singletonRequest(TopicPartition topicPartition,

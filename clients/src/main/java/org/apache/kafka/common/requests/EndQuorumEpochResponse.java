@@ -18,7 +18,6 @@
 package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
@@ -26,6 +25,7 @@ import org.apache.kafka.common.protocol.types.Struct;
 
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -64,7 +64,20 @@ public class EndQuorumEpochResponse extends AbstractResponse {
 
     @Override
     public Map<Errors, Integer> errorCounts() {
-        return Collections.singletonMap(Errors.forCode(data.errorCode()), 1);
+        Map<Errors, Integer> errors = new HashMap<>();
+
+        Errors topLevelError = Errors.forCode(data.errorCode());
+        if (topLevelError != Errors.NONE) {
+            errors.put(topLevelError, 1);
+        }
+
+        for (EndQuorumEpochResponseData.EndQuorumTopicResponse topicResponse : data.topics()) {
+            for (EndQuorumEpochResponseData.EndQuorumPartitionResponse partitionResponse : topicResponse.partitions()) {
+                errors.compute(Errors.forCode(partitionResponse.errorCode()),
+                    (error, count) -> count == null ? 1 : count + 1);
+            }
+        }
+        return errors;
     }
 
     public static EndQuorumEpochResponseData singletonResponse(

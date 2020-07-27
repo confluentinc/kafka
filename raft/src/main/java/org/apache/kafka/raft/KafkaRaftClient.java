@@ -651,12 +651,8 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private BeginQuorumEpochResponseData buildBeginQuorumEpochResponse(Errors partitionLevelError) {
-        return buildBeginQuorumEpochResponse(Errors.NONE, partitionLevelError);
-    }
-
-    private BeginQuorumEpochResponseData buildBeginQuorumEpochResponse(Errors topLevelError, Errors partitionLevelError) {
         return BeginQuorumEpochResponse.singletonResponse(
-            topLevelError,
+            Errors.NONE,
             log.topicPartition(),
             partitionLevelError,
             quorum.epoch(),
@@ -728,12 +724,8 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private EndQuorumEpochResponseData buildEndQuorumEpochResponse(Errors partitionLevelError) {
-        return buildEndQuorumEpochResponse(Errors.NONE, partitionLevelError);
-    }
-
-    private EndQuorumEpochResponseData buildEndQuorumEpochResponse(Errors topLevelError, Errors partitionLevelError) {
         return EndQuorumEpochResponse.singletonResponse(
-            topLevelError,
+            Errors.NONE,
             log.topicPartition(),
             partitionLevelError,
             quorum.epoch(),
