@@ -18,15 +18,11 @@ package org.apache.kafka.raft;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
-import org.apache.kafka.common.message.BeginQuorumEpochRequestData.BeginQuorumPartitionRequest;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
-import org.apache.kafka.common.message.BeginQuorumEpochResponseData.BeginQuorumPartitionResponse;
 import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.ReplicaState;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
-import org.apache.kafka.common.message.EndQuorumEpochRequestData.EndQuorumPartitionRequest;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
-import org.apache.kafka.common.message.EndQuorumEpochResponseData.EndQuorumPartitionResponse;
 import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
 import org.apache.kafka.common.message.FetchQuorumRecordsResponseData;
 import org.apache.kafka.common.message.FindQuorumRequestData;
@@ -34,9 +30,7 @@ import org.apache.kafka.common.message.FindQuorumResponseData;
 import org.apache.kafka.common.message.LeaderChangeMessage;
 import org.apache.kafka.common.message.LeaderChangeMessage.Voter;
 import org.apache.kafka.common.message.VoteRequestData;
-import org.apache.kafka.common.message.VoteRequestData.VotePartitionRequest;
 import org.apache.kafka.common.message.VoteResponseData;
-import org.apache.kafka.common.message.VoteResponseData.VotePartitionResponse;
 import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -1749,7 +1743,7 @@ public class KafkaRaftClientTest {
         VoteResponseData response = (VoteResponseData) raftMessage.data();
         assertTrue(hasValidTopicPartition(response, METADATA_PARTITION));
 
-        VotePartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+        VoteResponseData.PartitionData partitionResponse = response.topics().get(0).partitions().get(0);
 
         assertEquals(voteGranted, partitionResponse.voteGranted());
         assertEquals(error, Errors.forCode(partitionResponse.errorCode()));
@@ -1769,7 +1763,8 @@ public class KafkaRaftClientTest {
         EndQuorumEpochResponseData response = (EndQuorumEpochResponseData) raftMessage.data();
         assertEquals(Errors.NONE, Errors.forCode(response.errorCode()));
 
-        EndQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+        EndQuorumEpochResponseData.PartitionData partitionResponse =
+            response.topics().get(0).partitions().get(0);
 
         assertEquals(epoch, partitionResponse.leaderEpoch());
         assertEquals(leaderId.orElse(-1), partitionResponse.leaderId());
@@ -1805,7 +1800,8 @@ public class KafkaRaftClientTest {
         BeginQuorumEpochResponseData response = (BeginQuorumEpochResponseData) raftMessage.data();
         assertEquals(Errors.NONE, Errors.forCode(response.errorCode()));
 
-        BeginQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+        BeginQuorumEpochResponseData.PartitionData partitionResponse =
+            response.topics().get(0).partitions().get(0);
 
         assertEquals(epoch, partitionResponse.leaderEpoch());
         assertEquals(leaderId.orElse(-1), partitionResponse.leaderId());
@@ -1826,7 +1822,8 @@ public class KafkaRaftClientTest {
             if (raftMessage.data() instanceof EndQuorumEpochRequestData) {
                 EndQuorumEpochRequestData request = (EndQuorumEpochRequestData) raftMessage.data();
 
-                EndQuorumPartitionRequest partitionRequest = request.topics().get(0).partitions().get(0);
+                EndQuorumEpochRequestData.PartitionData partitionRequest =
+                    request.topics().get(0).partitions().get(0);
 
                 assertEquals(epoch, partitionRequest.leaderEpoch());
                 assertEquals(leaderId.orElse(-1), partitionRequest.leaderId());
@@ -1865,7 +1862,7 @@ public class KafkaRaftClientTest {
                 VoteRequestData request = (VoteRequestData) raftMessage.data();
                 assertTrue(hasValidTopicPartition(request, METADATA_PARTITION));
 
-                VotePartitionRequest partitionRequest = request.topics().get(0).partitions().get(0);
+                VoteRequestData.PartitionData partitionRequest = request.topics().get(0).partitions().get(0);
 
                 assertEquals(epoch, partitionRequest.candidateEpoch());
                 assertEquals(localId, partitionRequest.candidateId());
@@ -1889,7 +1886,8 @@ public class KafkaRaftClientTest {
             assertTrue(raftRequest.data() instanceof BeginQuorumEpochRequestData);
             BeginQuorumEpochRequestData request = (BeginQuorumEpochRequestData) raftRequest.data();
 
-            BeginQuorumPartitionRequest partitionRequest = request.topics().get(0).partitions().get(0);
+            BeginQuorumEpochRequestData.PartitionData partitionRequest =
+                request.topics().get(0).partitions().get(0);
 
             assertEquals(epoch, partitionRequest.leaderEpoch());
             assertEquals(localId, partitionRequest.leaderId());

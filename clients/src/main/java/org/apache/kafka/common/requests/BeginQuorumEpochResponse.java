@@ -67,10 +67,10 @@ public class BeginQuorumEpochResponse extends AbstractResponse {
         return new BeginQuorumEpochResponseData()
                    .setErrorCode(topLevelError.code())
                    .setTopics(Collections.singletonList(
-                       new BeginQuorumEpochResponseData.BeginQuorumTopicResponse()
+                       new BeginQuorumEpochResponseData.TopicData()
                            .setTopicName(topicPartition.topic())
                            .setPartitions(Collections.singletonList(
-                               new BeginQuorumEpochResponseData.BeginQuorumPartitionResponse()
+                               new BeginQuorumEpochResponseData.PartitionData()
                                    .setErrorCode(partitionLevelError.code())
                                    .setLeaderId(leaderId)
                                    .setLeaderEpoch(leaderEpoch)
@@ -92,8 +92,8 @@ public class BeginQuorumEpochResponse extends AbstractResponse {
             errors.put(topLevelError, 1);
         }
 
-        for (BeginQuorumEpochResponseData.BeginQuorumTopicResponse topicResponse : data.topics()) {
-            for (BeginQuorumEpochResponseData.BeginQuorumPartitionResponse partitionResponse : topicResponse.partitions()) {
+        for (BeginQuorumEpochResponseData.TopicData topicResponse : data.topics()) {
+            for (BeginQuorumEpochResponseData.PartitionData partitionResponse : topicResponse.partitions()) {
                 errors.compute(Errors.forCode(partitionResponse.errorCode()),
                     (error, count) -> count == null ? 1 : count + 1);
             }

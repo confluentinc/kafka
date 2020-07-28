@@ -71,8 +71,8 @@ public class EndQuorumEpochResponse extends AbstractResponse {
             errors.put(topLevelError, 1);
         }
 
-        for (EndQuorumEpochResponseData.EndQuorumTopicResponse topicResponse : data.topics()) {
-            for (EndQuorumEpochResponseData.EndQuorumPartitionResponse partitionResponse : topicResponse.partitions()) {
+        for (EndQuorumEpochResponseData.TopicData topicResponse : data.topics()) {
+            for (EndQuorumEpochResponseData.PartitionData partitionResponse : topicResponse.partitions()) {
                 errors.compute(Errors.forCode(partitionResponse.errorCode()),
                     (error, count) -> count == null ? 1 : count + 1);
             }
@@ -90,10 +90,10 @@ public class EndQuorumEpochResponse extends AbstractResponse {
         return new EndQuorumEpochResponseData()
                    .setErrorCode(topLevelError.code())
                    .setTopics(Collections.singletonList(
-                       new EndQuorumEpochResponseData.EndQuorumTopicResponse()
+                       new EndQuorumEpochResponseData.TopicData()
                            .setTopicName(topicPartition.topic())
                            .setPartitions(Collections.singletonList(
-                               new EndQuorumEpochResponseData.EndQuorumPartitionResponse()
+                               new EndQuorumEpochResponseData.PartitionData()
                                    .setErrorCode(partitionLevelError.code())
                                    .setLeaderId(leaderId)
                                    .setLeaderEpoch(leaderEpoch)

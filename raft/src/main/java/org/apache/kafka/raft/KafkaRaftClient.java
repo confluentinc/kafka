@@ -21,13 +21,11 @@ import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
-import org.apache.kafka.common.message.BeginQuorumEpochResponseData.BeginQuorumPartitionResponse;
 import org.apache.kafka.common.message.DescribeQuorumRequestData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData;
 import org.apache.kafka.common.message.DescribeQuorumResponseData.ReplicaState;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
 import org.apache.kafka.common.message.EndQuorumEpochResponseData;
-import org.apache.kafka.common.message.EndQuorumEpochResponseData.EndQuorumPartitionResponse;
 import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
 import org.apache.kafka.common.message.FetchQuorumRecordsResponseData;
 import org.apache.kafka.common.message.FindQuorumRequestData;
@@ -36,7 +34,6 @@ import org.apache.kafka.common.message.LeaderChangeMessage;
 import org.apache.kafka.common.message.LeaderChangeMessage.Voter;
 import org.apache.kafka.common.message.VoteRequestData;
 import org.apache.kafka.common.message.VoteResponseData;
-import org.apache.kafka.common.message.VoteResponseData.VotePartitionResponse;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ApiMessage;
@@ -515,7 +512,7 @@ public class KafkaRaftClient implements RaftClient {
             return VoteRequest.getPartitionLevelErrorResponse(request, Errors.UNKNOWN_TOPIC_OR_PARTITION);
         }
 
-        VoteRequestData.VotePartitionRequest partitionRequest =
+        VoteRequestData.PartitionData partitionRequest =
             request.topics().get(0).partitions().get(0);
 
         int candidateId = partitionRequest.candidateId();
@@ -589,7 +586,7 @@ public class KafkaRaftClient implements RaftClient {
             return handleUnexpectedError(topLevelError, responseMetadata);
         }
 
-        VotePartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+        VoteResponseData.PartitionData partitionResponse = response.topics().get(0).partitions().get(0);
 
         Errors error = Errors.forCode(partitionResponse.errorCode());
         OptionalInt responseLeaderId = optionalLeaderId(partitionResponse.leaderId());
@@ -678,7 +675,7 @@ public class KafkaRaftClient implements RaftClient {
                 request, Errors.UNKNOWN_TOPIC_OR_PARTITION);
         }
 
-        BeginQuorumEpochRequestData.BeginQuorumPartitionRequest partitionRequest =
+        BeginQuorumEpochRequestData.PartitionData partitionRequest =
             request.topics().get(0).partitions().get(0);
 
         Optional<Errors> errorOpt = validateVoterOnlyRequest(
@@ -708,7 +705,8 @@ public class KafkaRaftClient implements RaftClient {
             return handleUnexpectedError(topLevelError, responseMetadata);
         }
 
-        BeginQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+        BeginQuorumEpochResponseData.PartitionData partitionResponse =
+            response.topics().get(0).partitions().get(0);
 
         Errors partitionError = Errors.forCode(partitionResponse.errorCode());
         OptionalInt responseLeaderId = optionalLeaderId(partitionResponse.leaderId());
@@ -753,7 +751,7 @@ public class KafkaRaftClient implements RaftClient {
                 request, Errors.UNKNOWN_TOPIC_OR_PARTITION);
         }
 
-        EndQuorumEpochRequestData.EndQuorumPartitionRequest partitionRequest =
+        EndQuorumEpochRequestData.PartitionData partitionRequest =
             request.topics().get(0).partitions().get(0);
 
         int requestEpoch = partitionRequest.leaderEpoch();
@@ -809,7 +807,8 @@ public class KafkaRaftClient implements RaftClient {
             return handleUnexpectedError(topLevelError, responseMetadata);
         }
 
-        EndQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
+        EndQuorumEpochResponseData.PartitionData partitionResponse =
+            response.topics().get(0).partitions().get(0);
         Errors partitionError = Errors.forCode(partitionResponse.errorCode());
 
         OptionalInt responseLeaderId = optionalLeaderId(partitionResponse.leaderId());

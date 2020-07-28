@@ -87,10 +87,10 @@ public class EndQuorumEpochRequest extends AbstractRequest {
         return new EndQuorumEpochRequestData()
                    .setClusterId(clusterId)
                    .setTopics(Collections.singletonList(
-                       new EndQuorumEpochRequestData.EndQuorumTopicRequest()
+                       new EndQuorumEpochRequestData.TopicData()
                            .setTopicName(topicPartition.topic())
                            .setPartitions(Collections.singletonList(
-                               new EndQuorumEpochRequestData.EndQuorumPartitionRequest()
+                               new EndQuorumEpochRequestData.PartitionData()
                                    .setPartitionIndex(topicPartition.partition())
                                    .setReplicaId(replicaId)
                                    .setLeaderEpoch(leaderEpoch)
@@ -102,13 +102,13 @@ public class EndQuorumEpochRequest extends AbstractRequest {
 
     public static EndQuorumEpochResponseData getPartitionLevelErrorResponse(EndQuorumEpochRequestData data, Errors error) {
         short errorCode = error.code();
-        List<EndQuorumEpochResponseData.EndQuorumTopicResponse> topicResponses = new ArrayList<>();
-        for (EndQuorumEpochRequestData.EndQuorumTopicRequest topic : data.topics()) {
+        List<EndQuorumEpochResponseData.TopicData> topicResponses = new ArrayList<>();
+        for (EndQuorumEpochRequestData.TopicData topic : data.topics()) {
             topicResponses.add(
-                new EndQuorumEpochResponseData.EndQuorumTopicResponse()
+                new EndQuorumEpochResponseData.TopicData()
                     .setTopicName(topic.topicName())
                     .setPartitions(topic.partitions().stream().map(
-                        requestPartition -> new EndQuorumEpochResponseData.EndQuorumPartitionResponse()
+                        requestPartition -> new EndQuorumEpochResponseData.PartitionData()
                                                 .setPartitionIndex(requestPartition.partitionIndex())
                                                 .setErrorCode(errorCode)
                     ).collect(Collectors.toList())));
