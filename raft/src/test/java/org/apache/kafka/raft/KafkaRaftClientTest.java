@@ -165,8 +165,6 @@ public class KafkaRaftClientTest {
 
         // Should have sent out connection info query for other node id.
         client.poll();
-
-        assertSentFindQuorumRequest();
     }
 
     @Test
@@ -1839,17 +1837,6 @@ public class KafkaRaftClientTest {
         }
         assertEquals(destinationIdSet, collectedDestinationIdSet);
         return endQuorumRequests;
-    }
-
-    private RaftRequest.Outbound assertSentFindQuorumRequest() {
-        List<RaftRequest.Outbound> sentMessages = channel.drainSentRequests(ApiKeys.FIND_QUORUM);
-        assertEquals(1, sentMessages.size());
-        RaftRequest.Outbound raftMessage = sentMessages.get(0);
-        assertTrue(raftMessage.data() instanceof FindQuorumRequestData);
-        FindQuorumRequestData request = (FindQuorumRequestData) raftMessage.data();
-        assertEquals(localId, request.replicaId());
-        assertTrue(raftMessage.destinationId() < 0);
-        return raftMessage;
     }
 
     private int assertSentVoteRequest(int epoch, int lastEpoch, long lastEpochOffset) {

@@ -73,8 +73,6 @@ import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
 import org.apache.kafka.common.message.FetchQuorumRecordsResponseData;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
-import org.apache.kafka.common.message.FindQuorumRequestData;
-import org.apache.kafka.common.message.FindQuorumResponseData;
 import org.apache.kafka.common.message.HeartbeatRequestData;
 import org.apache.kafka.common.message.HeartbeatResponseData;
 import org.apache.kafka.common.message.IncrementalAlterConfigsRequestData;
@@ -236,7 +234,6 @@ public enum ApiKeys {
     BEGIN_QUORUM_EPOCH(51, "BeginQuorumEpoch", true, BeginQuorumEpochRequestData.SCHEMAS, BeginQuorumEpochResponseData.SCHEMAS),
     END_QUORUM_EPOCH(52, "EndQuorumEpoch", true, EndQuorumEpochRequestData.SCHEMAS, EndQuorumEpochResponseData.SCHEMAS),
     FETCH_QUORUM_RECORDS(53, "FetchQuorumRecords", true, FetchQuorumRecordsRequestData.SCHEMAS, FetchQuorumRecordsResponseData.SCHEMAS),
-    FIND_QUORUM(55, "FindQuorum", true, FindQuorumRequestData.SCHEMAS, FindQuorumResponseData.SCHEMAS),
     DESCRIBE_QUORUM(56, "DescribeQuorum", true, DescribeQuorumRequestData.SCHEMAS, DescribeQuorumResponseData.SCHEMAS);
 
     private static final ApiKeys[] ID_TO_TYPE;
