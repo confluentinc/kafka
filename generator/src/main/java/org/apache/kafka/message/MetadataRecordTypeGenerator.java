@@ -46,7 +46,7 @@ public final class MetadataRecordTypeGenerator implements TypeClassGenerator {
             MessageSpec prevSpec = apis.put(id, spec);
             if (prevSpec != null) {
                 throw new RuntimeException("Duplicate metadata record entry for type " +
-                    id + ".  Original claimant: " + prevSpec.name() + ".  New " +
+                    id + ". Original claimant: " + prevSpec.name() + ". New " +
                     "claimaint: " + spec.name());
             }
         }

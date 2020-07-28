@@ -28,7 +28,7 @@
       "about": "The broker epoch, or -1 if one has not yet been assigned." },
     { "name": "LeaseStartTimeMs", "type": "int64", "versions": "0+",
       "about": "The time which the broker wants the lease to start at in milliseconds." },
-    { "name": "CurMetadataOffset", "type": "int64", "versions": "0+",
+    { "name": "CurrentMetadataOffset", "type": "int64", "versions": "0+",
       "about": "The highest metadata offset which the broker has reached." },
     { "name": "Listeners", "type": "[]Listener",
       "about": "The listeners of this broker", "versions": "0+", "fields": [
