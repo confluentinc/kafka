@@ -584,8 +584,9 @@ public class KafkaRaftClient implements RaftClient {
             return false;
         }
 
-        if (Errors.forCode(response.errorCode()) != Errors.NONE) {
-            return false;
+        Errors topLevelError = Errors.forCode(response.errorCode());
+        if (topLevelError != Errors.NONE) {
+            return handleUnexpectedError(topLevelError, responseMetadata);
         }
 
         VotePartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
@@ -702,9 +703,11 @@ public class KafkaRaftClient implements RaftClient {
             return false;
         }
 
-        if (Errors.forCode(response.errorCode()) != Errors.NONE) {
-            return false;
+        Errors topLevelError = Errors.forCode(response.errorCode());
+        if (topLevelError != Errors.NONE) {
+            return handleUnexpectedError(topLevelError, responseMetadata);
         }
+
         BeginQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
 
         Errors partitionError = Errors.forCode(partitionResponse.errorCode());
@@ -801,9 +804,9 @@ public class KafkaRaftClient implements RaftClient {
             return false;
         }
 
-        Errors error = Errors.forCode(response.errorCode());
-        if (error != Errors.NONE) {
-            return handleUnexpectedError(error, responseMetadata);
+        Errors topLevelError = Errors.forCode(response.errorCode());
+        if (topLevelError != Errors.NONE) {
+            return handleUnexpectedError(topLevelError, responseMetadata);
         }
 
         EndQuorumPartitionResponse partitionResponse = response.topics().get(0).partitions().get(0);
@@ -812,7 +815,7 @@ public class KafkaRaftClient implements RaftClient {
         OptionalInt responseLeaderId = optionalLeaderId(partitionResponse.leaderId());
         int responseEpoch = partitionResponse.leaderEpoch();
 
-        Optional<Boolean> handled = maybeHandleCommonResponse(error, responseLeaderId, responseEpoch);
+        Optional<Boolean> handled = maybeHandleCommonResponse(partitionError, responseLeaderId, responseEpoch);
         if (handled.isPresent()) {
             return handled.get();
         } else if (partitionError == Errors.NONE) {
