@@ -39,7 +39,7 @@ public class MetadataParserTest {
     final public Timeout globalTimeout = Timeout.seconds(40);
 
     @Test
-    public void testRoundTrips() throws Throwable {
+    public void testRoundTrips() {
         testRoundTrip(new BrokerRecord().setBrokerId(1).setBrokerEpoch(2), (short) 0);
         testRoundTrip(new ConfigRecord().setName("my.config.value").
             setResourceName("foo").setResourceType((byte) 0).setValue("bar"), (short) 0);

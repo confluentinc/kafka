@@ -28,9 +28,9 @@ import java.nio.ByteBuffer;
 public class MetadataParser {
     public static final int MAX_SERIALIZED_EVENT_SIZE = 32 * 1024 * 1024;
 
-    private static short unsignedIntToShort(int val, String what) {
+    private static short unsignedIntToShort(int val, String entity) {
         if (val > Short.MAX_VALUE) {
-            throw new MetadataParseException("Value for " + what + " was too large.");
+            throw new MetadataParseException("Value for " + entity + " was too large.");
         }
         return (short) val;
     }

@@ -18,7 +18,7 @@
 package org.apache.kafka.metadata;
 
 /**
- * An exception that indicates that we failed to parse a metadata entry.
+ * An exception indicating that we failed to parse a metadata entry.
  */
 public class MetadataParseException extends RuntimeException {
     private static final long serialVersionUID = 1L;
