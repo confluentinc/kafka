@@ -67,7 +67,7 @@ public class MetadataParser {
         }
         if (buffer.hasRemaining()) {
             throw new MetadataParseException("Found " + buffer.remaining() +
-                " bytes of garbage after " + recordType);
+                " byte(s) of garbage after " + recordType);
         }
         return message;
     }
