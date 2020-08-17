@@ -773,7 +773,7 @@ public class KafkaRaftClient implements RaftClient {
     private FetchResponseData buildFetchResponse(
         Errors error,
         Records records,
-        Optional<FetchResponseData.OffsetAndEpoch> nextFetchOffsetAndEpoch,
+        OptionalLong truncationOffset,
         Optional<LogOffsetMetadata> highWatermark
     ) {
         return RaftUtil.singletonFetchResponse(log.topicPartition(), Errors.NONE, partitionData -> {
@@ -789,7 +789,7 @@ public class KafkaRaftClient implements RaftClient {
                 .setLeaderEpoch(quorum.epoch())
                 .setLeaderId(quorum.leaderIdOrNil());
 
-            nextFetchOffsetAndEpoch.ifPresent(partitionData::setNextOffsetAndEpoch);
+            truncationOffset.ifPresent(partitionData::setTruncationOffset);
         });
     }
 
@@ -797,7 +797,7 @@ public class KafkaRaftClient implements RaftClient {
         Errors error,
         Optional<LogOffsetMetadata> highWatermark
     ) {
-        return buildFetchResponse(error, MemoryRecords.EMPTY, Optional.empty(), highWatermark);
+        return buildFetchResponse(error, MemoryRecords.EMPTY, OptionalLong.empty(), highWatermark);
     }
 
     /**
@@ -936,19 +936,18 @@ public class KafkaRaftClient implements RaftClient {
         long fetchOffset = request.fetchOffset();
         int lastFetchedEpoch = request.lastFetchedEpoch();
         LeaderState state = quorum.leaderStateOrThrow();
-        Optional<OffsetAndEpoch> nextOffsetOpt = validateFetchOffsetAndEpoch(fetchOffset, lastFetchedEpoch);
+        Optional<OffsetAndEpoch> validRangeOpt = validateFetchOffsetAndEpoch(fetchOffset, lastFetchedEpoch);
 
-        if (nextOffsetOpt.isPresent()) {
-            Optional<FetchResponseData.OffsetAndEpoch> nextOffsetAndEpoch =
-                nextOffsetOpt.map(offsetAndEpoch ->
-                    new FetchResponseData.OffsetAndEpoch()
-                        .setNextFetchOffset(offsetAndEpoch.offset)
-                        .setNextFetchOffsetEpoch(offsetAndEpoch.epoch));
-            return buildFetchResponse(Errors.NONE, MemoryRecords.EMPTY, nextOffsetAndEpoch, state.highWatermark());
+        if (validRangeOpt.isPresent()) {
+            return buildFetchResponse(
+                    Errors.NONE,
+                    MemoryRecords.EMPTY,
+                    OptionalLong.of(validRangeOpt.map(validRange -> validRange.offset).get()),
+                    state.highWatermark());
         } else {
             LogFetchInfo info = log.read(fetchOffset, Isolation.UNCOMMITTED);
             updateReplicaEndOffsetAndTimestamp(state, replicaId, info.startOffsetMetadata);
-            return buildFetchResponse(Errors.NONE, info.records, Optional.empty(), state.highWatermark());
+            return buildFetchResponse(Errors.NONE, info.records, OptionalLong.empty(), state.highWatermark());
         }
     }
 
@@ -1004,32 +1003,28 @@ public class KafkaRaftClient implements RaftClient {
 
         FollowerState state = quorum.followerStateOrThrow();
         if (error == Errors.NONE) {
-            FetchResponseData.OffsetAndEpoch nextOffsetAndEpoch = partitionResponse.nextOffsetAndEpoch();
-            if (nextOffsetAndEpoch.nextFetchOffset() > 0) {
+            long truncationOffset = partitionResponse.truncationOffset();
+            if (truncationOffset >= 0) {
                 // The leader is asking us to truncate before continuing
-                OffsetAndEpoch nextFetchOffsetAndEpoch = new OffsetAndEpoch(
-                    nextOffsetAndEpoch.nextFetchOffset(), nextOffsetAndEpoch.nextFetchOffsetEpoch());
-
                 state.highWatermark().ifPresent(highWatermark -> {
-                    if (nextFetchOffsetAndEpoch.offset < highWatermark.offset) {
-                        throw new KafkaException("The leader requested truncation to offset " +
-                            nextFetchOffsetAndEpoch.offset + ", which is below the current high watermark" +
-                            " " + highWatermark);
+                    if (truncationOffset < highWatermark.offset) {
+                        throw new KafkaException(
+                                "The leader requested truncation to offset " +
+                                truncationOffset + ", which is below the current high watermark" +
+                                " " + highWatermark);
                     }
                 });
 
-                log.truncateToEndOffset(nextFetchOffsetAndEpoch).ifPresent(truncationOffset -> {
-                    logger.info("Truncated to offset {} after out of range error from leader {}",
-                        truncationOffset, quorum.leaderIdOrNil());
+                log.truncateTo(truncationOffset);
+                logger.info("Truncated to offset {} after out of range error from leader {}", truncationOffset, quorum.leaderIdOrNil());
 
-                    // Since the end offset has been updated, we should complete any delayed
-                    // reads at the end offset.
+                // Since the end offset has been updated, we should complete any delayed
+                // reads at the end offset.
 
-                    // FIXME: Come up with a better solution for completing all
-                    fetchPurgatory.maybeComplete(
+                // FIXME: Come up with a better solution for completing all
+                fetchPurgatory.maybeComplete(
                         new LogOffset(Long.MAX_VALUE, Isolation.UNCOMMITTED),
                         time.milliseconds());
-                });
             } else {
                 Records records = (Records) partitionResponse.recordSet();
                 if (records.sizeInBytes() > 0) {

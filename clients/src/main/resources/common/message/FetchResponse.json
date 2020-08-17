@@ -20,7 +20,7 @@
   //
   // Version 1 adds throttle time.
   //
-  // Version 2 and 3 are the same as version 1. 
+  // Version 2 and 3 are the same as version 1.
   //
   // Version 4 adds features for transactional consumption.
   //
@@ -63,13 +63,8 @@
           "about": "The last stable offset (or LSO) of the partition. This is the last offset such that the state of all transactional records prior to this offset have been decided (ABORTED or COMMITTED)" },
         { "name": "LogStartOffset", "type": "int64", "versions": "5+", "default": "-1", "ignorable": true,
           "about": "The current log start offset." },
-        { "name": "NextOffsetAndEpoch", "type": "OffsetAndEpoch",
-          "versions": "12+", "taggedVersions": "12+", "tag": 0, "fields": [
-          { "name": "NextFetchOffset", "type": "int64", "versions": "12+", "default": "-1",
-            "about": "If set, this is the offset that the follower should truncate to"},
-          { "name": "NextFetchOffsetEpoch", "type": "int32", "versions": "12+", "default": "-1",
-            "about": "The epoch of the next offset in case the follower needs to truncate"}
-        ]},
+        { "name": "TruncationOffset", "type": "int64", "versions": "12+", "default": "-1", "taggedVersions": "12+", "tag": 0,
+          "about": "If set and it is not -1, the follower must truncate all offsets that are greater than or equal to this value." },
         { "name": "CurrentLeader", "type": "LeaderIdAndEpoch",
           "versions": "12+", "taggedVersions": "12+", "tag": 1, "fields": [
           { "name": "LeaderId", "type": "int32", "versions": "12+", "default": "-1",

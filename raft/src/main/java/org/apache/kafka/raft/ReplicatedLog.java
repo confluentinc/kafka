@@ -97,37 +97,6 @@ public interface ReplicatedLog extends Closeable {
      */
     TopicPartition topicPartition();
 
-    /**
-     * Truncate to an offset and epoch.
-     *
-     * @param endOffset offset and epoch to truncate to
-     * @return the truncation offset or empty if no truncation occurred
-     */
-    default OptionalLong truncateToEndOffset(OffsetAndEpoch endOffset) {
-        final long truncationOffset;
-        int leaderEpoch = endOffset.epoch;
-        if (leaderEpoch == 0) {
-            truncationOffset = endOffset.offset;
-        } else {
-            Optional<OffsetAndEpoch> localEndOffsetOpt = endOffsetForEpoch(leaderEpoch);
-            if (localEndOffsetOpt.isPresent()) {
-                OffsetAndEpoch localEndOffset = localEndOffsetOpt.get();
-                if (localEndOffset.epoch == leaderEpoch) {
-                    truncationOffset = Math.min(localEndOffset.offset, endOffset.offset);
-                } else {
-                    truncationOffset = Math.min(localEndOffset.offset, endOffset().offset);
-                }
-            } else {
-                // The leader has no epoch which is less than or equal to our own epoch. We simply truncate
-                // to the leader offset and begin replication from there.
-                truncationOffset = endOffset.offset;
-            }
-        }
-
-        truncateTo(truncationOffset);
-        return OptionalLong.of(truncationOffset);
-    }
-
     default void close() {}
 
 }

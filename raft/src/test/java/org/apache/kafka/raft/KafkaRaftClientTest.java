@@ -592,8 +592,7 @@ public class KafkaRaftClientTest {
         // We send a fetch at the current offset and the leader tells us to truncate
         pollUntilSend(client);
         int fetchCorrelationId = assertSentFetchRequest(newEpoch, 3L, epoch);
-        FetchResponseData fetchResponse = outOfRangeFetchRecordsResponse(
-            newEpoch, otherNodeId, 1L, epoch, 0L);
+        FetchResponseData fetchResponse = outOfRangeFetchRecordsResponse(newEpoch, otherNodeId, 1L, 0L);
         deliverResponse(fetchCorrelationId, otherNodeId, fetchResponse);
         client.poll();
         assertEquals(1L, log.endOffset().offset);
@@ -1982,8 +1981,7 @@ public class KafkaRaftClientTest {
 
         int correlationId = assertSentFetchRequest(epoch, 3L, lastEpoch);
 
-        FetchResponseData response = outOfRangeFetchRecordsResponse(epoch, otherNodeId, 2L,
-            lastEpoch, 1L);
+        FetchResponseData response = outOfRangeFetchRecordsResponse(epoch, otherNodeId, 2L, 1L);
         deliverResponse(correlationId, otherNodeId, response);
 
         // Poll again to complete truncation
@@ -2325,22 +2323,18 @@ public class KafkaRaftClientTest {
     private FetchResponseData outOfRangeFetchRecordsResponse(
         int epoch,
         int leaderId,
-        long nextFetchOffset,
-        int nextFetchEpoch,
+        long truncationOffset,
         long highWatermark
     ) {
         return RaftUtil.singletonFetchResponse(METADATA_PARTITION, Errors.NONE, partitionData -> {
             partitionData
                 .setErrorCode(Errors.NONE.code())
-                .setHighWatermark(highWatermark);
+                .setHighWatermark(highWatermark)
+                .setTruncationOffset(truncationOffset);
 
             partitionData.currentLeader()
                 .setLeaderEpoch(epoch)
                 .setLeaderId(leaderId);
-
-            partitionData.nextOffsetAndEpoch()
-                .setNextFetchOffset(nextFetchOffset)
-                .setNextFetchOffsetEpoch(nextFetchEpoch);
         });
     }
 
