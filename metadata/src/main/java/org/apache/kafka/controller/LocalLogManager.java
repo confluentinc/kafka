@@ -140,15 +140,18 @@ public final class LocalLogManager implements MetaLogManager {
                     lockData = locks.computeIfAbsent(path, __ -> new LockData());
                     lockData.waiters++;
                 }
-                lockData.lock.lockInterruptibly();
                 try {
-                    fileLock = channel.lock();
-                    onTakeLock.run();
-                } catch (FileLockInterruptionException e) {
-                    throw new InterruptedException();
+                    lockData.lock.lockInterruptibly();
+                    try {
+                        fileLock = channel.lock();
+                        onTakeLock.run();
+                    } catch (FileLockInterruptionException e) {
+                        throw new InterruptedException();
+                    } finally {
+                        Utils.closeQuietly(fileLock, "fileLock");
+                        lockData.lock.unlock();
+                    }
                 } finally {
-                    Utils.closeQuietly(fileLock, "fileLock");
-                    lockData.lock.unlock();
                     synchronized (this) {
                         lockData.waiters--;
                         if (lockData.waiters == 0) {
