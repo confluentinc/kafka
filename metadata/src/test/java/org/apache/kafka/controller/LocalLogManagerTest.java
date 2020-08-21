@@ -123,7 +123,7 @@ public class LocalLogManagerTest {
     }
 
     /**
-     * Test creating a LocalLogManager and closing it.
+     * Test that the local log maanger will claim leadership.
      */
     @Test
     public void testClaimsLeadership() throws Exception {
@@ -213,7 +213,7 @@ public class LocalLogManagerTest {
 
         synchronized void verifyCursorsHaveReachedCommitNumber(int expectedNumCursors,
                                                                int expectedCommitNumber) {
-            if (cursors.size() < expectedNumCursors) {
+            if (cursors.size() != expectedNumCursors) {
                 throw new RuntimeException("Expected " + expectedNumCursors +
                     " cursors, but there were only " + cursors.size());
             }
@@ -238,7 +238,9 @@ public class LocalLogManagerTest {
             new TestCommit(0, 2, new BrokerRecord().setBrokerId(2)),
             new TestCommit(0, 3, new BrokerRecord().setBrokerId(0))
         ));
-        try (LocalLogManagerTestEnv env = new LocalLogManagerTestEnv(checker, 3)) {
+        final int numManagers = 3;
+        try (LocalLogManagerTestEnv env =
+                new LocalLogManagerTestEnv(checker, numManagers)) {
             LeaderInfo leaderInfo = env.waitForLeader();
             for (int i = 0; i < checker.commits.size(); i++) {
                 TestCommit testCommit = checker.commits.get(i);
@@ -249,7 +251,8 @@ public class LocalLogManagerTest {
                     ", nodeId=" + leaderInfo.nodeId() + ") = " + index);
             }
             TestUtils.retryOnExceptionWithTimeout(3, 20000, () -> {
-                checker.verifyCursorsHaveReachedCommitNumber(3, checker.commits.size());
+                checker.verifyCursorsHaveReachedCommitNumber(numManagers,
+                    checker.commits.size());
             });
             env.close();
             assertEquals(null, env.firstError.get());

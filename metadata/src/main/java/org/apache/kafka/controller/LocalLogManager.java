@@ -253,7 +253,13 @@ public final class LocalLogManager implements MetaLogManager {
                                     }
                                 }
                             } catch (InterruptedException e) {
-                                log.trace("LeadershipClaimerThread received InterruptedException.");
+                                // Other threads send an InterruptedException to this thread
+                                // in order to break us out of FileChannel#lock (if we
+                                // haven't take the lock) or Object#wait (if we have).
+                                // Once we catch the exception, we're done with it and
+                                // can discard it.
+                                log.trace("LeadershipClaimerThread received " +
+                                    "InterruptedException.");
                             } finally {
                                 try {
                                     scribeThread.blockingRenounce();
@@ -345,7 +351,7 @@ public final class LocalLogManager implements MetaLogManager {
                             if (state != ScribeState.LEADER) {
                                 // If claim is non-null here, that means we are ready
                                 // to become a leader.  Otherwise, we have to enter
-                                // the BECOME_LEADER state.
+                                // the BECOMING_LEADER state.
                                 if (claim != null) {
                                     state = ScribeState.LEADER;
                                     incomingWrites = null;
