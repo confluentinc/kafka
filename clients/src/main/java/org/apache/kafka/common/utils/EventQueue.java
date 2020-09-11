@@ -135,8 +135,8 @@ public interface EventQueue extends AutoCloseable {
                                      Event<T> event);
 
     /**
-     * Asynchronously shut down the event queue.
-     * See shutdown(Event<?>, TimeUnit, long);
+     * Asynchronously shut down the event queue with no unnecessary delay.
+     * @see #beginShutdown(Event, TimeUnit, long)
      */
     default void beginShutdown() {
         beginShutdown(new VoidEvent());
