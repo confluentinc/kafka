@@ -122,7 +122,7 @@ public final class KafkaEventQueue implements EventQueue {
         /**
          * Run the event associated with this EventContext.
          */
-        void run() throws Throwable {
+        void run() {
             try {
                 future.complete(event.run());
             } catch (Exception e) {
@@ -196,21 +196,16 @@ public final class KafkaEventQueue implements EventQueue {
             }
         }
 
-        private void handleEvents() throws Throwable {
-            EventContext<?> timedEventContext = null;
-            EventContext<?> queuedEventContext = null;
+        private void handleEvents() throws InterruptedException {
+            EventContext<?> toTimeout = null;
+            EventContext<?> toRun = null;
             while (true) {
-                if (timedEventContext != null) {
-                    if (timedEventContext.insertionType == EventInsertionType.DEFERRED) {
-                        // The deferred event is ready to run.  Put it in the queue.
-                        head.insertBefore(timedEventContext);
-                    } else {
-                        timedEventContext.completeWithTimeout();
-                    }
-                    timedEventContext = null;
-                } else if (queuedEventContext != null) {
-                    queuedEventContext.run();
-                    queuedEventContext = null;
+                if (toTimeout != null) {
+                    toTimeout.completeWithTimeout();
+                    toTimeout = null;
+                } else if (toRun != null) {
+                    toRun.run();
+                    toRun = null;
                 }
                 lock.lock();
                 try {
@@ -218,22 +213,34 @@ public final class KafkaEventQueue implements EventQueue {
                     Map.Entry<Long, EventContext<?>> entry = delayMap.firstEntry();
                     if (entry != null) {
                         long now = SystemTime.SYSTEM.nanoseconds();
-                        if (entry.getKey() <= now || closingTimeNs <= now) {
-                            timedEventContext = entry.getValue();
-                            remove(timedEventContext);
+                        long timeoutMs = entry.getKey();
+                        EventContext<?> eventContext = entry.getValue();
+                        if (timeoutMs <= now) {
+                            if (eventContext.insertionType == EventInsertionType.DEFERRED) {
+                                // The deferred event is ready to run.  Put it in the queue.
+                                remove(eventContext);
+                                head.insertBefore(eventContext);
+                            } else {
+                                remove(eventContext);
+                                toTimeout = eventContext;
+                            }
+                            continue;
+                        } else if (closingTimeNs <= now) {
+                            remove(eventContext);
+                            toTimeout = eventContext;
                             continue;
                         }
-                        awaitNs = entry.getKey() - now;
+                        awaitNs = timeoutMs - now;
                     }
                     if (head.next == head) {
-                        if (closingTimeNs != Long.MAX_VALUE) {
+                        if ((closingTimeNs != Long.MAX_VALUE) && delayMap.isEmpty()) {
                             // If there are no more entries to process, and the queue is
                             // closing, exit the thread.
                             return;
                         }
                     } else {
-                        queuedEventContext = head.next;
-                        remove(queuedEventContext);
+                        toRun = head.next;
+                        remove(toRun);
                         continue;
                     }
                     if (closingTimeNs != Long.MAX_VALUE) {
@@ -254,7 +261,7 @@ public final class KafkaEventQueue implements EventQueue {
         }
 
         private void enqueue(EventContext<?> eventContext,
-                     Function<Long, Long> deadlineNsCalculator) {
+                             Function<Long, Long> deadlineNsCalculator) {
             lock.lock();
             try {
                 Long existingDeadlineNs = null;
@@ -317,7 +324,13 @@ public final class KafkaEventQueue implements EventQueue {
     private final Supplier<Throwable> closedExceptionSupplier;
     private final EventHandler eventHandler;
     private final Thread eventHandlerThread;
+
+    /**
+     * The time in monotonic nanoseconds when the queue is closing, or Long.MAX_VALUE if
+     * the queue is not currently closing.
+     */
     private long closingTimeNs;
+
     private Event<?> cleanupEvent;
 
     public KafkaEventQueue(LogContext logContext,

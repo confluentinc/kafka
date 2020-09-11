@@ -37,7 +37,7 @@ import static org.junit.Assert.assertThrows;
 
 public class KafkaEventQueueTest {
     @Rule
-    final public Timeout globalTimeout = Timeout.millis(120000);
+    final public Timeout globalTimeout = Timeout.seconds(20);
 
     @Test
     public void testCreateAndClose() throws Exception {
@@ -168,7 +168,7 @@ public class KafkaEventQueueTest {
             latch.await();
             return count.getAndAdd(1);
         }));
-        futures.add(queue.append(() -> count.getAndAdd(1)));
+        futures.add(queue.append(() -> count.getAndAdd(1) ));
         futures.add(queue.append(() -> count.getAndAdd(1)));
         futures.add(queue.scheduleDeferred("foo",
             __ -> Time.SYSTEM.nanoseconds() + 1L,
@@ -180,10 +180,10 @@ public class KafkaEventQueueTest {
                 return value;
             }));
         latch.countDown();
-        int i = 0;
-        for (CompletableFuture<Integer> future : futures) {
-            assertEquals(Integer.valueOf(i++), future.get());
-        }
+        assertEquals(Integer.valueOf(0), futures.get(0).get());
+        assertEquals(Integer.valueOf(1), futures.get(1).get());
+        assertEquals(Integer.valueOf(2), futures.get(2).get());
+        assertEquals(Integer.valueOf(3), futures.get(3).get());
         queue.close();
     }
 }

@@ -23,7 +23,7 @@ import java.util.function.Function;
 
 public interface EventQueue extends AutoCloseable {
     interface Event<T> {
-        T run() throws Throwable;
+        T run() throws Exception;
     }
 
     class VoidEvent implements Event<Void> {
