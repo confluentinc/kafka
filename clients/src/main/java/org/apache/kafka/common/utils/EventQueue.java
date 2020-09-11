@@ -159,8 +159,8 @@ public interface EventQueue extends AutoCloseable {
      * No new events will be accepted, and the timeout will be initiated
      * for all existing events.
      *
-     * @param cleanupEvent  The event to invoke after all other events have been
-     *                      processed.
+     * @param cleanupEvent  The mandatory event to invoke after all other events have
+     *                     been processed.
      * @param timeUnit      The time unit to use for the timeout.
      * @param timeSpan      The amount of time to use for the timeout.
      *                      Once the timeout elapses, any remaining queued
