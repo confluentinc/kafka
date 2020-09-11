@@ -36,7 +36,7 @@ public interface EventQueue extends AutoCloseable {
     }
 
     /**
-     * Add an element to the end of the queue.
+     * Add an element to the front of the queue.
      *
      * @param event             The event to append.
      *
