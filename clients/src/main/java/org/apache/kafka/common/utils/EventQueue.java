@@ -143,8 +143,11 @@ public interface EventQueue extends AutoCloseable {
     }
 
     /**
-     * Asynchronously shut down the event queue.
-     * See beginShutdown(Event<?>, TimeUnit, long);
+     * Asynchronously shut down the event queue with no unnecessary delay.
+     *
+     * @param cleanupEvent The mandatory event to invoke after all other events have
+     *                     been processed.
+     * @see #beginShutdown(Event, TimeUnit, long)
      */
     default void beginShutdown(Event<?> cleanupEvent) {
         beginShutdown(cleanupEvent, TimeUnit.SECONDS, 0);
