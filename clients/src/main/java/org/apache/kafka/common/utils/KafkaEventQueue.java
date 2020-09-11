@@ -253,7 +253,7 @@ public final class KafkaEventQueue implements EventQueue {
             }
         }
 
-        void enqueue(EventContext<?> eventContext,
+        private void enqueue(EventContext<?> eventContext,
                      Function<Long, Long> deadlineNsCalculator) {
             lock.lock();
             try {
