@@ -186,4 +186,18 @@ public class KafkaEventQueueTest {
         assertEquals(Integer.valueOf(3), futures.get(3).get());
         queue.close();
     }
+
+    @Test
+    public void testShutdownBeforeDeferred() throws Exception {
+        KafkaEventQueue queue =
+            new KafkaEventQueue(new LogContext(), "testShutdownBeforeDeferred");
+        final AtomicInteger count = new AtomicInteger(0);
+        CompletableFuture<Integer> future = queue.scheduleDeferred("myDeferred",
+            __ -> SystemTime.SYSTEM.nanoseconds() + TimeUnit.HOURS.toNanos(1),
+            () -> count.getAndAdd(1));
+        queue.beginShutdown();
+        assertThrows(ExecutionException.class, () -> future.get());
+        assertEquals(0, count.get());
+        queue.close();
+    }
 }
