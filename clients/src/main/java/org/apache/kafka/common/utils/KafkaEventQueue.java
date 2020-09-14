@@ -125,6 +125,8 @@ public final class KafkaEventQueue implements EventQueue {
         void run() {
             try {
                 future.complete(event.run());
+            } catch (InterruptedException e) {
+                throw e;
             } catch (Exception e) {
                 future.completeExceptionally(e);
             }
@@ -212,15 +214,20 @@ public final class KafkaEventQueue implements EventQueue {
                     long awaitNs = Long.MAX_VALUE;
                     Map.Entry<Long, EventContext<?>> entry = delayMap.firstEntry();
                     if (entry != null) {
+                        // Search for timed-out events or deferred events that are ready
+                        // to run.
                         long now = SystemTime.SYSTEM.nanoseconds();
-                        long timeoutMs = entry.getKey();
+                        long timeoutNs = entry.getKey();
                         EventContext<?> eventContext = entry.getValue();
-                        if (timeoutMs <= now) {
+                        if (timeoutNs <= now) {
                             if (eventContext.insertionType == EventInsertionType.DEFERRED) {
-                                // The deferred event is ready to run.  Put it in the queue.
+                                // The deferred event is ready to run.  Prepend it to the
+                                // queue.  (The value for deferred events is a schedule time
+                                // rather than a timeout.)
                                 remove(eventContext);
-                                head.insertBefore(eventContext);
+                                head.insertAfter(eventContext);
                             } else {
+                                // not a deferred event, so it is a deadline, and it is timed out.
                                 remove(eventContext);
                                 toTimeout = eventContext;
                             }
@@ -230,7 +237,7 @@ public final class KafkaEventQueue implements EventQueue {
                             toTimeout = eventContext;
                             continue;
                         }
-                        awaitNs = timeoutMs - now;
+                        awaitNs = timeoutNs - now;
                     }
                     if (head.next == head) {
                         if ((closingTimeNs != Long.MAX_VALUE) && delayMap.isEmpty()) {

@@ -168,7 +168,7 @@ public class KafkaEventQueueTest {
             latch.await();
             return count.getAndAdd(1);
         }));
-        futures.add(queue.append(() -> count.getAndAdd(1) ));
+        futures.add(queue.append(() -> count.getAndAdd(1)));
         futures.add(queue.append(() -> count.getAndAdd(1)));
         futures.add(queue.scheduleDeferred("foo",
             __ -> Time.SYSTEM.nanoseconds() + 1L,
