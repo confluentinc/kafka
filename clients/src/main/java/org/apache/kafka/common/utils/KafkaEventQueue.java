@@ -122,7 +122,7 @@ public final class KafkaEventQueue implements EventQueue {
         /**
          * Run the event associated with this EventContext.
          */
-        void run() {
+        void run() throws InterruptedException {
             try {
                 future.complete(event.run());
             } catch (InterruptedException e) {
@@ -216,7 +216,7 @@ public final class KafkaEventQueue implements EventQueue {
                     if (entry != null) {
                         // Search for timed-out events or deferred events that are ready
                         // to run.
-                        long now = SystemTime.SYSTEM.nanoseconds();
+                        long now = time.nanoseconds();
                         long timeoutNs = entry.getKey();
                         EventContext<?> eventContext = entry.getValue();
                         if (timeoutNs <= now) {
@@ -251,7 +251,7 @@ public final class KafkaEventQueue implements EventQueue {
                         continue;
                     }
                     if (closingTimeNs != Long.MAX_VALUE) {
-                        long now = SystemTime.SYSTEM.nanoseconds();
+                        long now = time.nanoseconds();
                         if (awaitNs > closingTimeNs - now) {
                             awaitNs = closingTimeNs - now;
                         }
@@ -299,7 +299,9 @@ public final class KafkaEventQueue implements EventQueue {
                         break;
                     case DEFERRED:
                         if (deadlineNs == null) {
-                            throw new RuntimeException("Deferred event must have a deadline.");
+                            eventContext.completeWithException(new RuntimeException(
+                                "You must specify a deadline for deferred events."));
+                            return;
                         }
                         break;
                 }
@@ -326,6 +328,7 @@ public final class KafkaEventQueue implements EventQueue {
         }
     }
 
+    private final Time time;
     private final ReentrantLock lock;
     private final Logger log;
     private final Supplier<Throwable> closedExceptionSupplier;
@@ -340,14 +343,17 @@ public final class KafkaEventQueue implements EventQueue {
 
     private Event<?> cleanupEvent;
 
-    public KafkaEventQueue(LogContext logContext,
+    public KafkaEventQueue(Time time,
+                           LogContext logContext,
                            String threadNamePrefix) {
-        this(logContext, threadNamePrefix, TimeoutException::new);
+        this(time, logContext, threadNamePrefix, TimeoutException::new);
     }
 
-    public KafkaEventQueue(LogContext logContext,
+    public KafkaEventQueue(Time time,
+                           LogContext logContext,
                            String threadNamePrefix,
                            Supplier<Throwable> closedExceptionSupplier) {
+        this.time = time;
         this.lock = new ReentrantLock();
         this.log = logContext.logger(KafkaEventQueue.class);
         this.closedExceptionSupplier = closedExceptionSupplier;
@@ -393,7 +399,7 @@ public final class KafkaEventQueue implements EventQueue {
                 return;
             }
             cleanupEvent = newCleanupEvent;
-            long newClosingTimeNs = Time.SYSTEM.nanoseconds() + timeUnit.toNanos(timeSpan);
+            long newClosingTimeNs = time.nanoseconds() + timeUnit.toNanos(timeSpan);
             if (closingTimeNs >= newClosingTimeNs)
                 closingTimeNs = newClosingTimeNs;
             eventHandler.cond.signal();

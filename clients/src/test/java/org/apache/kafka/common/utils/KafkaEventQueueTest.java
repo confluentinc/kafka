@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,14 +41,14 @@ public class KafkaEventQueueTest {
     @Test
     public void testCreateAndClose() throws Exception {
         KafkaEventQueue queue =
-            new KafkaEventQueue(new LogContext(), "testCreateAndClose");
+            new KafkaEventQueue(Time.SYSTEM, new LogContext(), "testCreateAndClose");
         queue.close();
     }
 
     @Test
     public void testHandleEvents() throws Exception {
         KafkaEventQueue queue =
-            new KafkaEventQueue(new LogContext(), "testHandleEvents");
+            new KafkaEventQueue(Time.SYSTEM, new LogContext(), "testHandleEvents");
         AtomicInteger numEventsExecuted = new AtomicInteger(0);
         CompletableFuture<Integer> future1 = queue.prepend(
             () -> {
@@ -83,7 +82,7 @@ public class KafkaEventQueueTest {
     @Test
     public void testTimeouts() throws Exception {
         KafkaEventQueue queue =
-            new KafkaEventQueue(new LogContext(), "testTimeouts");
+            new KafkaEventQueue(Time.SYSTEM, new LogContext(), "testTimeouts");
         AtomicInteger numEventsExecuted = new AtomicInteger(0);
         CompletableFuture<Integer> future1 = queue.append(
             () -> {
@@ -120,7 +119,7 @@ public class KafkaEventQueueTest {
     @Test
     public void testScheduleDeferred() throws Exception {
         KafkaEventQueue queue =
-            new KafkaEventQueue(new LogContext(), "testAppendDeferred");
+            new KafkaEventQueue(Time.SYSTEM, new LogContext(), "testAppendDeferred");
 
         // Wait for the deferred event to happen after the non-deferred event.
         // It may not happpen every time, so we keep trying until it does.
@@ -140,8 +139,8 @@ public class KafkaEventQueueTest {
 
     @Test
     public void testScheduleDeferredWithTagReplacement() throws Exception {
-        KafkaEventQueue queue =
-            new KafkaEventQueue(new LogContext(), "testScheduleDeferredWithTagReplacement");
+        KafkaEventQueue queue = new KafkaEventQueue(Time.SYSTEM, new LogContext(),
+            "testScheduleDeferredWithTagReplacement");
 
         AtomicInteger ai = new AtomicInteger(0);
         CompletableFuture<Integer> future1 = queue.
@@ -158,39 +157,27 @@ public class KafkaEventQueueTest {
 
     @Test
     public void testDeferredIsQueuedAfterTriggering() throws Exception {
-        KafkaEventQueue queue =
-            new KafkaEventQueue(new LogContext(), "testDeferredIsQueuedAfterTriggering");
-
-        final CountDownLatch latch = new CountDownLatch(1);
+        MockTime time = new MockTime(0, 100000, 1);
+        KafkaEventQueue queue = new KafkaEventQueue(time, new LogContext(),
+            "testDeferredIsQueuedAfterTriggering");
         AtomicInteger count = new AtomicInteger(0);
         List<CompletableFuture<Integer>> futures = new ArrayList<>();
-        futures.add(queue.append(() -> {
-            latch.await();
-            return count.getAndAdd(1);
-        }));
-        futures.add(queue.append(() -> count.getAndAdd(1)));
-        futures.add(queue.append(() -> count.getAndAdd(1)));
         futures.add(queue.scheduleDeferred("foo",
-            __ -> Time.SYSTEM.nanoseconds() + 1L,
-            () -> {
-                int value = count.getAndAdd(1);
-                if (value != 3) {
-                    throw new RuntimeException("invalid ordering.");
-                }
-                return value;
-            }));
-        latch.countDown();
-        assertEquals(Integer.valueOf(0), futures.get(0).get());
-        assertEquals(Integer.valueOf(1), futures.get(1).get());
+            __ -> 2L,
+            () -> count.getAndIncrement()));
+        futures.add(queue.append(() -> count.getAndAdd(1)));
+        assertEquals(Integer.valueOf(0), futures.get(1).get());
+        time.sleep(1);
+        futures.add(queue.append(() -> count.getAndAdd(1)));
+        assertEquals(Integer.valueOf(1), futures.get(0).get());
         assertEquals(Integer.valueOf(2), futures.get(2).get());
-        assertEquals(Integer.valueOf(3), futures.get(3).get());
         queue.close();
     }
 
     @Test
     public void testShutdownBeforeDeferred() throws Exception {
-        KafkaEventQueue queue =
-            new KafkaEventQueue(new LogContext(), "testShutdownBeforeDeferred");
+        KafkaEventQueue queue = new KafkaEventQueue(Time.SYSTEM, new LogContext(),
+            "testShutdownBeforeDeferred");
         final AtomicInteger count = new AtomicInteger(0);
         CompletableFuture<Integer> future = queue.scheduleDeferred("myDeferred",
             __ -> SystemTime.SYSTEM.nanoseconds() + TimeUnit.HOURS.toNanos(1),

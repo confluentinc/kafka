@@ -83,11 +83,10 @@ public interface EventQueue extends AutoCloseable {
      * @param tag                   If this is non-null, the unique tag to use for this
      *                              event.  If an event with this tag already exists, it
      *                              will be cancelled.
-     * @param deadlineNsCalculator  If this is non-null, it is a function which takes as
-     *                              an argument the existing deadline for the event with
-     *                              this tag (or null if the event has no tag, or if
-     *                              there is none such), and produces the deadline to use
-     *                              for this event (or null to use none.)
+     * @param deadlineNsCalculator  A function which takes as an argument the existing
+     *                              deadline for the event with this tag (or null if the
+     *                              event has no tag, or if there is none such), and
+     *                              produces the deadline to use for this event.
      * @param event                 The event to schedule.
      *
      * @return                      A future which is completed with an exception or
