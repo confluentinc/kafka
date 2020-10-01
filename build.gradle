@@ -307,6 +307,7 @@ subprojects {
 
   test {
     maxParallelForks = userMaxForks ?: Runtime.runtime.availableProcessors()
+    ignoreFailures = userIgnoreFailures
 
     minHeapSize = "256m"
     maxHeapSize = "2048m"
