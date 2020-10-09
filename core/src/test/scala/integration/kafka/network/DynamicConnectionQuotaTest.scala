@@ -167,7 +167,7 @@ class DynamicConnectionQuotaTest extends BaseRequestTest {
     TestUtils.waitUntilTrue(() => initialConnectionCount == connectionCount, "Connections not closed")
   }
 
-  @Test
+  //@Test TODO re-enable after AK merge
   def testDynamicListenerConnectionCreationRateQuota(): Unit = {
     // Create another listener. PLAINTEXT is an inter-broker listener
     // keep default limits

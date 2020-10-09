@@ -642,6 +642,9 @@ class KafkaConfigTest {
         case KafkaConfig.ConnectionSetupTimeoutMaxMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.ProcessRolesProp => // ignore string
         case KafkaConfig.ControllerConnectProp => // ignore string
+        case KafkaConfig.MetadataLogDirProp => // ignore string
+        case KafkaConfig.RegistrationHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case KafkaConfig.RegistrationLeaseTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
 
         case KafkaConfig.AuthorizerClassNameProp => //ignore string
         case KafkaConfig.CreateTopicPolicyClassNameProp => //ignore string
@@ -964,8 +967,13 @@ class KafkaConfigTest {
     values.foreach((value) => {
       val props = validRequiredProps
       props.setProperty(name, value.toString)
-      intercept[Exception] {
+      try {
         KafkaConfig.fromProps(props)
+        fail(s"Expected an Exception for invalid value on property $name, but saw none")
+      } catch {
+        case e: Exception => // ok
+        case ae: AssertionError => throw ae
+        case t: Throwable => fail(s"Expected an Exception for invalid value on property $name, but got $t")
       }
     })
   }

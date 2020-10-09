@@ -252,9 +252,9 @@ public enum ApiKeys {
     DESCRIBE_QUORUM(55, "DescribeQuorum", true, false,
         DescribeQuorumRequestData.SCHEMAS, DescribeQuorumResponseData.SCHEMAS),
     ALTER_ISR(56, "AlterIsr", AlterIsrRequestData.SCHEMAS, AlterIsrResponseData.SCHEMAS),
-    BROKER_HEARTBEAT(57, "BrokerHeartbeat", BrokerHeartbeatRequestData.SCHEMAS,
+    BROKER_HEARTBEAT(57, "BrokerHeartbeat", true, false, BrokerHeartbeatRequestData.SCHEMAS,
             BrokerHeartbeatResponseData.SCHEMAS),
-    CONTROLLER_HEARTBEAT(58, "ControllerHeartbeat", ControllerHeartbeatRequestData.SCHEMAS,
+    CONTROLLER_HEARTBEAT(58, "ControllerHeartbeat", true, false, ControllerHeartbeatRequestData.SCHEMAS,
             ControllerHeartbeatResponseData.SCHEMAS);
 
     private static final ApiKeys[] ID_TO_TYPE;
