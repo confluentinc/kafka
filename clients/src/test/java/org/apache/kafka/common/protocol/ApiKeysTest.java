@@ -56,7 +56,7 @@ public class ApiKeysTest {
     @Test
     public void testResponseThrottleTime() {
         List<ApiKeys> authenticationKeys = Arrays.asList(ApiKeys.SASL_HANDSHAKE, ApiKeys.SASL_AUTHENTICATE);
-        for (ApiKeys apiKey: ApiKeys.values()) {
+        for (ApiKeys apiKey: ApiKeys.enabledApis()) {
             Schema responseSchema = apiKey.responseSchema(apiKey.latestVersion());
             BoundField throttleTimeField = responseSchema.get(CommonFields.THROTTLE_TIME_MS.name);
             if (apiKey.clusterAction || authenticationKeys.contains(apiKey))
