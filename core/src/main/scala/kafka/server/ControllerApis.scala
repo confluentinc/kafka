@@ -24,7 +24,7 @@ import org.apache.kafka.common.acl.AclOperation.CLUSTER_ACTION
 import org.apache.kafka.common.errors.ApiException
 import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.protocol.ApiKeys
-import org.apache.kafka.common.requests.AlterIsrRequest
+import org.apache.kafka.common.requests.{AlterIsrRequest, BrokerHeartbeatRequest}
 import org.apache.kafka.common.resource.Resource.CLUSTER_NAME
 import org.apache.kafka.common.resource.ResourceType.CLUSTER
 import org.apache.kafka.common.utils.Time
@@ -44,6 +44,7 @@ class ControllerApis(val apisUtil: ApisUtils,
     try {
       request.header.apiKey match {
         case ApiKeys.ALTER_ISR => handleAlterIsrRequest(request)
+        case ApiKeys.BROKER_HEARTBEAT => handleBrokerHeartBeatRequest(request)
           // TODO other APIs
         case _ => throw new ApiException(s"Unsupported ApiKey ${request.context.header.apiKey()}")
       }
@@ -75,6 +76,14 @@ class ControllerApis(val apisUtil: ApisUtils,
         alterIsrRequest.data().brokerId(),
         alterIsrRequest.data().brokerEpoch(),
         isrsToAlter.asJava)
+    }
+  }
+
+  def handleBrokerHeartBeatRequest(request: RequestChannel.Request): Unit = {
+    val heartbeatRequest = request.body[BrokerHeartbeatRequest]
+    if (apisUtil.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
+      // TODO: Process heartbeat request
+      logger.info(heartbeatRequest.toString(true))
     }
   }
 }
