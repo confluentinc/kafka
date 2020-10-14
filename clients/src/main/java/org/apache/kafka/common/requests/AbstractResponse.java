@@ -202,10 +202,10 @@ public abstract class AbstractResponse implements AbstractRequestResponse {
                 return new DescribeQuorumResponse(struct, version);
             case ALTER_ISR:
                 return new AlterIsrResponse(new AlterIsrResponseData(struct, version));
+            case BROKER_REGISTRATION:
+                return new BrokerRegistrationResponse(struct, version);
             case BROKER_HEARTBEAT:
                 return new BrokerHeartbeatResponse(struct, version);
-            case CONTROLLER_HEARTBEAT:
-                return new ControllerHeartbeatResponse(struct, version);
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `parseResponse`, the " +
                         "code should be updated to do so.", apiKey));

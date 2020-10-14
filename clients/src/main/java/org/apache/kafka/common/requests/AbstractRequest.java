@@ -257,10 +257,10 @@ public abstract class AbstractRequest implements AbstractRequestResponse {
                 return new EndQuorumEpochRequest(struct, apiVersion);
             case ALTER_ISR:
                 return new AlterIsrRequest(new AlterIsrRequestData(struct, apiVersion), apiVersion);
+            case BROKER_REGISTRATION:
+                return new BrokerRegistrationRequest(struct, apiVersion);
             case BROKER_HEARTBEAT:
                 return new BrokerHeartbeatRequest(struct, apiVersion);
-            case CONTROLLER_HEARTBEAT:
-                return new ControllerHeartbeatRequest(struct, apiVersion); 
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `parseRequest`, the " +
                         "code should be updated to do so.", apiKey));
