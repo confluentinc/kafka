@@ -1,10 +1,11 @@
 package unit.kafka.server
 
+import java.util.Properties
 import java.util.concurrent.Executors
 
 import kafka.common.KafkaException
-import kafka.server.{BrokerHeartbeatManagerImpl, BrokerToControllerChannelManager}
-import kafka.utils.MockTime
+import kafka.server.{BrokerHeartbeatManagerImpl, BrokerToControllerChannelManager, Defaults, KafkaConfig}
+import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.clients.{ClientResponse, RequestCompletionHandler}
 import org.apache.kafka.common.message.BrokerHeartbeatResponseData
 import org.apache.kafka.common.message.BrokerRegistrationRequestData.{FeatureCollection, ListenerCollection}
@@ -24,28 +25,36 @@ class BrokerHeartbeatManagerTest {
   val MaxConditionWaitTime = 10000 // milliseconds
 
   // We want to ensure we don't simulate any network delay longer than the maximum test wait time
-  assert(MaxNetworkDelay + BrokerHeartbeatManagerImpl.SchedulerTaskPollTime <= MaxConditionWaitTime)
+  assert(MaxNetworkDelay + Defaults.RegistrationHeartbeatIntervalMs <= MaxConditionWaitTime)
 
   val time = new MockTime
   val brokerID = 99
   val rack = "rack-1"
   val random = new Random(System.currentTimeMillis())
+  val configProperties: Properties = TestUtils.createBrokerConfig(brokerID, TestUtils.MockZkConnect)
+  var config: KafkaConfig = _
 
   var brokerToControllerChannel: BrokerToControllerChannelManager = _
   @Before
   def setup(): Unit = {
     brokerToControllerChannel = EasyMock.createMock(classOf[BrokerToControllerChannelManager])
+
+    // Seed config w/ defaults for the relevant heartbeat timeouts
+    configProperties.setProperty(KafkaConfig.RegistrationHeartbeatIntervalMsProp, Defaults.RegistrationHeartbeatIntervalMs.toString)
+    configProperties.setProperty(KafkaConfig.RegistrationLeaseTimeoutMsProp, Defaults.RegistrationLeaseTimeoutMs.toString)
+
+    config = KafkaConfig.fromProps(configProperties)
   }
 
   private def simulateNetworkDelay(delay: Int = MaxNetworkDelay): Unit = {
-    // Sleep for at least BrokerHeartbeatManagerImpl.SchedulerTaskPollTime
-    time.sleep(BrokerHeartbeatManagerImpl.SchedulerTaskPollTime + random.nextInt(delay))
+    // Sleep for at least config.registrationHeartbeatIntervalMs
+    time.sleep(config.registrationHeartbeatIntervalMs + random.nextInt(delay))
   }
 
   private def waitForPromise(promise: Promise[Unit], maxWaitTime: Int = MaxConditionWaitTime) : Unit = {
     // Wait for promise to be completed -> The "network" thread simulates a network delay
-    for (_ <- 0 to maxWaitTime by BrokerHeartbeatManagerImpl.SchedulerTaskPollTime) {
-      time.sleep(BrokerHeartbeatManagerImpl.SchedulerTaskPollTime)
+    for (_ <- 0 to maxWaitTime by config.registrationHeartbeatIntervalMs) {
+      time.sleep(config.registrationHeartbeatIntervalMs.longValue)
       if (promise.isCompleted) return
     }
 
@@ -82,7 +91,10 @@ class BrokerHeartbeatManagerTest {
     EasyMock.replay(brokerToControllerChannel)
 
     // Init BrokerHeartbeatManager
-    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(brokerToControllerChannel, time.scheduler, time, brokerID, rack, () => 1337, () => 2020)
+    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
     brokerHeartbeatManager.start(new ListenerCollection(), new FeatureCollection())
 
     // Start
@@ -128,13 +140,16 @@ class BrokerHeartbeatManagerTest {
       }
       // Due to the way Mock time and EasyMock works, time is advanced serially while simulating network delay
       // This leads to the periodic heartbeats being scheduled in addition to the state change heartbeats being
-      // tested here. To account for the excess calls, this test expects the mocked function to be called ATLEAST
+      // tested here. To account for the excess calls, this test expects the mocked function to be called AT LEAST
       // as many as the number of state changes being tested
     ).times(pendingStateChanges.size, Int.MaxValue)
     EasyMock.replay(brokerToControllerChannel)
 
     // Init BrokerHeartbeatManager
-    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(brokerToControllerChannel, time.scheduler, time, brokerID, rack, () => 1337, () => 2020)
+    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
 
     // Start
     brokerHeartbeatManager.start(new ListenerCollection(), new FeatureCollection())
@@ -187,7 +202,10 @@ class BrokerHeartbeatManagerTest {
     EasyMock.replay(brokerToControllerChannel)
 
     // Init BrokerHeartbeatManager
-    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(brokerToControllerChannel, time.scheduler, time, brokerID, rack, () => 1337, () => 2020)
+    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
     brokerHeartbeatManager.start(new ListenerCollection(), new FeatureCollection())
 
     // Start
@@ -204,7 +222,7 @@ class BrokerHeartbeatManagerTest {
     }
 
     for (_ <- 1 to numPeriodicHeartbeatsExpected) {
-      time.sleep(50)
+      time.sleep(config.registrationHeartbeatIntervalMs.longValue())
     }
     // Verify that the current broker state is the last requested target state
     assert(brokerHeartbeatManager.brokerState == BrokerState.FENCED)
@@ -252,7 +270,10 @@ class BrokerHeartbeatManagerTest {
     EasyMock.replay(brokerToControllerChannel)
 
     // Init BrokerHeartbeatManager
-    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(brokerToControllerChannel, time.scheduler, time, brokerID, rack, () => 1337, () => 2020)
+    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
     brokerHeartbeatManager.start(new ListenerCollection(), new FeatureCollection())
 
     // Schedule enqueues asynchronously
@@ -315,7 +336,10 @@ class BrokerHeartbeatManagerTest {
     EasyMock.replay(brokerToControllerChannel)
 
     // Init BrokerHeartbeatManager
-    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(brokerToControllerChannel, time.scheduler, time, brokerID, rack, () => 1337, () => 2020)
+    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
     brokerHeartbeatManager.start(new ListenerCollection(), new FeatureCollection())
 
     // Start
@@ -330,7 +354,7 @@ class BrokerHeartbeatManagerTest {
         waitForPromise(stateChangePromise)
         assert(stateChangePromise.future.value.get.isFailure)
         stateChangePromise.future.value.get match {
-          case Success(value) => assert(false, "This promise should not have succeeded. Expected error: " + Errors.NOT_CONTROLLER)
+          case Success(_) => assert(assertion = false, "This promise should not have succeeded. Expected error: " + Errors.NOT_CONTROLLER)
           case Failure(exception) => assert(exception.isInstanceOf[KafkaException])
         }
 

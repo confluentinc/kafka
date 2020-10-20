@@ -23,7 +23,6 @@ import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 
 import kafka.common.KafkaException
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.BrokerHeartbeatManagerImpl.SchedulerTaskPollTime
 import kafka.utils.{Logging, Scheduler}
 import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData
@@ -68,18 +67,17 @@ trait BrokerHeartbeatManager {
  * Implements the BrokerHeartbeatManager trait. Uses a concurrent queue to process state changes/notifications.
  * Also responsible for maintaining the broker state based on the response from the controller.
  *
- * @param controllerChannelManager
- *        - Channel to interact with the active controller
- * @param brokerID
- *        - This broker's ID
- * @param rack
- *        - The rack the broker is hosted on
- * @param metadataOffset
- *        - The last committed/processed metadata offset for this broker
- * @param brokerEpoch
- *        - This broker's current epoch
+ * @param config - Kafka config used for configuring the relevant heartbeat timeouts
+ * @param controllerChannelManager - Channel to interact with the active controller
+ * @param scheduler - The scheduler for scheduling the heartbeat tasks on
+ * @param time - Default time provider
+ * @param brokerID - This broker's ID
+ * @param rack - The rack the broker is hosted on
+ * @param metadataOffset - The last committed/processed metadata offset provider for this broker
+ * @param brokerEpoch - This broker's current epoch provider
  */
-class BrokerHeartbeatManagerImpl(val controllerChannelManager: BrokerToControllerChannelManager,
+class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
+                                 val controllerChannelManager: BrokerToControllerChannelManager,
                                  val scheduler: Scheduler,
                                  val time: Time,
                                  val brokerID: Int,
@@ -98,7 +96,7 @@ class BrokerHeartbeatManagerImpl(val controllerChannelManager: BrokerToControlle
 
   // Broker states - Current and Target/Next
   private var currentState: BrokerState = _
-  private val pendingStateChange = new AtomicBoolean(false)
+  private val pendingHeartbeat = new AtomicBoolean(false)
 
   // Metrics - Histogram of broker heartbeat request/response time
   // FIXME: Tags
@@ -116,8 +114,8 @@ class BrokerHeartbeatManagerImpl(val controllerChannelManager: BrokerToControlle
     schedulerTask = Some(scheduler.schedule(
       "send-broker-heartbeat",
       processHeartbeatRequests,
-      SchedulerTaskPollTime,
-      SchedulerTaskPollTime,
+      config.registrationHeartbeatIntervalMs.longValue(),
+      config.registrationHeartbeatIntervalMs.longValue(),
       TimeUnit.MILLISECONDS)
     )
   }
@@ -140,16 +138,59 @@ class BrokerHeartbeatManagerImpl(val controllerChannelManager: BrokerToControlle
 
     // Ensure that there are no outstanding state change requests
     // TODO: Do we want to allow some sort preemption to prioritize critical state changes?
-    if (pendingStateChange.compareAndSet(false, true)) {
-      // If any state transition was requested, get target state from the queue
-      // Else schedule a regular heartbeat w/ targetState = currentState
-      // TODO: Check for errors in the previous periodic heartbeat
-      val state = if (requestQueue.isEmpty) (currentState, Promise[Unit]()) else requestQueue.poll
+    if (pendingHeartbeat.compareAndSet(false, true)) {
+      // No pending heartbeat in-flight. We have a few things to check during this iteration
+      // Check when the last heartbeat was successful
+      // - If < registration.heartbeat.interval.ms, no-op
+      // - Else, check for any pending state changes that have been queued
+      //   - Attempt a heartbeat w/ the requested state change
+      // - No state change requests queued
+      //   - If > registration.lease.timeout.ms (We have fallen way behind and it's best to fence ourselves here)
+      //     - Fence ourselves and attempt a state change from FENCED -> ACTIVE in the next iteration
+      //   - If > registration.heartbeat.interval.ms
+      //     - Attempt another heartbeat w/ targetState = currentState
+      //
+      // Heartbeat Timeline:
+      // +--+--+------------------------+--+--+------------
+      // |  |  |  Heartbeat       |Send |  |  |
+      // |50|50+----------------->+Heart|50|50+----------->
+      // |  |  |  interval        |beat |  |  |
+      // +--+--+------------------------+--+--+------------
+      //
+      val currentTime = time.milliseconds
+      // NOTE: We still have to ensure the last heartbeat was sent at least w/ a gap of registration.heartbeat.interval.ms
+      //       even though the task is scheduled at intervals registration.heartbeat.interval.ms because of
+      //       scheduler ticks being batched in some cases where another task hogs the scheduler's runtime.
+      //       We're not real-time here and so this accounts for two task runs occurring almost immediately one after
+      //       the other
+      if (currentTime - lastSuccessfulHeartbeatTime < config.registrationHeartbeatIntervalMs) {
+        // No-op
+        pendingHeartbeat.compareAndSet(true, false)
+        return
+      }
+
+      // Check for any pending state changes that have been queued
+      var state = requestQueue.poll
+      if (state == null) {
+        // No state change requests queued
+        if (currentTime - lastSuccessfulHeartbeatTime > config.registrationLeaseTimeoutMs) {
+          // Fence ourselves
+          currentState = BrokerState.FENCED
+          // FIXME: What is the preferred action here? Do we wait for an external actor queue a state change
+          //       request?
+          pendingHeartbeat.compareAndSet(true, false)
+          return
+        } else if (currentTime - lastSuccessfulHeartbeatTime >= config.registrationHeartbeatIntervalMs) {
+          // Attempt another heartbeat w/ targetState = currentState
+          state = (currentState, Promise[Unit]())
+        }
+      }
       sendHeartbeat(state)
     }
   }
 
   private def sendHeartbeat(requestState: (BrokerState, Promise[Unit])): Unit = {
+
     val sendTime = time.nanoseconds()
 
     // Construct broker heartbeat request
@@ -182,7 +223,7 @@ class BrokerHeartbeatManagerImpl(val controllerChannelManager: BrokerToControlle
           case None => requestState._2.trySuccess(())
           case Some(errorMsg) => requestState._2.tryFailure(new KafkaException(errorMsg.toString))
         }
-        pendingStateChange.compareAndSet(true, false)
+        pendingHeartbeat.compareAndSet(true, false)
       }
     }
 
@@ -207,9 +248,4 @@ class BrokerHeartbeatManagerImpl(val controllerChannelManager: BrokerToControlle
 
   // In milliseconds
   override def lastSuccessfulHeartbeatTime: Long = _lastSuccessfulHeartbeatTime
-}
-
-object BrokerHeartbeatManagerImpl {
-  // Minimum possible time for heartbeats
-  val SchedulerTaskPollTime = 50 // ms
 }
