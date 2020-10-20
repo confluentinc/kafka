@@ -30,7 +30,7 @@ import org.apache.kafka.common.message.BrokerRegistrationRequestData.{FeatureCol
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.{BrokerHeartbeatRequest, BrokerHeartbeatResponse}
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.metadata.BrokerState
+import org.apache.kafka.metadata
 
 import scala.concurrent.Promise
 
@@ -51,10 +51,10 @@ trait BrokerHeartbeatManager {
   // Note: This does not enforce any specific order of the state transitions. The target
   //       state is sent out as enqueued.
   // Returns a promise that indicates success if completed w/o exception
-  def enqueue(state: BrokerState): Promise[Unit]
+  def enqueue(state: metadata.BrokerState): Promise[Unit]
 
   // Current broker state
-  def brokerState: BrokerState
+  def brokerState: metadata.BrokerState
 
   // Last successful heartbeat time
   def lastSuccessfulHeartbeatTime: Long
@@ -89,13 +89,13 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
   // private val scheduler = new KafkaScheduler(threads = 1, threadNamePrefix = "broker-heartbeat")
 
   // Request queue
-  private val requestQueue: util.Queue[(BrokerState, Promise[Unit])] = new ConcurrentLinkedQueue[(BrokerState, Promise[Unit])]()
+  private val requestQueue: util.Queue[(metadata.BrokerState, Promise[Unit])] = new ConcurrentLinkedQueue[(metadata.BrokerState, Promise[Unit])]()
 
   // Scheduler task
   private var schedulerTask: Option[ScheduledFuture[_]] = None
 
   // Broker states - Current and Target/Next
-  private var currentState: BrokerState = _
+  private var currentState: metadata.BrokerState = _
   private val pendingHeartbeat = new AtomicBoolean(false)
 
   // Metrics - Histogram of broker heartbeat request/response time
@@ -109,7 +109,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
 
   override def start(listeners: ListenerCollection, features: FeatureCollection): Unit = {
     // TODO: Handle broker registration?
-    currentState = BrokerState.NOT_RUNNING
+    currentState = metadata.BrokerState.NOT_RUNNING
     // TODO: Configurable schedule period
     schedulerTask = Some(scheduler.schedule(
       "send-broker-heartbeat",
@@ -120,7 +120,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
     )
   }
 
-  override def enqueue(state: BrokerState): Promise[Unit] = {
+  override def enqueue(state: metadata.BrokerState): Promise[Unit] = {
     // TODO: Ignore requests if requested state is the same as the current state?
     val p = Promise[Unit]()
     requestQueue.add((state, p))
@@ -175,7 +175,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
         // No state change requests queued
         if (currentTime - lastSuccessfulHeartbeatTime > config.registrationLeaseTimeoutMs) {
           // Fence ourselves
-          currentState = BrokerState.FENCED
+          currentState = metadata.BrokerState.FENCED
           // FIXME: What is the preferred action here? Do we wait for an external actor queue a state change
           //       request?
           pendingHeartbeat.compareAndSet(true, false)
@@ -189,7 +189,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
     }
   }
 
-  private def sendHeartbeat(requestState: (BrokerState, Promise[Unit])): Unit = {
+  private def sendHeartbeat(requestState: (metadata.BrokerState, Promise[Unit])): Unit = {
 
     val sendTime = time.nanoseconds()
 
@@ -238,13 +238,13 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
       error(s"Broker heartbeat failure: $errorMsg")
       Some(errorMsg)
     } else {
-      currentState = BrokerState.fromValue(response.data().nextState())
+      currentState = metadata.BrokerState.fromValue(response.data().nextState())
       _lastSuccessfulHeartbeatTime = time.milliseconds
       None
     }
   }
 
-  override def brokerState: BrokerState = currentState
+  override def brokerState: metadata.BrokerState = currentState
 
   // In milliseconds
   override def lastSuccessfulHeartbeatTime: Long = _lastSuccessfulHeartbeatTime
