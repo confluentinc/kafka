@@ -398,7 +398,7 @@ class BrokerHeartbeatManagerTest {
             0, 0, false,
             null, null, new BrokerHeartbeatResponse(response))
           if (networkDelay) {
-            simulateNetworkDelay(config.registrationHeartbeatIntervalMs * 2)
+            simulateNetworkDelay(config.registrationHeartbeatIntervalMs)
           }
           if (failChange) {
             response.setErrorCode(Errors.NOT_CONTROLLER.code())
@@ -437,6 +437,101 @@ class BrokerHeartbeatManagerTest {
     EasyMock.verify(brokerToControllerChannel)
   }
 
-  // TODO:
-  // Test Registration lease timeout
+  /**
+   * Test Registration lease timeout
+   * - Attempt broker registration, fencing and activation
+   * - Wait for 1 periodic heartbeat to succeed
+   * - Submit a state change request and simulate an error response after a
+   *   network delay (longer than the heartbeat interval)
+   * - Verify current time - lastSuccessfulHeartbeat > heartbeat interval
+   * - Verify current state is still the last target state
+   * - Wait for a periodic heartbeat to be sent out that errors out after a
+   *   network delay (longer than the registration lease timeout)
+   * - Verify current time - lastSuccessfulHeartbeat > registration lease timeout
+   * - Verify current state is FENCED
+   *
+   */
+  @Test
+  def testRegistrationLeaseTimeout(): Unit = {
+    // Setup mock
+    val capturedRequest = EasyMock.newCapture[BrokerHeartbeatRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    val pendingStateChanges = Set(
+      BrokerState.REGISTERING,
+      BrokerState.FENCED,
+      BrokerState.RUNNING
+    )
+    var networkDelay = false
+    var failChange = false
+    var networkDelayTime = 0
+
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val targetState = BrokerState.fromValue(capturedRequest.getValue.build().data().targetState())
+          val response = new BrokerHeartbeatResponseData()
+            .setNextState(targetState.value())
+            .setErrorCode(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            null, null, new BrokerHeartbeatResponse(response))
+          if (networkDelay) {
+            simulateNetworkDelay(networkDelayTime)
+          }
+          if (failChange) {
+            response.setErrorCode(Errors.NOT_CONTROLLER.code())
+          }
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    ).atLeastOnce()
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerHeartbeatManager
+    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    brokerHeartbeatManager.start(new ListenerCollection(), new FeatureCollection())
+
+    // Step 1 - Attempt broker registration, fencing and activation
+    val pendingPromises = ListBuffer[Promise[Unit]]()
+    pendingStateChanges foreach {
+      state => pendingPromises += brokerHeartbeatManager.enqueue(state)
+    }
+
+    // Verify
+    pendingPromises foreach {
+      stateChangePromise =>
+        waitForPromise(stateChangePromise)
+        assert(stateChangePromise.future.value.get.isSuccess)
+    }
+
+    // Step 2 - Wait for 1 periodic heartbeat to succeed
+    time.sleep(config.registrationHeartbeatIntervalMs.longValue())
+    assert(brokerHeartbeatManager.lastSuccessfulHeartbeatTime != 0)
+
+    // Step 3 - Submit a state change request and simulate a delayed error response
+    networkDelay = true
+    failChange = true
+    networkDelayTime = config.registrationHeartbeatIntervalMs
+    var promise = brokerHeartbeatManager.enqueue(BrokerState.SHUTTING_DOWN)
+    time.sleep(networkDelayTime)
+    assert(promise.future.value.get.isFailure)
+    assert(time.milliseconds - brokerHeartbeatManager.lastSuccessfulHeartbeatTime > config.registrationHeartbeatIntervalMs)
+    assert(time.milliseconds - brokerHeartbeatManager.lastSuccessfulHeartbeatTime < config.registrationLeaseTimeoutMs)
+    assert(brokerHeartbeatManager.brokerState == BrokerState.RUNNING)
+
+    // Step 4 - Wait for a periodic heartbeat to be sent out that errors out after registration lease timeout
+    networkDelayTime = config.registrationLeaseTimeoutMs
+    promise = brokerHeartbeatManager.enqueue(BrokerState.SHUTTING_DOWN)
+    time.sleep(networkDelayTime)
+    assert(promise.future.value.get.isFailure)
+    assert(time.milliseconds - brokerHeartbeatManager.lastSuccessfulHeartbeatTime > config.registrationLeaseTimeoutMs)
+    assert(brokerHeartbeatManager.brokerState == BrokerState.FENCED)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
 }

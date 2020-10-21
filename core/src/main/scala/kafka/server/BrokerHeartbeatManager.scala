@@ -176,7 +176,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
       if (state == null) {
         // No state change requests queued
         if (timeSinceLastHeartbeat > config.registrationLeaseTimeoutMs) {
-          warn(s"Last successful heartbeat was $timeSinceLastHeartbeat ms ago")
+          error(s"Last successful heartbeat was $timeSinceLastHeartbeat ms ago")
           // Fence ourselves
           currentState = metadata.BrokerState.FENCED
           // FIXME: What is the preferred action here? Do we wait for an external actor queue a state change
