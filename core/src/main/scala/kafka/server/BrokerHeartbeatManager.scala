@@ -66,7 +66,10 @@ trait BrokerHeartbeatManager {
 /**
  * Implements the BrokerHeartbeatManager trait. Uses a concurrent queue to process state changes/notifications.
  * Also responsible for maintaining the broker state based on the response from the controller.
- *
+ * Note: We don't start sending heartbeats out until a state change is requested from NOT_RUNNING -> *
+ *       At startup, the default state being NOT_RUNNING, the broker will not attempt to communicate
+ *       w/ the active controller until the Broker Registration is complete.
+ *       
  * @param config - Kafka config used for configuring the relevant heartbeat timeouts
  * @param controllerChannelManager - Channel to interact with the active controller
  * @param scheduler - The scheduler for scheduling the heartbeat tasks on
@@ -110,7 +113,6 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
   override def start(listeners: ListenerCollection, features: FeatureCollection): Unit = {
     // TODO: Handle broker registration?
     currentState = metadata.BrokerState.NOT_RUNNING
-    // TODO: Configurable schedule period
     schedulerTask = Some(scheduler.schedule(
       "send-broker-heartbeat",
       processHeartbeatRequests,
@@ -122,9 +124,9 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
 
   override def enqueue(state: metadata.BrokerState): Promise[Unit] = {
     // TODO: Ignore requests if requested state is the same as the current state?
-    val p = Promise[Unit]()
-    requestQueue.add((state, p))
-    p
+    val promise = Promise[Unit]()
+    requestQueue.add((state, promise))
+    promise
   }
 
   override def stop(): Unit = {
@@ -135,9 +137,9 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
   }
 
   private def processHeartbeatRequests(): Unit = {
-
     // Ensure that there are no outstanding state change requests
     // TODO: Do we want to allow some sort preemption to prioritize critical state changes?
+    // TODO: Ensure RPC timeout < heartbeat interval timeout (or at the very least < registration lease timeout)
     if (pendingHeartbeat.compareAndSet(false, true)) {
       // No pending heartbeat in-flight. We have a few things to check during this iteration
       // Check when the last heartbeat was successful
@@ -157,13 +159,13 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
       // |  |  |  interval        |beat |  |  |
       // +--+--+------------------------+--+--+------------
       //
-      val currentTime = time.milliseconds
+      val timeSinceLastHeartbeat = time.milliseconds - lastSuccessfulHeartbeatTime
       // NOTE: We still have to ensure the last heartbeat was sent at least w/ a gap of registration.heartbeat.interval.ms
       //       even though the task is scheduled at intervals registration.heartbeat.interval.ms because of
       //       scheduler ticks being batched in some cases where another task hogs the scheduler's runtime.
       //       We're not real-time here and so this accounts for two task runs occurring almost immediately one after
       //       the other
-      if (currentTime - lastSuccessfulHeartbeatTime < config.registrationHeartbeatIntervalMs) {
+      if (timeSinceLastHeartbeat < config.registrationHeartbeatIntervalMs) {
         // No-op
         pendingHeartbeat.compareAndSet(true, false)
         return
@@ -173,14 +175,15 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
       var state = requestQueue.poll
       if (state == null) {
         // No state change requests queued
-        if (currentTime - lastSuccessfulHeartbeatTime > config.registrationLeaseTimeoutMs) {
+        if (timeSinceLastHeartbeat > config.registrationLeaseTimeoutMs) {
+          warn(s"Last successful heartbeat was $timeSinceLastHeartbeat ms ago")
           // Fence ourselves
           currentState = metadata.BrokerState.FENCED
           // FIXME: What is the preferred action here? Do we wait for an external actor queue a state change
           //       request?
           pendingHeartbeat.compareAndSet(true, false)
           return
-        } else if (currentTime - lastSuccessfulHeartbeatTime >= config.registrationHeartbeatIntervalMs) {
+        } else if (timeSinceLastHeartbeat >= config.registrationHeartbeatIntervalMs) {
           // Attempt another heartbeat w/ targetState = currentState
           state = (currentState, Promise[Unit]())
         }
@@ -233,7 +236,6 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
 
   private def handleBrokerHeartbeatResponse(response: BrokerHeartbeatResponse): Option[Errors] = {
     if (response.data().errorCode() != 0) {
-      // TODO: Maintain last successful heartbeat time and FENCE broker if > registration.lease.timeout.ms
       val errorMsg = Errors.forCode(response.data().errorCode())
       error(s"Broker heartbeat failure: $errorMsg")
       Some(errorMsg)

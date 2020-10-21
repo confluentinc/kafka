@@ -366,4 +366,77 @@ class BrokerHeartbeatManagerTest {
     // Verify that only a single request was processed per scheduler tick
     EasyMock.verify(brokerToControllerChannel)
   }
+
+  /**
+   * Test heartbeat timeouts
+   * - Attempt broker registration
+   * - Wait for 1 periodic heartbeat to succeed
+   * - Submit a state change request and simulate an error response after a
+   *   network delay (longer than the heartbeat interval)
+   * - Verify current time - lastSuccessfulHeartbeat > heartbeat interval
+   * - Wait for a periodic heartbeat to be sent out
+   * - Verify current time - lastSuccessfulHeartbeat < heartbeat interval
+   *
+   */
+  @Test
+  def testHeartbeatTimeout(): Unit = {
+    // Setup mock
+    val capturedRequest = EasyMock.newCapture[BrokerHeartbeatRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    var networkDelay = false
+    var failChange = false
+
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val targetState = BrokerState.fromValue(capturedRequest.getValue.build().data().targetState())
+          val response = new BrokerHeartbeatResponseData()
+            .setNextState(targetState.value())
+            .setErrorCode(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            null, null, new BrokerHeartbeatResponse(response))
+          if (networkDelay) {
+            simulateNetworkDelay(config.registrationHeartbeatIntervalMs * 2)
+          }
+          if (failChange) {
+            response.setErrorCode(Errors.NOT_CONTROLLER.code())
+          }
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    ).atLeastOnce()
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerHeartbeatManager
+    val brokerHeartbeatManager = new BrokerHeartbeatManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    brokerHeartbeatManager.start(new ListenerCollection(), new FeatureCollection())
+
+    // Register broker
+    var promise = brokerHeartbeatManager.enqueue(BrokerState.REGISTERING)
+    time.sleep(config.registrationHeartbeatIntervalMs.longValue())
+    assert(promise.future.value.get.isSuccess)
+
+    // Wait for a heartbeat to be scheduled
+    time.sleep(config.registrationHeartbeatIntervalMs.longValue())
+    assert(brokerHeartbeatManager.lastSuccessfulHeartbeatTime != 0)
+
+    // Delay and error out state change
+    networkDelay = true
+    failChange = true
+    promise = brokerHeartbeatManager.enqueue(BrokerState.RUNNING)
+    time.sleep(config.registrationHeartbeatIntervalMs.longValue())
+    assert(promise.future.value.get.isFailure)
+    assert(time.milliseconds - brokerHeartbeatManager.lastSuccessfulHeartbeatTime > config.registrationHeartbeatIntervalMs)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
+
+  // TODO:
+  // Test Registration lease timeout
 }
