@@ -35,12 +35,15 @@ import org.apache.kafka.metadata
 import scala.concurrent.Promise
 
 /**
- * Schedules heartbeats from the broker to the active controller.
+ * Manages the broker lifecycle. Handles:
+ * - Broker Registration
+ * - Broker Heartbeats
+ *
  * Explicit broker state transitions are performed by co-ordinating
  * with the controller through the heartbeats.
  *
  */
-trait BrokerHeartbeatManager {
+trait BrokerLifecycleManager {
 
   // Initiate broker registration and start the heartbeat scheduler loop
   def start(listeners: ListenerCollection, features: FeatureCollection): Unit
@@ -64,12 +67,12 @@ trait BrokerHeartbeatManager {
 }
 
 /**
- * Implements the BrokerHeartbeatManager trait. Uses a concurrent queue to process state changes/notifications.
+ * Implements the BrokerLifecycleManager trait. Uses a concurrent queue to process state changes/notifications.
  * Also responsible for maintaining the broker state based on the response from the controller.
  * Note: We don't start sending heartbeats out until a state change is requested from NOT_RUNNING -> *
  *       At startup, the default state being NOT_RUNNING, the broker will not attempt to communicate
  *       w/ the active controller until the Broker Registration is complete.
- *       
+ *
  * @param config - Kafka config used for configuring the relevant heartbeat timeouts
  * @param controllerChannelManager - Channel to interact with the active controller
  * @param scheduler - The scheduler for scheduling the heartbeat tasks on
@@ -79,17 +82,14 @@ trait BrokerHeartbeatManager {
  * @param metadataOffset - The last committed/processed metadata offset provider for this broker
  * @param brokerEpoch - This broker's current epoch provider
  */
-class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
+class BrokerLifecycleManagerImpl(val config: KafkaConfig,
                                  val controllerChannelManager: BrokerToControllerChannelManager,
-                                 val scheduler: Scheduler,
+                                 val scheduler: Scheduler, // FIXME: Pass in a Dedicated Heartbeat scheduler thread
                                  val time: Time,
                                  val brokerID: Int,
                                  val rack: String,
                                  val metadataOffset: () => Long,
-                                 val brokerEpoch: () => Long) extends BrokerHeartbeatManager with Logging with KafkaMetricsGroup {
-
-  // TODO: Dedicated Heartbeat scheduler thread?
-  // private val scheduler = new KafkaScheduler(threads = 1, threadNamePrefix = "broker-heartbeat")
+                                 val brokerEpoch: () => Long) extends BrokerLifecycleManager with Logging with KafkaMetricsGroup {
 
   // Request queue
   private val requestQueue: util.Queue[(metadata.BrokerState, Promise[Unit])] = new ConcurrentLinkedQueue[(metadata.BrokerState, Promise[Unit])]()
@@ -108,10 +108,10 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
     biased = true,
     Map("request" -> "BrokerHeartBeat")
   )
-  private var _lastSuccessfulHeartbeatTime: Long = 0 // milliseconds
+  private var _lastSuccessfulHeartbeatTime: Long = 0 // nanoseconds
 
   override def start(listeners: ListenerCollection, features: FeatureCollection): Unit = {
-    // TODO: Handle broker registration?
+    // FIXME: Initiate broker registration and schedule heartbeats
     currentState = metadata.BrokerState.NOT_RUNNING
     schedulerTask = Some(scheduler.schedule(
       "send-broker-heartbeat",
@@ -137,9 +137,10 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
   }
 
   private def processHeartbeatRequests(): Unit = {
-    // Ensure that there are no outstanding state change requests
     // TODO: Do we want to allow some sort preemption to prioritize critical state changes?
     // TODO: Ensure RPC timeout < heartbeat interval timeout (or at the very least < registration lease timeout)
+
+    // Ensure that there are no outstanding state change requests
     if (pendingHeartbeat.compareAndSet(false, true)) {
       // No pending heartbeat in-flight. We have a few things to check during this iteration
       // Check when the last heartbeat was successful
@@ -152,14 +153,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
       //   - If > registration.heartbeat.interval.ms
       //     - Attempt another heartbeat w/ targetState = currentState
       //
-      // Heartbeat Timeline:
-      // +--+--+------------------------+--+--+------------
-      // |  |  |  Heartbeat       |Send |  |  |
-      // |50|50+----------------->+Heart|50|50+----------->
-      // |  |  |  interval        |beat |  |  |
-      // +--+--+------------------------+--+--+------------
-      //
-      val timeSinceLastHeartbeat = time.milliseconds - lastSuccessfulHeartbeatTime
+      val timeSinceLastHeartbeat = TimeUnit.NANOSECONDS.toMillis(time.nanoseconds - lastSuccessfulHeartbeatTime)
       // NOTE: We still have to ensure the last heartbeat was sent at least w/ a gap of registration.heartbeat.interval.ms
       //       even though the task is scheduled at intervals registration.heartbeat.interval.ms because of
       //       scheduler ticks being batched in some cases where another task hogs the scheduler's runtime.
@@ -194,7 +188,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
 
   private def sendHeartbeat(requestState: (metadata.BrokerState, Promise[Unit])): Unit = {
 
-    val sendTime = time.nanoseconds()
+    val sendTime = time.nanoseconds
 
     // Construct broker heartbeat request
     def request: BrokerHeartbeatRequestData = {
@@ -218,7 +212,7 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
         requestState._2.tryFailure(new IOException("No response found"))
       } else {
         // Update metrics
-        heartbeatResponseTime.update(time.nanoseconds() - sendTime)
+        heartbeatResponseTime.update(time.nanoseconds - sendTime)
 
         // Extract API response
         val body = response.responseBody().asInstanceOf[BrokerHeartbeatResponse]
@@ -241,13 +235,13 @@ class BrokerHeartbeatManagerImpl(val config: KafkaConfig,
       Some(errorMsg)
     } else {
       currentState = metadata.BrokerState.fromValue(response.data().nextState())
-      _lastSuccessfulHeartbeatTime = time.milliseconds
+      _lastSuccessfulHeartbeatTime = time.nanoseconds
       None
     }
   }
 
   override def brokerState: metadata.BrokerState = currentState
 
-  // In milliseconds
+  // In nanoseconds using the JVM's high-resolution timer
   override def lastSuccessfulHeartbeatTime: Long = _lastSuccessfulHeartbeatTime
 }

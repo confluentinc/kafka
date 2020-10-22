@@ -82,8 +82,8 @@ class ControllerApis(val apisUtil: ApisUtils,
   def handleBrokerHeartBeatRequest(request: RequestChannel.Request): Unit = {
     val heartbeatRequest = request.body[BrokerHeartbeatRequest]
     if (apisUtil.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
-      // TODO: Process heartbeat request
       logger.info(heartbeatRequest.toString(true))
+      controller.processBrokerHeartbeat(heartbeatRequest.data())
     }
   }
 }
