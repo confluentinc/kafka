@@ -612,6 +612,7 @@ public final class QuorumController implements Controller {
     @Override
     public CompletableFuture<HeartbeatReply>
             processBrokerHeartbeat(BrokerHeartbeatRequestData request) {
+        // TODO: Map exceptions to API errors
         return appendReadEvent("processBrokerHeartbeat", () ->
             clusterControlManager.processBrokerHeartbeat(request, lastCommittedOffset));
     }
@@ -619,6 +620,7 @@ public final class QuorumController implements Controller {
     @Override
     public CompletableFuture<RegistrationReply>
             registerBroker(BrokerRegistrationRequest request) {
+        // TODO: Map exceptions to API errors
         return appendWriteEvent("registerBroker", () ->
             clusterControlManager.registerBroker(request.data(), writeOffset));
     }

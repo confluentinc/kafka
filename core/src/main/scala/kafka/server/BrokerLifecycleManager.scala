@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,18 +21,19 @@ import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 
-import kafka.common.KafkaException
+import org.apache.kafka.common.KafkaException
 import kafka.metrics.KafkaMetricsGroup
 import kafka.utils.{Logging, Scheduler}
 import org.apache.kafka.clients.ClientResponse
-import org.apache.kafka.common.message.BrokerHeartbeatRequestData
+import org.apache.kafka.common.message.{BrokerHeartbeatRequestData, BrokerRegistrationRequestData}
 import org.apache.kafka.common.message.BrokerRegistrationRequestData.{FeatureCollection, ListenerCollection}
 import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.common.requests.{BrokerHeartbeatRequest, BrokerHeartbeatResponse}
+import org.apache.kafka.common.requests.{BrokerHeartbeatRequest, BrokerHeartbeatResponse, BrokerRegistrationRequest, BrokerRegistrationResponse}
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.metadata
 
-import scala.concurrent.Promise
+import scala.concurrent.{Await, Promise}
+import scala.concurrent.duration._
 
 /**
  * Manages the broker lifecycle. Handles:
@@ -70,17 +71,17 @@ trait BrokerLifecycleManager {
  * Implements the BrokerLifecycleManager trait. Uses a concurrent queue to process state changes/notifications.
  * Also responsible for maintaining the broker state based on the response from the controller.
  * Note: We don't start sending heartbeats out until a state change is requested from NOT_RUNNING -> *
- *       At startup, the default state being NOT_RUNNING, the broker will not attempt to communicate
- *       w/ the active controller until the Broker Registration is complete.
+ * At startup, the default state being NOT_RUNNING, the broker will NOT attempt to communicate
+ * w/ the active controller until the Broker Registration is complete.
  *
- * @param config - Kafka config used for configuring the relevant heartbeat timeouts
+ * @param config                   - Kafka config used for configuring the relevant heartbeat timeouts
  * @param controllerChannelManager - Channel to interact with the active controller
- * @param scheduler - The scheduler for scheduling the heartbeat tasks on
- * @param time - Default time provider
- * @param brokerID - This broker's ID
- * @param rack - The rack the broker is hosted on
- * @param metadataOffset - The last committed/processed metadata offset provider for this broker
- * @param brokerEpoch - This broker's current epoch provider
+ * @param scheduler                - The scheduler for scheduling the heartbeat tasks on
+ * @param time                     - Default time provider
+ * @param brokerID                 - This broker's ID
+ * @param rack                     - The rack the broker is hosted on
+ * @param metadataOffset           - The last committed/processed metadata offset provider for this broker
+ * @param brokerEpoch              - This broker's current epoch provider
  */
 class BrokerLifecycleManagerImpl(val config: KafkaConfig,
                                  val controllerChannelManager: BrokerToControllerChannelManager,
@@ -110,9 +111,76 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
   )
   private var _lastSuccessfulHeartbeatTime: Long = 0 // nanoseconds
 
+  /**
+   * Attempts to register the broker
+   * - On success, schedules a periodic heartbeat task
+   * - On failure, throws an exception which can be conditionally retried
+   *
+   * @param listeners - List of endpoints configured for this broker
+   * @param features - List of features supported by this broker
+   * @throws org.apache.kafka.common.errors.AuthenticationException
+   *         - Transport layer authentication errors
+   * @throws org.apache.kafka.common.errors.UnsupportedVersionException
+   *         - Broker version not supported
+   * @throws java.io.IOException
+   *         - Disconnected client/Invalid response from the controller
+   * @throws java.lang.InterruptedException
+   *         - Registration wait was interrupted
+   * @throws java.util.concurrent.TimeoutException
+   *         - Registration wait timed out (max wait: registration.lease.timeout.ms)
+   * @throws org.apache.kafka.common.errors.DuplicateBrokerRegistrationException
+   *         - Duplicate broker ID during registration
+   * @throws org.apache.kafka.common.KafkaException
+   *         - Generic catch all for unknown/unhandled exception(s)
+   *
+   */
   override def start(listeners: ListenerCollection, features: FeatureCollection): Unit = {
-    // FIXME: Initiate broker registration and schedule heartbeats
+    // FIXME: Handle broker registration inconsistencies where the controller successfully registers the broker but the
+    //        broker times-out/fails on the RPC. Retrying today, would lead to a DuplicateBrokerRegistrationException
     currentState = metadata.BrokerState.NOT_RUNNING
+
+    // Initiate broker registration
+    val brokerRegistrationData = new BrokerRegistrationRequestData()
+      .setBrokerId(brokerID)
+      .setFeatures(features)
+      .setListeners(listeners)
+      .setRack(rack)
+    val promise = Promise[Unit]()
+
+    def responseHandler(response: ClientResponse) = {
+      validateResponse(response) match {
+        case None =>
+          // Check for API errors
+          val body = response.responseBody().asInstanceOf[BrokerRegistrationResponse]
+          Errors.forCode(body.data().errorCode()) match {
+            case Errors.DUPLICATE_BROKER_REGISTRATION =>
+              currentState = metadata.BrokerState.NOT_RUNNING
+              promise.tryFailure(Errors.DUPLICATE_BROKER_REGISTRATION.exception())
+            case Errors.NONE =>
+              // Registration success
+              // TODO: Is this the correct next state?
+              currentState = metadata.BrokerState.RECOVERING_FROM_UNCLEAN_SHUTDOWN
+              promise.trySuccess(())
+            case _ =>
+              // Unhandled error
+              currentState = metadata.BrokerState.NOT_RUNNING
+              promise.tryFailure(Errors.forCode(body.data().errorCode()).exception())
+          }
+        case Some(throwable) =>
+          currentState = metadata.BrokerState.NOT_RUNNING
+          promise.tryFailure(throwable)
+      }
+    }
+    currentState = metadata.BrokerState.REGISTERING
+    controllerChannelManager.sendRequest(new BrokerRegistrationRequest.Builder(brokerRegistrationData), responseHandler)
+
+    // Wait for broker registration
+    // Note: We want to deliberately block here since the rest of the broker startup process
+    //       is dependent on the registration succeeding first
+    // TODO: Maybe set a lower timeout?
+    Await.result(promise.future, Duration(config.registrationLeaseTimeoutMs.longValue(), MILLISECONDS))
+
+    // Broker registration successful; Schedule heartbeats
     schedulerTask = Some(scheduler.schedule(
       "send-broker-heartbeat",
       processHeartbeatRequests,
@@ -122,6 +190,13 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
     )
   }
 
+  /**
+   * Enqueue a state change request for the target state
+   *
+   * @param state - Target state requested
+   * @return Promise[Unit] - To wait for success/failure of the state change
+   *
+   */
   override def enqueue(state: metadata.BrokerState): Promise[Unit] = {
     // TODO: Ignore requests if requested state is the same as the current state?
     val promise = Promise[Unit]()
@@ -129,13 +204,45 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
     promise
   }
 
+  /**
+   * Stop the heartbeat scheduler
+   *
+   */
   override def stop(): Unit = {
+    // TODO: BrokerShutdown state change
     schedulerTask foreach {
       task => task.cancel(true)
     }
     requestQueue.clear()
   }
 
+  /**
+   * Generic response validator
+   *   - Checks for common transport errors
+   *
+   */
+  private def validateResponse(response: ClientResponse): Option[Throwable] = {
+    // Check for any transport errors
+    if (response.authenticationException() != null) {
+      Some(response.authenticationException())
+    } else if (response.versionMismatch() != null) {
+      Some(response.versionMismatch())
+    } else if (response.wasDisconnected()) {
+      Some(new IOException("Client was disconnected"))
+    } else if (!response.hasResponse) {
+      Some(new IOException("No response found"))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Task loop to be scheduled
+   *   - Schedule another heartbeat if no heartbeat is pending/in-flight AND time since last heartbeat >=
+   *     registration.heartbeat.interval.ms
+   *   - If time since last heartbeat > registration.lease.timeout.ms, FENCE the broker
+   *
+   */
   private def processHeartbeatRequests(): Unit = {
     // TODO: Do we want to allow some sort preemption to prioritize critical state changes?
     // TODO: Ensure RPC timeout < heartbeat interval timeout (or at the very least < registration lease timeout)
@@ -186,6 +293,12 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
     }
   }
 
+  /**
+   * Send heartbeat request to the active controller
+   *
+   * @param requestState - Tuple of the target state and the associated pending promise
+   *
+   */
   private def sendHeartbeat(requestState: (metadata.BrokerState, Promise[Unit])): Unit = {
 
     val sendTime = time.nanoseconds
@@ -202,32 +315,34 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
 
     def responseHandler(response: ClientResponse): Unit = {
       // Check for any transport errors
-      if (response.authenticationException() != null) {
-        requestState._2.tryFailure(response.authenticationException())
-      } else if (response.versionMismatch() != null) {
-        requestState._2.tryFailure(response.versionMismatch())
-      } else if (response.wasDisconnected()) {
-        requestState._2.tryFailure(new IOException("Client was disconnected"))
-      } else if (!response.hasResponse) {
-        requestState._2.tryFailure(new IOException("No response found"))
-      } else {
-        // Update metrics
-        heartbeatResponseTime.update(time.nanoseconds - sendTime)
-
-        // Extract API response
-        val body = response.responseBody().asInstanceOf[BrokerHeartbeatResponse]
-        handleBrokerHeartbeatResponse(body) match {
-          case None => requestState._2.trySuccess(())
-          case Some(errorMsg) => requestState._2.tryFailure(new KafkaException(errorMsg.toString))
-        }
-        pendingHeartbeat.compareAndSet(true, false)
+      validateResponse(response) match {
+        case None =>
+          // Extract API response
+          val body = response.responseBody().asInstanceOf[BrokerHeartbeatResponse]
+          handleBrokerHeartbeatResponse(body) match {
+            case None =>
+              // Update metrics
+              heartbeatResponseTime.update(time.nanoseconds - sendTime)
+              // Report success
+              requestState._2.trySuccess(())
+            case Some(errorMsg) => requestState._2.tryFailure(new KafkaException(errorMsg.toString))
+          }
+        case Some(throwable) =>
+          requestState._2.tryFailure(throwable)
       }
+      pendingHeartbeat.compareAndSet(true, false)
     }
 
     debug(s"Sending BrokerHeartbeatRequest to controller $request")
     controllerChannelManager.sendRequest(new BrokerHeartbeatRequest.Builder(request), responseHandler)
   }
 
+  /**
+   * Handles a heartbeat response to determine success/failure of the in-flight state change request
+   *
+   * @param response - From the active controller
+   * @return
+   */
   private def handleBrokerHeartbeatResponse(response: BrokerHeartbeatResponse): Option[Errors] = {
     if (response.data().errorCode() != 0) {
       val errorMsg = Errors.forCode(response.data().errorCode())
@@ -240,8 +355,16 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
     }
   }
 
+  /**
+   * Exports current broker state
+   *
+   * @return
+   */
   override def brokerState: metadata.BrokerState = currentState
 
-  // In nanoseconds using the JVM's high-resolution timer
+  /**
+   * Last successful heartbeat time in nanoseconds; using the JVM's high-resolution timer
+   *   - NOT wall-clock time
+   */
   override def lastSuccessfulHeartbeatTime: Long = _lastSuccessfulHeartbeatTime
 }

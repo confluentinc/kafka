@@ -1,19 +1,22 @@
 package unit.kafka.server
 
+import java.io.IOException
 import java.util.Properties
 import java.util.concurrent.{Executors, TimeUnit}
 
-import kafka.common.KafkaException
+import org.apache.kafka.common.KafkaException
 import kafka.server.{BrokerLifecycleManagerImpl, BrokerToControllerChannelManager, Defaults, KafkaConfig}
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.clients.{ClientResponse, RequestCompletionHandler}
-import org.apache.kafka.common.message.BrokerHeartbeatResponseData
+import org.apache.kafka.common.errors.{AuthenticationException, DuplicateBrokerRegistrationException, UnsupportedVersionException}
+import org.apache.kafka.common.message.{BrokerHeartbeatResponseData, BrokerRegistrationResponseData}
 import org.apache.kafka.common.message.BrokerRegistrationRequestData.{FeatureCollection, ListenerCollection}
 import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.common.requests.{BrokerHeartbeatRequest, BrokerHeartbeatResponse}
+import org.apache.kafka.common.requests.{BrokerHeartbeatRequest, BrokerHeartbeatResponse, BrokerRegistrationRequest, BrokerRegistrationResponse}
 import org.apache.kafka.metadata.BrokerState
 import org.easymock.{EasyMock, IAnswer}
 import org.junit.{Before, Test}
+import org.scalatest.Matchers.intercept
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Promise
@@ -29,12 +32,15 @@ class BrokerLifecycleManagerTest {
 
   val time = new MockTime
   val brokerID = 99
+  val activeControllerID = 198
+  val leaseDuration = 3_600 // seconds
   val rack = "rack-1"
   val random = new Random(System.currentTimeMillis())
   val configProperties: Properties = TestUtils.createBrokerConfig(brokerID, TestUtils.MockZkConnect)
   var config: KafkaConfig = _
 
   var brokerToControllerChannel: BrokerToControllerChannelManager = _
+
   @Before
   def setup(): Unit = {
     brokerToControllerChannel = EasyMock.createMock(classOf[BrokerToControllerChannelManager])
@@ -51,7 +57,7 @@ class BrokerLifecycleManagerTest {
     time.sleep(config.registrationHeartbeatIntervalMs + random.nextInt(delay))
   }
 
-  private def waitForPromise(promise: Promise[Unit], maxWaitTime: Int = MaxConditionWaitTime) : Unit = {
+  private def waitForPromise(promise: Promise[Unit], maxWaitTime: Int = MaxConditionWaitTime): Unit = {
     // Wait for promise to be completed -> The "network" thread simulates a network delay
     for (_ <- 0 to maxWaitTime by config.registrationHeartbeatIntervalMs) {
       time.sleep(config.registrationHeartbeatIntervalMs.longValue)
@@ -60,6 +66,28 @@ class BrokerLifecycleManagerTest {
 
     // Fail the promise
     promise.tryFailure(new Error("Promise failed to complete in time"))
+  }
+
+  private def mockBrokerRegistration(mock: BrokerToControllerChannelManager): Unit = {
+    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    EasyMock.expect(mock.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val response = new BrokerRegistrationResponseData()
+            .setActiveControllerId(activeControllerID)
+            .setBrokerEpoch(1)
+            .setErrorCode(Errors.NONE.code())
+            .setLeaseDurationMs(TimeUnit.SECONDS.toMillis(leaseDuration))
+            .setThrottleTimeMs(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            null, null, new BrokerRegistrationResponse(response))
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    )
   }
 
   /**
@@ -72,6 +100,11 @@ class BrokerLifecycleManagerTest {
     val capturedRequest = EasyMock.newCapture[BrokerHeartbeatRequest.Builder]()
     val capturedResponseHandler = EasyMock.newCapture()
     val pendingStateChanges = Set(BrokerState.REGISTERING)
+
+    // Setup mock registration response
+    mockBrokerRegistration(brokerToControllerChannel)
+
+    // Setup mock heartbeat response
     EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
       new IAnswer[Unit]() {
         override def answer(): Unit = {
@@ -123,6 +156,11 @@ class BrokerLifecycleManagerTest {
     val capturedRequest = EasyMock.newCapture[BrokerHeartbeatRequest.Builder]()
     val capturedResponseHandler = EasyMock.newCapture()
     val pendingStateChanges = Set(BrokerState.REGISTERING, BrokerState.FENCED)
+
+    // Setup mock registration response
+    mockBrokerRegistration(brokerToControllerChannel)
+
+    // Setup mock heartbeat response
     EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
       new IAnswer[Unit]() {
         override def answer(): Unit = {
@@ -180,7 +218,10 @@ class BrokerLifecycleManagerTest {
     val numPeriodicHeartbeatsExpected = 10
     val pendingStateChanges = Set(BrokerState.REGISTERING, BrokerState.FENCED)
 
-    // Setup mock
+    // Setup mock registration response
+    mockBrokerRegistration(brokerToControllerChannel)
+
+    // Setup mock heartbeat response
     val capturedRequest = EasyMock.newCapture[BrokerHeartbeatRequest.Builder]()
     val capturedResponseHandler = EasyMock.newCapture()
     EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
@@ -248,7 +289,10 @@ class BrokerLifecycleManagerTest {
       BrokerState.SHUTTING_DOWN
     )
 
-    // Setup mock
+    // Setup mock registration response
+    mockBrokerRegistration(brokerToControllerChannel)
+
+    // Setup mock heartbeat response
     val capturedRequest = EasyMock.newCapture[BrokerHeartbeatRequest.Builder]()
     val capturedResponseHandler = EasyMock.newCapture()
     EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
@@ -279,11 +323,12 @@ class BrokerLifecycleManagerTest {
     // Schedule enqueues asynchronously
     val executor = Executors.newFixedThreadPool(2)
     pendingStateChanges foreach {
-      state => executor.submit(
-        (() => {
-          brokerLifecycleManager.enqueue(state)
-        }): Runnable
-      )
+      state =>
+        executor.submit(
+          (() => {
+            brokerLifecycleManager.enqueue(state)
+          }): Runnable
+        )
     }
 
     // Start
@@ -318,6 +363,10 @@ class BrokerLifecycleManagerTest {
     val capturedResponseHandler = EasyMock.newCapture()
     val pendingStateChanges = Set(BrokerState.REGISTERING)
 
+    // Setup mock registration response
+    mockBrokerRegistration(brokerToControllerChannel)
+
+    // Setup mock heartbeat response
     EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
       new IAnswer[Unit]() {
         override def answer(): Unit = {
@@ -372,7 +421,7 @@ class BrokerLifecycleManagerTest {
    * - Attempt broker registration
    * - Wait for 1 periodic heartbeat to succeed
    * - Submit a state change request and simulate an error response after a
-   *   network delay (longer than the heartbeat interval)
+   * network delay (longer than the heartbeat interval)
    * - Verify current time - lastSuccessfulHeartbeat > heartbeat interval
    * - Wait for a periodic heartbeat to be sent out
    * - Verify current time - lastSuccessfulHeartbeat < heartbeat interval
@@ -386,6 +435,10 @@ class BrokerLifecycleManagerTest {
     var networkDelay = false
     var failChange = false
 
+    // Setup mock registration response
+    mockBrokerRegistration(brokerToControllerChannel)
+
+    // Setup mock heartbeat response
     EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
       new IAnswer[Unit]() {
         override def answer(): Unit = {
@@ -444,11 +497,11 @@ class BrokerLifecycleManagerTest {
    * - Attempt broker registration, fencing and activation
    * - Wait for 1 periodic heartbeat to succeed
    * - Submit a state change request and simulate an error response after a
-   *   network delay (longer than the heartbeat interval)
+   * network delay (longer than the heartbeat interval)
    * - Verify current time - lastSuccessfulHeartbeat > heartbeat interval
    * - Verify current state is still the last target state
    * - Wait for a periodic heartbeat to be sent out that errors out after a
-   *   network delay (longer than the registration lease timeout)
+   * network delay (longer than the registration lease timeout)
    * - Verify current time - lastSuccessfulHeartbeat > registration lease timeout
    * - Verify current state is FENCED
    *
@@ -467,6 +520,10 @@ class BrokerLifecycleManagerTest {
     var failChange = false
     var networkDelayTime = 0
 
+    // Setup mock registration response
+    mockBrokerRegistration(brokerToControllerChannel)
+
+    // Setup mock heartbeat response
     EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
       new IAnswer[Unit]() {
         override def answer(): Unit = {
@@ -544,4 +601,271 @@ class BrokerLifecycleManagerTest {
   }
 
   // TODO: BrokerRegistrationTests
+  /**
+   * Test registration failure due to AuthenticationException
+   *
+   */
+  @Test
+  def testRegistrationAuthenticationError(): Unit = {
+    // Setup mock registration response
+    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    val exceptionMessage = "403"
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val response = new BrokerRegistrationResponseData()
+            .setActiveControllerId(activeControllerID)
+            .setBrokerEpoch(1)
+            .setErrorCode(Errors.NONE.code())
+            .setLeaseDurationMs(TimeUnit.SECONDS.toMillis(leaseDuration))
+            .setThrottleTimeMs(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            null, new AuthenticationException(exceptionMessage), new BrokerRegistrationResponse(response))
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    )
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerLifecycleManager
+    val brokerLifecycleManager = new BrokerLifecycleManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    val assertion = intercept[AuthenticationException] {
+      brokerLifecycleManager.start(new ListenerCollection(), new FeatureCollection())
+    }
+
+    assert(assertion.getMessage.contains(exceptionMessage))
+    assert(brokerLifecycleManager.brokerState == BrokerState.NOT_RUNNING)
+    assert(brokerLifecycleManager.lastSuccessfulHeartbeatTime == 0)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
+
+  /**
+   * Test registration failure due to broker UnsupportedVersion
+   *
+   */
+  @Test
+  def testRegistrationUnsupportedVersionError(): Unit = {
+    // Setup mock registration response
+    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    val exceptionMessage = "Have: 2.x; Need: 3.x"
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val response = new BrokerRegistrationResponseData()
+            .setActiveControllerId(activeControllerID)
+            .setBrokerEpoch(1)
+            .setErrorCode(Errors.NONE.code())
+            .setLeaseDurationMs(TimeUnit.SECONDS.toMillis(leaseDuration))
+            .setThrottleTimeMs(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            new UnsupportedVersionException(exceptionMessage), null, new BrokerRegistrationResponse(response))
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    )
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerLifecycleManager
+    val brokerLifecycleManager = new BrokerLifecycleManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    val assertion = intercept[UnsupportedVersionException] {
+      brokerLifecycleManager.start(new ListenerCollection(), new FeatureCollection())
+    }
+
+    assert(assertion.getMessage.contains(exceptionMessage))
+    assert(brokerLifecycleManager.brokerState == BrokerState.NOT_RUNNING)
+    assert(brokerLifecycleManager.lastSuccessfulHeartbeatTime == 0)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
+
+  /**
+   * Test registration failure due to broker disconnection
+   *
+   */
+  @Test
+  def testRegistrationDisconnectionError(): Unit = {
+    // Setup mock registration response
+    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val response = new BrokerRegistrationResponseData()
+            .setActiveControllerId(activeControllerID)
+            .setBrokerEpoch(1)
+            .setErrorCode(Errors.NONE.code())
+            .setLeaseDurationMs(TimeUnit.SECONDS.toMillis(leaseDuration))
+            .setThrottleTimeMs(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, true,
+            null, null, new BrokerRegistrationResponse(response))
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    )
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerLifecycleManager
+    val brokerLifecycleManager = new BrokerLifecycleManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    val assertion = intercept[IOException] {
+      brokerLifecycleManager.start(new ListenerCollection(), new FeatureCollection())
+    }
+
+    assert(assertion.getMessage.contains("Client was disconnected"))
+    assert(brokerLifecycleManager.brokerState == BrokerState.NOT_RUNNING)
+    assert(brokerLifecycleManager.lastSuccessfulHeartbeatTime == 0)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
+
+  /**
+   * Test registration failure due to invalid response
+   *
+   */
+  @Test
+  def testRegistrationInvalidResponseError(): Unit = {
+    // Setup mock registration response
+    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            null, null, null)
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    )
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerLifecycleManager
+    val brokerLifecycleManager = new BrokerLifecycleManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    val assertion = intercept[IOException] {
+      brokerLifecycleManager.start(new ListenerCollection(), new FeatureCollection())
+    }
+
+    assert(assertion.getMessage.contains("No response found"))
+    assert(brokerLifecycleManager.brokerState == BrokerState.NOT_RUNNING)
+    assert(brokerLifecycleManager.lastSuccessfulHeartbeatTime == 0)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
+
+  /**
+   * Test registration failure due to duplicate broker ID
+   *
+   */
+  @Test
+  def testRegistrationDuplicateBrokerIDError(): Unit = {
+    // Setup mock registration response
+    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val response = new BrokerRegistrationResponseData()
+            .setActiveControllerId(activeControllerID)
+            .setBrokerEpoch(1)
+            .setErrorCode(Errors.DUPLICATE_BROKER_REGISTRATION.code())
+            .setLeaseDurationMs(TimeUnit.SECONDS.toMillis(leaseDuration))
+            .setThrottleTimeMs(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            null, null, new BrokerRegistrationResponse(response))
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    )
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerLifecycleManager
+    val brokerLifecycleManager = new BrokerLifecycleManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    val assertion = intercept[DuplicateBrokerRegistrationException] {
+      brokerLifecycleManager.start(new ListenerCollection(), new FeatureCollection())
+    }
+
+    assert(assertion.getMessage.contains(Errors.DUPLICATE_BROKER_REGISTRATION.message))
+    assert(brokerLifecycleManager.brokerState == BrokerState.NOT_RUNNING)
+    assert(brokerLifecycleManager.lastSuccessfulHeartbeatTime == 0)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
+
+  /**
+   * Test registration failure due to duplicate broker ID
+   *
+   */
+  @Test
+  def testRegistrationDuplicateBrokerIDError(): Unit = {
+    // Setup mock registration response
+    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
+    val capturedResponseHandler = EasyMock.newCapture()
+    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
+      new IAnswer[Unit]() {
+        override def answer(): Unit = {
+          val response = new BrokerRegistrationResponseData()
+            .setActiveControllerId(activeControllerID)
+            .setBrokerEpoch(1)
+            .setErrorCode(Errors.DUPLICATE_BROKER_REGISTRATION.code())
+            .setLeaseDurationMs(TimeUnit.SECONDS.toMillis(leaseDuration))
+            .setThrottleTimeMs(0)
+          val clientResponse = new ClientResponse(
+            null, null, null,
+            0, 0, false,
+            null, null, new BrokerRegistrationResponse(response))
+          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
+        }
+      }
+    )
+    EasyMock.replay(brokerToControllerChannel)
+
+    // Init BrokerLifecycleManager
+    val brokerLifecycleManager = new BrokerLifecycleManagerImpl(
+      config, brokerToControllerChannel, time.scheduler,
+      time, brokerID, rack, () => 1337, () => 2020
+    )
+    val assertion = intercept[DuplicateBrokerRegistrationException] {
+      brokerLifecycleManager.start(new ListenerCollection(), new FeatureCollection())
+    }
+
+    assert(assertion.getMessage.contains(Errors.DUPLICATE_BROKER_REGISTRATION.message))
+    assert(brokerLifecycleManager.brokerState == BrokerState.NOT_RUNNING)
+    assert(brokerLifecycleManager.lastSuccessfulHeartbeatTime == 0)
+
+    // Verify that only a single request was processed per scheduler tick
+    EasyMock.verify(brokerToControllerChannel)
+  }
+
+  // TODO: BrokerHeartbeatRecoveryTests -> Error and reschedule heartbeat
 }

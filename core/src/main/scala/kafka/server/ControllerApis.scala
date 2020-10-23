@@ -21,7 +21,7 @@ import kafka.network.RequestChannel
 import kafka.utils.Logging
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.acl.AclOperation.CLUSTER_ACTION
-import org.apache.kafka.common.errors.ApiException
+import org.apache.kafka.common.errors.{ApiException, ClusterAuthorizationException}
 import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.protocol.ApiKeys
 import org.apache.kafka.common.requests.{AlterIsrRequest, BrokerHeartbeatRequest}
@@ -80,10 +80,14 @@ class ControllerApis(val apisUtil: ApisUtils,
   }
 
   def handleBrokerHeartBeatRequest(request: RequestChannel.Request): Unit = {
-    val heartbeatRequest = request.body[BrokerHeartbeatRequest]
-    if (apisUtil.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
-      logger.info(heartbeatRequest.toString(true))
-      controller.processBrokerHeartbeat(heartbeatRequest.data())
+    // Pre-check
+    // TODO: Verify if CLUSTER_ACTION is the right ACL context
+    if (!apisUtil.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
+      Some(new ClusterAuthorizationException(s"Request $request is not authorized"))
     }
+
+    // Authorized
+    val heartbeatRequest = request.body[BrokerHeartbeatRequest]
+    controller.processBrokerHeartbeat(heartbeatRequest.data())
   }
 }
