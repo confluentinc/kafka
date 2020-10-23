@@ -25,7 +25,7 @@ import scala.util.{Failure, Random, Success}
 class BrokerLifecycleManagerTest {
 
   val MaxNetworkDelay = 100 // milliseconds
-  val MaxConditionWaitTime = 10_000 // milliseconds
+  val MaxConditionWaitTime = 10000 // milliseconds
 
   // We want to ensure we don't simulate any network delay longer than the maximum test wait time
   assert(MaxNetworkDelay + Defaults.RegistrationHeartbeatIntervalMs <= MaxConditionWaitTime)
@@ -33,7 +33,7 @@ class BrokerLifecycleManagerTest {
   val time = new MockTime
   val brokerID = 99
   val activeControllerID = 198
-  val leaseDuration = 3_600 // seconds
+  val leaseDuration = 3600 // seconds
   val rack = "rack-1"
   val random = new Random(System.currentTimeMillis())
   val configProperties: Properties = TestUtils.createBrokerConfig(brokerID, TestUtils.MockZkConnect)
