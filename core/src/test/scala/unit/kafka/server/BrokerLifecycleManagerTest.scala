@@ -822,50 +822,5 @@ class BrokerLifecycleManagerTest {
     EasyMock.verify(brokerToControllerChannel)
   }
 
-  /**
-   * Test registration failure due to duplicate broker ID
-   *
-   */
-  @Test
-  def testRegistrationDuplicateBrokerIDError(): Unit = {
-    // Setup mock registration response
-    val capturedRequest = EasyMock.newCapture[BrokerRegistrationRequest.Builder]()
-    val capturedResponseHandler = EasyMock.newCapture()
-    EasyMock.expect(brokerToControllerChannel.sendRequest(EasyMock.capture(capturedRequest), EasyMock.capture(capturedResponseHandler))).andAnswer(
-      new IAnswer[Unit]() {
-        override def answer(): Unit = {
-          val response = new BrokerRegistrationResponseData()
-            .setActiveControllerId(activeControllerID)
-            .setBrokerEpoch(1)
-            .setErrorCode(Errors.DUPLICATE_BROKER_REGISTRATION.code())
-            .setLeaseDurationMs(TimeUnit.SECONDS.toMillis(leaseDuration))
-            .setThrottleTimeMs(0)
-          val clientResponse = new ClientResponse(
-            null, null, null,
-            0, 0, false,
-            null, null, new BrokerRegistrationResponse(response))
-          capturedResponseHandler.getValue.asInstanceOf[RequestCompletionHandler].onComplete(clientResponse)
-        }
-      }
-    )
-    EasyMock.replay(brokerToControllerChannel)
-
-    // Init BrokerLifecycleManager
-    val brokerLifecycleManager = new BrokerLifecycleManagerImpl(
-      config, brokerToControllerChannel, time.scheduler,
-      time, brokerID, rack, () => 1337, () => 2020
-    )
-    val assertion = intercept[DuplicateBrokerRegistrationException] {
-      brokerLifecycleManager.start(new ListenerCollection(), new FeatureCollection())
-    }
-
-    assert(assertion.getMessage.contains(Errors.DUPLICATE_BROKER_REGISTRATION.message))
-    assert(brokerLifecycleManager.brokerState == BrokerState.NOT_RUNNING)
-    assert(brokerLifecycleManager.lastSuccessfulHeartbeatTime == 0)
-
-    // Verify that only a single request was processed per scheduler tick
-    EasyMock.verify(brokerToControllerChannel)
-  }
-
   // TODO: BrokerHeartbeatRecoveryTests -> Error and reschedule heartbeat
 }
