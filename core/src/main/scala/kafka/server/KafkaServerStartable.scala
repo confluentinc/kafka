@@ -21,8 +21,7 @@ import java.util.Properties
 
 import kafka.metrics.KafkaMetricsReporter
 import kafka.utils.{Exit, Logging, VerifiableProperties}
-
-import scala.collection.Seq
+import org.apache.kafka.common.utils.Time
 
 object KafkaServerStartable {
   def fromProps(serverProps: Properties): KafkaServerStartable = {
@@ -31,27 +30,28 @@ object KafkaServerStartable {
 
   def fromProps(serverProps: Properties, threadNamePrefix: Option[String]): KafkaServerStartable = {
     val reporters = KafkaMetricsReporter.startReporters(new VerifiableProperties(serverProps))
-    new KafkaServerStartable(KafkaConfig.fromProps(serverProps, false), reporters, threadNamePrefix)
+    new KafkaServerStartable(KafkaConfig.fromProps(serverProps, false), reporters.toSeq, threadNamePrefix)
   }
 }
 
 class KafkaServerStartable(val staticServerConfig: KafkaConfig, reporters: Seq[KafkaMetricsReporter], threadNamePrefix: Option[String] = None) extends Logging {
-  private val server = new KafkaServer(staticServerConfig, kafkaMetricsReporters = reporters, threadNamePrefix = threadNamePrefix)
+  private val serverManager = KafkaServerManager(staticServerConfig, Time.SYSTEM,
+    threadNamePrefix, reporters)
 
   def this(serverConfig: KafkaConfig) = this(serverConfig, Seq.empty)
 
   def startup(): Unit = {
-    try server.startup()
+    try serverManager.startup()
     catch {
       case _: Throwable =>
-        // KafkaServer.startup() calls shutdown() in case of exceptions, so we invoke `exit` to set the status code
+        // KafkaServerStartable.startup() calls shutdown() in case of exceptions, so we invoke `exit` to set the status code
         fatal("Exiting Kafka.")
         Exit.exit(1)
     }
   }
 
   def shutdown(): Unit = {
-    try server.shutdown()
+    try serverManager.shutdown()
     catch {
       case _: Throwable =>
         fatal("Halting Kafka.")
@@ -60,16 +60,7 @@ class KafkaServerStartable(val staticServerConfig: KafkaConfig, reporters: Seq[K
     }
   }
 
-  /**
-   * Allow setting broker state from the startable.
-   * This is needed when a custom kafka server startable want to emit new states that it introduces.
-   */
-  def setServerState(newState: Byte): Unit = {
-    server.brokerState.newState(newState)
-  }
-
-  def awaitShutdown(): Unit = server.awaitShutdown()
-
+  def awaitShutdown(): Unit = serverManager.awaitShutdown()
 }
 
 

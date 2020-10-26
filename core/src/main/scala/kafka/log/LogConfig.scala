@@ -71,7 +71,7 @@ case class LogConfig(props: java.util.Map[_, _], overriddenConfigs: Set[String] 
   extends AbstractConfig(LogConfig.configDef, props, false) {
   /**
    * Important note: Any configuration parameter that is passed along from KafkaConfig to LogConfig
-   * should also go in [[kafka.server.KafkaServer.copyKafkaConfigToLog]].
+   * should also go in [[kafka.server.KafkaBroker.copyKafkaConfigToLog]].
    */
   val segmentSize = getInt(LogConfig.SegmentBytesProp)
   val segmentMs = getLong(LogConfig.SegmentMsProp)
@@ -228,7 +228,7 @@ object LogConfig {
   }
 
   // Package private for testing, return a copy since it's a mutable global variable
-  private[log] def configDefCopy: LogConfigDef = new LogConfigDef(configDef)
+  def configDefCopy: LogConfigDef = new LogConfigDef(configDef)
 
   private val configDef: LogConfigDef = {
     import org.apache.kafka.common.config.ConfigDef.Importance._
