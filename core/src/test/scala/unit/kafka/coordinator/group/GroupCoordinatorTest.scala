@@ -94,7 +94,7 @@ class GroupCoordinatorTest {
 
   @Before
   def setUp(): Unit = {
-    val props = TestUtils.createBrokerConfig(nodeId = 0, zkConnect = "")
+    val props = TestUtils.createBrokerConfig(nodeId = 0, zkConnect = TestUtils.MockZkConnect)
     props.setProperty(KafkaConfig.GroupMinSessionTimeoutMsProp, GroupMinSessionTimeout.toString)
     props.setProperty(KafkaConfig.GroupMaxSessionTimeoutMsProp, GroupMaxSessionTimeout.toString)
     props.setProperty(KafkaConfig.GroupMaxSizeProp, GroupMaxSize.toString)
@@ -195,7 +195,7 @@ class GroupCoordinatorTest {
 
   @Test
   def testOffsetsRetentionMsIntegerOverflow(): Unit = {
-    val props = TestUtils.createBrokerConfig(nodeId = 0, zkConnect = "")
+    val props = TestUtils.createBrokerConfig(nodeId = 0, zkConnect = TestUtils.MockZkConnect)
     props.setProperty(KafkaConfig.OffsetsRetentionMinutesProp, Integer.MAX_VALUE.toString)
     val config = KafkaConfig.fromProps(props)
     val offsetConfig = GroupCoordinator.offsetConfig(config)
