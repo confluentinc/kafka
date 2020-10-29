@@ -27,7 +27,7 @@ import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.message.ApiVersionsResponseData
 import org.apache.kafka.common.message.ApiVersionsResponseData.{ApiVersionsResponseKey, FinalizedFeatureKey, SupportedFeatureKey}
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
-import org.apache.kafka.common.requests.{AlterIsrRequest, ApiVersionsRequest, ApiVersionsResponse, BrokerHeartbeatRequest}
+import org.apache.kafka.common.requests.{AlterIsrRequest, ApiVersionsRequest, ApiVersionsResponse, BrokerHeartbeatRequest, BrokerRegistrationRequest}
 import org.apache.kafka.common.resource.Resource.CLUSTER_NAME
 import org.apache.kafka.common.resource.ResourceType.CLUSTER
 import org.apache.kafka.common.utils.Time
@@ -84,8 +84,8 @@ class ControllerApis(val requestChannel: RequestChannel,
     //ApiKeys.DESCRIBE_QUORUM
     ApiKeys.ALTER_ISR,
     //ApiKeys.UPDATE_FEATURES
-    //ApiKeys.BROKER_REGISTRATION
-    //ApiKeys.BROKER_HEARTBEAT
+    ApiKeys.BROKER_REGISTRATION,
+    ApiKeys.BROKER_HEARTBEAT
   )
 
   override def handle(request: RequestChannel.Request): Unit = {
@@ -94,6 +94,7 @@ class ControllerApis(val requestChannel: RequestChannel,
         case ApiKeys.API_VERSIONS => handleApiVersionsRequest(request)
         case ApiKeys.ALTER_ISR => handleAlterIsrRequest(request)
         case ApiKeys.BROKER_HEARTBEAT => handleBrokerHeartBeatRequest(request)
+        case ApiKeys.BROKER_REGISTRATION => handleBrokerRegistration(request)
           // TODO other APIs
         case _ => throw new ApiException(s"Unsupported ApiKey ${request.context.header.apiKey()}")
       }
@@ -176,11 +177,17 @@ class ControllerApis(val requestChannel: RequestChannel,
     }
   }
 
+  def handleBrokerRegistration(request: RequestChannel.Request): Unit = {
+    val registrationRequest = request.body[BrokerRegistrationRequest]
+    if (apisUtil.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
+      controller.registerBroker(registrationRequest)
+    }
+  }
+
   def handleBrokerHeartBeatRequest(request: RequestChannel.Request): Unit = {
     val heartbeatRequest = request.body[BrokerHeartbeatRequest]
     if (apisUtil.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
-      // TODO: Process heartbeat request
-      logger.info(heartbeatRequest.toString(true))
+      controller.processBrokerHeartbeat(heartbeatRequest.data)
     }
   }
 }
