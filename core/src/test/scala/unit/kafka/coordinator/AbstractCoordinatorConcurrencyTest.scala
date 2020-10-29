@@ -48,7 +48,7 @@ abstract class AbstractCoordinatorConcurrencyTest[M <: CoordinatorMember] {
   val scheduler = new MockScheduler(time)
   var replicaManager: TestReplicaManager = _
   var zkClient: KafkaZkClient = _
-  val serverProps = TestUtils.createBrokerConfig(nodeId = 0, zkConnect = TestUtils.MockZkConnect)
+  val serverProps = TestUtils.createBrokerConfig(nodeId = 0, zkConnect = "")
   val random = new Random
 
   @Before
