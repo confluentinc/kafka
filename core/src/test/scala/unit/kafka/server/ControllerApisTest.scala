@@ -1,11 +1,12 @@
 package unit.kafka.server
 
 import java.net.InetAddress
+import java.util.UUID
 
 import kafka.network.RequestChannel
-import kafka.server.{ClientQuotaManager, ClientRequestQuotaManager, ControllerApis, ControllerMutationQuotaManager, ReplicationQuotaManager}
+import kafka.server.{ClientQuotaManager, ClientRequestQuotaManager, ControllerApis, ControllerMutationQuotaManager, KafkaConfig, MetaProperties, ReplicationQuotaManager}
 import kafka.server.QuotaFactory.QuotaManagers
-import kafka.utils.MockTime
+import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.memory.MemoryPool
 import org.apache.kafka.common.message.BrokerRegistrationRequestData
 import org.apache.kafka.common.network.{ClientInformation, ListenerName, Send}
@@ -24,9 +25,12 @@ class ControllerApisTest {
   private val brokerID = 1
   private val brokerRack = "Rack1"
   private val clientID = "Client1"
+  private val time = new MockTime
+  private val incarnationID = UUID.randomUUID()
+  private val clusterID = UUID.randomUUID()
+  private val metaProperties = new MetaProperties(incarnationID, clusterID)
   private val requestChannelMetrics: RequestChannel.Metrics = EasyMock.createNiceMock(classOf[RequestChannel.Metrics])
   private val requestChannel: RequestChannel = EasyMock.createNiceMock(classOf[RequestChannel])
-  private val time = new MockTime
   private val clientQuotaManager: ClientQuotaManager = EasyMock.createNiceMock(classOf[ClientQuotaManager])
   private val clientRequestQuotaManager: ClientRequestQuotaManager = EasyMock.createNiceMock(classOf[ClientRequestQuotaManager])
   private val clientControllerQuotaManager: ControllerMutationQuotaManager = EasyMock.createNiceMock(classOf[ControllerMutationQuotaManager])
@@ -44,13 +48,16 @@ class ControllerApisTest {
 
   private def createControllerApis(authorizer: Option[Authorizer] = None,
                                    supportedFeatures: Map[String, VersionRange] = Map.empty): ControllerApis = {
+    val config = TestUtils.createBrokerConfig(brokerID, TestUtils.MockZkConnect)
     new ControllerApis(
       requestChannel,
       authorizer,
       quotas,
       time,
       supportedFeatures,
-      controller
+      controller,
+      KafkaConfig.fromProps(config),
+      metaProperties
     )
   }
 
@@ -83,7 +90,7 @@ class ControllerApisTest {
    * @param capturedResponse - Captured response before send
    * @return
    */
-  private def simulateSendResponse(api: ApiKeys, apiVersion: Short, request: RequestChannel.Request, capturedResponse: Option[AbstractResponse]): Option[AbstractResponse] = {
+  private def simulateSendResponse(api: ApiKeys, apiVersion: Short, request: RequestChannel.Request, capturedResponse: Option[AbstractResponse]): AbstractResponse = {
     capturedResponse match {
       case Some(response) =>
         val responseSend = request.context.buildResponse(response)
@@ -92,10 +99,10 @@ class ControllerApisTest {
         channel.close()
         channel.buffer.getInt()
         ResponseHeader.parse(channel.buffer, api.responseHeaderVersion(apiVersion))
-        Some(AbstractResponse.parseResponse(api, api.responseSchema(apiVersion).read(channel.buffer), apiVersion))
+        AbstractResponse.parseResponse(api, api.responseSchema(apiVersion).read(channel.buffer), apiVersion)
       case None =>
-        // No-op
-        None
+        fail("Empty response not expected")
+        null
     }
   }
 
@@ -116,6 +123,7 @@ class ControllerApisTest {
       EasyMock.anyObject[Option[Send => Unit]]()
     ))
 
+
     EasyMock.replay(requestChannel)
     createControllerApis().handleBrokerRegistration(request)
 
@@ -125,13 +133,8 @@ class ControllerApisTest {
       request,
       capturedResponse.getValue)
 
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[BrokerRegistrationResponse]
-        assertEquals(response.errorCounts(), 0)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val response = simulatedResponse.asInstanceOf[BrokerRegistrationResponse]
+    assertEquals(response.errorCounts(), 0)
   }
 
   @After
