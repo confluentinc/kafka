@@ -26,6 +26,7 @@ import org.apache.kafka.common.requests.ApiError;
 import org.apache.kafka.common.requests.BrokerRegistrationRequest;
 import org.apache.kafka.controller.ClusterControlManager.HeartbeatReply;
 import org.apache.kafka.controller.ClusterControlManager.RegistrationReply;
+import org.apache.kafka.metadata.FeatureManager;
 
 import java.util.Collection;
 import java.util.Map;
@@ -113,10 +114,23 @@ public interface Controller extends AutoCloseable {
     CompletableFuture<RegistrationReply> registerBroker(BrokerRegistrationRequest request);
 
     /**
+     * Get the current finalized feature ranges for each feature.
+     *
+     * @return              A future yielding the feature ranges.
+     */
+    CompletableFuture<FeatureManager.FinalizedFeaturesAndEpoch> finalizedFeatures();
+
+    /**
      * Begin shutting down, but don't block.  You must still call close to clean up all
      * resources.
      */
     void beginShutdown();
+
+    /**
+     * If this controller is active, this is the non-negative controller epoch.
+     * Otherwise, this is -1.
+     */
+    long curClaimEpoch();
 
     /**
      * Blocks until we have shut down and freed all resources.

@@ -28,13 +28,14 @@ import kafka.network.SocketServer
 import kafka.security.CredentialProvider
 import kafka.server.QuotaFactory.QuotaManagers
 import kafka.utils.{CoreUtils, Logging}
-import org.apache.kafka.common.config.{ConfigResource }
+import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.metrics.{JmxReporter, Metrics, MetricsReporter}
 import org.apache.kafka.common.security.scram.internals.ScramMechanism
 import org.apache.kafka.common.security.token.delegation.internals.DelegationTokenCache
-import org.apache.kafka.common.utils.{LogContext, Time}
+import org.apache.kafka.common.utils.{AppInfoParser, LogContext, Time}
 import org.apache.kafka.common.{ClusterResource, Endpoint}
 import org.apache.kafka.controller.{Controller, LocalLogManager, QuorumController}
+import org.apache.kafka.metadata.VersionRange
 import org.apache.kafka.server.authorizer.{Authorizer, AuthorizerServerInfo}
 
 import scala.jdk.CollectionConverters._
@@ -85,8 +86,10 @@ class Kip500Controller(val config: KafkaConfig,
   var credentialProvider: CredentialProvider = null
   var socketServer: SocketServer = null
   var controller: Controller = null
+  val supportedFeatures: Map[String, VersionRange] = Map()
   var quotaManagers: QuotaManagers = null
   var controllerApis: ControllerApis = null
+  var controllerApisHandlerPool: KafkaRequestHandlerPool = null
 
   private def maybeChangeStatus(from: Status, to: Status): Boolean = {
     lock.lock()
@@ -145,17 +148,23 @@ class Kip500Controller(val config: KafkaConfig,
       val reporters = new util.ArrayList[MetricsReporter]
       reporters.add(jmxReporter)
       metrics = new Metrics(metricConfig, reporters, time, true, metricsContext)
-      KafkaBroker.notifyClusterListeners(clusterId,
-        kafkaMetricsReporters ++ metrics.reporters.asScala)
+      AppInfoParser.registerAppInfo(KafkaBroker.metricsPrefix,
+        config.controllerId.toString, metrics, time.milliseconds())
+      if (kafkaMetricsReporters == null) {
+        KafkaBroker.notifyClusterListeners(clusterId, metrics.reporters.asScala)
+      } else {
+        KafkaBroker.notifyClusterListeners(clusterId,
+          kafkaMetricsReporters ++ metrics.reporters.asScala)
+      }
 
       logManager = new LocalLogManager(new LogContext(),
         config.controllerId, config.metadataLogDir, "", 10)
 
       tokenCache = new DelegationTokenCache(ScramMechanism.mechanismNames)
       credentialProvider = new CredentialProvider(ScramMechanism.mechanismNames, tokenCache)
-      socketServer = new SocketServer(config, metrics, time, credentialProvider)
+      socketServer = new SocketServer(config, metrics, time, credentialProvider, false,
+        Some(new LogContext(s"[SocketServer controllerId=${config.controllerId}] ")))
       socketServer.startup(startProcessingRequests = false)
-      socketServer.startProcessingRequests(authorizerFutures)
 
       val configDefs = Map(ConfigResource.Type.BROKER -> KafkaConfig.configDef,
         ConfigResource.Type.TOPIC -> LogConfig.configDefCopy).toMap.asJava
@@ -175,7 +184,18 @@ class Kip500Controller(val config: KafkaConfig,
         authorizer,
         quotaManagers,
         time,
-        controller)
+        supportedFeatures,
+        controller,
+        config,
+        metaProperties)
+      controllerApisHandlerPool = new KafkaRequestHandlerPool(config.controllerId,
+        socketServer.dataPlaneRequestChannel,
+        controllerApis,
+        time,
+        config.numIoThreads,
+        s"${SocketServer.DataPlaneMetricPrefix}RequestHandlerAvgIdlePercent",
+        SocketServer.DataPlaneThreadPrefix)
+      socketServer.startProcessingRequests(authorizerFutures)
     } catch {
       case e: Throwable =>
         maybeChangeStatus(STARTING, STARTED)
@@ -191,8 +211,16 @@ class Kip500Controller(val config: KafkaConfig,
       info("shutting down")
       if (socketServer != null)
         CoreUtils.swallow(socketServer.stopProcessingRequests(), this)
+      if (controller != null)
+        controller.beginShutdown()
       if (socketServer != null)
         CoreUtils.swallow(socketServer.shutdown(), this)
+      if (controllerApisHandlerPool != null)
+        CoreUtils.swallow(controllerApisHandlerPool.shutdown(), this)
+      if (quotaManagers != null)
+        CoreUtils.swallow(quotaManagers.shutdown(), this)
+      if (controller != null)
+        controller.close()
     } catch {
       case e: Throwable =>
         fatal("Fatal error during controller shutdown.", e)
