@@ -393,20 +393,14 @@ class KafkaApisTest {
       EasyMock.replay(replicaManager, clientRequestQuotaManager, requestChannel)
       createKafkaApis().handleOffsetCommitRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.OFFSET_COMMIT,
         offsetCommitRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[OffsetCommitResponse]
-          assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION,
-            Errors.forCode(response.data().topics().get(0).partitions().get(0).errorCode()))
-        case None =>
-          fail("Empty response not expected")
-      }
+      ).asInstanceOf[OffsetCommitResponse]
+      assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION,
+        Errors.forCode(response.data().topics().get(0).partitions().get(0).errorCode()))
     }
 
     checkInvalidPartition(-1)
@@ -437,19 +431,13 @@ class KafkaApisTest {
       EasyMock.replay(replicaManager, clientRequestQuotaManager, requestChannel)
       createKafkaApis().handleTxnOffsetCommitRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.TXN_OFFSET_COMMIT,
         offsetCommitRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[TxnOffsetCommitResponse]
-          assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION, response.errors().get(invalidTopicPartition))
-        case None =>
-          fail("Empty response not expected")
-      }
+      ).asInstanceOf[TxnOffsetCommitResponse]
+      assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION, response.errors().get(invalidTopicPartition))
     }
 
     checkInvalidPartition(-1)
@@ -506,22 +494,17 @@ class KafkaApisTest {
 
       createKafkaApis().handleTxnOffsetCommitRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.TXN_OFFSET_COMMIT,
         offsetCommitRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[TxnOffsetCommitResponse]
-          if (version < 2) {
-            assertEquals(Errors.COORDINATOR_NOT_AVAILABLE, response.errors().get(topicPartition))
-          } else {
-            assertEquals(Errors.COORDINATOR_LOAD_IN_PROGRESS, response.errors().get(topicPartition))
-          }
-        case None =>
-          fail("Empty response not expected")
+      ).asInstanceOf[TxnOffsetCommitResponse]
+
+      if (version < 2) {
+        assertEquals(Errors.COORDINATOR_NOT_AVAILABLE, response.errors().get(topicPartition))
+      } else {
+        assertEquals(Errors.COORDINATOR_LOAD_IN_PROGRESS, response.errors().get(topicPartition))
       }
     }
   }
@@ -584,22 +567,17 @@ class KafkaApisTest {
 
       createKafkaApis().handleInitProducerIdRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.INIT_PRODUCER_ID,
         initProducerIdRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[InitProducerIdResponse]
-          if (version < 4) {
-            assertEquals(Errors.INVALID_PRODUCER_EPOCH.code, response.data.errorCode)
-          } else {
-            assertEquals(Errors.PRODUCER_FENCED.code, response.data.errorCode)
-          }
-        case None =>
-          fail("Empty response not expected")
+      ).asInstanceOf[InitProducerIdResponse]
+
+      if (version < 4) {
+        assertEquals(Errors.INVALID_PRODUCER_EPOCH.code, response.data.errorCode)
+      } else {
+        assertEquals(Errors.PRODUCER_FENCED.code, response.data.errorCode)
       }
     }
   }
@@ -654,22 +632,17 @@ class KafkaApisTest {
 
       createKafkaApis().handleAddOffsetsToTxnRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.ADD_OFFSETS_TO_TXN,
         addOffsetsToTxnRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[AddOffsetsToTxnResponse]
-          if (version < 2) {
-            assertEquals(Errors.INVALID_PRODUCER_EPOCH.code, response.data.errorCode)
-          } else {
-            assertEquals(Errors.PRODUCER_FENCED.code, response.data.errorCode)
-          }
-        case None =>
-          fail("Empty response not expected")
+      ).asInstanceOf[AddOffsetsToTxnResponse]
+
+      if (version < 2) {
+        assertEquals(Errors.INVALID_PRODUCER_EPOCH.code, response.data.errorCode)
+      } else {
+        assertEquals(Errors.PRODUCER_FENCED.code, response.data.errorCode)
       }
     }
   }
@@ -721,22 +694,17 @@ class KafkaApisTest {
 
       createKafkaApis().handleAddPartitionToTxnRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.ADD_PARTITIONS_TO_TXN,
         addPartitionsToTxnRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[AddPartitionsToTxnResponse]
-          if (version < 2) {
-            assertEquals(Collections.singletonMap(topicPartition, Errors.INVALID_PRODUCER_EPOCH), response.errors())
-          } else {
-            assertEquals(Collections.singletonMap(topicPartition, Errors.PRODUCER_FENCED), response.errors())
-          }
-        case None =>
-          fail("Empty response not expected")
+      ).asInstanceOf[AddPartitionsToTxnResponse]
+
+      if (version < 2) {
+        assertEquals(Collections.singletonMap(topicPartition, Errors.INVALID_PRODUCER_EPOCH), response.errors())
+      } else {
+        assertEquals(Collections.singletonMap(topicPartition, Errors.PRODUCER_FENCED), response.errors())
       }
     }
   }
@@ -785,22 +753,17 @@ class KafkaApisTest {
 
       createKafkaApis().handleEndTxnRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.END_TXN,
         endTxnRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[EndTxnResponse]
-          if (version < 2) {
-            assertEquals(Errors.INVALID_PRODUCER_EPOCH.code, response.data.errorCode)
-          } else {
-            assertEquals(Errors.PRODUCER_FENCED.code, response.data.errorCode)
-          }
-        case None =>
-          fail("Empty response not expected")
+      ).asInstanceOf[EndTxnResponse]
+
+      if (version < 2) {
+        assertEquals(Errors.INVALID_PRODUCER_EPOCH.code, response.data.errorCode)
+      } else {
+        assertEquals(Errors.PRODUCER_FENCED.code, response.data.errorCode)
       }
     }
   }
@@ -823,19 +786,13 @@ class KafkaApisTest {
       EasyMock.replay(replicaManager, clientRequestQuotaManager, requestChannel)
       createKafkaApis().handleAddPartitionToTxnRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.ADD_PARTITIONS_TO_TXN,
         addPartitionsToTxnRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[AddPartitionsToTxnResponse]
-          assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION, response.errors().get(invalidTopicPartition))
-        case None =>
-          fail("Empty response not expected")
-      }
+      ).asInstanceOf[AddPartitionsToTxnResponse]
+      assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION, response.errors().get(invalidTopicPartition))
     }
 
     checkInvalidPartition(-1)
@@ -884,22 +841,13 @@ class KafkaApisTest {
     EasyMock.replay(replicaManager, replicaQuotaManager, requestChannel)
     createKafkaApis().handleWriteTxnMarkersRequest(request)
 
-    EasyMock.verify(requestChannel)
-    assertTrue(capturedResponse.hasCaptured)
-
-    val simulatedResponse = simulateSendResponse(
+    val markersResponse = simulateSendResponse(
       ApiKeys.WRITE_TXN_MARKERS,
       writeTxnMarkersRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[WriteTxnMarkersResponse]
-        assertEquals(expectedErrors, response.errors(1))
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[WriteTxnMarkersResponse]
+    assertEquals(expectedErrors, markersResponse.errors(1))
   }
 
   @Test
@@ -920,19 +868,13 @@ class KafkaApisTest {
 
     createKafkaApis().handleWriteTxnMarkersRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val markersResponse = simulateSendResponse(
       ApiKeys.WRITE_TXN_MARKERS,
       writeTxnMarkersRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[WriteTxnMarkersResponse]
-        assertEquals(expectedErrors, response.errors(1))
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[WriteTxnMarkersResponse]
+    assertEquals(expectedErrors, markersResponse.errors(1))
   }
 
   @Test
@@ -969,20 +911,14 @@ class KafkaApisTest {
 
     createKafkaApis().handleWriteTxnMarkersRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val markersResponse = simulateSendResponse(
       ApiKeys.WRITE_TXN_MARKERS,
       writeTxnMarkersRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[WriteTxnMarkersResponse]
-        assertEquals(expectedErrors, response.errors(1))
-        EasyMock.verify(replicaManager)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[WriteTxnMarkersResponse]
+    assertEquals(expectedErrors, markersResponse.errors(1))
+    EasyMock.verify(replicaManager)
   }
 
   @Test
@@ -1120,20 +1056,14 @@ class KafkaApisTest {
 
     createKafkaApis().handleWriteTxnMarkersRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val markersResponse = simulateSendResponse(
       ApiKeys.WRITE_TXN_MARKERS,
       writeTxnMarkersRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[WriteTxnMarkersResponse]
-        assertEquals(expectedErrors, response.errors(1))
-        EasyMock.verify(replicaManager)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[WriteTxnMarkersResponse]
+    assertEquals(expectedErrors, markersResponse.errors(1))
+    EasyMock.verify(replicaManager)
   }
 
   @Test
@@ -1204,33 +1134,28 @@ class KafkaApisTest {
 
     createKafkaApis().handleDescribeGroupRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.DESCRIBE_GROUPS,
       describeGroupsRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[DescribeGroupsResponse]
-        val group = response.data().groups().get(0)
-        assertEquals(Errors.NONE, Errors.forCode(group.errorCode()))
-        assertEquals(groupId, group.groupId())
-        assertEquals(groupSummary.state, group.groupState())
-        assertEquals(groupSummary.protocolType, group.protocolType())
-        assertEquals(groupSummary.protocol, group.protocolData())
-        assertEquals(groupSummary.members.size, group.members().size())
+    ).asInstanceOf[DescribeGroupsResponse]
 
-        val member = group.members().get(0)
-        assertEquals(memberSummary.memberId, member.memberId())
-        assertEquals(memberSummary.groupInstanceId.orNull, member.groupInstanceId())
-        assertEquals(memberSummary.clientId, member.clientId())
-        assertEquals(memberSummary.clientHost, member.clientHost())
-        assertArrayEquals(memberSummary.metadata, member.memberMetadata())
-        assertArrayEquals(memberSummary.assignment, member.memberAssignment())
-      case None =>
-        fail("Empty response not expected")
-    }
+    val group = response.data().groups().get(0)
+    assertEquals(Errors.NONE, Errors.forCode(group.errorCode()))
+    assertEquals(groupId, group.groupId())
+    assertEquals(groupSummary.state, group.groupState())
+    assertEquals(groupSummary.protocolType, group.protocolType())
+    assertEquals(groupSummary.protocol, group.protocolData())
+    assertEquals(groupSummary.members.size, group.members().size())
+
+    val member = group.members().get(0)
+    assertEquals(memberSummary.memberId, member.memberId())
+    assertEquals(memberSummary.groupInstanceId.orNull, member.groupInstanceId())
+    assertEquals(memberSummary.clientId, member.clientId())
+    assertEquals(memberSummary.clientHost, member.clientHost())
+    assertArrayEquals(memberSummary.metadata, member.memberMetadata())
+    assertArrayEquals(memberSummary.assignment, member.memberAssignment())
   }
 
   @Test
@@ -1280,27 +1205,22 @@ class KafkaApisTest {
 
     createKafkaApis().handleOffsetDeleteRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.OFFSET_DELETE,
       offsetDeleteRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[OffsetDeleteResponse]
-        def errorForPartition(topic: String, partition: Int): Errors = {
-          Errors.forCode(response.data.topics.find(topic).partitions.find(partition).errorCode())
-        }
+    ).asInstanceOf[OffsetDeleteResponse]
 
-        assertEquals(2, response.data.topics.size)
-        assertEquals(Errors.NONE, errorForPartition("topic-1", 0))
-        assertEquals(Errors.NONE, errorForPartition("topic-1", 1))
-        assertEquals(Errors.NONE, errorForPartition("topic-2", 0))
-        assertEquals(Errors.NONE, errorForPartition("topic-2", 1))
-      case None =>
-        fail("Empty response not expected")
+    def errorForPartition(topic: String, partition: Int): Errors = {
+      Errors.forCode(response.data.topics.find(topic).partitions.find(partition).errorCode())
     }
+
+    assertEquals(2, response.data.topics.size)
+    assertEquals(Errors.NONE, errorForPartition("topic-1", 0))
+    assertEquals(Errors.NONE, errorForPartition("topic-1", 1))
+    assertEquals(Errors.NONE, errorForPartition("topic-2", 0))
+    assertEquals(Errors.NONE, errorForPartition("topic-2", 1))
   }
 
   @Test
@@ -1331,20 +1251,15 @@ class KafkaApisTest {
 
       createKafkaApis().handleOffsetDeleteRequest(request)
 
-      val simulatedResponse = simulateSendResponse(
+      val response = simulateSendResponse(
         ApiKeys.OFFSET_DELETE,
         offsetDeleteRequest.version,
         request,
         capturedResponse.getValue
-      )
-      simulatedResponse match {
-        case Some(validResponse) =>
-          val response = validResponse.asInstanceOf[OffsetDeleteResponse]
-          assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION,
-            Errors.forCode(response.data.topics.find(topic).partitions.find(invalidPartitionId).errorCode()))
-        case None =>
-          fail("Empty response not expected")
-      }
+      ).asInstanceOf[OffsetDeleteResponse]
+
+      assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION,
+        Errors.forCode(response.data.topics.find(topic).partitions.find(invalidPartitionId).errorCode()))
     }
 
     checkInvalidPartition(-1)
@@ -1370,19 +1285,14 @@ class KafkaApisTest {
 
     createKafkaApis().handleOffsetDeleteRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.OFFSET_DELETE,
       offsetDeleteRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[OffsetDeleteResponse]
-        assertEquals(Errors.GROUP_ID_NOT_FOUND, Errors.forCode(response.data.errorCode()))
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[OffsetDeleteResponse]
+
+    assertEquals(Errors.GROUP_ID_NOT_FOUND, Errors.forCode(response.data.errorCode()))
   }
 
   private def testListOffsetFailedGetLeaderReplica(error: Errors): Unit = {
@@ -1412,26 +1322,20 @@ class KafkaApisTest {
     val request = buildRequest(listOffsetRequest)
     createKafkaApis().handleListOffsetRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.LIST_OFFSETS,
       listOffsetRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[ListOffsetResponse]
-        val partitionDataOptional = response.topics.asScala.find(_.name == tp.topic).get
-          .partitions.asScala.find(_.partitionIndex == tp.partition)
-        assertTrue(partitionDataOptional.isDefined)
+    ).asInstanceOf[ListOffsetResponse]
+    val partitionDataOptional = response.topics.asScala.find(_.name == tp.topic).get
+      .partitions.asScala.find(_.partitionIndex == tp.partition)
+    assertTrue(partitionDataOptional.isDefined)
 
-        val partitionData = partitionDataOptional.get
-        assertEquals(error.code, partitionData.errorCode)
-        assertEquals(ListOffsetResponse.UNKNOWN_OFFSET, partitionData.offset)
-        assertEquals(ListOffsetResponse.UNKNOWN_TIMESTAMP, partitionData.timestamp)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val partitionData = partitionDataOptional.get
+    assertEquals(error.code, partitionData.errorCode)
+    assertEquals(ListOffsetResponse.UNKNOWN_OFFSET, partitionData.offset)
+    assertEquals(ListOffsetResponse.UNKNOWN_TIMESTAMP, partitionData.timestamp)
   }
 
   @Test
@@ -1452,13 +1356,8 @@ class KafkaApisTest {
   def testMetadataRequestOnSharedListenerWithInconsistentListenersAcrossBrokers(): Unit = {
     val (plaintextListener, _) = updateMetadataCacheWithInconsistentListeners()
 
-    sendMetadataRequestWithInconsistentListeners(plaintextListener) match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[MetadataResponse]
-        assertEquals(Set(0, 1), response.brokers.asScala.map(_.id).toSet)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val response = sendMetadataRequestWithInconsistentListeners(plaintextListener).asInstanceOf[MetadataResponse]
+    assertEquals(Set(0, 1), response.brokers.asScala.map(_.id).toSet)
   }
 
   /*
@@ -1469,13 +1368,8 @@ class KafkaApisTest {
   def testMetadataRequestOnDistinctListenerWithInconsistentListenersAcrossBrokers(): Unit = {
     val (_, anotherListener) = updateMetadataCacheWithInconsistentListeners()
 
-    sendMetadataRequestWithInconsistentListeners(anotherListener) match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[MetadataResponse]
-        assertEquals(Set(0), response.brokers.asScala.map(_.id).toSet)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val response = sendMetadataRequestWithInconsistentListeners(anotherListener).asInstanceOf[MetadataResponse]
+    assertEquals(Set(0), response.brokers.asScala.map(_.id).toSet)
   }
 
   /**
@@ -1527,28 +1421,22 @@ class KafkaApisTest {
     val request = buildRequest(fetchRequest)
     createKafkaApis().handleFetchRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.FETCH,
       fetchRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[FetchResponse[BaseRecords]]
-        assertTrue(response.responseData.containsKey(tp))
+    ).asInstanceOf[FetchResponse[BaseRecords]]
+    assertTrue(response.responseData.containsKey(tp))
 
-        val partitionData = response.responseData.get(tp)
-        assertEquals(Errors.NONE, partitionData.error)
-        assertEquals(hw, partitionData.highWatermark)
-        assertEquals(-1, partitionData.lastStableOffset)
-        assertEquals(0, partitionData.logStartOffset)
-        assertEquals(timestamp,
-          partitionData.records.asInstanceOf[MemoryRecords].batches.iterator.next.maxTimestamp)
-        assertNull(partitionData.abortedTransactions)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val partitionData = response.responseData.get(tp)
+    assertEquals(Errors.NONE, partitionData.error)
+    assertEquals(hw, partitionData.highWatermark)
+    assertEquals(-1, partitionData.lastStableOffset)
+    assertEquals(0, partitionData.logStartOffset)
+    assertEquals(timestamp,
+      partitionData.records.asInstanceOf[MemoryRecords].batches.iterator.next.maxTimestamp)
+    assertNull(partitionData.abortedTransactions)
   }
 
   @Test
@@ -1660,32 +1548,27 @@ class KafkaApisTest {
 
     capturedCallback.getValue.apply(JoinGroupResult(memberId, Errors.INCONSISTENT_GROUP_PROTOCOL))
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.JOIN_GROUP,
       joinGroupRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[JoinGroupResponse]
-        assertEquals(Errors.INCONSISTENT_GROUP_PROTOCOL, response.error)
-        assertEquals(0, response.data.members.size)
-        assertEquals(memberId, response.data.memberId)
-        assertEquals(GroupCoordinator.NoGeneration, response.data.generationId)
-        assertEquals(GroupCoordinator.NoLeader, response.data.leader)
-        assertNull(response.data.protocolType)
+    ).asInstanceOf[JoinGroupResponse]
 
-        if (version >= 7) {
-          assertNull(response.data.protocolName)
-        } else {
-          assertEquals(GroupCoordinator.NoProtocol, response.data.protocolName)
-        }
+    assertEquals(Errors.INCONSISTENT_GROUP_PROTOCOL, response.error)
+    assertEquals(0, response.data.members.size)
+    assertEquals(memberId, response.data.memberId)
+    assertEquals(GroupCoordinator.NoGeneration, response.data.generationId)
+    assertEquals(GroupCoordinator.NoLeader, response.data.leader)
+    assertNull(response.data.protocolType)
 
-        EasyMock.verify(clientRequestQuotaManager, requestChannel)
-      case None =>
-        fail("Empty response not expected")
+    if (version >= 7) {
+      assertNull(response.data.protocolName)
+    } else {
+      assertEquals(GroupCoordinator.NoProtocol, response.data.protocolName)
     }
+
+    EasyMock.verify(clientRequestQuotaManager, requestChannel)
   }
 
   @Test
@@ -1750,32 +1633,27 @@ class KafkaApisTest {
       error = Errors.NONE
     ))
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.JOIN_GROUP,
       joinGroupRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[JoinGroupResponse]
-        assertEquals(Errors.NONE, response.error)
-        assertEquals(0, response.data.members.size)
-        assertEquals(memberId, response.data.memberId)
-        assertEquals(0, response.data.generationId)
-        assertEquals(memberId, response.data.leader)
-        assertEquals(protocolName, response.data.protocolName)
+    ).asInstanceOf[JoinGroupResponse]
 
-        if (version >= 7) {
-          assertEquals(protocolType, response.data.protocolType)
-        } else {
-          assertNull(response.data.protocolType)
-        }
+    assertEquals(Errors.NONE, response.error)
+    assertEquals(0, response.data.members.size)
+    assertEquals(memberId, response.data.memberId)
+    assertEquals(0, response.data.generationId)
+    assertEquals(memberId, response.data.leader)
+    assertEquals(protocolName, response.data.protocolName)
 
-        EasyMock.verify(clientRequestQuotaManager, requestChannel)
-      case None =>
-        fail("Empty response not expected")
+    if (version >= 7) {
+      assertEquals(protocolType, response.data.protocolType)
+    } else {
+      assertNull(response.data.protocolType)
     }
+
+    EasyMock.verify(clientRequestQuotaManager, requestChannel)
   }
 
   @Test
@@ -1794,7 +1672,7 @@ class KafkaApisTest {
    * @param capturedResponse - Captured response before send
    * @return
    */
-  private def simulateSendResponse(api: ApiKeys, apiVersion: Short, request: RequestChannel.Request, capturedResponse: Option[AbstractResponse]): Option[AbstractResponse] = {
+  private def simulateSendResponse(api: ApiKeys, apiVersion: Short, request: RequestChannel.Request, capturedResponse: Option[AbstractResponse]): AbstractResponse = {
     capturedResponse match {
       case Some(response) =>
         val responseSend = request.context.buildResponse(response)
@@ -1803,10 +1681,10 @@ class KafkaApisTest {
         channel.close()
         channel.buffer.getInt()
         ResponseHeader.parse(channel.buffer, api.responseHeaderVersion(apiVersion))
-        Some(AbstractResponse.parseResponse(api, api.responseSchema(apiVersion).read(channel.buffer), apiVersion))
+        AbstractResponse.parseResponse(api, api.responseSchema(apiVersion).read(channel.buffer), apiVersion)
       case None =>
-        // No-op
-        None
+        fail("Empty response not expected")
+        null
     }
   }
 
@@ -1857,28 +1735,23 @@ class KafkaApisTest {
       error = Errors.NONE
     ))
 
-   val simulatedResponse = simulateSendResponse(
+   val response = simulateSendResponse(
       ApiKeys.SYNC_GROUP,
       syncGroupRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-   simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[SyncGroupResponse]
-        assertEquals(Errors.NONE, response.error)
-        assertArrayEquals(Array.empty[Byte], response.data.assignment)
+    ).asInstanceOf[SyncGroupResponse]
 
-        if (version >= 5) {
-          assertEquals(protocolType, response.data.protocolType)
-        } else {
-          assertNull(response.data.protocolType)
-        }
+    assertEquals(Errors.NONE, response.error)
+    assertArrayEquals(Array.empty[Byte], response.data.assignment)
 
-        EasyMock.verify(clientRequestQuotaManager, requestChannel)
-      case None =>
-        fail("Empty response not expected")
+    if (version >= 5) {
+      assertEquals(protocolType, response.data.protocolType)
+    } else {
+      assertNull(response.data.protocolType)
     }
+
+    EasyMock.verify(clientRequestQuotaManager, requestChannel)
   }
 
   @Test
@@ -1937,25 +1810,20 @@ class KafkaApisTest {
       ))
     }
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.SYNC_GROUP,
       syncGroupRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[SyncGroupResponse]
-        if (version < 5) {
-          assertEquals(Errors.NONE, response.error)
-        } else {
-          assertEquals(Errors.INCONSISTENT_GROUP_PROTOCOL, response.error)
-        }
+    ).asInstanceOf[SyncGroupResponse]
 
-        EasyMock.verify(clientRequestQuotaManager, requestChannel)
-      case None =>
-        fail("Empty response not expected")
+    if (version < 5) {
+      assertEquals(Errors.NONE, response.error)
+    } else {
+      assertEquals(Errors.INCONSISTENT_GROUP_PROTOCOL, response.error)
     }
+
+    EasyMock.verify(clientRequestQuotaManager, requestChannel)
   }
 
   @Test
@@ -1975,20 +1843,14 @@ class KafkaApisTest {
     val requestChannelRequest = buildRequest(joinGroupRequest)
     createKafkaApis(KAFKA_2_2_IV1).handleJoinGroupRequest(requestChannelRequest)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.JOIN_GROUP,
       joinGroupRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[JoinGroupResponse]
-        assertEquals(Errors.UNSUPPORTED_VERSION, response.error())
-        EasyMock.replay(groupCoordinator)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[JoinGroupResponse]
+    assertEquals(Errors.UNSUPPORTED_VERSION, response.error())
+    EasyMock.replay(groupCoordinator)
   }
 
   @Test
@@ -2007,20 +1869,14 @@ class KafkaApisTest {
     val requestChannelRequest = buildRequest(syncGroupRequest)
     createKafkaApis(KAFKA_2_2_IV1).handleSyncGroupRequest(requestChannelRequest)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.SYNC_GROUP,
       syncGroupRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[SyncGroupResponse]
-        assertEquals(Errors.UNSUPPORTED_VERSION, response.error)
-        EasyMock.replay(groupCoordinator)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[SyncGroupResponse]
+    assertEquals(Errors.UNSUPPORTED_VERSION, response.error)
+    EasyMock.replay(groupCoordinator)
   }
 
   @Test
@@ -2038,20 +1894,14 @@ class KafkaApisTest {
     val requestChannelRequest = buildRequest(heartbeatRequest)
     createKafkaApis(KAFKA_2_2_IV1).handleHeartbeatRequest(requestChannelRequest)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.HEARTBEAT,
       heartbeatRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[HeartbeatResponse]
-        assertEquals(Errors.UNSUPPORTED_VERSION, response.error())
-        EasyMock.replay(groupCoordinator)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[HeartbeatResponse]
+    assertEquals(Errors.UNSUPPORTED_VERSION, response.error())
+    EasyMock.replay(groupCoordinator)
   }
 
   @Test
@@ -2091,20 +1941,14 @@ class KafkaApisTest {
         ))
     )
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.OFFSET_COMMIT,
       offsetCommitRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[OffsetCommitResponse]
-        assertEquals(expectedTopicErrors, response.data.topics())
-        EasyMock.replay(groupCoordinator)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[OffsetCommitResponse]
+    assertEquals(expectedTopicErrors, response.data.topics())
+    EasyMock.replay(groupCoordinator)
   }
 
   @Test
@@ -2244,19 +2088,13 @@ class KafkaApisTest {
     val requestChannelRequest = buildRequest(initProducerIdRequest)
     createKafkaApis(KAFKA_2_2_IV1).handleInitProducerIdRequest(requestChannelRequest)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.INIT_PRODUCER_ID,
       initProducerIdRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[InitProducerIdResponse]
-        assertEquals(Errors.INVALID_REQUEST, response.error)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[InitProducerIdResponse]
+    assertEquals(Errors.INVALID_REQUEST, response.error)
   }
 
   @Test
@@ -2274,19 +2112,13 @@ class KafkaApisTest {
     val requestChannelRequest = buildRequest(initProducerIdRequest)
     createKafkaApis(KAFKA_2_2_IV1).handleInitProducerIdRequest(requestChannelRequest)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.INIT_PRODUCER_ID,
       initProducerIdRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[InitProducerIdResponse]
-        assertEquals(Errors.INVALID_REQUEST, response.error)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[InitProducerIdResponse]
+    assertEquals(Errors.INVALID_REQUEST, response.error)
   }
 
   @Test
@@ -2330,20 +2162,14 @@ class KafkaApisTest {
 
     createKafkaApis().handleUpdateMetadataRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.UPDATE_METADATA,
       updateMetadataRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[UpdateMetadataResponse]
-        assertEquals(expectedError, response.error())
-        EasyMock.verify(replicaManager)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[UpdateMetadataResponse]
+    assertEquals(expectedError, response.error())
+    EasyMock.verify(replicaManager)
   }
 
   @Test
@@ -2416,15 +2242,9 @@ class KafkaApisTest {
       leaderAndIsrRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[LeaderAndIsrResponse]
-        assertEquals(expectedError, response.error())
-        EasyMock.verify(replicaManager)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[LeaderAndIsrResponse]
+    assertEquals(expectedError, simulatedResponse.error())
+    EasyMock.verify(replicaManager)
   }
 
   @Test
@@ -2490,20 +2310,14 @@ class KafkaApisTest {
 
     createKafkaApis().handleStopReplicaRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.STOP_REPLICA,
       stopReplicaRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[StopReplicaResponse]
-        assertEquals(expectedError, response.error())
-        EasyMock.verify(replicaManager)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[StopReplicaResponse]
+    assertEquals(expectedError, response.error())
+    EasyMock.verify(replicaManager)
   }
 
   @Test
@@ -2513,15 +2327,10 @@ class KafkaApisTest {
       GroupOverview("group2", "qwerty", "Empty")
     )
 
-    listGroupRequest(None, overviews) match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[ListGroupsResponse]
-        assertEquals(2, response.data.groups.size)
-        assertEquals("Stable", response.data.groups.get(0).groupState)
-        assertEquals("Empty", response.data.groups.get(1).groupState)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val response = listGroupRequest(None, overviews).asInstanceOf[ListGroupsResponse]
+    assertEquals(2, response.data.groups.size)
+    assertEquals("Stable", response.data.groups.get(0).groupState)
+    assertEquals("Empty", response.data.groups.get(1).groupState)
   }
 
   @Test
@@ -2530,17 +2339,12 @@ class KafkaApisTest {
       GroupOverview("group1", "protocol1", "Stable")
     )
 
-    listGroupRequest(Some("Stable"), overviews) match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[ListGroupsResponse]
-        assertEquals(1, response.data.groups.size)
-        assertEquals("Stable", response.data.groups.get(0).groupState)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val response = listGroupRequest(Some("Stable"), overviews).asInstanceOf[ListGroupsResponse]
+    assertEquals(1, response.data.groups.size)
+    assertEquals("Stable", response.data.groups.get(0).groupState)
   }
 
-  private def listGroupRequest(state: Option[String], overviews: List[GroupOverview]): Option[AbstractResponse] = {
+  private def listGroupRequest(state: Option[String], overviews: List[GroupOverview]): AbstractResponse = {
     EasyMock.reset(groupCoordinator, clientRequestQuotaManager, requestChannel)
 
     val data = new ListGroupsRequestData()
@@ -2556,13 +2360,12 @@ class KafkaApisTest {
     EasyMock.replay(groupCoordinator, clientRequestQuotaManager, requestChannel)
 
     createKafkaApis().handleListGroupsRequest(requestChannelRequest)
-    val simulatedResponse = simulateSendResponse(
+    simulateSendResponse(
       ApiKeys.LIST_GROUPS,
       listGroupsRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
     )
-    simulatedResponse
   }
 
   /**
@@ -2603,7 +2406,7 @@ class KafkaApisTest {
     (plaintextListener, anotherListener)
   }
 
-  private def sendMetadataRequestWithInconsistentListeners(requestListener: ListenerName): Option[AbstractResponse] = {
+  private def sendMetadataRequestWithInconsistentListeners(requestListener: ListenerName): AbstractResponse = {
     val capturedResponse = expectNoThrottling()
     EasyMock.replay(clientRequestQuotaManager, requestChannel)
 
@@ -2611,13 +2414,12 @@ class KafkaApisTest {
     val requestChannelRequest = buildRequest(metadataRequest, requestListener)
     createKafkaApis().handleTopicMetadataRequest(requestChannelRequest)
 
-    val simulatedResponse = simulateSendResponse(
+    simulateSendResponse(
       ApiKeys.METADATA,
       metadataRequest.version,
       requestChannelRequest,
       capturedResponse.getValue
     )
-    simulatedResponse
   }
 
   private def testConsumerListOffsetLatest(isolationLevel: IsolationLevel): Unit = {
@@ -2646,26 +2448,21 @@ class KafkaApisTest {
     val request = buildRequest(listOffsetRequest)
     createKafkaApis().handleListOffsetRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.LIST_OFFSETS,
       listOffsetRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[ListOffsetResponse]
-        val partitionDataOptional = response.topics.asScala.find(_.name == tp.topic).get
-          .partitions.asScala.find(_.partitionIndex == tp.partition)
-        assertTrue(partitionDataOptional.isDefined)
+    ).asInstanceOf[ListOffsetResponse]
 
-        val partitionData = partitionDataOptional.get
-        assertEquals(Errors.NONE.code, partitionData.errorCode)
-        assertEquals(latestOffset, partitionData.offset)
-        assertEquals(ListOffsetResponse.UNKNOWN_TIMESTAMP, partitionData.timestamp)
-      case None =>
-        fail("Empty response not expected")
-    }
+    val partitionDataOptional = response.topics.asScala.find(_.name == tp.topic).get
+      .partitions.asScala.find(_.partitionIndex == tp.partition)
+    assertTrue(partitionDataOptional.isDefined)
+
+    val partitionData = partitionDataOptional.get
+    assertEquals(Errors.NONE.code, partitionData.errorCode)
+    assertEquals(latestOffset, partitionData.offset)
+    assertEquals(ListOffsetResponse.UNKNOWN_TIMESTAMP, partitionData.timestamp)
   }
 
   private def createWriteTxnMarkersRequest(partitions: util.List[TopicPartition]) = {
@@ -2766,25 +2563,20 @@ class KafkaApisTest {
 
     createKafkaApis().handleAlterReplicaLogDirsRequest(request)
 
-    val simulatedResponse = simulateSendResponse(
+    val response = simulateSendResponse(
       ApiKeys.ALTER_REPLICA_LOG_DIRS,
       alterReplicaLogDirsRequest.version,
       request,
       capturedResponse.getValue
-    )
-    simulatedResponse match {
-      case Some(validResponse) =>
-        val response = validResponse.asInstanceOf[AlterReplicaLogDirsResponse]
-        assertEquals(partitionResults, response.data.results.asScala.flatMap { tr =>
-          tr.partitions().asScala.map { pr =>
-            new TopicPartition(tr.topicName, pr.partitionIndex) -> Errors.forCode(pr.errorCode)
-          }
-        }.toMap)
-        assertEquals(Map(Errors.NONE -> 1,
-          Errors.LOG_DIR_NOT_FOUND -> 1,
-          Errors.INVALID_TOPIC_EXCEPTION -> 1).asJava, response.errorCounts)
-      case None =>
-        fail("Empty response not expected")
-    }
+    ).asInstanceOf[AlterReplicaLogDirsResponse]
+
+    assertEquals(partitionResults, response.data.results.asScala.flatMap { tr =>
+      tr.partitions().asScala.map { pr =>
+        new TopicPartition(tr.topicName, pr.partitionIndex) -> Errors.forCode(pr.errorCode)
+      }
+    }.toMap)
+    assertEquals(Map(Errors.NONE -> 1,
+      Errors.LOG_DIR_NOT_FOUND -> 1,
+      Errors.INVALID_TOPIC_EXCEPTION -> 1).asJava, response.errorCounts)
   }
 }
