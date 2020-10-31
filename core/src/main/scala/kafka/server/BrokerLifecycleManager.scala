@@ -23,6 +23,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 
 import org.apache.kafka.common.KafkaException
 import kafka.metrics.KafkaMetricsGroup
+import kafka.server.metadata.{BrokerMetadataListener, OutOfBandFenceLocalBrokerEvent, OutOfBandRegisterLocalBrokerEvent}
 import kafka.utils.{Logging, Scheduler}
 import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.message.{BrokerHeartbeatRequestData, BrokerRegistrationRequestData}
@@ -83,14 +84,7 @@ trait BrokerLifecycleManager {
  * @param metadataOffset           - The last committed/processed metadata offset provider for this broker
  * @param brokerEpoch              - This broker's current epoch provider
  */
-class BrokerLifecycleManagerImpl(val config: KafkaConfig,
-                                 val controllerChannelManager: BrokerToControllerChannelManager,
-                                 val scheduler: Scheduler, // FIXME: Pass in a Dedicated Heartbeat scheduler thread
-                                 val time: Time,
-                                 val brokerID: Int,
-                                 val rack: String,
-                                 val metadataOffset: () => Long,
-                                 val brokerEpoch: () => Long) extends BrokerLifecycleManager with Logging with KafkaMetricsGroup {
+class BrokerLifecycleManagerImpl(val brokerMetadataListener: BrokerMetadataListener, val config: KafkaConfig, val controllerChannelManager: BrokerToControllerChannelManager, val scheduler: Scheduler, val time: Time, val brokerID: Int, val rack: String, val metadataOffset: () => Long, val brokerEpoch: () => Long) extends BrokerLifecycleManager with Logging with KafkaMetricsGroup {
 
   // Request queue
   private val requestQueue: util.Queue[(metadata.BrokerState, Promise[Unit])] = new ConcurrentLinkedQueue[(metadata.BrokerState, Promise[Unit])]()
@@ -151,20 +145,21 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
       validateResponse(response) match {
         case None =>
           // Check for API errors
-          val body = response.responseBody().asInstanceOf[BrokerRegistrationResponse]
-          Errors.forCode(body.data().errorCode()) match {
+          val body = response.responseBody().asInstanceOf[BrokerRegistrationResponse].data
+          Errors.forCode(body.errorCode()) match {
             case Errors.DUPLICATE_BROKER_REGISTRATION =>
               currentState = metadata.BrokerState.NOT_RUNNING
               promise.tryFailure(Errors.DUPLICATE_BROKER_REGISTRATION.exception())
             case Errors.NONE =>
-              // Registration success
               // TODO: Is this the correct next state?
               currentState = metadata.BrokerState.RECOVERING_FROM_UNCLEAN_SHUTDOWN
+              // Registration success; notify the BrokerMetadataListener
+              brokerMetadataListener.put(OutOfBandRegisterLocalBrokerEvent(body.brokerEpoch))
               promise.trySuccess(())
             case _ =>
               // Unhandled error
               currentState = metadata.BrokerState.NOT_RUNNING
-              promise.tryFailure(Errors.forCode(body.data().errorCode()).exception())
+              promise.tryFailure(Errors.forCode(body.errorCode()).exception())
           }
         case Some(throwable) =>
           currentState = metadata.BrokerState.NOT_RUNNING
@@ -278,8 +273,9 @@ class BrokerLifecycleManagerImpl(val config: KafkaConfig,
         // No state change requests queued
         if (timeSinceLastHeartbeat > config.registrationLeaseTimeoutMs) {
           error(s"Last successful heartbeat was $timeSinceLastHeartbeat ms ago")
-          // Fence ourselves
+          // Fence ourselves; notify the BrokerMetadataListener
           currentState = metadata.BrokerState.FENCED
+          brokerMetadataListener.put(OutOfBandFenceLocalBrokerEvent(brokerEpoch()))
           // FIXME: What is the preferred action here? Do we wait for an external actor queue a state change
           //       request?
           pendingHeartbeat.compareAndSet(true, false)

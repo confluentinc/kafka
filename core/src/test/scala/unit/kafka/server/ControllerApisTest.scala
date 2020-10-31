@@ -7,18 +7,19 @@ import kafka.network.RequestChannel
 import kafka.server.{ClientQuotaManager, ClientRequestQuotaManager, ControllerApis, ControllerMutationQuotaManager, KafkaConfig, MetaProperties, ReplicationQuotaManager}
 import kafka.server.QuotaFactory.QuotaManagers
 import kafka.utils.{MockTime, TestUtils}
+import org.apache.kafka.common.errors.ClusterAuthorizationException
 import org.apache.kafka.common.memory.MemoryPool
 import org.apache.kafka.common.message.BrokerRegistrationRequestData
 import org.apache.kafka.common.network.{ClientInformation, ListenerName, Send}
-import org.apache.kafka.common.protocol.ApiKeys
-import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse, BrokerRegistrationRequest, BrokerRegistrationResponse, ByteBufferChannel, RequestContext, RequestHeader, ResponseHeader}
+import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse, BrokerRegistrationRequest, RequestContext, RequestHeader}
 import org.apache.kafka.common.security.auth.{KafkaPrincipal, SecurityProtocol}
 import org.apache.kafka.controller.Controller
 import org.apache.kafka.metadata.VersionRange
-import org.apache.kafka.server.authorizer.{Action, AuthorizableRequestContext, AuthorizationResult, Authorizer}
+import org.apache.kafka.server.authorizer.{AuthorizableRequestContext, AuthorizationResult, Authorizer}
 import org.easymock.{Capture, EasyMock, IAnswer}
-import org.junit.Assert.{assertEquals, fail}
 import org.junit.{After, Test}
+import org.scalatest.Matchers.intercept
 
 class ControllerApisTest {
   // Mocks
@@ -46,7 +47,7 @@ class ControllerApisTest {
     None)
   private val controller: Controller = EasyMock.createNiceMock(classOf[Controller])
 
-  private def createControllerApis(authorizer: Option[Authorizer] = None,
+  private def createControllerApis(authorizer: Option[Authorizer],
                                    supportedFeatures: Map[String, VersionRange] = Map.empty): ControllerApis = {
     val config = TestUtils.createBrokerConfig(brokerID, TestUtils.MockZkConnect)
     new ControllerApis(
@@ -81,31 +82,6 @@ class ControllerApisTest {
       requestChannelMetrics)
   }
 
-  /**
-   * Exercises the serialize/deserialize logic for API responses
-   * Useful for ensuring version checks are working as intended
-   *
-   * @param api - API type
-   * @param request - Request
-   * @param capturedResponse - Captured response before send
-   * @return
-   */
-  private def simulateSendResponse(api: ApiKeys, apiVersion: Short, request: RequestChannel.Request, capturedResponse: Option[AbstractResponse]): AbstractResponse = {
-    capturedResponse match {
-      case Some(response) =>
-        val responseSend = request.context.buildResponse(response)
-        val channel = new ByteBufferChannel(responseSend.size)
-        responseSend.writeTo(channel)
-        channel.close()
-        channel.buffer.getInt()
-        ResponseHeader.parse(channel.buffer, api.responseHeaderVersion(apiVersion))
-        AbstractResponse.parseResponse(api, api.responseSchema(apiVersion).read(channel.buffer), apiVersion)
-      case None =>
-        fail("Empty response not expected")
-        null
-    }
-  }
-
   @Test
   def testBrokerRegistrationAuthFailure(): Unit = {
     val brokerRegistrationRequest = new BrokerRegistrationRequest.Builder(
@@ -125,23 +101,20 @@ class ControllerApisTest {
 
     val authorizer = Some[Authorizer](EasyMock.createNiceMock(classOf[Authorizer]))
     EasyMock.expect(authorizer.get.authorize(EasyMock.anyObject[AuthorizableRequestContext](), EasyMock.anyObject())).andAnswer(
-      new IAnswer[List[AuthorizationResult]]() {
-        override def answer(): List[AuthorizationResult] = {
-          List[AuthorizationResult](AuthorizationResult.DENIED)
+      new IAnswer[java.util.List[AuthorizationResult]]() {
+        override def answer(): java.util.List[AuthorizationResult] = {
+          new java.util.ArrayList[AuthorizationResult](){
+            add(AuthorizationResult.DENIED)
+          }
         }
       }
     )
     EasyMock.replay(requestChannel, authorizer.get)
-    createControllerApis(authorizer = authorizer).handleBrokerRegistration(request)
 
-    val simulatedResponse = simulateSendResponse(
-      ApiKeys.BROKER_REGISTRATION,
-      brokerRegistrationRequest.version,
-      request,
-      capturedResponse.getValue)
-
-    val response = simulatedResponse.asInstanceOf[BrokerRegistrationResponse]
-    assertEquals(response.errorCounts(), 0)
+    val assertion = intercept[ClusterAuthorizationException] {
+      createControllerApis(authorizer = authorizer).handleBrokerRegistration(request)
+    }
+    assert(Errors.forException(assertion) == Errors.CLUSTER_AUTHORIZATION_FAILED)
   }
 
   @After
