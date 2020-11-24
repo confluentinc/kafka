@@ -213,13 +213,13 @@ class BrokerMetadataListenerTest {
     val listener = new BrokerMetadataListener(mock(classOf[KafkaConfig]), new MockTime, List(brokerMetadataProcessor),
       eventQueueTimeoutMs = 50)
     val localLogManager = new LocalLogManager(new LogContext("log-manager-broker-test"), 1,
-      logdir.getAbsolutePath, "log-manager", 10)
+      logdir.getAbsolutePath, "log-manager")
     localLogManager.initialize(listener)
 
     // Invoke dummy APIs
     val apisInvoked = mutable.ListBuffer[ApiMessageAndVersion]()
-    apisInvoked.addOne(new ApiMessageAndVersion(new RegisterBrokerRecord, apiVersion))
-    apisInvoked.addOne(new ApiMessageAndVersion(new FenceBrokerRecord, apiVersion))
+    apisInvoked += new ApiMessageAndVersion(new RegisterBrokerRecord, apiVersion)
+    apisInvoked += new ApiMessageAndVersion(new FenceBrokerRecord, apiVersion)
 
     // Schedule writes to the metadata log
     var eventsScheduled = 0

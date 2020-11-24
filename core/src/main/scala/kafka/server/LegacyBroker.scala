@@ -47,7 +47,6 @@ import org.apache.kafka.common.security.token.delegation.internals.DelegationTok
 import org.apache.kafka.common.security.{JaasContext, JaasUtils}
 import org.apache.kafka.common.utils.{AppInfoParser, LogContext, Time}
 import org.apache.kafka.common.{Endpoint, Node}
-import org.apache.kafka.controller.{LocalLogManager, MetaLogManager}
 import org.apache.kafka.metadata.BrokerState
 import org.apache.kafka.server.authorizer.Authorizer
 import org.apache.zookeeper.client.ZKClientConfig
@@ -129,8 +128,6 @@ class LegacyBroker(val config: KafkaConfig,
   var kafkaController: KafkaController = null
 
   var brokerMetadataListener: BrokerMetadataListener = null
-
-  var metaLogManager: MetaLogManager = null
 
   var brokerToControllerChannelManager: BrokerToControllerChannelManager = null
 
@@ -293,11 +290,6 @@ class LegacyBroker(val config: KafkaConfig,
             config, _clusterId, metadataCache, groupCoordinator, quotaManagers, replicaManager, transactionCoordinator,
             logManager))
         brokerMetadataListener.start()
-
-        // TODO: Replace w/ the raft log implementation
-        metaLogManager = new LocalLogManager(new LogContext(),
-          config.controllerId, config.metadataLogDir, "log-manager", config.metadataLogCheckIntervalMs)
-        metaLogManager.initialize(brokerMetadataListener)
 
         /* Get the authorizer and initialize it if one is specified.*/
         authorizer = config.authorizer

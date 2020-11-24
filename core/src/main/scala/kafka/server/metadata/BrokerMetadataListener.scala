@@ -124,7 +124,7 @@ class BrokerMetadataListener(
 
   // metrics
   private val eventQueueTimeHist = newHistogram(BrokerMetadataListener.EventQueueTimeMetricName)
-  newGauge(BrokerMetadataListener.EventQueueSizeMetricName, () => queue.size)
+  newGauge(BrokerMetadataListener.EventQueueSizeMetricName, () => pendingEvents)
 
   @volatile private var _currentMetadataOffset: Long = -1
 
