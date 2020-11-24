@@ -208,22 +208,28 @@ class BrokerMetadataListenerTest {
   def testLocalLogManagerEventQueue(): Unit = {
     val logdir = KTestUtils.tempDirectory()
     val leaderEpoch = 0
+    val apiVersion: Short = 1
     val brokerMetadataProcessor = new MockMetadataProcessor
     val listener = new BrokerMetadataListener(mock(classOf[KafkaConfig]), new MockTime, List(brokerMetadataProcessor),
       eventQueueTimeoutMs = 50)
-    val localLogManager = new LocalLogManager(new LogContext("log-manager-broker-test"), 1, logdir.getAbsolutePath, "log-manager", 10)
+    val localLogManager = new LocalLogManager(new LogContext("log-manager-broker-test"), 1,
+      logdir.getAbsolutePath, "log-manager", 10)
     localLogManager.initialize(listener)
+
+    // Invoke dummy APIs
     val apisInvoked = mutable.ListBuffer[ApiMessageAndVersion]()
-    apisInvoked.addOne(new ApiMessageAndVersion(new RegisterBrokerRecord, 1))
-    apisInvoked.addOne(new ApiMessageAndVersion(new FenceBrokerRecord, 1))
+    apisInvoked.addOne(new ApiMessageAndVersion(new RegisterBrokerRecord, apiVersion))
+    apisInvoked.addOne(new ApiMessageAndVersion(new FenceBrokerRecord, apiVersion))
 
     // Schedule writes to the metadata log
+    var eventsScheduled = 0
     localLogManager.scheduleWrite(leaderEpoch, apisInvoked.asJava)
+    eventsScheduled += 1
 
     // Wait for all events to be queued
     KTestUtils.waitForCondition(new TestCondition {
       override def conditionMet(): Boolean = {
-        listener.pendingEvents == 1
+        listener.pendingEvents == eventsScheduled
       }
     }, 1000, "Wait for all events to be queued")
 
