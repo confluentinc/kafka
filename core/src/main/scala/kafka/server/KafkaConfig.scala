@@ -71,6 +71,7 @@ object Defaults {
   val QueuedMaxRequestBytes = -1
   val RegistrationHeartbeatIntervalMs = 2000
   val RegistrationLeaseTimeoutMs = 18000
+  val MetadataLogCheckIntervalMs = 10000
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassName = ""
@@ -361,6 +362,7 @@ object KafkaConfig {
   val RegistrationHeartbeatIntervalMsProp = "registration.heartbeat.interval.ms"
   val RegistrationLeaseTimeoutMsProp = "registration.lease.timeout.ms"
   val MetadataLogDirProp = "metadata.log.dir"
+  val MetadataLogCheckIntervalMsProp = "metadata.log.check.interval.ms"
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameProp = "authorizer.class.name"
@@ -651,6 +653,7 @@ object KafkaConfig {
   val RegistrationHeartbeatIntervalMsDoc = "The length of time in milliseconds between broker heartbeats. Used when running in KIP-500 mode."
   val RegistrationLeaseTimeoutMsDoc = "The length of time in milliseconds that a broker lease lasts if no heartbeats are made. Used when running in KIP-500 mode."
   val MetadataLogDirDoc = "The directory in which the metadata log is kept. If not set, we default to the first directory given by log.dirs"
+  val MetadataLogCheckIntervalDoc = "The length of time in milliseconds between metadata log checks. Used when running in KIP-500 mode."
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameDoc = s"The fully qualified name of a class that implements s${classOf[Authorizer].getName}" +
@@ -1052,6 +1055,7 @@ object KafkaConfig {
       .define(RegistrationHeartbeatIntervalMsProp, INT, Defaults.RegistrationHeartbeatIntervalMs, MEDIUM, RegistrationHeartbeatIntervalMsDoc)
       .define(RegistrationLeaseTimeoutMsProp, INT, Defaults.RegistrationLeaseTimeoutMs, MEDIUM, RegistrationLeaseTimeoutMsDoc)
       .define(MetadataLogDirProp, STRING, null, HIGH, MetadataLogDirDoc)
+      .define(MetadataLogCheckIntervalMsProp, INT, Defaults.MetadataLogCheckIntervalMs, MEDIUM, MetadataLogCheckIntervalDoc)
 
       /************* Authorizer Configuration ***********/
       .define(AuthorizerClassNameProp, STRING, Defaults.AuthorizerClassName, LOW, AuthorizerClassNameDoc)
@@ -1514,6 +1518,7 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
       case None => logDirs.head
     }
   }
+  val metadataLogCheckIntervalMs = getInt(KafkaConfig.MetadataLogCheckIntervalMsProp)
 
   def getNumReplicaAlterLogDirsThreads: Int = {
     val numThreads: Integer = Option(getInt(KafkaConfig.NumReplicaAlterLogDirsThreadsProp)).getOrElse(logDirs.size)

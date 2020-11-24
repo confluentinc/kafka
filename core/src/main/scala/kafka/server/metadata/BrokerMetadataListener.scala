@@ -144,6 +144,11 @@ class BrokerMetadataListener(
     thread.doWork()
   }
 
+  // For testing, to verify event queuing
+  private[metadata] def pendingEvents: Int = {
+    queue.size
+  }
+
   def close(): Unit = {
     try {
       thread.initiateShutdown()
