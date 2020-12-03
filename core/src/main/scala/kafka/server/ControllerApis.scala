@@ -240,7 +240,7 @@ class ControllerApis(val requestChannel: RequestChannel,
           brokerRegistrationResponseData.setActiveControllerId(MetadataResponse.NO_CONTROLLER_ID)
         }
         brokerRegistrationResponseData.setBrokerEpoch(reply.epoch)
-        brokerRegistrationResponseData.setLeaseDurationMs(reply.epoch)
+        brokerRegistrationResponseData.setLeaseDurationMs(reply.leaseDurationMs)
         brokerRegistrationResponseData.setThrottleTimeMs(requestThrottleMs)
         brokerRegistrationResponseData.setErrorCode(error.code)
         new BrokerRegistrationResponse(brokerRegistrationResponseData)
