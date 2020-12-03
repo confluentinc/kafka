@@ -246,14 +246,10 @@ class BrokerLifecycleManagerImpl(val brokerMetadataListener: BrokerMetadataListe
     // TODO: Do we want to allow some sort preemption to prioritize critical state changes?
 
     val timeSinceLastHeartbeat = TimeUnit.NANOSECONDS.toMillis(time.nanoseconds - lastSuccessfulHeartbeatTime)
-    // If last heartbeat has been pending for more than config.registrationHeartbeatIntervalMs milliseconds ago, force another one
-    if (timeSinceLastHeartbeat >= config.registrationHeartbeatIntervalMs) {
-      pendingHeartbeat.compareAndSet(true, false);
-    }
-
     // Ensure that there are no outstanding state change requests
-    if (pendingHeartbeat.compareAndSet(false, true)) {
-      // No pending heartbeat in-flight. We have a few things to check during this iteration
+    // If last heartbeat has been pending for more than config.registrationHeartbeatIntervalMs milliseconds ago, force another one
+    if (pendingHeartbeat.compareAndSet(false, true) ||
+          timeSinceLastHeartbeat >= config.registrationHeartbeatIntervalMs) {
       // Check when the last heartbeat was successful
       // - If < registration.heartbeat.interval.ms, no-op
       // - Else, check for any pending state changes that have been queued

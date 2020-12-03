@@ -223,10 +223,11 @@ class ControllerApis(val requestChannel: RequestChannel,
     apisUtils.authorizeClusterOperation(request, CLUSTER_ACTION)
 
     controller.registerBroker(registrationRequest.data).handle[Unit]((reply, ex) => {
-      var err = Errors.NONE
-      if (ex != null) {
+      val err = if (ex != null) {
         error(s"Failed to register broker: ${ex.getMessage}")
-        err = Errors.forException(ex)
+        Errors.forException(ex)
+      } else {
+        Errors.NONE
       }
 
       def createResponseCallback(requestThrottleMs: Int, reply: RegistrationReply, error: Errors): BrokerRegistrationResponse = {
@@ -255,10 +256,11 @@ class ControllerApis(val requestChannel: RequestChannel,
     apisUtils.authorizeClusterOperation(request, CLUSTER_ACTION)
 
     controller.processBrokerHeartbeat(heartbeatRequest.data).handle[Unit]((reply, ex) => {
-      var err = Errors.NONE
-      if (ex != null) {
+      val err = if (ex != null) {
         error(s"Failed to acknowledge broker heartbeat: ${ex.getMessage}")
-        err = Errors.forException(ex)
+        Errors.forException(ex)
+      } else {
+        Errors.NONE
       }
 
       def createResponseCallback(requestThrottleMs: Int, reply: HeartbeatReply, error: Errors): BrokerHeartbeatResponse = {
