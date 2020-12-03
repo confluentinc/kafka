@@ -222,28 +222,29 @@ class ControllerApis(val requestChannel: RequestChannel,
     val registrationRequest = request.body[BrokerRegistrationRequest]
     apisUtils.authorizeClusterOperation(request, CLUSTER_ACTION)
 
-    def createResponseCallback(requestThrottleMs: Int, reply: RegistrationReply, error: Errors): BrokerRegistrationResponse = {
-      val brokerRegistrationResponseData = new BrokerRegistrationResponseData()
-
-      // TODO: get a better estimate of the current active controller from Raft or somewhere.
-      if (controller.curClaimEpoch() > 0) {
-        brokerRegistrationResponseData.setActiveControllerId(config.controllerId)
-      } else {
-        brokerRegistrationResponseData.setActiveControllerId(MetadataResponse.NO_CONTROLLER_ID)
-      }
-      brokerRegistrationResponseData.setBrokerEpoch(reply.epoch)
-      brokerRegistrationResponseData.setLeaseDurationMs(reply.epoch)
-      brokerRegistrationResponseData.setThrottleTimeMs(requestThrottleMs)
-      brokerRegistrationResponseData.setErrorCode(error.code)
-      new BrokerRegistrationResponse(brokerRegistrationResponseData)
-    }
-
-    controller.registerBroker(registrationRequest.data).handle((reply, ex) => {
+    controller.registerBroker(registrationRequest.data).handle[Unit]((reply, ex) => {
       var err = Errors.NONE
       if (ex != null) {
         error(s"Failed to register broker: ${ex.getMessage}")
         err = Errors.forException(ex)
       }
+
+      def createResponseCallback(requestThrottleMs: Int, reply: RegistrationReply, error: Errors): BrokerRegistrationResponse = {
+        val brokerRegistrationResponseData = new BrokerRegistrationResponseData()
+
+        // TODO: get a better estimate of the current active controller from Raft or somewhere.
+        if (controller.curClaimEpoch() > 0) {
+          brokerRegistrationResponseData.setActiveControllerId(config.controllerId)
+        } else {
+          brokerRegistrationResponseData.setActiveControllerId(MetadataResponse.NO_CONTROLLER_ID)
+        }
+        brokerRegistrationResponseData.setBrokerEpoch(reply.epoch)
+        brokerRegistrationResponseData.setLeaseDurationMs(reply.epoch)
+        brokerRegistrationResponseData.setThrottleTimeMs(requestThrottleMs)
+        brokerRegistrationResponseData.setErrorCode(error.code)
+        new BrokerRegistrationResponse(brokerRegistrationResponseData)
+      }
+
       apisUtils.sendResponseMaybeThrottle(request,
         requestThrottleMs => createResponseCallback(requestThrottleMs, reply, err))
     })
@@ -253,28 +254,29 @@ class ControllerApis(val requestChannel: RequestChannel,
     val heartbeatRequest = request.body[BrokerHeartbeatRequest]
     apisUtils.authorizeClusterOperation(request, CLUSTER_ACTION)
 
-    def createResponseCallback(requestThrottleMs: Int, reply: HeartbeatReply, error: Errors): BrokerHeartbeatResponse = {
-      val brokerHeartbeatResponseData = new BrokerHeartbeatResponseData()
-
-      // TODO: get a better estimate of the current active controller from Raft or somewhere.
-      if (controller.curClaimEpoch() > 0) {
-        brokerHeartbeatResponseData.setActiveControllerId(config.controllerId)
-      } else {
-        brokerHeartbeatResponseData.setActiveControllerId(MetadataResponse.NO_CONTROLLER_ID)
-      }
-      brokerHeartbeatResponseData.setLeaseDurationMs(reply.leaseDurationMs)
-      brokerHeartbeatResponseData.setThrottleTimeMs(requestThrottleMs)
-      brokerHeartbeatResponseData.setErrorCode(error.code)
-      brokerHeartbeatResponseData.setNextState(reply.nextState.value)
-      new BrokerHeartbeatResponse(brokerHeartbeatResponseData)
-    }
-
-    controller.processBrokerHeartbeat(heartbeatRequest.data).handle((reply, ex) => {
+    controller.processBrokerHeartbeat(heartbeatRequest.data).handle[Unit]((reply, ex) => {
       var err = Errors.NONE
       if (ex != null) {
         error(s"Failed to acknowledge broker heartbeat: ${ex.getMessage}")
         err = Errors.forException(ex)
       }
+
+      def createResponseCallback(requestThrottleMs: Int, reply: HeartbeatReply, error: Errors): BrokerHeartbeatResponse = {
+        val brokerHeartbeatResponseData = new BrokerHeartbeatResponseData()
+
+        // TODO: get a better estimate of the current active controller from Raft or somewhere.
+        if (controller.curClaimEpoch() > 0) {
+          brokerHeartbeatResponseData.setActiveControllerId(config.controllerId)
+        } else {
+          brokerHeartbeatResponseData.setActiveControllerId(MetadataResponse.NO_CONTROLLER_ID)
+        }
+        brokerHeartbeatResponseData.setLeaseDurationMs(reply.leaseDurationMs)
+        brokerHeartbeatResponseData.setThrottleTimeMs(requestThrottleMs)
+        brokerHeartbeatResponseData.setErrorCode(error.code)
+        brokerHeartbeatResponseData.setNextState(reply.nextState.value)
+        new BrokerHeartbeatResponse(brokerHeartbeatResponseData)
+      }
+
       apisUtils.sendResponseMaybeThrottle(request,
         requestThrottleMs => createResponseCallback(requestThrottleMs, reply, err))
     })
