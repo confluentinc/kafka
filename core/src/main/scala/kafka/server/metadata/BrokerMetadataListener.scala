@@ -20,7 +20,6 @@ package kafka.server.metadata
 import java.util
 import java.util.Properties
 import java.util.concurrent.{CompletableFuture, Future, LinkedBlockingQueue, TimeUnit}
-
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.TransactionCoordinator
 import kafka.log.LogManager
@@ -29,8 +28,9 @@ import kafka.server.{BrokerConfigHandler, ConfigHandler, KafkaConfig, MetadataCa
 import kafka.utils.ShutdownableThread
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.protocol.ApiMessage
+import org.apache.kafka.common.requests.MetadataResponse
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.metalog.MetaLogListener
+import org.apache.kafka.metalog.{MetaLogLeader, MetaLogListener}
 
 object BrokerMetadataListener {
   val ThreadNamePrefix = "broker-"
@@ -166,6 +166,16 @@ class BrokerMetadataListener(
 
   @volatile private var _currentMetadataOffset: Long = -1
 
+  private var _activeController: Option[MetaLogLeader] = _
+  def activeControllerId(): Int = {
+    _activeController match {
+      case None =>
+        MetadataResponse.NO_CONTROLLER_ID
+      case Some(controller) =>
+        controller.nodeId
+    }
+  }
+
   def start(): Unit = {
     thread.start()
   }
@@ -203,6 +213,10 @@ class BrokerMetadataListener(
 
   override def handleCommits(lastOffset: Long, messages: util.List[ApiMessage]): Unit = {
     put(MetadataLogEvent(messages, lastOffset))
+  }
+
+  override def handleNewLeader(leader: MetaLogLeader): Unit = {
+    _activeController = Some(leader)
   }
 
   def put(event: BrokerMetadataEvent): QueuedEvent = {
