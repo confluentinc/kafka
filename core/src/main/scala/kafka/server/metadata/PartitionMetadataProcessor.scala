@@ -20,7 +20,6 @@ package kafka.server.metadata
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.{Collections, Properties}
-
 import kafka.api.LeaderAndIsr
 import kafka.cluster.{Broker, EndPoint}
 import kafka.coordinator.group.GroupCoordinator
@@ -36,7 +35,7 @@ import org.apache.kafka.common.message.UpdateMetadataRequestData.UpdateMetadataP
 import org.apache.kafka.common.metadata.{ConfigRecord, FenceBrokerRecord, IsrChangeRecord, PartitionRecord, RegisterBrokerRecord, RemoveTopicRecord, TopicRecord, UnfenceBrokerRecord}
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
-import org.apache.kafka.common.requests.LeaderAndIsrRequest
+import org.apache.kafka.common.requests.{LeaderAndIsrRequest, MetadataResponse}
 import org.apache.kafka.common.security.auth.SecurityProtocol
 import org.apache.kafka.common.{Node, TopicPartition, UUID}
 
@@ -404,14 +403,7 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
         // We know that at least one of these data structures has changed, but we don't want to copy
         // anything that hasn't changed already, so use the current version; this will
         // use the copy if there is one or the original if not.
-        MetadataSnapshot(
-          mgr.getCurrentPartitionStates(),
-          mgr.getMetadataSnapshot().controllerId,
-          mgr.getCurrentAliveBrokers(),
-          mgr.getCurrentAliveNodes(),
-          mgr.getCurrentTopicIdMap(),
-          mgr.getCurrentFencedBrokers(),
-          mgr.getCurrentBrokerEpochs()))
+        MetadataSnapshot(mgr.getCurrentPartitionStates(), mgr.getMetadataSnapshot().controllerNode, mgr.getCurrentAliveBrokers(), mgr.getCurrentAliveNodes(), mgr.getCurrentTopicIdMap(), mgr.getCurrentFencedBrokers(), mgr.getCurrentBrokerEpochs()))
       if (mgr.requiresUpdateQuotaMetricConfigs) {
         quotaManagers.clientQuotaCallback.foreach { callback =>
           val listenerName = kafkaConfig.interBrokerListenerName // TODO: confirm that this is correct
@@ -437,7 +429,10 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
     // send stop replica as required
     if (mgr.topicPartitionsNeedingStopReplica.nonEmpty) {
       val correlationId = -1 // remove after bridge release
-      val controllerId = mgr.getMetadataSnapshot().controllerId.getOrElse(-1)
+      val controllerId = mgr.getMetadataSnapshot().controllerNode match {
+        case None => MetadataResponse.NO_CONTROLLER_ID
+        case Some(node) => node.id
+      }
       val controllerEpoch = replicaManager.controllerEpoch // requirement is it can't go backwards, so use current value
       val brokerEpoch = 0 // unused, so provide an arbitrary number
       val partitionStates: Map[TopicPartition, StopReplicaPartitionState] =
@@ -472,7 +467,10 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
     }
     // become leader or follower as required
     if (mgr.topicPartitionsNeedingLeaderFollowerChanges.nonEmpty) {
-      val controllerId = mgr.getMetadataSnapshot().controllerId.getOrElse(-1)
+      val controllerId = mgr.getMetadataSnapshot().controllerNode match {
+        case None => MetadataResponse.NO_CONTROLLER_ID
+        case Some(node) => node.id
+      }
       val controllerEpoch = replicaManager.controllerEpoch // can't go backwards, so use the current one
       val liveLeaders: util.Collection[Node] = Collections.emptyList() // I think this is not used?
       val leaderAndIsrRequest = new LeaderAndIsrRequest.Builder(
@@ -871,14 +869,7 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
       val mgr = MetadataMgr(numBrokersAdding, 0, 0)
       mgr.getCopiedBrokerEpochs().put(kafkaConfig.brokerId, requestedBrokerEpoch)
       metadataCache.writeState(
-        MetadataSnapshot(
-          mgr.getCurrentPartitionStates(),
-          mgr.getMetadataSnapshot().controllerId,
-          mgr.getCurrentAliveBrokers(),
-          mgr.getCurrentAliveNodes(),
-          mgr.getCurrentTopicIdMap(),
-          mgr.getCurrentFencedBrokers(),
-          mgr.getCurrentBrokerEpochs()))
+        MetadataSnapshot(mgr.getCurrentPartitionStates(), mgr.getMetadataSnapshot().controllerNode, mgr.getCurrentAliveBrokers(), mgr.getCurrentAliveNodes(), mgr.getCurrentTopicIdMap(), mgr.getCurrentFencedBrokers(), mgr.getCurrentBrokerEpochs()))
     }
   }
 
@@ -910,14 +901,7 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
         // No need to log errors since they are already logged.
         removeAllLeadershipForLocalBroker(mgr)
         metadataCache.writeState(
-          MetadataSnapshot(
-            mgr.getCurrentPartitionStates(),
-            mgr.getMetadataSnapshot().controllerId,
-            mgr.getCurrentAliveBrokers(),
-            mgr.getCurrentAliveNodes(),
-            mgr.getCurrentTopicIdMap(),
-            mgr.getCurrentFencedBrokers(),
-            mgr.getCurrentBrokerEpochs()))
+          MetadataSnapshot(mgr.getCurrentPartitionStates(), mgr.getMetadataSnapshot().controllerNode, mgr.getCurrentAliveBrokers(), mgr.getCurrentAliveNodes(), mgr.getCurrentTopicIdMap(), mgr.getCurrentFencedBrokers(), mgr.getCurrentBrokerEpochs()))
       }
     }
   }

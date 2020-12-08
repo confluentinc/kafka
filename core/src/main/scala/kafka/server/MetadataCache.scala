@@ -69,10 +69,7 @@ class MetadataCache(brokerId: Int) extends Logging {
   //replace the value with a completely new one. this means reads (which are not under any lock) need to grab
   //the value of this var (into a val) ONCE and retain that read copy for the duration of their operation.
   //multiple reads of this value risk getting different snapshots.
-  @volatile private var metadataSnapshot: MetadataSnapshot = MetadataSnapshot(partitionStates = mutable.AnyRefMap.empty,
-    controllerId = None, aliveBrokers = mutable.LongMap.empty, aliveNodes = mutable.LongMap.empty,
-    topicIdMap = new util.HashMap[UUID, String](),
-    fencedBrokers = mutable.LongMap.empty, brokerEpochs = mutable.LongMap.empty)
+  @volatile private var metadataSnapshot: MetadataSnapshot = MetadataSnapshot(partitionStates = mutable.AnyRefMap.empty, controllerNode = None, aliveBrokers = mutable.LongMap.empty, aliveNodes = mutable.LongMap.empty, topicIdMap = new util.HashMap[UUID, String](), fencedBrokers = mutable.LongMap.empty, brokerEpochs = mutable.LongMap.empty)
 
   this.logIdent = s"[MetadataCache brokerId=$brokerId] "
   private val stateChangeLogger = new StateChangeLogger(brokerId, inControllerContext = false, None)
@@ -274,7 +271,13 @@ class MetadataCache(brokerId: Int) extends Logging {
     }.getOrElse(Map.empty[Int, Node])
   }
 
-  def getControllerId: Option[Int] = metadataSnapshot.controllerId
+  private def node(snapshot: MetadataSnapshot, id: Integer, listenerName: ListenerName): Node = {
+    val nodes = snapshot.aliveNodes.map { case (id, nodes) => (id, nodes.get(listenerName).orNull) }
+    nodes.getOrNull(id.toLong)
+  }
+
+  def getControllerNode: Option[Node] = metadataSnapshot.controllerNode
+  def getControllerId: Option[Int] = metadataSnapshot.controllerNode.map(_.id)
 
   def getClusterMetadata(clusterId: String, listenerName: ListenerName): Cluster = {
     val snapshot = metadataSnapshot
@@ -293,7 +296,7 @@ class MetadataCache(brokerId: Int) extends Logging {
     new Cluster(clusterId, nodes.values.filter(_ != null).toBuffer.asJava,
       partitions.toBuffer.asJava,
       unauthorizedTopics, internalTopics,
-      snapshot.controllerId.map(id => node(id)).orNull)
+      snapshot.controllerNode.orNull)
   }
 
   def stateChangeTraceEnabled(): Boolean = {
@@ -310,10 +313,10 @@ class MetadataCache(brokerId: Int) extends Logging {
 
       val aliveBrokers = new mutable.LongMap[Broker](metadataSnapshot.aliveBrokers.size)
       val aliveNodes = new mutable.LongMap[collection.Map[ListenerName, Node]](metadataSnapshot.aliveNodes.size)
-      val controllerIdOpt = updateMetadataRequest.controllerId match {
+      val controllerNodeOpt: Option[Node] = updateMetadataRequest.controllerId match {
           case id if id < 0 => None
-          case id => Some(id)
-        }
+          case id => Some(node(metadataSnapshot, id, new ListenerName("FIXME: CONTROLLER_LISTENER")))
+      }
 
       updateMetadataRequest.liveBrokers.forEach { broker =>
         // `aliveNodes` is a hot path for metadata requests for large clusters, so we use java.util.HashMap which
@@ -333,8 +336,7 @@ class MetadataCache(brokerId: Int) extends Logging {
 
       val deletedPartitions = new mutable.ArrayBuffer[TopicPartition]
       if (!updateMetadataRequest.partitionStates.iterator.hasNext) {
-        metadataSnapshot = MetadataSnapshot(metadataSnapshot.partitionStates, controllerIdOpt, aliveBrokers, aliveNodes,
-          metadataSnapshot.topicIdMap, metadataSnapshot.fencedBrokers, metadataSnapshot.brokerEpochs)
+        metadataSnapshot = MetadataSnapshot(metadataSnapshot.partitionStates, controllerNodeOpt, aliveBrokers, aliveNodes, metadataSnapshot.topicIdMap, metadataSnapshot.fencedBrokers, metadataSnapshot.brokerEpochs)
       } else {
         //since kafka may do partial metadata updates, we start by copying the previous state
         val partitionStates = metadataSnapshot.copyPartitionStates()
@@ -363,8 +365,7 @@ class MetadataCache(brokerId: Int) extends Logging {
         stateChangeLogger.info(s"Add $cachedPartitionsCount partitions and deleted ${deletedPartitions.size} partitions from metadata cache " +
           s"in response to UpdateMetadata request sent by controller $controllerId epoch $controllerEpoch with correlation id $correlationId")
 
-        metadataSnapshot = MetadataSnapshot(partitionStates, controllerIdOpt, aliveBrokers, aliveNodes,
-          metadataSnapshot.topicIdMap, metadataSnapshot.fencedBrokers, metadataSnapshot.brokerEpochs)
+        metadataSnapshot = MetadataSnapshot(partitionStates, controllerNodeOpt, aliveBrokers, aliveNodes, metadataSnapshot.topicIdMap, metadataSnapshot.fencedBrokers, metadataSnapshot.brokerEpochs)
       }
       deletedPartitions
     }
@@ -396,13 +397,7 @@ class MetadataCache(brokerId: Int) extends Logging {
   }
 }
 
-case class MetadataSnapshot(partitionStates: mutable.AnyRefMap[String, mutable.LongMap[UpdateMetadataPartitionState]],
-                            controllerId: Option[Int],
-                            aliveBrokers: mutable.LongMap[Broker],
-                            aliveNodes: mutable.LongMap[collection.Map[ListenerName, Node]],
-                            topicIdMap: util.Map[UUID, String],
-                            fencedBrokers: mutable.LongMap[Broker],
-                            brokerEpochs: mutable.LongMap[Long]) {
+case class MetadataSnapshot(partitionStates: mutable.AnyRefMap[String, mutable.LongMap[UpdateMetadataPartitionState]], controllerNode: Option[Node], aliveBrokers: mutable.LongMap[Broker], aliveNodes: mutable.LongMap[collection.Map[ListenerName, Node]], topicIdMap: util.Map[UUID, String], fencedBrokers: mutable.LongMap[Broker], brokerEpochs: mutable.LongMap[Long]) {
   def copyPartitionStates(): mutable.AnyRefMap[String, mutable.LongMap[UpdateMetadataPartitionState]] = {
     val partitionStatesCopy = new mutable.AnyRefMap[String, mutable.LongMap[UpdateMetadataPartitionState]](partitionStates.size)
     partitionStates.forKeyValue { (topic, oldPartitionStates) =>
