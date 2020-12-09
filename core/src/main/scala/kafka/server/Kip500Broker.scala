@@ -235,7 +235,7 @@ class Kip500Broker(val config: KafkaConfig,
       config.dynamicConfig.addReconfigurables(this.asInstanceOf[Kip500Broker])
 
       brokerMetadataListener = new BrokerMetadataListener(
-        config, time,
+        config, metadataCache, time,
         BrokerMetadataListener.defaultProcessors(
           config, _clusterId, metadataCache, groupCoordinator, quotaManagers, replicaManager, transactionCoordinator,
           logManager))

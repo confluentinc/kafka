@@ -123,6 +123,7 @@ trait ConfigRepository {
 
 class BrokerMetadataListener(
   config: KafkaConfig,
+  metadataCache: MetadataCache,
   time: Time,
   processors: List[BrokerMetadataProcessor],
   eventQueueTimeoutMs: Long = BrokerMetadataListener.DefaultEventQueueTimeoutMs
@@ -217,6 +218,9 @@ class BrokerMetadataListener(
 
   override def handleNewLeader(leader: MetaLogLeader): Unit = {
     _activeController = Some(leader)
+
+    // Also, update the metadata cache
+    // TODO: Copy existing snapshot
   }
 
   def put(event: BrokerMetadataEvent): QueuedEvent = {
