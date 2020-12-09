@@ -25,7 +25,7 @@ import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.metadata.{FenceBrokerRecord, RegisterBrokerRecord}
 import org.apache.kafka.common.protocol.{ApiMessage, ApiMessageAndVersion}
 import org.apache.kafka.common.utils.{LogContext, MockTime, Utils}
-import org.apache.kafka.metalog.LocalLogManager
+import org.apache.kafka.metalog.{LocalLogManager, MetaLogLeader}
 import org.apache.kafka.test.{TestCondition, TestUtils => KTestUtils}
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue, fail}
 import org.junit.{After, Test}
@@ -304,6 +304,34 @@ class BrokerMetadataListenerTest {
 
     // Verify that the events were processed
     assertTrue(listener.currentMetadataOffset() == apisInvoked.size - 1)
+  }
+
+  @Test
+  def testLocalLogManagerNewLeaderNotification(): Unit = {
+    val logdir = KTestUtils.tempDirectory()
+    val leaderEpoch = 0
+    val brokerMetadataProcessor = new MockMetadataProcessor
+    val brokerID = 1;
+
+    // Use a real metadata cache
+    val realMetadataCache = new MetadataCache(brokerID)
+    val listener = new BrokerMetadataListener(mock(classOf[KafkaConfig]), realMetadataCache, new MockTime, List(brokerMetadataProcessor),
+      eventQueueTimeoutMs = 50)
+
+    // Controller ID change notification
+    val newControllerID = 999;
+
+    // Let BrokerMetadataListener know of the new controller ID
+    listener.handleNewLeader(new MetaLogLeader(newControllerID, leaderEpoch + 1))
+
+    // Cleanup
+    listener.beginShutdown()
+    listener.close()
+    Utils.delete(logdir)
+
+    // Verify that the leadership change was processed
+    assertTrue(realMetadataCache.getControllerId.isDefined)
+    assertEquals(realMetadataCache.getControllerId.get, newControllerID)
   }
 
   private class MockMetadataProcessor extends BrokerMetadataProcessor {

@@ -17,20 +17,20 @@
 
 package kafka.server.metadata
 
-import java.util
-import java.util.Properties
-import java.util.concurrent.{CompletableFuture, Future, LinkedBlockingQueue, TimeUnit}
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.TransactionCoordinator
 import kafka.log.LogManager
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.{BrokerConfigHandler, ConfigHandler, KafkaConfig, MetadataCache, QuotaFactory, ReplicaManager, TopicConfigHandler}
+import kafka.server._
 import kafka.utils.ShutdownableThread
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.protocol.ApiMessage
-import org.apache.kafka.common.requests.MetadataResponse
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.metalog.{MetaLogLeader, MetaLogListener}
+
+import java.util
+import java.util.Properties
+import java.util.concurrent.{CompletableFuture, Future, LinkedBlockingQueue, TimeUnit}
 
 object BrokerMetadataListener {
   val ThreadNamePrefix = "broker-"
@@ -167,16 +167,6 @@ class BrokerMetadataListener(
 
   @volatile private var _currentMetadataOffset: Long = -1
 
-  private var _activeController: Option[MetaLogLeader] = _
-  def activeControllerId(): Int = {
-    _activeController match {
-      case None =>
-        MetadataResponse.NO_CONTROLLER_ID
-      case Some(controller) =>
-        controller.nodeId
-    }
-  }
-
   def start(): Unit = {
     thread.start()
   }
@@ -217,10 +207,19 @@ class BrokerMetadataListener(
   }
 
   override def handleNewLeader(leader: MetaLogLeader): Unit = {
-    _activeController = Some(leader)
+    // Update MetadataCache w/ a new snapshot w/ the updated leader node ID
+    // Copy the existing snapshot
+    val snapshot = metadataCache.readState()
 
-    // Also, update the metadata cache
-    // TODO: Copy existing snapshot
+    metadataCache.writeState(
+      MetadataSnapshot(
+        snapshot.partitionStates,
+        Some(leader.nodeId), // New leader ID
+        snapshot.aliveBrokers,
+        snapshot.aliveNodes,
+        snapshot.topicIdMap,
+        snapshot.fencedBrokers,
+        snapshot.brokerEpochs))
   }
 
   def put(event: BrokerMetadataEvent): QueuedEvent = {
