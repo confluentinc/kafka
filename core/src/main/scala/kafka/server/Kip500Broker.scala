@@ -193,6 +193,7 @@ class Kip500Broker(val config: KafkaConfig,
 
       /* create log manager, which will perform recovery from unclean shutdown if necessary before returning */
       val cleanShutdownCompletableFuture = new CompletableFuture[Boolean]()
+      cleanShutdownCompletableFuture.thenApply[Unit](_ => cleanShutdown = Some(cleanShutdownCompletableFuture.get()))
       logManager = LogManager(config, initialOfflineDirs, cleanShutdownCompletableFuture, kafkaScheduler, time, brokerTopicStats, logDirFailureChannel)
       cleanShutdown = Some(cleanShutdownCompletableFuture.get())
       /* start log manager */
