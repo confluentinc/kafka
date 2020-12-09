@@ -113,14 +113,7 @@ class Kip500Broker(val config: KafkaConfig,
   val brokerMetaPropsFile = "meta.properties"
 
   // Look for metadata checkpoints (meta.properties) in all log.dirs and metadata.log.dir
-  val brokerLogDirs = config.metadataLogDir match {
-    // If the `metadata.log.dir` is the same as the first directory in the `log.dirs`, it's not set
-    // Use log.dirs
-    case config.logDirs.head =>
-      config.logDirs
-    case metadataLog =>
-      config.logDirs.appended(metadataLog)
-  }
+  val brokerLogDirs = config.logDirs.toSet + config.metadataLogDir
   val brokerMetadataCheckpoints = brokerLogDirs.map(logDir => (logDir, new BrokerMetadataCheckpoint(new File(logDir + File.separator + brokerMetaPropsFile)))).toMap
 
   private var _clusterId: String = null
