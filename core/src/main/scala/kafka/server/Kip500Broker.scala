@@ -114,6 +114,8 @@ class Kip500Broker(val config: KafkaConfig,
 
   // Look for metadata checkpoints (meta.properties) in all log.dirs and metadata.log.dir
   val brokerLogDirs = config.metadataLogDir match {
+    // If the `metadata.log.dir` is the same as the first directory in the `log.dirs`, it's not set
+    // Use log.dirs
     case config.logDirs.head =>
       config.logDirs
     case metadataLog =>
