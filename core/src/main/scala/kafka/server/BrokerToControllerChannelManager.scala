@@ -201,8 +201,8 @@ class BrokerToControllerRequestThread(networkClient: KafkaClient,
     } else {
       waitForControllerRetries = 0
       if (curController.isEmpty || curController.get != nextController.get) {
+        metadataUpdater.setNodes(Collections.singletonList(nextController.get))
         curController = nextController
-        metadataUpdater.setNodes(Collections.singletonList(curController.get))
         info(s"Controller node is now ${curController}")
       }
       val requestsToSend = new mutable.Queue[RequestAndCompletionHandler]
