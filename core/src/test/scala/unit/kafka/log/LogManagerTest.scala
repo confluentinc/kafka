@@ -18,6 +18,7 @@
 package kafka.log
 
 import java.io._
+import java.nio.file.Files
 import java.util.{Collections, Properties}
 
 import com.yammer.metrics.core.MetricName
@@ -25,6 +26,7 @@ import kafka.metrics.KafkaYammerMetrics
 import kafka.server.{FetchDataInfo, FetchLogEnd}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils._
+import org.apache.directory.api.util.FileUtils
 import org.apache.kafka.common.errors.OffsetOutOfRangeException
 import org.apache.kafka.common.utils.Utils
 import org.apache.kafka.common.{KafkaException, TopicPartition}
@@ -67,7 +69,8 @@ class LogManagerTest {
       logManager.shutdown()
     Utils.delete(logDir)
     // Some tests assign a new LogManager
-    logManager.liveLogDirs.foreach(Utils.delete)
+    if (logManager != null)
+      logManager.liveLogDirs.foreach(Utils.delete)
   }
 
   /**
@@ -81,6 +84,103 @@ class LogManagerTest {
     val logFile = new File(logDir, name + "-0")
     assertTrue(logFile.exists)
     log.appendAsLeader(TestUtils.singletonRecords("test".getBytes()), leaderEpoch = 0)
+  }
+
+  /**
+   * Tests that all internal futures are completed before LogManager.shutdown() returns to the
+   * caller during error situations.
+   */
+  @Test
+  def testHandlingExceptionsDuringShutdown(): Unit = {
+    // We create two directories logDir1 and logDir2 to help effectively test error handling
+    // during LogManager.shutdown().
+    val logDir1 = TestUtils.tempDir()
+    val logDir2 = TestUtils.tempDir()
+    var logManagerForTest: Option[LogManager] = Option.empty
+    try {
+      logManagerForTest = Some(createLogManager(Seq(logDir1, logDir2)))
+
+      assertEquals(2, logManagerForTest.get.liveLogDirs.size)
+      logManagerForTest.get.startup()
+
+      val log1 = logManagerForTest.get.getOrCreateLog(new TopicPartition(name, 0), () => logConfig)
+      val log2 = logManagerForTest.get.getOrCreateLog(new TopicPartition(name, 1), () => logConfig)
+
+      val logFile1 = new File(logDir1, name + "-0")
+      assertTrue(logFile1.exists)
+      val logFile2 = new File(logDir2, name + "-1")
+      assertTrue(logFile2.exists)
+
+      log1.appendAsLeader(TestUtils.singletonRecords("test1".getBytes()), leaderEpoch = 0)
+      log1.takeProducerSnapshot()
+      log1.appendAsLeader(TestUtils.singletonRecords("test1".getBytes()), leaderEpoch = 0)
+
+      log2.appendAsLeader(TestUtils.singletonRecords("test2".getBytes()), leaderEpoch = 0)
+      log2.takeProducerSnapshot()
+      log2.appendAsLeader(TestUtils.singletonRecords("test2".getBytes()), leaderEpoch = 0)
+
+      // This should cause log1.close() to fail during LogManger shutdown sequence.
+      FileUtils.deleteDirectory(logFile1)
+
+      logManagerForTest.get.shutdown()
+
+      assertFalse(Files.exists(new File(logDir1, Log.CleanShutdownFile).toPath))
+      assertTrue(Files.exists(new File(logDir2, Log.CleanShutdownFile).toPath))
+    } finally {
+      logManagerForTest.foreach(manager => manager.liveLogDirs.foreach(Utils.delete))
+    }
+  }
+
+  /**
+   * Tests that clean shutdown future gets completed correctly
+   */
+  @Test
+  def testCleanShutdownFutureCompletedCorrectly(): Unit = {
+    val logDir1 = TestUtils.tempDir()
+    val logDir2 = TestUtils.tempDir()
+    var logManagerForTest1: Option[LogManager] = Option.empty
+    var logManagerForTest2: Option[LogManager] = Option.empty
+    var logManagerForTest3: Option[LogManager] = Option.empty
+    try {
+      logManagerForTest1 = Some(createLogManager(Seq(logDir1, logDir2)))
+      assertFalse(Files.exists(new File(logDir1, Log.CleanShutdownFile).toPath))
+      assertFalse(Files.exists(new File(logDir2, Log.CleanShutdownFile).toPath))
+      assertTrue(logManagerForTest1.get.cleanShutdownCompletableFuture.isDone)
+      assertFalse(logManagerForTest1.get.cleanShutdownCompletableFuture.get())
+      logManagerForTest1.get.startup()
+      val log1 = logManagerForTest1.get.getOrCreateLog(new TopicPartition(name, 0), () => logConfig)
+      val log2 = logManagerForTest1.get.getOrCreateLog(new TopicPartition(name, 1), () => logConfig)
+      val logFile1 = new File(logDir1, name + "-0")
+      assertTrue(logFile1.exists)
+      val logFile2 = new File(logDir2, name + "-1")
+      assertTrue(logFile2.exists)
+
+      log1.appendAsLeader(TestUtils.singletonRecords("test1".getBytes()), leaderEpoch = 0)
+      log1.takeProducerSnapshot()
+      log1.appendAsLeader(TestUtils.singletonRecords("test1".getBytes()), leaderEpoch = 0)
+
+      log2.appendAsLeader(TestUtils.singletonRecords("test2".getBytes()), leaderEpoch = 0)
+      log2.takeProducerSnapshot()
+      log2.appendAsLeader(TestUtils.singletonRecords("test2".getBytes()), leaderEpoch = 0)
+
+      logManagerForTest1.get.shutdown()
+
+      assertTrue(Files.exists(new File(logDir1, Log.CleanShutdownFile).toPath))
+      assertTrue(Files.exists(new File(logDir2, Log.CleanShutdownFile).toPath))
+      logManagerForTest2 = Some(createLogManager(Seq(logDir1, logDir2)))
+      assertTrue(logManagerForTest2.get.cleanShutdownCompletableFuture.isDone)
+      assertTrue(logManagerForTest2.get.cleanShutdownCompletableFuture.get())
+      logManagerForTest2.get.startup()
+      logManagerForTest2.get.shutdown()
+
+      // now delete the file indicating a clean shutdown and make sure we get false for completion on a new manager's future
+      FileUtils.forceDelete(new File(logDir2, Log.CleanShutdownFile))
+      logManagerForTest3 = Some(createLogManager(Seq(logDir1, logDir2)))
+      assertTrue(logManagerForTest3.get.cleanShutdownCompletableFuture.isDone)
+      assertFalse(logManagerForTest3.get.cleanShutdownCompletableFuture.get())
+    } finally {
+      logManagerForTest1.foreach(manager => manager.liveLogDirs.foreach(Utils.delete))
+    }
   }
 
   /**

@@ -322,7 +322,6 @@ class LogManager(logDirs: Seq[File],
           // so that if broker crashes while loading the log, it is considered hard shutdown during the next boot up. KAFKA-10471
           cleanShutdownFile.delete()
           hadCleanShutdown = true
-          cleanShutdownCompletableFuture.complete(true)
         } else {
           // log recovery itself is being performed by `Log` class during initialization
           info(s"Attempting recovery for all logs in $logDirAbsolutePath since no clean shutdown file was found")
@@ -379,7 +378,10 @@ class LogManager(logDirs: Seq[File],
           error(s"Error while loading log dir $logDirAbsolutePath", e)
       }
     }
-
+    // every log directory had a clean shutdown if we didn't complete the future above; complete it with true if so
+    if (!cleanShutdownCompletableFuture.isDone) {
+      cleanShutdownCompletableFuture.complete(true)
+    }
     try {
       for (dirJobs <- jobs) {
         dirJobs.foreach(_.get)
@@ -480,25 +482,30 @@ class LogManager(logDirs: Seq[File],
 
     try {
       for ((dir, dirJobs) <- jobs) {
-        dirJobs.foreach(_.get)
+        val hasErrors = dirJobs.map { future =>
+          Try(future.get) match {
+            case Success(_) => false
+            case Failure(e) =>
+              warn(s"There was an error in one of the threads during LogManager shutdown: ${e.getCause}")
+              true
+          }
+        }.contains(true)
 
-        val logs = logsInDir(localLogsByDir, dir)
+        if (!hasErrors) {
+          val logs = logsInDir(localLogsByDir, dir)
 
-        // update the last flush point
-        debug(s"Updating recovery points at $dir")
-        checkpointRecoveryOffsetsInDir(dir, logs)
+          // update the last flush point
+          debug(s"Updating recovery points at $dir")
+          checkpointRecoveryOffsetsInDir(dir, logs)
 
-        debug(s"Updating log start offsets at $dir")
-        checkpointLogStartOffsetsInDir(dir, logs)
+          debug(s"Updating log start offsets at $dir")
+          checkpointLogStartOffsetsInDir(dir, logs)
 
-        // mark that the shutdown was clean by creating marker file
-        debug(s"Writing clean shutdown marker at $dir")
-        CoreUtils.swallow(Files.createFile(new File(dir, Log.CleanShutdownFile).toPath), this)
+          // mark that the shutdown was clean by creating marker file
+          debug(s"Writing clean shutdown marker at $dir")
+          CoreUtils.swallow(Files.createFile(new File(dir, Log.CleanShutdownFile).toPath), this)
+        }
       }
-    } catch {
-      case e: ExecutionException =>
-        error(s"There was an error in one of the threads during LogManager shutdown: ${e.getCause}")
-        throw e.getCause
     } finally {
       threadPools.foreach(_.shutdown())
       // regardless of whether the close succeeded, we need to unlock the data directories
@@ -1167,35 +1174,6 @@ object LogManager {
   val LogStartOffsetCheckpointFile = "log-start-offset-checkpoint"
   val ProducerIdExpirationCheckIntervalMs = 10 * 60 * 1000
 
-//  def mutateBrokerStateForUncleanShutdown(brokerState: AtomicReference[BrokerState]): Boolean => Unit = {
-//    cleanShutdown => if (!cleanShutdown) brokerState.set(BrokerState.RECOVERING_FROM_UNCLEAN_SHUTDOWN)
-//  }
-//
-//  def apply(config: KafkaConfig,
-//            initialOfflineDirs: Seq[String],
-//            zkClient: KafkaZkClient,
-//            brokerState: AtomicReference[BrokerState],
-//            kafkaScheduler: KafkaScheduler,
-//            time: Time,
-//            brokerTopicStats: BrokerTopicStats,
-//            logDirFailureChannel: LogDirFailureChannel): LogManager = {
-//    this(config, initialOfflineDirs, Some(zkClient),
-//      mutateBrokerStateForUncleanShutdown(brokerState),
-//      kafkaScheduler, time, brokerTopicStats, logDirFailureChannel)
-//  }
-//
-//  def apply(config: KafkaConfig,
-//            initialOfflineDirs: Seq[String],
-//            brokerState: AtomicReference[BrokerState],
-//            kafkaScheduler: KafkaScheduler,
-//            time: Time,
-//            brokerTopicStats: BrokerTopicStats,
-//            logDirFailureChannel: LogDirFailureChannel): LogManager = {
-//    this(config, initialOfflineDirs, None,
-//      mutateBrokerStateForUncleanShutdown(brokerState),
-//      kafkaScheduler, time, brokerTopicStats, logDirFailureChannel)
-//  }
-//
   def apply(config: KafkaConfig,
             initialOfflineDirs: Seq[String],
             cleanShutdownCompletableFuture: CompletableFuture[Boolean], // completes true if the shutdown was clean, otherwise false,
