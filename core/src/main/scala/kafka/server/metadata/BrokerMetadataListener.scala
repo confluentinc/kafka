@@ -207,19 +207,7 @@ class BrokerMetadataListener(
   }
 
   override def handleNewLeader(leader: MetaLogLeader): Unit = {
-    // Update MetadataCache w/ a new snapshot w/ the updated leader node ID
-    // Copy the existing snapshot
-    val snapshot = metadataCache.readState()
-
-    metadataCache.writeState(
-      MetadataSnapshot(
-        snapshot.partitionStates,
-        Some(leader.nodeId), // New leader ID
-        snapshot.aliveBrokers,
-        snapshot.aliveNodes,
-        snapshot.topicIdMap,
-        snapshot.fencedBrokers,
-        snapshot.brokerEpochs))
+    metadataCache.updateController(leader.nodeId)
   }
 
   def put(event: BrokerMetadataEvent): QueuedEvent = {
