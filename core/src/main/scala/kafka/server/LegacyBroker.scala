@@ -204,7 +204,7 @@ class LegacyBroker(val config: KafkaConfig,
 
         /* generate brokerId */
         config.brokerId = getOrGenerateBrokerId(preloadedBrokerMetadataCheckpoint)
-        logContext = new LogContext(s"[KafkaBroker id=${config.brokerId}] ")
+        logContext = new LogContext(s"[KafkaServer LegacyBroker id=${config.brokerId}] ")
         this.logIdent = logContext.logPrefix
 
         // initialize dynamic broker configs from ZooKeeper. Any updates made after this will be

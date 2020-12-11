@@ -155,7 +155,7 @@ class Kip500Broker(val config: KafkaConfig,
       info(s"Cluster ID = ${_clusterId}")
 
       config.brokerId = loadedBrokerId
-      logContext = new LogContext(s"[KafkaBroker id=${config.brokerId}] ")
+      logContext = new LogContext(s"[KafkaServer Kip500Broker id=${config.brokerId}] ")
       this.logIdent = logContext.logPrefix
 
       // initialize dynamic broker configs from static config. Any updates will be
