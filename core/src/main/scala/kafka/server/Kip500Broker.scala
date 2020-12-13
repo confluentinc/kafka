@@ -48,10 +48,8 @@ import org.apache.kafka.metalog.MetaLogManager
 import org.apache.kafka.server.authorizer.Authorizer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{Map, mutable}
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.{Map, Seq, mutable}
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success}
 
 /**
  * A KIP-500 Kafka broker.
@@ -67,6 +65,9 @@ class Kip500Broker(
 ) extends KafkaBroker {
 
   import kafka.server.KafkaServer._
+
+  val lifecycleManager: BrokerLifecycleManager =
+      new BrokerLifecycleManager(config, time, threadNamePrefix)
 
   private val isShuttingDown = new AtomicBoolean(false)
 
@@ -118,8 +119,6 @@ class Kip500Broker(
   var brokerMetadataListener: BrokerMetadataListener = null
   val _brokerMetadataListenerFuture: CompletableFuture[BrokerMetadataListener] = new CompletableFuture[BrokerMetadataListener]()
 
-  var brokerLifecycleManager: BrokerLifecycleManager = null
-
   def kafkaYammerMetrics: kafka.metrics.KafkaYammerMetrics = KafkaYammerMetrics.INSTANCE
 
   private[kafka] def brokerTopicStats = _brokerTopicStats
@@ -157,6 +156,8 @@ class Kip500Broker(
       kafkaScheduler = new KafkaScheduler(config.backgroundThreads)
       kafkaScheduler.startup()
 
+      val controllerNodeProvider = new RaftControllerNodeProvider(metaLogManager, config.controllerConnectNodes)
+
       /* register broker metrics */
       _brokerTopicStats = new BrokerTopicStats
 
@@ -166,16 +167,7 @@ class Kip500Broker(
 
       // Create log manager, but don't start it because we need to delay any potential unclean shutdown log recovery
       // until we catch up on the metadata log and have up-to-date topic and broker configs.
-      val cleanShutdownCompletableFuture = new CompletableFuture[Boolean]()
-      cleanShutdownCompletableFuture.thenApply[Unit](_ =>
-        // If the shutdown was unclean then transition to the "recovering-from-unclean-shutdown" state;
-        // otherwise remain in the current state ("fenced" by the time this code runs).
-        if (!cleanShutdownCompletableFuture.get()) {
-          brokerLifecycleManager.enqueue(BrokerState.RECOVERING_FROM_UNCLEAN_SHUTDOWN)
-        }
-      )
-      logManager = LogManager(config, offlineDirs, cleanShutdownCompletableFuture, kafkaScheduler, time, brokerTopicStats, logDirFailureChannel)
-
+      logManager = LogManager(config, offlineDirs, kafkaScheduler, time, brokerTopicStats, logDirFailureChannel)
 
       metadataCache = new MetadataCache(config.brokerId)
       // Enable delegation token cache for all SCRAM mechanisms to simplify dynamic update.
@@ -193,7 +185,6 @@ class Kip500Broker(
       replicaManager = createReplicaManager(isShuttingDown)
 
       /* start broker-to-controller channel managers */
-      val controllerNodeProvider = new RaftControllerNodeProvider(metaLogManager, config.controllerConnectNodes)
       alterIsrChannelManager = new BrokerToControllerChannelManager(controllerNodeProvider,
         time, metrics, config, "alterisr", threadNamePrefix)
       alterIsrChannelManager.start()
@@ -227,15 +218,13 @@ class Kip500Broker(
         BrokerMetadataListener.defaultProcessors(
           config, clusterId, metadataCache, groupCoordinator, quotaManagers, replicaManager, transactionCoordinator,
           logManager))
-      _brokerMetadataListenerFuture.complete(brokerMetadataListener)
       brokerMetadataListener.start()
+
+      lifecycleManager.start(() => brokerMetadataListener.currentMetadataOffset(),
+        controllerNodeProvider, metrics, metaProps.clusterId)
 
       // Register a listener with the Raft layer to receive metadata event notifications
       metaLogManager.register(brokerMetadataListener)
-
-      brokerLifecycleManager = new BrokerLifecycleManagerImpl(brokerMetadataListener, config,
-        alterIsrChannelManager, kafkaScheduler, time, config.brokerId, config.rack.getOrElse(""),
-        brokerMetadataListener.currentMetadataOffset, brokerMetadataListener.brokerEpochNow)
 
       val listeners = new ListenerCollection()
       config.advertisedListeners.foreach { ep =>
@@ -244,7 +233,6 @@ class Kip500Broker(
       }
 
       val features = new FeatureCollection()
-      brokerLifecycleManager.start(listeners, features) // gets us into the "fenced" state
 
       val endPoints = new ArrayBuffer[EndPoint](listeners.size())
       listeners.iterator().forEachRemaining(listener => {
@@ -300,7 +288,8 @@ class Kip500Broker(
       }
 
       // Block until we've caught up on the metadata log
-      brokerMetadataListener.initiallyCaughtUpFuture.get()
+      lifecycleManager.initialCatchUpFuture.get()
+      _brokerMetadataListenerFuture.complete(brokerMetadataListener)
       // Start log manager, which will perform (potentially lengthy) recovery-from-unclean-shutdown if required.
       logManager.startup()
       // Start other services that we've delayed starting, in the appropriate order.
@@ -309,6 +298,9 @@ class Kip500Broker(
       transactionCoordinator.startup()
 
       socketServer.startProcessingRequests(authorizerFutures)
+
+      // We're now ready to unfence the broker.
+      lifecycleManager.setReadyToUnfence()
 
       info("started")
       maybeChangeStatus(STARTING, STARTED)
@@ -330,7 +322,8 @@ class Kip500Broker(
         fatal(s"Exhausted all demo/temporary producerIds as the next one will has extend past the block size of $maxProducerIdsPerBrokerEpoch")
         throw new KafkaException("Have exhausted all demo/temporary producerIds.")
       }
-      _brokerMetadataListenerFuture.get.brokerEpochFuture().get() * maxProducerIdsPerBrokerEpoch + currentOffset
+      lifecycleManager.initialCatchUpFuture.get()
+      lifecycleManager.brokerEpoch() * maxProducerIdsPerBrokerEpoch + currentOffset
     }
   }
 
@@ -340,7 +333,7 @@ class Kip500Broker(
 
   protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager = {
     val alterIsrManager = new AlterIsrManagerImpl(alterIsrChannelManager, kafkaScheduler,
-      time, config.brokerId, () => _brokerMetadataListenerFuture.get.brokerEpochFuture().get())
+      time, config.brokerId, () => lifecycleManager.brokerEpoch())
     // explicitly declare to eliminate spotbugs error in Scala 2.12
     val zkClient: Option[KafkaZkClient] = None
     new ReplicaManager(config, metrics, time, zkClient, kafkaScheduler, logManager, isShuttingDown, quotaManagers,
@@ -353,8 +346,7 @@ class Kip500Broker(
    */
   def getGroupMetadataTopicPartitionCount(): Int = {
     // wait until we are caught up on the metadata log if necessary
-    val listener = _brokerMetadataListenerFuture.get()
-    listener.initiallyCaughtUpFuture.get()
+    lifecycleManager.initialCatchUpFuture.get()
     // now return the number of partitions if the topic exists, otherwise the default
     metadataCache.numPartitions(Topic.GROUP_METADATA_TOPIC_NAME).getOrElse(config.offsetsTopicPartitions)
   }
@@ -365,8 +357,7 @@ class Kip500Broker(
    */
   def getTransactionTopicPartitionCount(): Int = {
     // wait until we are caught up on the metadata log if necessary
-    val listener = _brokerMetadataListenerFuture.get()
-    listener.initiallyCaughtUpFuture.get()
+    lifecycleManager.initialCatchUpFuture.get()
     // now return the number of partitions if the topic exists, otherwise the default
     metadataCache.numPartitions(Topic.TRANSACTION_STATE_TOPIC_NAME).getOrElse(config.transactionTopicPartitions)
   }
@@ -380,14 +371,10 @@ class Kip500Broker(
       // We request the heartbeat to initiate a controlled shutdown.
       info("Controlled shutdown requested")
 
-      if (brokerLifecycleManager != null) { // it's possible we haven't created it yet, in which case we do nothing
-        info("Requesting controlled shutdown via broker heartbeat")
-        brokerLifecycleManager.enqueue(BrokerState.PENDING_CONTROLLED_SHUTDOWN).future.onComplete {
-          case Success(_) => info("Controlled shutdown succeeded")
-          case Failure(_) => warn("Proceeding to do an unclean shutdown as all the controlled shutdown attempts failed")
-        }
-      }
+      // TODO: request controlled shutdown from broker lifecycle manager
+      // TODO: wait for controlled shutdown to complete
     }
+    lifecycleManager.beginShutdown()
   }
 
   def shutdown(): Unit = {
@@ -399,8 +386,9 @@ class Kip500Broker(
 
       // Stop socket server to stop accepting any more connections and requests.
       // Socket server will be shutdown towards the end of the sequence.
-      if (socketServer != null)
+      if (socketServer != null) {
         CoreUtils.swallow(socketServer.stopProcessingRequests(), this)
+      }
       if (dataPlaneRequestHandlerPool != null)
         CoreUtils.swallow(dataPlaneRequestHandlerPool.shutdown(), this)
       if (controlPlaneRequestHandlerPool != null)
@@ -413,9 +401,6 @@ class Kip500Broker(
       if (controlPlaneRequestProcessor != null)
         CoreUtils.swallow(controlPlaneRequestProcessor.close(), this)
       CoreUtils.swallow(authorizer.foreach(_.close()), this)
-
-      if (brokerLifecycleManager != null)
-        CoreUtils.swallow(brokerLifecycleManager.stop(), this)
 
       if (brokerMetadataListener !=  null) {
         CoreUtils.swallow(brokerMetadataListener.close(), this)
@@ -456,6 +441,9 @@ class Kip500Broker(
       config.dynamicConfig.clear()
 
       isShuttingDown.set(false)
+
+      CoreUtils.swallow(lifecycleManager.close(), this)
+
       CoreUtils.swallow(AppInfoParser.unregisterAppInfo(metricsPrefix, config.brokerId.toString, metrics), this)
       info("shut down completed")
     } catch {
@@ -479,14 +467,6 @@ class Kip500Broker(
     }
   }
 
-  override def currentState(): BrokerState = {
-    if (brokerLifecycleManager == null) {
-      // We have not yet instantiated our lifecycle manager, so we are not running.
-      BrokerState.NOT_RUNNING
-    } else {
-      // We've instantiated it, and it has our current state
-      brokerLifecycleManager.brokerState
-    }
-  }
+  override def currentState(): BrokerState = lifecycleManager.state()
 
 }

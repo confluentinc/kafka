@@ -33,6 +33,8 @@ import org.apache.kafka.common.metadata.ConfigRecord;
 import org.apache.kafka.common.metadata.FenceBrokerRecord;
 import org.apache.kafka.common.metadata.MetadataRecordType;
 import org.apache.kafka.common.metadata.RegisterBrokerRecord;
+import org.apache.kafka.common.metadata.UnfenceBrokerRecord;
+import org.apache.kafka.common.metadata.UnregisterBrokerRecord;
 import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.ApiMessageAndVersion;
 import org.apache.kafka.common.protocol.Errors;
@@ -315,7 +317,7 @@ public final class QuorumController implements Controller {
                     this.resultAndOffset = new ControllerResultAndOffset<>(-1,
                         Collections.emptyList(), result.response());
                     log.debug("Completing read-only operation {} immediately because " +
-                        "the purgatory is empty.");
+                        "the purgatory is empty.", this);
                     complete(null);
                     return;
                 }
@@ -456,8 +458,14 @@ public final class QuorumController implements Controller {
             case REGISTER_BROKER_RECORD:
                 clusterControl.replay((RegisterBrokerRecord) message);
                 break;
+            case UNREGISTER_BROKER_RECORD:
+                clusterControl.replay((UnregisterBrokerRecord) message);
+                break;
             case FENCE_BROKER_RECORD:
                 clusterControl.replay((FenceBrokerRecord) message);
+                break;
+            case UNFENCE_BROKER_RECORD:
+                clusterControl.replay((UnfenceBrokerRecord) message);
                 break;
             case TOPIC_RECORD:
                 throw new RuntimeException("Unhandled record type " + type);
@@ -571,7 +579,7 @@ public final class QuorumController implements Controller {
         this.configurationControl = new ConfigurationControlManager(snapshotRegistry,
             configDefs);
         this.clusterControl =
-            new ClusterControlManager(time, snapshotRegistry, 18000, 9000);
+            new ClusterControlManager(logContext, time, snapshotRegistry, 18000, 9000);
         this.featureControl =
             new FeatureControlManager(supportedFeatures, snapshotRegistry);
         this.replicationControl = new ReplicationControlManager(snapshotRegistry,
@@ -654,7 +662,7 @@ public final class QuorumController implements Controller {
     @Override
     public CompletableFuture<HeartbeatReply>
             processBrokerHeartbeat(BrokerHeartbeatRequestData request) {
-        return appendReadEvent("processBrokerHeartbeat", () ->
+        return appendWriteEvent("processBrokerHeartbeat", () ->
             clusterControl.processBrokerHeartbeat(request, lastCommittedOffset));
     }
 
@@ -662,7 +670,8 @@ public final class QuorumController implements Controller {
     public CompletableFuture<RegistrationReply>
             registerBroker(BrokerRegistrationRequestData request) {
         return appendWriteEvent("registerBroker", () ->
-            clusterControl.registerBroker(request, writeOffset + 1));
+            clusterControl.registerBroker(request, writeOffset + 1,
+                featureControl.finalizedFeaturesAndEpoch(Long.MAX_VALUE)));
     }
 
     @Override
