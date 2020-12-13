@@ -240,6 +240,7 @@ class LegacyBroker(val config: KafkaConfig,
 
         /* start log manager */
         brokerState.set(BrokerState.RECOVERY)
+        logManager = LogManager(config, initialOfflineDirs, kafkaScheduler, time, brokerTopicStats, logDirFailureChannel)
         logManager.startup()
         brokerState.set(BrokerState.RUNNING)
 
