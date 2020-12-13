@@ -214,7 +214,7 @@ object StorageTool extends Logging {
     }
 
     val controllerId = if (processRoles.contains(ControllerRole)) {
-      require(config.brokerId >= 0,
+      require(config.controllerId >= 0,
         s"The `controller` process role requires non-negative `controller.id`, but found ${config.controllerId}")
       Some(config.controllerId)
     } else {

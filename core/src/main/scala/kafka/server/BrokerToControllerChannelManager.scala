@@ -64,7 +64,7 @@ class MetadataCacheControllerNodeProvider(val metadataCache: kafka.server.Metada
  * This provider is used when we are in KIP-500 mode.
  */
 class RaftControllerNodeProvider(val metaLogManager: MetaLogManager,
-                                 controllerConnectNodes: Seq[Node]) extends ControllerNodeProvider {
+                                 controllerConnectNodes: Seq[Node]) extends ControllerNodeProvider with Logging {
   val idToNode = controllerConnectNodes.map(node => node.id() -> node).toMap
 
   override def controllerNode(): Option[Node] = {
@@ -244,8 +244,8 @@ class BrokerToControllerRequestThread(networkClient: KafkaClient,
       } else {
         waitForControllerRetries = 0
         if (curController.isEmpty || curController.get != nextController.get) {
-          metadataUpdater.setNodes(Collections.singletonList(curController.get))
           curController = nextController
+          metadataUpdater.setNodes(Collections.singletonList(curController.get))
           info(s"Controller node is now ${curController}")
         }
         val requestsToSend = sendableRequests.map {

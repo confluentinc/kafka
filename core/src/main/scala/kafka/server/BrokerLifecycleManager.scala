@@ -358,7 +358,13 @@ class BrokerLifecycleManagerImpl(val brokerMetadataListener: BrokerMetadataListe
       error(s"Broker heartbeat failure: $errorMsg")
       Some(errorMsg)
     } else {
+      val origState = currentState
       currentState = jmetadata.BrokerState.fromValue(response.data().nextState())
+      if (origState == jmetadata.BrokerState.FENCED && currentState == jmetadata.BrokerState.RUNNING) {
+        brokerMetadataListener.put(FenceBrokerEvent(brokerEpoch(), false))
+      } else if (origState == jmetadata.BrokerState.RUNNING && currentState == jmetadata.BrokerState.FENCED) {
+        brokerMetadataListener.put(FenceBrokerEvent(brokerEpoch(), true))
+      }
       _lastSuccessfulHeartbeatTime = time.nanoseconds
       None
     }
