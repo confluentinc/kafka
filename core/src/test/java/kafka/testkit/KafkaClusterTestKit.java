@@ -290,7 +290,7 @@ public class KafkaClusterTestKit implements AutoCloseable {
         Properties properties = new Properties();
         if (!controllers.isEmpty()) {
             Collection<Node> controllerNodes = JavaConverters.asJavaCollection(
-                KafkaConfig$.MODULE$.controllerQuorumVotersStringsToNodes(
+                KafkaConfig$.MODULE$.controllerQuorumVoterStringsToNodes(
                     controllerQuorumVotersFutureManager.future.get()));
             StringBuilder bld = new StringBuilder();
             String prefix = "";

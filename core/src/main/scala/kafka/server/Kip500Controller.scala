@@ -153,7 +153,7 @@ class Kip500Controller(
         build()
       quotaManagers = QuotaFactory.instantiate(config, metrics, time, threadNamePrefix.getOrElse(""))
       val controllerNodes =
-        KafkaConfig.controllerQuorumVotersStringsToNodes(controllerQuorumVotersFuture.get())
+        KafkaConfig.controllerQuorumVoterStringsToNodes(controllerQuorumVotersFuture.get())
       controllerApis = new ControllerApis(socketServer.dataPlaneRequestChannel,
         authorizer,
         quotaManagers,

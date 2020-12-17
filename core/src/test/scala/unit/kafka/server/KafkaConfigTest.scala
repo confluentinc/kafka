@@ -1041,12 +1041,12 @@ class KafkaConfigTest {
   }
 
   @Test
-  def testControllerQuorumVotersStringsToNodes(): Unit = {
-    assertEquals(Seq.empty, KafkaConfig.controllerQuorumVotersStringsToNodes(""))
+  def testControllerQuorumVoterStringsToNodes(): Unit = {
+    assertEquals(Seq.empty, KafkaConfig.controllerQuorumVoterStringsToNodes(""))
     assertEquals(Seq(new Node(3000, "example.com", 9093)),
-      KafkaConfig.controllerQuorumVotersStringsToNodes("3000@example.com:9093"))
+      KafkaConfig.controllerQuorumVoterStringsToNodes("3000@example.com:9093"))
     assertEquals(Seq(new Node(3000, "example.com", 9093),
                      new Node(3001, "example.com", 9094)),
-      KafkaConfig.controllerQuorumVotersStringsToNodes("3000@example.com:9093,3001@example.com:9094"))
+      KafkaConfig.controllerQuorumVoterStringsToNodes("3000@example.com:9093,3001@example.com:9094"))
   }
 }

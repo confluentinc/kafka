@@ -1344,7 +1344,7 @@ object KafkaConfig {
     configType.isEmpty || configType.contains(ConfigDef.Type.PASSWORD)
   }
 
-  def controllerQuorumVotersStringsToNodes(connectString: String): Seq[Node] = {
+  def controllerQuorumVoterStringsToNodes(connectString: String): Seq[Node] = {
     connectString.split(",").filterNot(_.isEmpty()).map { case input =>
       val atIndex = input.indexOf('@')
       if (atIndex < 0) {
@@ -1859,7 +1859,7 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
     }
   }
 
-  val controllerQuorumVotersNodes: Seq[Node] = KafkaConfig.controllerQuorumVotersStringsToNodes(Option(controllerQuorumVoters).getOrElse(""))
+  val controllerQuorumVoterNodes: Seq[Node] = KafkaConfig.controllerQuorumVoterStringsToNodes(Option(controllerQuorumVoters).getOrElse(""))
 
   validateValues()
 
