@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
 public class KafkaClusterTestKit implements AutoCloseable {
     /**
      * This class manages a future which is completed with the proper value for
-     * controller.connect once the randomly assigned ports for all the controllers are
+     * controller.quorum.voters once the randomly assigned ports for all the controllers are
      * known.
      */
     private static class ControllerConnectFutureManager implements AutoCloseable {
@@ -133,7 +133,7 @@ public class KafkaClusterTestKit implements AutoCloseable {
                         "CONTROLLER://localhost:0");
                     props.put(KafkaConfig$.MODULE$.ControllerListenerNamesProp(),
                         "CONTROLLER");
-                    // Note: we can't accurately set controller.connect yet, since we don't
+                    // Note: we can't accurately set controller.quorum.voters yet, since we don't
                     // yet know what ports each controller will pick.  Set it to an
                     // empty string for now as a placeholder.
                     props.put(KafkaConfig$.MODULE$.ControllerConnectProp(), "");

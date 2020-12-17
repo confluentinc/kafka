@@ -657,8 +657,8 @@ class KafkaConfigTest {
         case KafkaConfig.ConnectionSetupTimeoutMaxMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.ProcessRolesProp => // ignore string
         case KafkaConfig.ControllerConnectProp => // ignore string
-        case KafkaConfig.RegistrationHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
-        case KafkaConfig.RegistrationLeaseTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case KafkaConfig.BrokerHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case KafkaConfig.BrokerRegistrationTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
 
         case KafkaConfig.AuthorizerClassNameProp => //ignore string
         case KafkaConfig.CreateTopicPolicyClassNameProp => //ignore string

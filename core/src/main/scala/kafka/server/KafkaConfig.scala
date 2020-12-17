@@ -70,8 +70,9 @@ object Defaults {
   val BackgroundThreads = 10
   val QueuedMaxRequests = 500
   val QueuedMaxRequestBytes = -1
-  val RegistrationHeartbeatIntervalMs = 2000
-  val RegistrationLeaseTimeoutMs = 18000
+  val InitialBrokerRegistrationTimeoutMs = 60000
+  val BrokerHeartbeatIntervalMs = 2000
+  val BrokerRegistrationTimeoutMs = 18000
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassName = ""
@@ -361,8 +362,8 @@ object KafkaConfig {
   val ProcessRolesProp = "process.roles"
   val ControllerConnectProp = "controller.quorum.voters"
   val InitialBrokerRegistrationTimeoutMs = "initial.broker.registration.timeout.ms"
-  val RegistrationHeartbeatIntervalMsProp = "registration.heartbeat.interval.ms"
-  val RegistrationLeaseTimeoutMsProp = "registration.lease.timeout.ms"
+  val BrokerHeartbeatIntervalMsProp = "broker.heartbeat.interval.ms"
+  val BrokerRegistrationTimeoutMsProp = "broker.registration.timeout.ms"
   val MetadataLogDirProp = "metadata.log.dir"
 
   /************* Authorizer Configuration ***********/
@@ -652,9 +653,10 @@ object KafkaConfig {
   val ConnectionSetupTimeoutMaxMsDoc = CommonClientConfigs.SOCKET_CONNECTION_SETUP_TIMEOUT_MAX_MS_DOC
   val ProcessRolesDoc = "The roles that this process plays: 'broker', 'controller', or 'broker,controller' if it is both"
   val ControllerConnectDoc = "A comma-separated list of controller URIs that KIP-500 brokers should connect to on startup. Required for brokers running in KIP-500 mode."
-  val RegistrationHeartbeatIntervalMsDoc = "The length of time in milliseconds between broker heartbeats. Used when running in KIP-500 mode."
-  val RegistrationLeaseTimeoutMsDoc = "The length of time in milliseconds that a broker lease lasts if no heartbeats are made. Used when running in KIP-500 mode."
-  val MetadataLogDirDoc = "The directory in which the metadata log is kept. If not set, we default to the first directory given by log.dirs"
+  var InitialBrokerRegistrationTimeoutMsDoc = "When initially registering with the controller quorum, the number of milliseconds to wait before declaring failure and exiting the broker process."
+  val BrokerHeartbeatIntervalMsDoc = "The length of time in milliseconds between broker heartbeats. Used when running in KIP-500 mode."
+  val BrokerRegistrationTimeoutMsDoc = "The length of time in milliseconds that a broker lease lasts if no heartbeats are made. Used when running in KIP-500 mode."
+  val MetadataLogDirDoc = "This configuration determines where we put the metadata log.  if it is not set, the metadata log is placed in the first log directory from log.dirs."
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameDoc = s"The fully qualified name of a class that implements s${classOf[Authorizer].getName}" +
@@ -1054,9 +1056,9 @@ object KafkaConfig {
       .define(ConnectionSetupTimeoutMaxMsProp, LONG, Defaults.ConnectionSetupTimeoutMaxMs, MEDIUM, ConnectionSetupTimeoutMaxMsDoc)
       .define(ProcessRolesProp, LIST, Collections.emptyList(), ValidList.in("broker", "controller"), HIGH, ProcessRolesDoc)
       .define(ControllerConnectProp, STRING, null, HIGH, ControllerConnectDoc)
-      .define(InitialBrokerRegistrationTimeoutMs, INT, Defaults.RegistrationHeartbeatIntervalMs, MEDIUM, RegistrationHeartbeatIntervalMsDoc)
-      .define(RegistrationHeartbeatIntervalMsProp, INT, Defaults.RegistrationHeartbeatIntervalMs, MEDIUM, RegistrationHeartbeatIntervalMsDoc)
-      .define(RegistrationLeaseTimeoutMsProp, INT, Defaults.RegistrationLeaseTimeoutMs, MEDIUM, RegistrationLeaseTimeoutMsDoc)
+      .define(InitialBrokerRegistrationTimeoutMs, INT, Defaults.InitialBrokerRegistrationTimeoutMs, MEDIUM, InitialBrokerRegistrationTimeoutMsDoc)
+      .define(BrokerHeartbeatIntervalMsProp, INT, Defaults.BrokerHeartbeatIntervalMs, MEDIUM, BrokerHeartbeatIntervalMsDoc)
+      .define(BrokerRegistrationTimeoutMsProp, INT, Defaults.BrokerRegistrationTimeoutMs, MEDIUM, BrokerRegistrationTimeoutMsDoc)
       .define(MetadataLogDirProp, STRING, null, HIGH, MetadataLogDirDoc)
 
       // Experimental flag to turn on APIs required for the internal metadata quorum (KIP-500)
@@ -1519,8 +1521,8 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val processRoles = parseProcessRoles()
   val controllerConnect = getString(KafkaConfig.ControllerConnectProp)
   val initialRegistrationTimeoutMs = getInt(KafkaConfig.InitialBrokerRegistrationTimeoutMs)
-  val registrationHeartbeatIntervalMs = getInt(KafkaConfig.RegistrationHeartbeatIntervalMsProp)
-  val registrationLeaseTimeoutMs = getInt(KafkaConfig.RegistrationLeaseTimeoutMsProp)
+  val registrationHeartbeatIntervalMs = getInt(KafkaConfig.BrokerHeartbeatIntervalMsProp)
+  val registrationLeaseTimeoutMs = getInt(KafkaConfig.BrokerRegistrationTimeoutMsProp)
 
   private def parseProcessRoles(): List[ProcessRole] = {
     getList(KafkaConfig.ProcessRolesProp).asScala.map {
