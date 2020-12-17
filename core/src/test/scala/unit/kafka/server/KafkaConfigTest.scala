@@ -657,6 +657,7 @@ class KafkaConfigTest {
         case KafkaConfig.ConnectionSetupTimeoutMaxMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.ProcessRolesProp => // ignore string
         case KafkaConfig.ControllerQuorumVotersProp => // ignore string
+        case KafkaConfig.InitialBrokerRegistrationTimeoutMs => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.BrokerHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.BrokerSessionTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
 
@@ -991,7 +992,7 @@ class KafkaConfigTest {
           KafkaConfig.fromProps(props)
         }
       } catch {
-        case e: Throwable => throw new RuntimeException(s"error handling propert $name", e)
+        case e: Throwable => throw new RuntimeException(s"error handling property $name", e)
       }
     })
   }
