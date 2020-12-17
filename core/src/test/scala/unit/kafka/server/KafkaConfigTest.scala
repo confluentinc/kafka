@@ -656,9 +656,9 @@ class KafkaConfigTest {
         case KafkaConfig.ConnectionSetupTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.ConnectionSetupTimeoutMaxMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.ProcessRolesProp => // ignore string
-        case KafkaConfig.ControllerConnectProp => // ignore string
+        case KafkaConfig.ControllerQuorumVotersProp => // ignore string
         case KafkaConfig.BrokerHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
-        case KafkaConfig.BrokerRegistrationTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case KafkaConfig.BrokerSessionTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
 
         case KafkaConfig.AuthorizerClassNameProp => //ignore string
         case KafkaConfig.CreateTopicPolicyClassNameProp => //ignore string
@@ -1040,12 +1040,12 @@ class KafkaConfigTest {
   }
 
   @Test
-  def testControllerConnectStringsToNodes(): Unit = {
-    assertEquals(Seq.empty, KafkaConfig.controllerConnectStringsToNodes(""))
+  def testControllerQuorumVotersStringsToNodes(): Unit = {
+    assertEquals(Seq.empty, KafkaConfig.controllerQuorumVotersStringsToNodes(""))
     assertEquals(Seq(new Node(3000, "example.com", 9093)),
-      KafkaConfig.controllerConnectStringsToNodes("3000@example.com:9093"))
+      KafkaConfig.controllerQuorumVotersStringsToNodes("3000@example.com:9093"))
     assertEquals(Seq(new Node(3000, "example.com", 9093),
                      new Node(3001, "example.com", 9094)),
-      KafkaConfig.controllerConnectStringsToNodes("3000@example.com:9093,3001@example.com:9094"))
+      KafkaConfig.controllerQuorumVotersStringsToNodes("3000@example.com:9093,3001@example.com:9094"))
   }
 }

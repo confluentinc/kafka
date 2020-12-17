@@ -64,8 +64,8 @@ class MetadataCacheControllerNodeProvider(val metadataCache: kafka.server.Metada
  * This provider is used when we are in KIP-500 mode.
  */
 class RaftControllerNodeProvider(val metaLogManager: MetaLogManager,
-                                 controllerConnectNodes: Seq[Node]) extends ControllerNodeProvider with Logging {
-  val idToNode = controllerConnectNodes.map(node => node.id() -> node).toMap
+                                 controllerQuorumVotersNodes: Seq[Node]) extends ControllerNodeProvider with Logging {
+  val idToNode = controllerQuorumVotersNodes.map(node => node.id() -> node).toMap
 
   override def controllerNode(): Option[Node] = {
     val leader = metaLogManager.leader()

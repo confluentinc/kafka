@@ -156,7 +156,7 @@ class Kip500Broker(
       kafkaScheduler = new KafkaScheduler(config.backgroundThreads)
       kafkaScheduler.startup()
 
-      val controllerNodeProvider = new RaftControllerNodeProvider(metaLogManager, config.controllerConnectNodes)
+      val controllerNodeProvider = new RaftControllerNodeProvider(metaLogManager, config.controllerQuorumVotersNodes)
 
       /* register broker metrics */
       _brokerTopicStats = new BrokerTopicStats
