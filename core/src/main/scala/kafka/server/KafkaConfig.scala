@@ -72,7 +72,7 @@ object Defaults {
   val QueuedMaxRequestBytes = -1
   val InitialBrokerRegistrationTimeoutMs = 60000
   val BrokerHeartbeatIntervalMs = 2000
-  val BrokerRegistrationTimeoutMs = 18000
+  val BrokerSessionTimeoutMs = 18000
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassName = ""
@@ -1058,7 +1058,7 @@ object KafkaConfig {
       .define(ControllerQuorumVotersProp, STRING, null, HIGH, ControllerQuorumVotersDoc)
       .define(InitialBrokerRegistrationTimeoutMs, INT, Defaults.InitialBrokerRegistrationTimeoutMs, MEDIUM, InitialBrokerRegistrationTimeoutMsDoc)
       .define(BrokerHeartbeatIntervalMsProp, INT, Defaults.BrokerHeartbeatIntervalMs, MEDIUM, BrokerHeartbeatIntervalMsDoc)
-      .define(BrokerSessionTimeoutMsProp, INT, Defaults.BrokerRegistrationTimeoutMs, MEDIUM, BrokerSessionTimeoutMsDoc)
+      .define(BrokerSessionTimeoutMsProp, INT, Defaults.BrokerSessionTimeoutMs, MEDIUM, BrokerSessionTimeoutMsDoc)
       .define(MetadataLogDirProp, STRING, null, HIGH, MetadataLogDirDoc)
 
       // Experimental flag to turn on APIs required for the internal metadata quorum (KIP-500)
@@ -1521,8 +1521,8 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val processRoles = parseProcessRoles()
   val controllerQuorumVoters = getString(KafkaConfig.ControllerQuorumVotersProp)
   val initialRegistrationTimeoutMs = getInt(KafkaConfig.InitialBrokerRegistrationTimeoutMs)
-  val registrationHeartbeatIntervalMs = getInt(KafkaConfig.BrokerHeartbeatIntervalMsProp)
-  val registrationLeaseTimeoutMs = getInt(KafkaConfig.BrokerSessionTimeoutMsProp)
+  val brokerHeartbeatIntervalMs = getInt(KafkaConfig.BrokerHeartbeatIntervalMsProp)
+  val brokerSessionTimeoutMs = getInt(KafkaConfig.BrokerSessionTimeoutMsProp)
 
   private def parseProcessRoles(): List[ProcessRole] = {
     getList(KafkaConfig.ProcessRolesProp).asScala.map {
