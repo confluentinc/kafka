@@ -21,8 +21,13 @@ import kafka.testkit.{KafkaClusterTestKit, TestKitNodes}
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.metadata.BrokerState
+import org.apache.kafka.clients.admin.{Admin, NewTopic}
 import org.junit.rules.Timeout
 import org.junit.{Assert, Rule, Test}
+
+import java.time.Duration
+import java.util.Collections
+import java.util.concurrent.TimeUnit
 
 class Kip500ClusterTest {
   @Rule
@@ -44,7 +49,7 @@ class Kip500ClusterTest {
   def testCreateClusterAndWaitForBrokerInRunningState(): Unit = {
     val cluster = new KafkaClusterTestKit.Builder(
       new TestKitNodes.Builder().
-        setNumKip500BrokerNodes(1).
+        setNumKip500BrokerNodes(3).
         setNumControllerNodes(1).build()).build()
     try {
       cluster.format()

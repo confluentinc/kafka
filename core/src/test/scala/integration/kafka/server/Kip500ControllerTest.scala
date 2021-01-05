@@ -21,6 +21,9 @@ import org.apache.kafka.clients.admin.Admin
 import org.junit.rules.Timeout
 import org.junit.{Rule, Test}
 
+import java.time.Duration
+import java.util.concurrent.TimeUnit
+
 class Kip500ControllerTest {
   @Rule
   def globalTimeout = Timeout.millis(120000)
@@ -44,8 +47,12 @@ class Kip500ControllerTest {
       cluster.startup()
       val adminClient = Admin.create(cluster.controllerClientProperties())
       try {
+        // List topics and verify all the topics were created
+        val listTopicsResult = adminClient.listTopics()
+        val listOfTopics = listTopicsResult.names().get(10, TimeUnit.SECONDS)
+        assert(listOfTopics.size() == 0)
       } finally  {
-        adminClient.close()
+        adminClient.close(Duration.ofSeconds(10))
       }
     } finally {
       cluster.close()
