@@ -22,6 +22,7 @@ from ducktape.utils.util import wait_until
 from ducktape.cluster.remoteaccount import RemoteCommandError
 
 from kafkatest.directory_layout.kafka_path import KafkaPathResolverMixin
+from kafkatest.services.kafka.util import zk_quorum
 from kafkatest.services.security.security_config import SecurityConfig
 from kafkatest.version import DEV_BRANCH
 
@@ -48,17 +49,20 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
         """
         :type context
         """
+        # ZooKeeper is not being used when the test explicitly defines a different metadata quorum
+        self.ignored = 'metadata_quorum' in context.injected_args and context.injected_args['metadata_quorum'] != zk_quorum
         self.kafka_opts = ""
         self.zk_sasl = zk_sasl
-        if (zk_client_secure_port or zk_tls_encrypt_only) and not version.supports_tls_to_zookeeper():
+        if (zk_client_secure_port or zk_tls_encrypt_only) and not version.supports_tls_to_zookeeper() and not self.ignored:
             raise Exception("Cannot use TLS with a ZooKeeper version that does not support it: %s" % str(version))
-        if not zk_client_port and not zk_client_secure_port:
+        if not zk_client_port and not zk_client_secure_port and not self.ignored:
             raise Exception("Cannot disable both ZK clientPort and clientSecurePort")
         self.zk_client_port = zk_client_port
         self.zk_client_secure_port = zk_client_secure_port
         self.zk_tls_encrypt_only = zk_tls_encrypt_only
-        super(ZookeeperService, self).__init__(context, num_nodes)
-        self.set_version(version)
+        if not self.ignored:
+            super(ZookeeperService, self).__init__(context, num_nodes)
+            self.set_version(version)
 
     def set_version(self, version):
         for node in self.nodes:

@@ -181,6 +181,15 @@ class Kip500Server(
     raftManager.startup()
     controller.foreach(_.startup())
     broker.foreach(_.startup())
+    /*
+     * System tests grep the logs for 'Kafka\s*Server.*started' to identify when the service has started.
+     * The ZooKeeper- and Raft-based Kafka brokers both generate a matching log line, and the Raft-based Controller
+     * does not.  We therefore have to explicitly generate a matching line here if we are starting a node having only
+     * the controller role -- otherwise system tests will not detect when the node has started.
+     */
+    if (broker.isEmpty) {
+      info("Controller-only KafkaServer started")
+    }
   }
 
   def shutdown(): Unit = {

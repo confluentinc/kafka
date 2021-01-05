@@ -18,15 +18,12 @@ from . import config_property
 
 class KafkaConfig(dict):
     """A dictionary-like container class which allows for definition of overridable default values,
-    which is also capable of "rendering" itself as a useable server.properties file.
+    which is also capable of "rendering" itself as a usable server.properties file.
     """
 
     DEFAULTS = {
-        config_property.PORT: 9092,
         config_property.SOCKET_RECEIVE_BUFFER_BYTES: 65536,
         config_property.LOG_DIRS: "/mnt/kafka/kafka-data-logs-1,/mnt/kafka/kafka-data-logs-2",
-        config_property.ZOOKEEPER_CONNECTION_TIMEOUT_MS: 18000,
-        config_property.ZOOKEEPER_SESSION_TIMEOUT_MS: 18000
     }
 
     def __init__(self, **kwargs):
