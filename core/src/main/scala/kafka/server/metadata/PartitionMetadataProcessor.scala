@@ -510,6 +510,10 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
     mgr.getCopiedFencedBrokers().remove(brokerId)
     // set the broker epoch
     mgr.getCopiedBrokerEpochs()(brokerId) = brokerRecord.brokerEpoch()
+    // update the cached broker epoch if the local broker is being registered
+    if (brokerId == kafkaConfig.brokerId) {
+      brokerEpoch = brokerRecord.brokerEpoch()
+    }
   }
 
   /**
