@@ -128,7 +128,7 @@ class BrokerMetadataListenerTest {
     assertEquals(expectedInitialMetadataOffset, listener.currentMetadataOffset())
 
     val brokerEpoch = 1
-    val msg0 = FenceBrokerEvent(1, true)
+    val msg0 = FenceBrokerEvent(brokerEpoch, true)
     listener.put(msg0)
     listener.drain()
     assertEquals(List(msg0), processor.processed.toList)
@@ -137,7 +137,7 @@ class BrokerMetadataListenerTest {
     assertEquals(expectedInitialMetadataOffset, listener.currentMetadataOffset())
 
     processor.processed.clear()
-    val msg1 = FenceBrokerEvent(1, false)
+    val msg1 = FenceBrokerEvent(brokerEpoch, false)
     listener.put(msg1)
     listener.drain()
     assertEquals(List(msg1), processor.processed.toList)

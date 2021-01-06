@@ -72,16 +72,6 @@ sealed trait BrokerMetadataEvent
 final case class MetadataLogEvent(apiMessages: util.List[ApiMessage], lastOffset: Long) extends BrokerMetadataEvent
 
 /**
- * A register-broker event that occurs when the broker heartbeat receives a successful registration response.
- * It will only occur once in the lifetime of the broker process, and it will occur before
- * any metadata log message batches appear.  The listener injects this event into the event stream,
- * and processors will receive it immediately.
- *
- * @param brokerEpoch the epoch assigned to the broker by the active controller
- */
-final case class RegisterBrokerEvent(brokerEpoch: Long) extends BrokerMetadataEvent
-
-/**
  * A fence-broker event that occurs when either:
  *
  * 1) The local broker's heartbeat is unable to contact the active controller within the
