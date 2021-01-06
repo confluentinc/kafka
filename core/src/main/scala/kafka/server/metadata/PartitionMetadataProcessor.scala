@@ -346,7 +346,6 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
   override def process(event: BrokerMetadataEvent): Unit = {
     event match {
       case metadataLogEvent: MetadataLogEvent => process(metadataLogEvent)
-      case registerBrokerEvent: RegisterBrokerEvent => process(registerBrokerEvent)
       case _ => // no-op
     }
   }
@@ -802,30 +801,5 @@ class PartitionMetadataProcessor(kafkaConfig: KafkaConfig,
   private def process(config: ConfigRecord, mgr: MetadataMgr): Unit = {
     mgr.addConfigResourceChange(new ConfigResource(ConfigResource.Type.forId(config.resourceType()), config.resourceName()),
       config.name(), config.value())
-  }
-
-  def process(outOfBandRegisterLocalBrokerEvent: RegisterBrokerEvent): Unit = {
-    val requestedBrokerEpoch = outOfBandRegisterLocalBrokerEvent.brokerEpoch
-    if (requestedBrokerEpoch < 0) {
-      throw new IllegalArgumentException(s"Cannot change broker epoch to a negative value: $requestedBrokerEpoch")
-    }
-    // idempotent, and disallow changing the epoch once it is set to a positive value
-    if (brokerEpoch >= 0) {
-      if (requestedBrokerEpoch != brokerEpoch) {
-        throw new IllegalArgumentException(s"Cannot change broker epoch from already-set value $brokerEpoch: $requestedBrokerEpoch")
-      }
-    } else {
-      brokerEpoch = requestedBrokerEpoch
-      val numBrokersAdding = 1
-      val mgr = MetadataMgr(numBrokersAdding, 0, 0)
-      mgr.getCopiedBrokerEpochs().put(kafkaConfig.brokerId, requestedBrokerEpoch)
-      metadataCache.updatePartitionMetadata(
-        mgr.getCurrentPartitionStates(),
-        mgr.getCurrentAliveBrokers(),
-        mgr.getCurrentAliveNodes(),
-        mgr.getCurrentTopicIdMap(),
-        mgr.getCurrentFencedBrokers(),
-        mgr.getCurrentBrokerEpochs())
-    }
   }
 }

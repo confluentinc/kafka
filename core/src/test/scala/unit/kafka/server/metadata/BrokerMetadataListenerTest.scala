@@ -128,21 +128,19 @@ class BrokerMetadataListenerTest {
     assertEquals(expectedInitialMetadataOffset, listener.currentMetadataOffset())
 
     val brokerEpoch = 1
-    val msg0 = RegisterBrokerEvent(brokerEpoch)
-    val msg1 = FenceBrokerEvent(1, true)
+    val msg0 = FenceBrokerEvent(1, true)
     listener.put(msg0)
-    listener.put(msg1)
     listener.drain()
-    assertEquals(List(msg0, msg1), processor.processed.toList)
+    assertEquals(List(msg0), processor.processed.toList)
 
     // offset should not be updated
     assertEquals(expectedInitialMetadataOffset, listener.currentMetadataOffset())
 
     processor.processed.clear()
-    val msg2 = FenceBrokerEvent(1, false)
-    listener.put(msg2)
+    val msg1 = FenceBrokerEvent(1, false)
+    listener.put(msg1)
     listener.drain()
-    assertEquals(List(msg2), processor.processed.toList)
+    assertEquals(List(msg1), processor.processed.toList)
 
     // offset should not be updated
     assertEquals(expectedInitialMetadataOffset, listener.currentMetadataOffset())
@@ -187,11 +185,10 @@ class BrokerMetadataListenerTest {
     val listener = new BrokerMetadataListener(mock(classOf[KafkaConfig]), metadataCache, new MockTime(), List(processor))
     val logEvent1 = MetadataLogEvent(List(mock(classOf[ApiMessage])).asJava, 1)
     val logEvent2 = MetadataLogEvent(List(mock(classOf[ApiMessage])).asJava, 2)
-    val registerEvent = RegisterBrokerEvent(1)
     val fenceEvent = FenceBrokerEvent(1, true)
 
     // add the out-of-band messages after the batches
-    val expected = List(logEvent1, logEvent2, registerEvent, fenceEvent)
+    val expected = List(logEvent1, logEvent2, fenceEvent)
     expected.foreach { listener.put(_) }
     listener.drain()
 

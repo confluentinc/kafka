@@ -195,32 +195,17 @@ class PartitionMetadataProcessorTest {
   }
 
   @Test
-  def testOutOfBandRegisterLocalBrokerEvent(): Unit = {
-    val processor = createSimpleProcessor()
-    val initialBrokerEpoch = -1
-    assertEquals(initialBrokerEpoch, processor.brokerEpoch)
-    val brokerEpoch = 1
-    processor.process(RegisterBrokerEvent(brokerEpoch))
-    assertEquals(brokerEpoch, processor.brokerEpoch)
-    assertEquals(brokerEpoch, processor.MetadataMgr().getCurrentBrokerEpochs().get(0).get)
-    // test idempotency
-    processor.process(RegisterBrokerEvent(brokerEpoch))
-    assertEquals(brokerEpoch, processor.brokerEpoch)
-    assertEquals(brokerEpoch, processor.MetadataMgr().getCurrentBrokerEpochs().get(0).get)
-  }
-
-  @Test
   def testDisallowChangeBrokerEpoch(): Unit = {
     val processor = createSimpleProcessor()
     val brokerEpoch = 1
-    processor.process(RegisterBrokerEvent(brokerEpoch))
-    assertThrows[IllegalArgumentException] { processor.process(RegisterBrokerEvent(brokerEpoch + 1)) }
+    processor.process(FenceBrokerEvent(brokerEpoch, false))
+    assertThrows[IllegalArgumentException] { processor.process(FenceBrokerEvent(brokerEpoch + 1, true)) }
   }
 
   @Test(expected = classOf[IllegalArgumentException])
   def testDisallowNegativeBrokerEpoch(): Unit = {
     val processor = createSimpleProcessor()
-    processor.process(RegisterBrokerEvent(-1))
+    processor.process(FenceBrokerEvent(-1, false))
   }
 
   @Test

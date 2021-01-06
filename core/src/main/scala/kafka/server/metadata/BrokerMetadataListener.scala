@@ -243,8 +243,6 @@ class BrokerMetadataListener(
           _currentMetadataOffset = logEvent.lastOffset
         case fenceBrokerEvent: FenceBrokerEvent =>
           process(fenceBrokerEvent)
-        case registerBrokerEvent: RegisterBrokerEvent =>
-          process(registerBrokerEvent)
       }
     }
   }
