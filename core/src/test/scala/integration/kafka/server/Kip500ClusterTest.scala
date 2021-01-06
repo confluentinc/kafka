@@ -21,13 +21,10 @@ import kafka.testkit.{KafkaClusterTestKit, TestKitNodes}
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.metadata.BrokerState
-import org.apache.kafka.clients.admin.{Admin, NewTopic}
 import org.junit.rules.Timeout
 import org.junit.{Assert, Rule, Test}
 
-import java.time.Duration
-import java.util.Collections
-import java.util.concurrent.TimeUnit
+import scala.compat.java8.OptionConverters
 
 class Kip500ClusterTest {
   @Rule
@@ -50,12 +47,14 @@ class Kip500ClusterTest {
     val cluster = new KafkaClusterTestKit.Builder(
       new TestKitNodes.Builder().
         setNumKip500BrokerNodes(3).
-        setNumControllerNodes(1).build()).build()
+        setNumControllerNodes(3).build()).build()
     try {
       cluster.format()
       cluster.startup()
       TestUtils.waitUntilTrue(() => cluster.kip500Brokers().get(0).currentState() == BrokerState.RUNNING,
         "Broker never made it to RUNNING state.")
+      TestUtils.waitUntilTrue(() => OptionConverters.toJava(cluster.raftManagers().get(0).currentLeader).isPresent,
+      "RaftManager was not initialized.")
       val admin = Admin.create(cluster.clientProperties())
       try {
         Assert.assertEquals(cluster.nodes().clusterId().toString,
