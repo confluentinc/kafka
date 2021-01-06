@@ -31,7 +31,7 @@ from kafkatest.services.security.minikdc import MiniKdc
 from kafkatest.services.security.listener_security_config import ListenerSecurityConfig
 from kafkatest.services.security.security_config import SecurityConfig
 from kafkatest.version import DEV_BRANCH
-from kafkatest.services.kafka.util import fix_opts_for_new_jvm, remote_raft_quorum, inproc_raft_quorum
+from kafkatest.services.kafka.util import fix_opts_for_new_jvm, remote_raft_quorum, inproc_raft_quorum, zk_quorum
 
 
 class KafkaListener:
@@ -129,28 +129,28 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         :param dict per_node_server_prop_overrides:
         :param str extra_kafka_opts: jvm args to add to KAFKA_OPTS variable
         """
-        Service.__init__(self, context, num_nodes)
-        JmxMixin.__init__(self, num_nodes=num_nodes, jmx_object_names=jmx_object_names, jmx_attributes=(jmx_attributes or []),
-                          root=KafkaService.PERSISTENT_ROOT)
+        # Ducktape tears down services in the reverse order in which they are created,
+        # so create a service for the remote controller quorum (if we need one) first, before
+        # invoking Service.__init__(), so that Ducktape will tear down Kafka first; otherwise
+        # Ducktape will tear down the controller quorum first, which could lead to problems in
+        # Kafka and delays in tearing it down (and who knows what else -- it's simply better
+        # to correctly tear down Kafka before tearing down the remote controller).
 
-        self.zk = zk
-        self.using_zk = self.zk and not self.zk.ignored
-        self.using_raft = not self.using_zk
-        self.raft_controller_only_role = self.using_raft and raft_controller_only_role
-        self.has_broker_role = self.using_raft and not self.raft_controller_only_role
-        self.has_controller_role = self.using_raft and (
-                self.context.injected_args['metadata_quorum'] == inproc_raft_quorum or
-                self.context.injected_args['metadata_quorum'] == remote_raft_quorum and self.raft_controller_only_role)
-        self.has_combined_broker_and_controller_roles = self.has_broker_role and self.has_controller_role
+        # move to its own file
+        quorum_type = context.injected_args.get('metadata_quorum',
+                                                zk_quorum if (zk and not zk.ignored) else remote_raft_quorum)
+        if zk and not zk.ignored and quorum_type != zk_quorum:
+            raise Exception("Cannot use ZooKeeper while specifying a Raft metadata quorum")
+        if quorum_type != remote_raft_quorum and raft_controller_only_role:
+            raise Exception("Cannot specify raft_controller_only_role unless using a remote Raft metadata quorum")
 
-        # create a service for the remote controller quorum if necessary
-        if self.using_zk or self.has_controller_role:
-            self.controller_quorum = None
+        if quorum_type != remote_raft_quorum or raft_controller_only_role:
+            remote_controller_quorum = None
         else:
             # define the number of controllers (5, 3, or 1) based on the Kafka cluster size
             num_controller_nodes = 5 if num_nodes >= 5 else 3 if num_nodes >= 3 else 1
             # define quorum security based on the security of the Kafka cluster
-            self.controller_quorum = KafkaService(
+            remote_controller_quorum = KafkaService(
                 context, num_controller_nodes, zk, security_protocol=security_protocol,
                 interbroker_security_protocol=interbroker_security_protocol,
                 client_sasl_mechanism=client_sasl_mechanism, interbroker_sasl_mechanism=interbroker_sasl_mechanism,
@@ -163,9 +163,22 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                 raft_controller_per_node_server_prop_overrides=raft_controller_per_node_server_prop_overrides
             )
 
+        Service.__init__(self, context, num_nodes)
+        JmxMixin.__init__(self, num_nodes=num_nodes, jmx_object_names=jmx_object_names, jmx_attributes=(jmx_attributes or []),
+                          root=KafkaService.PERSISTENT_ROOT)
+
+        self.zk = zk
+        self.using_zk = quorum_type == zk_quorum
+        self.using_raft = not self.using_zk
+        self.raft_controller_only_role = raft_controller_only_role
+        self.has_broker_role = self.using_raft and not self.raft_controller_only_role
+        self.has_controller_role = quorum_type == inproc_raft_quorum or self.raft_controller_only_role
+        self.has_combined_broker_and_controller_roles = quorum_type == inproc_raft_quorum
+        self.remote_controller_quorum = remote_controller_quorum
+
         # define controller.quorum.voters text if necessary
         if self.using_raft:
-            controller_service = self if self.has_controller_role else self.controller_quorum
+            controller_service = self if self.has_controller_role else self.remote_controller_quorum
             self.controller_quorum_voters = ','.join(["%s@%s:%s" %
                                                       (controller_service.idx(node) + config_property.FIRST_CONTROLLER_ID - 1,
                                                        node.account.hostname,
@@ -344,8 +357,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         if self.using_zk:
             self._ensure_zk_chroot()
 
-        if self.controller_quorum:
-            self.controller_quorum.start()
+        if self.remote_controller_quorum:
+            self.remote_controller_quorum.start()
         Service.start(self)
 
         if self.using_zk:
@@ -510,11 +523,6 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     def signal_leader(self, topic, partition=0, sig=signal.SIGTERM):
         leader = self.leader(topic, partition)
         self.signal_node(leader, sig)
-
-    def stop(self):
-        if self.controller_quorum:
-            self.controller_quorum.stop()
-        super().stop()
 
     def stop_node(self, node, clean_shutdown=True, timeout_sec=60):
         pids = self.pids(node)
