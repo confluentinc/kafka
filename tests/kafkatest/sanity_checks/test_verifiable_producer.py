@@ -20,7 +20,7 @@ from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
 
 from kafkatest.services.kafka import KafkaService
-from kafkatest.services.kafka.quorum_utils import all_quorum_styles, using_zk, zk_quorum
+from kafkatest.services.kafka.quorum_utils import all_quorum_styles, zk_quorum
 from kafkatest.services.verifiable_producer import VerifiableProducer
 from kafkatest.services.zookeeper import ZookeeperService
 from kafkatest.utils import is_version
@@ -33,7 +33,7 @@ class TestVerifiableProducer(Test):
         super(TestVerifiableProducer, self).__init__(test_context)
 
         self.topic = "topic"
-        self.zk = ZookeeperService(test_context, num_nodes=1) if using_zk(test_context) else None
+        self.zk = ZookeeperService(test_context, num_nodes=1)
         self.kafka = KafkaService(test_context, num_nodes=1, zk=self.zk,
                                   topics={self.topic: {"partitions": 1, "replication-factor": 1}})
 
@@ -42,8 +42,7 @@ class TestVerifiableProducer(Test):
         self.producer = VerifiableProducer(test_context, num_nodes=1, kafka=self.kafka, topic=self.topic,
                                            max_messages=self.num_messages, throughput=self.num_messages // 10)
     def setUp(self):
-        if self.kafka.using_zk:
-            self.zk.start()
+        self.zk.start()
         self.kafka.start()
 
     @cluster(num_nodes=3)
