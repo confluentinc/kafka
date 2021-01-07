@@ -137,7 +137,6 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         # Kafka and delays in tearing it down (and who knows what else -- it's simply better
         # to correctly tear down Kafka before tearing down the remote controller).
 
-        # move to its own file
         quorum_type = get_validated_quorum_type(context, zk, raft_controller_only_role)
 
         if quorum_type != remote_raft_quorum or raft_controller_only_role:
@@ -166,9 +165,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         self.zk = zk
         self.using_zk = quorum_type == zk_quorum
         self.using_raft = not self.using_zk
-        self.raft_controller_only_role = raft_controller_only_role
-        self.has_broker_role = self.using_raft and not self.raft_controller_only_role
-        self.has_controller_role = quorum_type == inproc_raft_quorum or self.raft_controller_only_role
+        self.has_broker_role = self.using_raft and not raft_controller_only_role
+        self.has_controller_role = quorum_type == inproc_raft_quorum or raft_controller_only_role
         self.has_combined_broker_and_controller_roles = quorum_type == inproc_raft_quorum
         self.remote_controller_quorum = remote_controller_quorum
 
@@ -220,35 +218,29 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         # e.g. brokers to deregister after a hard kill.
         self.zk_session_timeout = zk_session_timeout
 
-        if self.using_zk or self.has_broker_role and not self.has_controller_role:
-            self.port_mappings = {
-                'PLAINTEXT': KafkaListener('PLAINTEXT', config_property.FIRST_BROKER_PORT + 0, 'PLAINTEXT', False),
-                'SSL': KafkaListener('SSL', config_property.FIRST_BROKER_PORT + 1, 'SSL', False),
-                'SASL_PLAINTEXT': KafkaListener('SASL_PLAINTEXT', config_property.FIRST_BROKER_PORT + 2, 'SASL_PLAINTEXT', False),
-                'SASL_SSL': KafkaListener('SASL_SSL', config_property.FIRST_BROKER_PORT + 3, 'SASL_SSL', False),
-                KafkaService.INTERBROKER_LISTENER_NAME:
-                    KafkaListener(KafkaService.INTERBROKER_LISTENER_NAME, config_property.FIRST_BROKER_PORT + 7, None, False)
-            }
-        elif self.has_combined_broker_and_controller_roles:
-            self.port_mappings = {
-                'PLAINTEXT': KafkaListener('PLAINTEXT', config_property.FIRST_BROKER_PORT + 0, 'PLAINTEXT', False),
-                'SSL': KafkaListener('SSL', config_property.FIRST_BROKER_PORT + 1, 'SSL', False),
-                'SASL_PLAINTEXT': KafkaListener('SASL_PLAINTEXT', config_property.FIRST_BROKER_PORT + 2, 'SASL_PLAINTEXT', False),
-                'SASL_SSL': KafkaListener('SASL_SSL', config_property.FIRST_BROKER_PORT + 3, 'SASL_SSL', False),
-                KafkaService.INTERBROKER_LISTENER_NAME:
-                    KafkaListener(KafkaService.INTERBROKER_LISTENER_NAME, config_property.FIRST_BROKER_PORT + 7, None, False),
-                'CONTROLLER': KafkaListener('CONTROLLER', config_property.FIRST_CONTROLLER_PORT + 0, 'PLAINTEXT', False),
-            }
-        else: # controller-only
-            self.port_mappings = {
-                'CONTROLLER': KafkaListener('CONTROLLER', config_property.FIRST_CONTROLLER_PORT + 0, 'PLAINTEXT', False),
-            }
+        broker_only_port_mappings = {
+            'PLAINTEXT': KafkaListener('PLAINTEXT', config_property.FIRST_BROKER_PORT + 0, 'PLAINTEXT', False),
+            'SSL': KafkaListener('SSL', config_property.FIRST_BROKER_PORT + 1, 'SSL', False),
+            'SASL_PLAINTEXT': KafkaListener('SASL_PLAINTEXT', config_property.FIRST_BROKER_PORT + 2, 'SASL_PLAINTEXT', False),
+            'SASL_SSL': KafkaListener('SASL_SSL', config_property.FIRST_BROKER_PORT + 3, 'SASL_SSL', False),
+            KafkaService.INTERBROKER_LISTENER_NAME:
+                KafkaListener(KafkaService.INTERBROKER_LISTENER_NAME, config_property.FIRST_BROKER_PORT + 7, None, False)
+        }
+        controller_only_port_mappings = {
+            'CONTROLLER': KafkaListener('CONTROLLER', config_property.FIRST_CONTROLLER_PORT + 0, 'PLAINTEXT', False),
+        }
+
+        if self.using_zk or self.has_broker_role and not self.has_controller_role: # ZK or Raft broker-only
+            self.port_mappings = broker_only_port_mappings
+        elif self.has_combined_broker_and_controller_roles: # Raft broker+controller
+            self.port_mappings = broker_only_port_mappings.copy()
+            self.port_mappings.update(controller_only_port_mappings)
+        else: # Raft controller-only
+            self.port_mappings = controller_only_port_mappings
 
         self.interbroker_listener = None
         if self.using_zk or self.has_broker_role:
             self.setup_interbroker_listener(interbroker_security_protocol, self.listener_security_config.use_separate_interbroker_listener)
-        else:
-            self.interbroker_listener = KafkaListener('PLAINTEXT', config_property.FIRST_BROKER_PORT + 0, 'PLAINTEXT', False) # not used, but needed to avoid issues along the way
         self.interbroker_sasl_mechanism = interbroker_sasl_mechanism
         self._security_config = None
 
@@ -306,7 +298,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     @property
     def security_config(self):
         if not self._security_config:
-            self._security_config = SecurityConfig(self.context, self.security_protocol, self.interbroker_listener.security_protocol,
+            inter_broker_security_protocol = self.interbroker_listener.security_protocol if self.using_zk or self.has_broker_role else None
+            self._security_config = SecurityConfig(self.context, self.security_protocol, inter_broker_security_protocol,
                                     zk_sasl=self.zk.zk_sasl if self.using_zk else False, zk_tls=self.zk_client_secure,
                                     client_sasl_mechanism=self.client_sasl_mechanism,
                                     interbroker_sasl_mechanism=self.interbroker_sasl_mechanism,
@@ -468,7 +461,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         node.account.mkdirs(KafkaService.PERSISTENT_ROOT)
 
         self.security_config.setup_node(node)
-        self.maybe_setup_broker_scram_credentials(node)
+        if self.using_zk or self.has_broker_role: # TODO: SCRAM currently unsupported for controller quorum
+            self.maybe_setup_broker_scram_credentials(node)
 
         prop_file = self.prop_file(node)
         self.logger.info("kafka.properties:")
@@ -491,12 +485,13 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             monitor.wait_until("Kafka\s*Server.*started", timeout_sec=timeout_sec, backoff_sec=.25,
                                err_msg="Kafka server didn't finish startup in %d seconds" % timeout_sec)
 
-        # Credentials for inter-broker communication are created before starting Kafka.
-        # Client credentials are created after starting Kafka so that both loading of
-        # existing credentials from ZK and dynamic update of credentials in Kafka are tested.
-        # We use the admin client and connect as the broker user when creating the client (non-broker) credentials
-        # if Kafka supports KIP-554, otherwise we use ZooKeeper.
-        self.maybe_setup_client_scram_credentials(node)
+        if self.using_zk or self.has_broker_role: # TODO: SCRAM currently unsupported for controller quorum
+            # Credentials for inter-broker communication are created before starting Kafka.
+            # Client credentials are created after starting Kafka so that both loading of
+            # existing credentials from ZK and dynamic update of credentials in Kafka are tested.
+            # We use the admin client and connect as the broker user when creating the client (non-broker) credentials
+            # if Kafka supports KIP-554, otherwise we use ZooKeeper.
+            self.maybe_setup_client_scram_credentials(node)
 
         self.start_jmx_tool(self.idx(node), node)
         if len(self.pids(node)) == 0:

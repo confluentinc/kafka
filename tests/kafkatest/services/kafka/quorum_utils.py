@@ -25,7 +25,7 @@ non_upgrade_quorums = [zk_quorum, remote_raft_quorum]
 # How we will parameterize upgrade-related tests
 upgrade_quorums = [zk_quorum, non_upgrade_quorums, remote_raft_quorum]
 
-def using_zk(test_context):
+def test_using_zk(test_context):
     # A test is using ZooKeeper if it doesn't specify a metadata quorum or if it explicitly specifies ZooKeeper
     return test_context.injected_args.get('metadata_quorum', zk_quorum) == zk_quorum
 
