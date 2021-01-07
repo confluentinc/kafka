@@ -25,9 +25,9 @@ non_upgrade_quorums = [zk_quorum, remote_raft_quorum]
 # How we will parameterize upgrade-related tests
 upgrade_quorums = [zk_quorum, non_upgrade_quorums, remote_raft_quorum]
 
-def test_using_zk(test_context):
-    # A test is using ZooKeeper if it doesn't specify a metadata quorum or if it explicitly specifies ZooKeeper
-    return test_context.injected_args.get('metadata_quorum', zk_quorum) == zk_quorum
+def quorum_type_for_test(test_context):
+    # A test uses ZooKeeper if it doesn't specify a metadata quorum or if it explicitly specifies ZooKeeper
+    return test_context.injected_args.get('metadata_quorum', zk_quorum)
 
 def get_validated_quorum_type(test_context, zk, raft_controller_only_role):
     """
@@ -39,15 +39,11 @@ def get_validated_quorum_type(test_context, zk, raft_controller_only_role):
     :param raft_controller_only_role: whether the Kafka service will run just a Raft-based controller
     :return: the quorum type for the Kafka cluster with the given parameters
     """
-    has_usable_zk = (zk and not zk.ignored)
-    # The default quorum to use if it isn't explicitly specified in the test context will be:
-    # ZooKeeper if the given instance is instantiated and usable/not ignored,
-    # A remote raft controller quorum otherwise.
-    default_quorum_type = zk_quorum if has_usable_zk else remote_raft_quorum
-    quorum_type = test_context.injected_args.get('metadata_quorum', default_quorum_type)
+    quorum_type = quorum_type_for_test(test_context)
     # Perform validations so we can definitively depend on the input parameters and the returned quorum type
+    has_usable_zk = (zk and not zk.ignored)
     if has_usable_zk and quorum_type != zk_quorum:
-        raise Exception("Cannot use ZooKeeper while specifying a Raft metadata quorum")
+        raise Exception("Cannot use ZooKeeper while specifying a Raft metadata quorum (should not happen)")
     if quorum_type != remote_raft_quorum and raft_controller_only_role:
-        raise Exception("Cannot specify raft_controller_only_role unless using a remote Raft metadata quorum")
+        raise Exception("Cannot specify raft_controller_only_role=True unless using a remote Raft metadata quorum (should not happen)")
     return quorum_type

@@ -246,28 +246,28 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
         for node in self.nodes:
             node.version = version
+            broker_only_configs = {
+                config_property.PORT: config_property.FIRST_BROKER_PORT,
+                config_property.BROKER_ID: self.idx(node),
+            }
+            using_zk_configs = {
+                config_property.ZOOKEEPER_CONNECTION_TIMEOUT_MS: zk_connect_timeout,
+                config_property.ZOOKEEPER_SESSION_TIMEOUT_MS: zk_session_timeout
+            }
+            using_zk_configs.update(broker_only_configs)
+            controller_only_configs = {
+                config_property.CONTROLLER_ID: self.idx(node) + config_property.FIRST_CONTROLLER_ID - 1,
+            }
             if self.using_zk:
-                node.config = KafkaConfig(**{
-                    config_property.PORT: config_property.FIRST_BROKER_PORT,
-                    config_property.BROKER_ID: self.idx(node),
-                    config_property.ZOOKEEPER_CONNECTION_TIMEOUT_MS: zk_connect_timeout,
-                    config_property.ZOOKEEPER_SESSION_TIMEOUT_MS: zk_session_timeout
-                })
+                node.config = KafkaConfig(**using_zk_configs)
             elif not self.has_broker_role: # controller-only role
-                node.config = KafkaConfig(**{
-                    config_property.CONTROLLER_ID: self.idx(node) + config_property.FIRST_CONTROLLER_ID - 1,
-                })
+                node.config = KafkaConfig(**controller_only_configs)
             elif not self.has_controller_role: # broker-only role
-                node.config = KafkaConfig(**{
-                    config_property.PORT: config_property.FIRST_BROKER_PORT,
-                    config_property.BROKER_ID: self.idx(node),
-                })
+                node.config = KafkaConfig(**broker_only_configs)
             else: # combined broker+controller roles
-                node.config = KafkaConfig(**{
-                    config_property.PORT: config_property.FIRST_BROKER_PORT,
-                    config_property.BROKER_ID: self.idx(node),
-                    config_property.CONTROLLER_ID: config_property.FIRST_CONTROLLER_ID + self.idx(node) - 1,
-                })
+                combined_broker_controller_configs = broker_only_configs.copy()
+                combined_broker_controller_configs.update(controller_only_configs)
+                node.config = KafkaConfig(**combined_broker_controller_configs)
 
     def set_version(self, version):
         for node in self.nodes:
@@ -1109,7 +1109,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         """ Get the current cluster id
         """
         if self.using_raft:
-            raise Exception("Not yet implemented: getting cluster ID when using Raft instead of ZooKeeper")
+            return config_property.CLUSTER_ID
+        
         self.logger.debug("Querying ZooKeeper to retrieve cluster id")
         cluster = self.zk.query("/cluster/id", chroot=self.zk_chroot)
 

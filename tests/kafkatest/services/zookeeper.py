@@ -22,7 +22,7 @@ from ducktape.utils.util import wait_until
 from ducktape.cluster.remoteaccount import RemoteCommandError
 
 from kafkatest.directory_layout.kafka_path import KafkaPathResolverMixin
-from kafkatest.services.kafka.quorum_utils import test_using_zk
+from kafkatest.services.kafka.quorum_utils import quorum_type_for_test, zk_quorum
 from kafkatest.services.security.security_config import SecurityConfig
 from kafkatest.version import DEV_BRANCH
 
@@ -51,8 +51,9 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
         """
         # ZooKeeper is not being used when the test explicitly defines a different metadata quorum
         # We allow ZooKeeper to be instantiated and yet automatically be ignored if necessary
-        # in order to minimize the number of changes to tests (even starting it will have no effect).
-        self.ignored = not test_using_zk(context)
+        # in order to minimize the number of changes to tests (even starting it will have no effect
+        # when it is ignored).
+        self.ignored = quorum_type_for_test(context) != zk_quorum
         self.kafka_opts = ""
         self.zk_sasl = zk_sasl
         if not self.ignored:
