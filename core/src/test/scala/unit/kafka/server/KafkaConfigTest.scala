@@ -17,8 +17,6 @@
 
 package kafka.server
 
-import java.util.Properties
-
 import kafka.api.{ApiVersion, KAFKA_0_8_2}
 import kafka.cluster.EndPoint
 import kafka.log.LogConfig
@@ -33,6 +31,8 @@ import org.apache.kafka.common.security.auth.SecurityProtocol
 import org.junit.Assert._
 import org.junit.Test
 import org.scalatest.Assertions.intercept
+
+import java.util.Properties
 
 class KafkaConfigTest {
 
@@ -1048,5 +1048,34 @@ class KafkaConfigTest {
     assertEquals(Seq(new Node(3000, "example.com", 9093),
                      new Node(3001, "example.com", 9094)),
       KafkaConfig.controllerQuorumVoterStringsToNodes("3000@example.com:9093,3001@example.com:9094"))
+  }
+
+  @Test
+  def testInvalidControllerQuorumVoterStringsToNodes(): Unit = {
+    assertInvalidQuorumVoters("")
+    assertInvalidQuorumVoters("1")
+    assertInvalidQuorumVoters("1@")
+    assertInvalidQuorumVoters("1:")
+    assertInvalidQuorumVoters("blah@")
+    assertInvalidQuorumVoters("1@kafka1")
+    assertInvalidQuorumVoters("1@kafka1:9092,")
+    assertInvalidQuorumVoters("1@kafka1:9092,")
+    assertInvalidQuorumVoters("1@kafka1:9092,2")
+    assertInvalidQuorumVoters("1@kafka1:9092,2@")
+    assertInvalidQuorumVoters("1@kafka1:9092,2@blah")
+    assertInvalidQuorumVoters("1@kafka1:9092,2@blah,")
+    assertInvalidQuorumVoters("1@kafka1:9092:1@kafka2:9092")
+  }
+
+  private def assertInvalidQuorumVoters(value: String): Unit = {
+    try {
+      intercept[Exception] {
+        KafkaConfig.controllerQuorumVoterStringsToNodes(value)
+      }
+    } catch {
+      case e: NumberFormatException => { return }
+      case e: RuntimeException => { return }
+      case e: Throwable => throw e
+    }
   }
 }

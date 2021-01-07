@@ -17,21 +17,20 @@
 
 package kafka.server
 
-import java.util
-import java.util.Collections
-import java.util.concurrent.CompletableFuture
-
 import kafka.metrics.{KafkaMetricsReporter, KafkaYammerMetrics}
 import kafka.raft.KafkaRaftManager
 import kafka.server.KafkaServer.{BrokerRole, ControllerRole}
 import kafka.utils.{Logging, Mx4jLoader}
-import org.apache.kafka.common.{ClusterResource, Endpoint, TopicPartition}
 import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.common.metrics.{JmxReporter, Metrics, MetricsReporter}
 import org.apache.kafka.common.utils.{AppInfoParser, Time}
+import org.apache.kafka.common.{ClusterResource, Endpoint, TopicPartition}
 import org.apache.kafka.metadata.VersionRange
 import org.apache.kafka.server.authorizer.AuthorizerServerInfo
 
+import java.util
+import java.util.Collections
+import java.util.concurrent.CompletableFuture
 import scala.jdk.CollectionConverters._
 
 private[kafka] case class KafkaAuthorizerServerInfo(clusterResource: ClusterResource,
@@ -116,7 +115,9 @@ class Kip500Server(
     kafkaMetricsReporters ++ metrics.reporters.asScala)
 
   private val metadataPartition = new TopicPartition(KafkaServer.metadataTopicName, 0)
-  private val raftManager = new KafkaRaftManager(metaProps, metadataPartition, config, time, metrics)
+  private val controllerQuorumVotersFuture = CompletableFuture.completedFuture(config.controllerQuorumVoters)
+  private val raftManager = new KafkaRaftManager(metaProps, metadataPartition, config, time, metrics,
+    controllerQuorumVotersFuture)
 
   val broker: Option[Kip500Broker] = if (roles.contains(BrokerRole)) {
     Some(new Kip500Broker(
@@ -127,7 +128,7 @@ class Kip500Server(
       metrics,
       threadNamePrefix,
       offlineDirs,
-      CompletableFuture.completedFuture(config.controllerQuorumVoters),
+      controllerQuorumVotersFuture,
       KafkaServer.SUPPORTED_FEATURES
     ))
   } else {

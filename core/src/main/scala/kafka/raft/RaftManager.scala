@@ -88,7 +88,8 @@ class KafkaRaftManager(
   metadataPartition: TopicPartition,
   config: KafkaConfig,
   time: Time,
-  metrics: Metrics
+  metrics: Metrics,
+  val controllerQuorumVotersFuture: CompletableFuture[String]
 ) extends RaftManager with Logging {
 
   private val raftConfig = new RaftConfig(config.originals)

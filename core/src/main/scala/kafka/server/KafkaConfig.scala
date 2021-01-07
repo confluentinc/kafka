@@ -1346,7 +1346,7 @@ object KafkaConfig {
   }
 
   def controllerQuorumVoterStringsToNodes(connectString: String): Seq[Node] = {
-    connectString.split(",").filterNot(_.isEmpty()).map { case input =>
+    connectString.split(",").filterNot(_.isEmpty()).map { input =>
       val atIndex = input.indexOf('@')
       if (atIndex < 0) {
         throw new RuntimeException("Invalid controller node specification '" + input +
