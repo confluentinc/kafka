@@ -22,7 +22,7 @@ from ducktape.utils.util import wait_until
 from ducktape.cluster.remoteaccount import RemoteCommandError
 
 from kafkatest.directory_layout.kafka_path import KafkaPathResolverMixin
-from kafkatest.services.kafka.util import zk_quorum
+from kafkatest.services.kafka.quorum_utils import using_zk
 from kafkatest.services.security.security_config import SecurityConfig
 from kafkatest.version import DEV_BRANCH
 
@@ -50,13 +50,16 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
         :type context
         """
         # ZooKeeper is not being used when the test explicitly defines a different metadata quorum
-        self.ignored = 'metadata_quorum' in context.injected_args and context.injected_args['metadata_quorum'] != zk_quorum
+        # We allow ZooKeeper to be instantiated and yet automatically be ignored if necessary
+        # in order to minimize the number of changes to tests (even starting it will have no effect).
+        self.ignored = not using_zk(context)
         self.kafka_opts = ""
         self.zk_sasl = zk_sasl
-        if (zk_client_secure_port or zk_tls_encrypt_only) and not version.supports_tls_to_zookeeper() and not self.ignored:
-            raise Exception("Cannot use TLS with a ZooKeeper version that does not support it: %s" % str(version))
-        if not zk_client_port and not zk_client_secure_port and not self.ignored:
-            raise Exception("Cannot disable both ZK clientPort and clientSecurePort")
+        if not self.ignored:
+            if (zk_client_secure_port or zk_tls_encrypt_only) and not version.supports_tls_to_zookeeper():
+                raise Exception("Cannot use TLS with a ZooKeeper version that does not support it: %s" % str(version))
+            if not zk_client_port and not zk_client_secure_port:
+                raise Exception("Cannot disable both ZK clientPort and clientSecurePort")
         self.zk_client_port = zk_client_port
         self.zk_client_secure_port = zk_client_secure_port
         self.zk_tls_encrypt_only = zk_tls_encrypt_only
@@ -84,13 +87,22 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
         return " zkclient "  + ' '.join(['zookeeper/' + zk_node.account.hostname for zk_node in self.nodes])
 
     def restart_cluster(self):
-        for node in self.nodes:
-            self.restart_node(node)
+        if not self.ignored:
+            for node in self.nodes:
+                self.restart_node(node)
 
     def restart_node(self, node):
         """Restart the given node."""
         self.stop_node(node)
         self.start_node(node)
+
+    def start(self):
+        if not self.ignored:
+            super().start()
+
+    def stop(self):
+        if not self.ignored:
+            super().stop()
 
     def start_node(self, node):
         idx = self.idx(node)

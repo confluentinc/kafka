@@ -20,7 +20,7 @@ from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
 
 from kafkatest.services.kafka import KafkaService
-from kafkatest.services.kafka.util import all_quorum_styles, test_uses_zk, zk_quorum
+from kafkatest.services.kafka.quorum_utils import all_quorum_styles, using_zk, zk_quorum
 from kafkatest.services.verifiable_producer import VerifiableProducer
 from kafkatest.services.zookeeper import ZookeeperService
 from kafkatest.utils import is_version
@@ -33,7 +33,7 @@ class TestVerifiableProducer(Test):
         super(TestVerifiableProducer, self).__init__(test_context)
 
         self.topic = "topic"
-        self.zk = ZookeeperService(test_context, num_nodes=1) if test_uses_zk(test_context) else None
+        self.zk = ZookeeperService(test_context, num_nodes=1) if using_zk(test_context) else None
         self.kafka = KafkaService(test_context, num_nodes=1, zk=self.zk,
                                   topics={self.topic: {"partitions": 1, "replication-factor": 1}})
 
@@ -47,12 +47,12 @@ class TestVerifiableProducer(Test):
         self.kafka.start()
 
     @cluster(num_nodes=3)
-    @parametrize(metadata_quorum=zk_quorum, producer_version=str(LATEST_0_8_2))
-    @parametrize(metadata_quorum=zk_quorum, producer_version=str(LATEST_0_9))
-    @parametrize(metadata_quorum=zk_quorum, producer_version=str(LATEST_0_10_0))
-    @parametrize(metadata_quorum=zk_quorum, producer_version=str(LATEST_0_10_1))
-    @matrix(metadata_quorum=all_quorum_styles, producer_version=[str(DEV_BRANCH)])
-    def test_simple_run(self, metadata_quorum, producer_version):
+    @parametrize(producer_version=str(LATEST_0_8_2))
+    @parametrize(producer_version=str(LATEST_0_9))
+    @parametrize(producer_version=str(LATEST_0_10_0))
+    @parametrize(producer_version=str(LATEST_0_10_1))
+    @matrix(producer_version=[str(DEV_BRANCH)], metadata_quorum=all_quorum_styles)
+    def test_simple_run(self, producer_version, metadata_quorum=zk_quorum):
         """
         Test that we can start VerifiableProducer on the current branch snapshot version or against the 0.8.2 jar, and
         verify that we can produce a small number of messages.

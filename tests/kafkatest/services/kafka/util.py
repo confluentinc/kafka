@@ -22,21 +22,6 @@ TopicPartition = namedtuple('TopicPartition', ['topic', 'partition'])
 
 new_jdk_not_supported = frozenset([str(LATEST_0_8_2), str(LATEST_0_9), str(LATEST_0_10_0), str(LATEST_0_10_1), str(LATEST_0_10_2), str(LATEST_0_11_0), str(LATEST_1_0)])
 
-# the types of metadata quorums we support
-zk_quorum = 'ZK' # ZooKeeper, used through the KIP-500 bridge release
-inproc_raft_quorum = 'INPROC_RAFT' # co-located KIP-500 Controllers, used during/after the KIP-500 bridge release
-remote_raft_quorum = 'REMOTE_RAFT' # separate KIP-500 Controllers, used during/after the KIP-500 bridge release
-
-# How we will parameterize tests that exercise all quorum styles
-all_quorum_styles = [zk_quorum, remote_raft_quorum, inproc_raft_quorum]
-# How we will parameterize tests that are unrelated to upgrades
-non_upgrade_quorums = [zk_quorum, remote_raft_quorum]
-# How we will parameterize upgrade-related tests
-upgrade_quorums = [zk_quorum, non_upgrade_quorums, remote_raft_quorum]
-
-def test_uses_zk(test_context):
-    # A test is using ZooKeeper if it doesn't specify a metadata quorum or if it explicitly specifies ZooKeeper
-    return test_context.injected_args.get('metadata_quorum', zk_quorum) == zk_quorum
 
 def fix_opts_for_new_jvm(node):
     # Startup scripts for early versions of Kafka contains options

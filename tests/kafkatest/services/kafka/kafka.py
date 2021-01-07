@@ -31,7 +31,8 @@ from kafkatest.services.security.minikdc import MiniKdc
 from kafkatest.services.security.listener_security_config import ListenerSecurityConfig
 from kafkatest.services.security.security_config import SecurityConfig
 from kafkatest.version import DEV_BRANCH
-from kafkatest.services.kafka.util import fix_opts_for_new_jvm, remote_raft_quorum, inproc_raft_quorum, zk_quorum
+from kafkatest.services.kafka.util import fix_opts_for_new_jvm
+from kafkatest.services.kafka.quorum_utils import get_validated_quorum_type, remote_raft_quorum, inproc_raft_quorum, zk_quorum
 
 
 class KafkaListener:
@@ -137,12 +138,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         # to correctly tear down Kafka before tearing down the remote controller).
 
         # move to its own file
-        quorum_type = context.injected_args.get('metadata_quorum',
-                                                zk_quorum if (zk and not zk.ignored) else remote_raft_quorum)
-        if zk and not zk.ignored and quorum_type != zk_quorum:
-            raise Exception("Cannot use ZooKeeper while specifying a Raft metadata quorum")
-        if quorum_type != remote_raft_quorum and raft_controller_only_role:
-            raise Exception("Cannot specify raft_controller_only_role unless using a remote Raft metadata quorum")
+        quorum_type = get_validated_quorum_type(context, zk, raft_controller_only_role)
 
         if quorum_type != remote_raft_quorum or raft_controller_only_role:
             remote_controller_quorum = None
