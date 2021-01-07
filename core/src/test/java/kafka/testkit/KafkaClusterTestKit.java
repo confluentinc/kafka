@@ -122,20 +122,6 @@ public class KafkaClusterTestKit implements AutoCloseable {
                 new ControllerQuorumVotersFutureManager(nodes.controllerNodes().size());
             File baseDirectory = null;
 
-            // Generate quorum voters connect configuration - Specify controller ports
-//            Map<Integer, Integer> controllerPorts = new HashMap<>();
-//            Iterator<Integer> nodeIDs = nodes.controllerNodes().keySet().stream().iterator();
-//            new Random().ints(10240, 65535).distinct()
-//                    .limit(nodes.controllerNodes().size())
-//                    .forEach(port -> controllerPorts.put(nodeIDs.next(), port));
-//            StringBuilder builder = new StringBuilder();
-//            String prefix = "";
-//            for (Map.Entry<Integer, Integer> ports : controllerPorts.entrySet()) {
-//                builder.append(prefix).append(ports.getKey()).append('@');
-//                builder.append("localhost").append(':').append(ports.getValue());
-//                prefix = ",";
-//            }
-
             try {
                 baseDirectory = TestUtils.tempDirectory();
                 nodes = nodes.copyWithAbsolutePaths(baseDirectory.getAbsolutePath());
