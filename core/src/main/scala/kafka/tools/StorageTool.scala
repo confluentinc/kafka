@@ -232,7 +232,7 @@ object StorageTool extends Logging {
       }
     })
     if (unformattedDirectories.isEmpty) {
-      throw new TerseFailure("All of the log directories are already formatted.")
+      stream.println("All of the log directories are already formatted.")
     }
     unformattedDirectories.foreach(directory => {
       try {
