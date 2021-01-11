@@ -20,6 +20,8 @@ remote_raft_quorum = 'REMOTE_RAFT' # separate KIP-500 Controllers, used during/a
 
 # How we will parameterize tests that exercise all quorum styles
 all_quorum_styles = [zk_quorum, remote_raft_quorum, inproc_raft_quorum]
+# How we will parameterize tests that exercise all Raft quorum styles
+all_raft_quorums = [remote_raft_quorum, inproc_raft_quorum]
 # How we will parameterize tests that are unrelated to upgrades
 non_upgrade_quorums = [zk_quorum, remote_raft_quorum]
 # How we will parameterize upgrade-related tests
