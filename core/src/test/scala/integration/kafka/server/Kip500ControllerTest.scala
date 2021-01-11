@@ -22,6 +22,7 @@ import org.junit.rules.Timeout
 import org.junit.{Rule, Test}
 
 import java.time.Duration
+import java.util.concurrent.TimeUnit
 
 class Kip500ControllerTest {
   @Rule
