@@ -27,7 +27,8 @@ upgrade_quorums = all_quorum_styles
 
 def quorum_type_for_test(test_context):
     # A test uses ZooKeeper if it doesn't specify a metadata quorum or if it explicitly specifies ZooKeeper
-    retval = test_context.injected_args.get('metadata_quorum', zk_quorum)
+    default_quorum_type = zk_quorum
+    retval = default_quorum_type if not test_context.injected_args else test_context.injected_args.get('metadata_quorum', default_quorum_type)
     if retval not in all_quorum_styles:
         raise Exception("Unknown metadata_quorum value provided for the test: %s" % retval)
     return retval

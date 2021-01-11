@@ -22,6 +22,7 @@ from ducktape.utils.util import wait_until
 
 from kafkatest.services.console_consumer import ConsoleConsumer
 from kafkatest.services.kafka import KafkaService
+from kafkatest.services.kafka.quorum_utils import non_upgrade_quorums, zk_quorum
 from kafkatest.services.verifiable_producer import VerifiableProducer
 from kafkatest.services.zookeeper import ZookeeperService
 from kafkatest.utils.remote_account import line_count, file_exists
@@ -43,11 +44,12 @@ class ConsoleConsumerTest(Test):
         self.zk.start()
 
     @cluster(num_nodes=3)
-    @matrix(security_protocol=['PLAINTEXT', 'SSL'])
+    @matrix(security_protocol=['PLAINTEXT', 'SSL'], metadata_quorum=non_upgrade_quorums)
     @cluster(num_nodes=4)
-    @matrix(security_protocol=['SASL_SSL'], sasl_mechanism=['PLAIN', 'SCRAM-SHA-256', 'SCRAM-SHA-512'])
-    @matrix(security_protocol=['SASL_PLAINTEXT', 'SASL_SSL'])
-    def test_lifecycle(self, security_protocol, sasl_mechanism='GSSAPI'):
+    @matrix(security_protocol=['SASL_SSL'], sasl_mechanism=['PLAIN'], metadata_quorum=non_upgrade_quorums)
+    @matrix(security_protocol=['SASL_SSL'], sasl_mechanism=['SCRAM-SHA-256', 'SCRAM-SHA-512']) # SCRAM not yet supported with Raft
+    @matrix(security_protocol=['SASL_PLAINTEXT', 'SASL_SSL'], metadata_quorum=non_upgrade_quorums)
+    def test_lifecycle(self, security_protocol, sasl_mechanism='GSSAPI', metadata_quorum=zk_quorum):
         """Check that console consumer starts/stops properly, and that we are capturing log output."""
 
         self.kafka.security_protocol = security_protocol
