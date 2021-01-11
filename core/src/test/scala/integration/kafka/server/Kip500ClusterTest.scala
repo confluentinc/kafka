@@ -40,6 +40,8 @@ class Kip500ClusterTest {
         setNumKip500BrokerNodes(1).
         setNumControllerNodes(1).build()).build()
     try {
+      cluster.format()
+      cluster.startup()
     } finally {
       cluster.close()
     }

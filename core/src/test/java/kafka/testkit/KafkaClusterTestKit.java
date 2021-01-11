@@ -117,6 +117,11 @@ public class KafkaClusterTestKit implements AutoCloseable {
             Map<Integer, Kip500Controller> controllers = new HashMap<>();
             Map<Integer, Kip500Broker> kip500Brokers = new HashMap<>();
             Map<Integer, KafkaRaftManager> raftManagers = new HashMap<>();
+
+            // Number of threads = Total number of brokers + Total number of controllers + Total number of Raft Managers
+            //                   = Total number of brokers + Total number of controllers * 2
+            //                     (Raft Manager per broker/controller)
+            int numOfExecutorThreads = (nodes.brokerNodes().size() + nodes.controllerNodes().size()) * 2;
             ExecutorService executorService = null;
             ControllerQuorumVotersFutureManager connectFutureManager =
                 new ControllerQuorumVotersFutureManager(nodes.controllerNodes().size());
@@ -125,8 +130,7 @@ public class KafkaClusterTestKit implements AutoCloseable {
             try {
                 baseDirectory = TestUtils.tempDirectory();
                 nodes = nodes.copyWithAbsolutePaths(baseDirectory.getAbsolutePath());
-                executorService = Executors.newFixedThreadPool(
-                    nodes.brokerNodes().size() + nodes.controllerNodes().size(),
+                executorService = Executors.newFixedThreadPool(numOfExecutorThreads,
                     ThreadUtils.createThreadFactory("KafkaClusterTestKit%d", false));
                 Time time = Time.SYSTEM;
                 for (ControllerNode node : nodes.controllerNodes().values()) {

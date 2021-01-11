@@ -22,7 +22,6 @@ import org.junit.rules.Timeout
 import org.junit.{Rule, Test}
 
 import java.time.Duration
-import java.util.concurrent.TimeUnit
 
 class Kip500ControllerTest {
   @Rule
@@ -33,6 +32,8 @@ class Kip500ControllerTest {
     val cluster = new KafkaClusterTestKit.Builder(
       new TestKitNodes.Builder().setNumControllerNodes(1).build()).build()
     try {
+      cluster.format()
+      cluster.startup()
     } finally {
       cluster.close()
     }
