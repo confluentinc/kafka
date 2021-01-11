@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ducktape.mark import parametrize
+from ducktape.mark import matrix, parametrize
 from ducktape.mark.resource import cluster
 from ducktape.tests.test import Test
 
 from kafkatest.services.kafka import KafkaService
+from kafkatest.services.kafka.quorum_utils import non_upgrade_quorums, zk_quorum
 from kafkatest.services.performance import ProducerPerformanceService, ConsumerPerformanceService, EndToEndLatencyService
 from kafkatest.services.performance import latency, compute_aggregate_throughput
 from kafkatest.services.zookeeper import ZookeeperService
@@ -43,8 +44,9 @@ class PerformanceServiceTest(Test):
     @parametrize(version=str(LATEST_0_9), new_consumer=False)
     @parametrize(version=str(LATEST_0_9))
     @parametrize(version=str(LATEST_1_1), new_consumer=False)
-    @parametrize(version=str(DEV_BRANCH))
-    def test_version(self, version=str(LATEST_0_9), new_consumer=True):
+    @cluster(num_nodes=5)
+    @matrix(version=[str(DEV_BRANCH)], metadata_quorum=non_upgrade_quorums)
+    def test_version(self, version=str(LATEST_0_9), new_consumer=True, metadata_quorum=zk_quorum):
         """
         Sanity check out producer performance service - verify that we can run the service with a small
         number of messages. The actual stats here are pretty meaningless since the number of messages is quite small.
