@@ -40,7 +40,6 @@ private[kafka] case class KafkaAuthorizerServerInfo(clusterResource: ClusterReso
                                                     interBrokerEndpoint: Endpoint) extends AuthorizerServerInfo
 
 trait KafkaServer {
-  def startup(): Unit
   def shutdown(): Unit
   def awaitShutdown(): Unit
 
@@ -179,8 +178,8 @@ class Kip500Server(
   def startup(): Unit = {
     Mx4jLoader.maybeLoad()
     raftManager.startup()
-    controller.foreach(_.startup())
-    broker.foreach(_.startup())
+    controller.foreach(_.startup(raftManager))
+    broker.foreach(_.startup(raftManager))
   }
 
   def shutdown(): Unit = {

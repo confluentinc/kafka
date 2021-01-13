@@ -17,15 +17,19 @@
 
 package kafka.testkit;
 
+import kafka.raft.KafkaRaftManager;
 import kafka.raft.RaftManager;
 import kafka.server.KafkaConfig;
 import kafka.server.KafkaConfig$;
 import kafka.server.KafkaServer;
 import kafka.server.Kip500Broker;
 import kafka.server.Kip500Controller;
+import kafka.server.MetaProperties;
 import kafka.tools.StorageTool;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.Node;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.network.ListenerName;
@@ -36,6 +40,7 @@ import org.apache.kafka.common.utils.ThreadUtils;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.metalog.LocalLogManager;
+import org.apache.kafka.raft.metadata.MetaLogRaftShim;
 import org.apache.kafka.test.TestUtils;
 import scala.collection.JavaConverters;
 import scala.compat.java8.OptionConverters;
@@ -113,13 +118,13 @@ public class KafkaClusterTestKit implements AutoCloseable {
         }
 
         public KafkaClusterTestKit build() throws Exception {
+            Map<Integer, Kip500Controller> raftManagers = new HashMap<>();
             Map<Integer, Kip500Controller> controllers = new HashMap<>();
             Map<Integer, Kip500Broker> kip500Brokers = new HashMap<>();
             ExecutorService executorService = null;
             ControllerQuorumVotersFutureManager connectFutureManager =
                 new ControllerQuorumVotersFutureManager(nodes.controllerNodes().size());
             File baseDirectory = null;
-            LocalLogManager metaLogManager = null;
             LocalLogManager.SharedLogData sharedLogData = new LocalLogManager.SharedLogData();
             try {
                 baseDirectory = TestUtils.tempDirectory();
@@ -151,33 +156,46 @@ public class KafkaClusterTestKit implements AutoCloseable {
                         OptionConverters.toScala(Optional.empty()));
 
                     String threadNamePrefix = String.format("controller%d_", node.id());
-                    LogContext logContext = new LogContext("[Controller id=" + node.id() + "] ");
-
-                    metaLogManager = new LocalLogManager(
-                        logContext,
-                        node.id(),
-                        sharedLogData,
-                        threadNamePrefix
-                    );
-                    metaLogManager.initialize();
-                    Kip500Controller controller = new Kip500Controller(
-                        nodes.controllerProperties(node.id()),
-                        config,
-                        metaLogManager,
-                        new MockRaftManager(),
-                        time,
-                        new Metrics(),
-                        OptionConverters.toScala(Optional.of(threadNamePrefix)),
-                        connectFutureManager.future
-                    );
-                    controllers.put(node.id(), controller);
-                    controller.socketServerFirstBoundPortFuture().whenComplete((port, e) -> {
-                        if (e != null) {
-                            connectFutureManager.fail(e);
-                        } else {
-                            connectFutureManager.registerPort(node.id(), port);
+                    KafkaRaftManager raftManager = null;
+                    Kip500Controller controller = null;
+                    try {
+                        MetaProperties metaProperties = MetaProperties.apply(Uuid.ZERO_UUID,
+                            OptionConverters.toScala(Optional.empty()),
+                            OptionConverters.toScala(Optional.of(node.id())));
+                        raftManager = new KafkaRaftManager(metaProperties,
+                            new TopicPartition(KafkaServer.metadataTopicName(), 0),
+                            config,
+                            Time.SYSTEM,
+                            new Metrics(),
+                            connectFutureManager.future);
+                        raftManager.startup();
+                        controller = new Kip500Controller(
+                            nodes.controllerProperties(node.id()),
+                            config,
+                            raftManager.metaLogManager(),
+                            raftManager,
+                            time,
+                            new Metrics(),
+                            OptionConverters.toScala(Optional.of(threadNamePrefix)),
+                            connectFutureManager.future
+                        );
+                        controllers.put(node.id(), controller);
+                        controller.socketServerFirstBoundPortFuture().whenComplete((port, e) -> {
+                            if (e != null) {
+                                connectFutureManager.fail(e);
+                            } else {
+                                connectFutureManager.registerPort(node.id(), port);
+                            }
+                        });
+                    } catch (Exception e) {
+                        if (raftManager != null) {
+                            raftManager.shutdown();
                         }
-                    });
+                        if (controller != null) {
+                            controller.shutdown();
+                        }
+                        throw e;
+                    }
                 }
                 for (Kip500BrokerNode node : nodes.brokerNodes().values()) {
                     Map<String, String> props = new HashMap<>(configProps);
@@ -234,6 +252,12 @@ public class KafkaClusterTestKit implements AutoCloseable {
                     executorService.shutdownNow();
                     executorService.awaitTermination(1, TimeUnit.DAYS);
                 }
+                if (raftManager != null) {
+                    raftManager.close();
+                }
+                if (shim != null) {
+                    shim.close();
+                }
                 for (Kip500Controller controller : controllers.values()) {
                     controller.shutdown();
                 }
@@ -261,16 +285,6 @@ public class KafkaClusterTestKit implements AutoCloseable {
             for (String logDataDirectory : logDataDirectories) {
                 Files.createDirectories(Paths.get(logDataDirectory));
             }
-        }
-    }
-
-    static class MockRaftManager implements RaftManager {
-        @Override
-        public CompletableFuture<ApiMessage> handleRequest(RequestHeader header, ApiMessage data) {
-            CompletableFuture<ApiMessage> future = new CompletableFuture<>();
-            future.completeExceptionally(
-                new UnsupportedVersionException("API " + header.apiKey() + " is not available"));
-            return future;
         }
     }
 

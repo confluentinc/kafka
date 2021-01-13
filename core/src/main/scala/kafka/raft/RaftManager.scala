@@ -90,10 +90,16 @@ class KafkaRaftManager(
   metadataPartition: TopicPartition,
   config: KafkaConfig,
   time: Time,
-  metrics: Metrics
+  metrics: Metrics,
+  controllerQuorumVotersFuture: CompletableFuture[String]
 ) extends RaftManager with Logging {
 
-  private val raftConfig = new RaftConfig(config.originals)
+  private val raftConfig = {
+    val configs = new util.HashMap[String, AnyRef](config.originals)
+    configs.put(RaftConfig.QUORUM_VOTERS_CONFIG, controllerQuorumVotersFuture.get())
+    new RaftConfig(configs)
+  }
+
   private val nodeId = if (config.processRoles.contains(ControllerRole)) {
     config.controllerId
   } else {

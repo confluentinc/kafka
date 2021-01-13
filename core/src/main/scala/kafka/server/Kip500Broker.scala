@@ -27,6 +27,7 @@ import kafka.coordinator.transaction.{ProducerIdGenerator, TransactionCoordinato
 import kafka.log.LogManager
 import kafka.metrics.KafkaYammerMetrics
 import kafka.network.SocketServer
+import kafka.raft.KafkaRaftManager
 import kafka.security.CredentialProvider
 import kafka.server.KafkaBroker.metricsPrefix
 import kafka.server.metadata.BrokerMetadataListener
@@ -54,7 +55,6 @@ import scala.jdk.CollectionConverters._
 class Kip500Broker(
   val config: KafkaConfig,
   val metaProps: MetaProperties,
-  val metaLogManager: MetaLogManager,
   val time: Time,
   val metrics: Metrics,
   val threadNamePrefix: Option[String],
@@ -141,7 +141,7 @@ class Kip500Broker(
     true
   }
 
-  override def startup(): Unit = {
+  def startup(raftManager: KafkaRaftManager): Unit = {
     if (!maybeChangeStatus(SHUTDOWN, STARTING)) return
     try {
       info("Starting broker")
@@ -185,6 +185,7 @@ class Kip500Broker(
       /* start broker-to-controller channel managers */
       val controllerNodes =
         KafkaConfig.controllerQuorumVoterStringsToNodes(controllerQuorumVotersFuture.get())
+      val metaLogManager = raftManager.metaLogManager
       val controllerNodeProvider = new RaftControllerNodeProvider(metaLogManager, controllerNodes)
       alterIsrChannelManager = BrokerToControllerChannelManager(controllerNodeProvider,
         time, metrics, config, 60000,"alterisr", threadNamePrefix)

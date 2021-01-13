@@ -47,7 +47,6 @@ class Kip500Controller(
   val metaProperties: MetaProperties,
   val config: KafkaConfig,
   val metaLogManager: MetaLogManager,
-  val raftManager: RaftManager,
   val time: Time,
   val metrics: Metrics,
   val threadNamePrefix: Option[String],
@@ -85,7 +84,7 @@ class Kip500Controller(
 
   def clusterId: String = metaProperties.clusterId.toString
 
-  def startup(): Unit = {
+  def startup(raftManager: RaftManager): Unit = {
     if (!maybeChangeStatus(SHUTDOWN, STARTING)) return
     try {
       info("Starting controller")
