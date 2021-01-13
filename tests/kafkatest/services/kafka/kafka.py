@@ -25,14 +25,13 @@ from ducktape.cluster.remoteaccount import RemoteCommandError
 
 from .config import KafkaConfig
 from kafkatest.directory_layout.kafka_path import KafkaPathResolverMixin
-from kafkatest.services.kafka import config_property
+from kafkatest.services.kafka import config_property, quorum
 from kafkatest.services.monitor.jmx import JmxMixin
 from kafkatest.services.security.minikdc import MiniKdc
 from kafkatest.services.security.listener_security_config import ListenerSecurityConfig
 from kafkatest.services.security.security_config import SecurityConfig
 from kafkatest.version import DEV_BRANCH
 from kafkatest.services.kafka.util import fix_opts_for_new_jvm
-from kafkatest.services.kafka.quorum_utils import get_validated_quorum_type, inproc_raft_quorum, zk_quorum
 
 
 class KafkaListener:
@@ -63,7 +62,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     the same JVM or remote in separate JVMs.  The choice is made via
     the 'metadata_quorum' parameter defined for the system test: if it
     is not explicitly defined, or if it is set to 'ZK', then ZooKeeper
-    is used.  If it is explicitly set to 'INPROC_RAFT' then Raft
+    is used.  If it is explicitly set to 'COLOCATED_RAFT' then Raft
     controllers will be co-located with the brokers; the value
     `REMOTE_RAFT` indicates remote controllers.
 
@@ -115,7 +114,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
     Raft Quorums
     ------------
-    Set metadata_quorum accordingly (to INPROC_RAFT or REMOTE_RAFT).
+    Set metadata_quorum accordingly (to COLOCATED_RAFT or REMOTE_RAFT).
     Any provided instance of ZookeeperService will be ignored and will
     not be started (this helps to minimize system test changes when
     we wish to run existing tests with Raft in addition to ZooKeeper).
@@ -237,19 +236,13 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
         """
 
-        quorum_type = get_validated_quorum_type(context, zk, remote_kafka)
-
         self.zk = zk
-        self.using_zk = quorum_type == zk_quorum
-        self.using_raft = not self.using_zk
-        self.has_broker_role = self.using_raft and not remote_kafka
-        self.has_controller_role = quorum_type == inproc_raft_quorum or remote_kafka
-        self.has_combined_broker_and_controller_roles = quorum_type == inproc_raft_quorum
         self.remote_kafka = remote_kafka
+        self.quorum_info = quorum.Info(self, context)
         self.controller_quorum = None # will define below if necessary
         self.remote_controller_quorum = None # will define below if necessary
 
-        if self.using_raft:
+        if self.quorum_info.using_raft:
             # Initially use the inter-broker security protocol for both
             # broker-to-controller and inter-controller communication. Both can be explicitly changed later if desired.
             # Note, however, that the two must the same if the controller quorum is in-process/co-located with the
@@ -265,7 +258,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             # Ducktape will tear down the controller quorum first, which could lead to problems in
             # Kafka and delays in tearing it down (and who knows what else -- it's simply better
             # to correctly tear down Kafka first, before tearing down the remote controller).
-            if self.has_controller_role:
+            if self.quorum_info.has_controller_role:
                 self.controller_quorum = self
             else:
                 # define the number of controllers (5, 3, or 1) based on the Kafka cluster size unless explicitly overridden
@@ -336,16 +329,16 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             broker_only_port_mappings[sec_protocol] = KafkaListener(sec_protocol, config_property.FIRST_BROKER_PORT + idx, sec_protocol, False)
             controller_only_port_mappings[name_for_controller] = KafkaListener(name_for_controller, config_property.FIRST_CONTROLLER_PORT + idx, sec_protocol, False)
 
-        if self.using_zk or self.has_broker_role and not self.has_controller_role: # ZK or Raft broker-only
+        if self.quorum_info.using_zk or self.quorum_info.has_broker_role and not self.quorum_info.has_controller_role: # ZK or Raft broker-only
             self.port_mappings = broker_only_port_mappings
-        elif self.has_combined_broker_and_controller_roles: # Raft broker+controller
+        elif self.quorum_info.has_combined_broker_and_controller_roles: # Raft broker+controller
             self.port_mappings = broker_only_port_mappings.copy()
             self.port_mappings.update(controller_only_port_mappings)
         else: # Raft controller-only
             self.port_mappings = controller_only_port_mappings
 
         self.interbroker_listener = None
-        if self.using_zk or self.has_broker_role:
+        if self.quorum_info.using_zk or self.quorum_info.has_broker_role:
             self.setup_interbroker_listener(interbroker_security_protocol, self.listener_security_config.use_separate_interbroker_listener)
         self.interbroker_sasl_mechanism = interbroker_sasl_mechanism
         self._security_config = None
@@ -364,11 +357,11 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             controller_only_configs = {
                 config_property.CONTROLLER_ID: self.idx(node) + config_property.FIRST_CONTROLLER_ID - 1,
             }
-            if self.using_zk:
+            if self.quorum_info.using_zk:
                 node.config = KafkaConfig(**using_zk_configs)
-            elif not self.has_broker_role: # controller-only role
+            elif not self.quorum_info.has_broker_role: # controller-only role
                 node.config = KafkaConfig(**controller_only_configs)
-            elif not self.has_controller_role: # broker-only role
+            elif not self.quorum_info.has_controller_role: # broker-only role
                 node.config = KafkaConfig(**broker_only_configs)
             else: # combined broker+controller roles
                 combined_broker_controller_configs = broker_only_configs.copy()
@@ -384,7 +377,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
     @property
     def interbroker_security_protocol(self):
-        return self.interbroker_listener.security_protocol if self.using_zk or self.has_broker_role else self.intercontroller_security_protocol
+        # TODO: disentangle interbroker and intercontroller protocol information
+        return self.interbroker_listener.security_protocol if self.quorum_info.using_zk or self.quorum_info.has_broker_role else self.intercontroller_security_protocol
 
     # this is required for backwards compatibility - there are a lot of tests that set this property explicitly
     # meaning 'use one of the existing listeners that match given security protocol, do not use custom listener'
@@ -407,10 +401,10 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     @property
     def security_config(self):
         if not self._security_config:
-            client_sasl_mechanism_to_use = self.client_sasl_mechanism if self.using_zk or self.has_broker_role else self.controller_sasl_mechanism
-            interbroker_sasl_mechanism_to_use = self.interbroker_sasl_mechanism if self.using_zk or self.has_broker_role else self.intercontroller_sasl_mechanism
+            client_sasl_mechanism_to_use = self.client_sasl_mechanism if self.quorum_info.using_zk or self.quorum_info.has_broker_role else self.controller_sasl_mechanism
+            interbroker_sasl_mechanism_to_use = self.interbroker_sasl_mechanism if self.quorum_info.using_zk or self.quorum_info.has_broker_role else self.intercontroller_sasl_mechanism
             self._security_config = SecurityConfig(self.context, self.security_protocol, self.interbroker_security_protocol,
-                                    zk_sasl=self.zk.zk_sasl if self.using_zk else False, zk_tls=self.zk_client_secure,
+                                    zk_sasl=self.zk.zk_sasl if self.quorum_info.using_zk else False, zk_tls=self.zk_client_secure,
                                     client_sasl_mechanism=client_sasl_mechanism_to_use,
                                     interbroker_sasl_mechanism=interbroker_sasl_mechanism_to_use,
                                     listener_security_config=self.listener_security_config,
@@ -418,7 +412,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         for port in self.port_mappings.values():
             if port.open:
                 self._security_config.enable_security_protocol(port.security_protocol)
-        if self.using_zk:
+        if self.quorum_info.using_zk:
             if self.zk.zk_sasl:
                 self._security_config.enable_sasl()
                 self._security_config.zk_sasl = self.zk.zk_sasl
@@ -434,12 +428,12 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         self.port_mappings[listener_name].open = False
 
     def start_minikdc_if_necessary(self, add_principals=""):
-        has_sasl = self.security_config.has_sasl if self.using_zk else \
-            self.security_config.has_sasl or self.controller_quorum.security_config.has_sasl if self.has_broker_role else\
+        has_sasl = self.security_config.has_sasl if self.quorum_info.using_zk else \
+            self.security_config.has_sasl or self.controller_quorum.security_config.has_sasl if self.quorum_info.has_broker_role else\
                 self.security_config.has_sasl or self.remote_kafka.security_config.has_sasl
         if has_sasl:
             if self.minikdc is None:
-                other_service = self.remote_kafka if self.remote_kafka else self.controller_quorum if self.using_raft else None
+                other_service = self.remote_kafka if self.remote_kafka else self.controller_quorum if self.quorum_info.using_raft else None
                 if not other_service or not other_service.minikdc:
                     nodes_for_kdc = self.nodes.copy()
                     if other_service and other_service != self:
@@ -448,7 +442,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                     self.minikdc.start()
         else:
             self.minikdc = None
-            if self.using_raft:
+            if self.quorum_info.using_raft:
                 self.controller_quorum.minikdc = None
                 if self.remote_kafka:
                     self.remote_kafka.minikdc = None
@@ -457,29 +451,29 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         return len(self.pids(node)) > 0
 
     def start(self, add_principals=""):
-        if self.using_zk and self.zk_client_secure and not self.zk.zk_client_secure_port:
+        if self.quorum_info.using_zk and self.zk_client_secure and not self.zk.zk_client_secure_port:
             raise Exception("Unable to start Kafka: TLS to Zookeeper requested but Zookeeper secure port not enabled")
-        if self.has_combined_broker_and_controller_roles and (
+        if self.quorum_info.has_combined_broker_and_controller_roles and (
                 self.controller_security_protocol != self.intercontroller_security_protocol or
                 self.controller_sasl_mechanism != self.intercontroller_sasl_mechanism):
             raise Exception("Co-located Raft-based Brokers (%s/%s) and Controllers (%s/%s) cannot talk to Controllers via different security protocols" %
                              (self.controller_security_protocol, self.controller_sasl_mechanism,
                               self.intercontroller_security_protocol, self.intercontroller_sasl_mechanism))
-        if self.using_zk or self.has_broker_role:
+        if self.quorum_info.using_zk or self.quorum_info.has_broker_role:
             self.open_port(self.security_protocol)
             self.interbroker_listener.open = True
-        if self.has_controller_role:
+        if self.quorum_info.has_controller_role:
             self.open_port(self.controller_listener_name(self.interbroker_security_protocol))
 
         self.start_minikdc_if_necessary(add_principals)
-        if self.using_zk:
+        if self.quorum_info.using_zk:
             self._ensure_zk_chroot()
 
         if self.remote_controller_quorum:
             self.remote_controller_quorum.start()
         Service.start(self)
 
-        if self.using_zk:
+        if self.quorum_info.using_zk:
             self.logger.info("Waiting for brokers to register at ZK")
 
             retries = 30
@@ -513,10 +507,13 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         advertised_listeners = []
         protocol_map = []
 
+        controller_listener_names = self.controller_listener_name_list()
+
         for port in self.port_mappings.values():
             if port.open:
                 listeners.append(port.listener())
-                advertised_listeners.append(port.advertised_listener(node))
+                if not port.name in controller_listener_names:
+                    advertised_listeners.append(port.advertised_listener(node))
                 protocol_map.append(port.listener_security_protocol())
         if self.remote_controller_quorum:
             sec_protocol = self.remote_controller_quorum.controller_security_protocol
@@ -525,7 +522,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         self.listeners = ','.join(listeners)
         self.advertised_listeners = ','.join(advertised_listeners)
         self.listener_security_protocol_map = ','.join(protocol_map)
-        if self.using_zk or self.has_broker_role:
+        if self.quorum_info.using_zk or self.quorum_info.has_broker_role:
             self.interbroker_bootstrap_servers = self.__bootstrap_servers(self.interbroker_listener, True)
 
     def prop_file(self, node):
@@ -541,9 +538,9 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
         #load specific test override configs
         override_configs = KafkaConfig(**node.config)
-        if self.using_zk or self.has_broker_role:
+        if self.quorum_info.using_zk or self.quorum_info.has_broker_role:
             override_configs[config_property.ADVERTISED_HOSTNAME] = node.account.hostname
-        if self.using_zk:
+        if self.quorum_info.using_zk:
             override_configs[config_property.ZOOKEEPER_CONNECT] = self.zk_connect_setting()
             if self.zk_client_secure:
                 override_configs[config_property.ZOOKEEPER_SSL_CLIENT_ENABLE] = 'true'
@@ -589,16 +586,24 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                 KafkaService.STDOUT_STDERR_CAPTURE)
         return cmd
 
+    def controller_listener_name_list(self):
+        if self.quorum_info.using_zk:
+            return []
+        controller_service = self if self.quorum_info.has_controller_role else self.remote_controller_quorum
+        broker_to_controller_listener_name = self.controller_listener_name(controller_service.controller_security_protocol)
+        return [broker_to_controller_listener_name] if (controller_service.intercontroller_security_protocol == controller_service.controller_security_protocol) \
+            else [broker_to_controller_listener_name, self.controller_listener_name(controller_service.intercontroller_security_protocol)]
+
     def start_node(self, node, timeout_sec=60):
         node.account.mkdirs(KafkaService.PERSISTENT_ROOT)
 
         self.security_config.setup_node(node)
-        if self.using_zk or self.has_broker_role: # TODO: SCRAM currently unsupported for controller quorum
+        if self.quorum_info.using_zk or self.quorum_info.has_broker_role: # TODO: SCRAM currently unsupported for controller quorum
             self.maybe_setup_broker_scram_credentials(node)
 
-        if self.using_raft:
+        if self.quorum_info.using_raft:
             # define controller.quorum.voters text
-            controller_service = self if self.has_controller_role else self.remote_controller_quorum
+            controller_service = self if self.quorum_info.has_controller_role else self.remote_controller_quorum
             security_protocol_to_use = controller_service.controller_security_protocol
             self.controller_quorum_voters = ','.join(["%s@%s:%s" %
                                                       (controller_service.idx(node) + config_property.FIRST_CONTROLLER_ID - 1,
@@ -607,9 +612,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                                                        KafkaService.SECURITY_PROTOCOLS.index(security_protocol_to_use))
                                                       for node in controller_service.nodes])
             # define controller.listener.names
-            broker_to_controller_listener_name = self.controller_listener_name(controller_service.controller_security_protocol)
-            self.controller_listener_names = broker_to_controller_listener_name if (controller_service.intercontroller_security_protocol == controller_service.controller_security_protocol)\
-                else "%s,%s" % (broker_to_controller_listener_name, self.controller_listener_name(controller_service.intercontroller_security_protocol))
+            self.controller_listener_names = ','.join(self.controller_listener_name_list())
 
         prop_file = self.prop_file(node)
         self.logger.info("kafka.properties:")
@@ -617,7 +620,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         node.account.create_file(KafkaService.CONFIG_FILE, prop_file)
         node.account.create_file(self.LOG4J_CONFIG, self.render('log4j.properties', log_dir=KafkaService.OPERATIONAL_LOG_DIR))
 
-        if self.using_raft:
+        if self.quorum_info.using_raft:
             # format log directories if necessary
             kafka_storage_script = self.path.script("kafka-storage.sh", node)
             cmd = "%s format --ignore-formatted --config %s --cluster-id %s" % (kafka_storage_script, KafkaService.CONFIG_FILE, config_property.CLUSTER_ID)
@@ -632,7 +635,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             monitor.wait_until("Kafka\s*Server.*started", timeout_sec=timeout_sec, backoff_sec=.25,
                                err_msg="Kafka server didn't finish startup in %d seconds" % timeout_sec)
 
-        if self.using_zk or self.has_broker_role: # TODO: SCRAM currently unsupported for controller quorum
+        if self.quorum_info.using_zk or self.quorum_info.has_broker_role: # TODO: SCRAM currently unsupported for controller quorum
             # Credentials for inter-broker communication are created before starting Kafka.
             # Client credentials are created after starting Kafka so that both loading of
             # existing credentials from ZK and dynamic update of credentials in Kafka are tested.
@@ -693,7 +696,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         node.account.ssh("sudo rm -rf -- %s" % KafkaService.PERSISTENT_ROOT, allow_fail=False)
 
     def kafka_topics_cmd_with_optional_security_settings(self, node, force_use_zk_connection, kafka_security_protocol = None):
-        if self.using_raft and not self.has_broker_role:
+        if self.quorum_info.using_raft and not self.quorum_info.has_broker_role:
             raise Exception("Must invoke kafka-topics against a broker, not a Raft controller")
         if force_use_zk_connection:
             bootstrap_server_or_zookeeper = "--zookeeper %s" % (self.zk_connect_setting())
@@ -732,7 +735,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                 bootstrap_server_or_zookeeper, optional_command_config_suffix)
 
     def kafka_configs_cmd_with_optional_security_settings(self, node, force_use_zk_connection, kafka_security_protocol = None):
-        if self.using_raft and not self.has_broker_role:
+        if self.quorum_info.using_raft and not self.quorum_info.has_broker_role:
             raise Exception("Must invoke kafka-configs against a broker, not a Raft controller")
         if force_use_zk_connection:
             # kafka-configs supports a TLS config file, so include it if there is one
@@ -957,7 +960,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         node.account.ssh(cmd)
 
     def kafka_acls_cmd_with_optional_security_settings(self, node, force_use_zk_connection, kafka_security_protocol = None, override_command_config = None):
-        if self.using_raft and not self.has_broker_role:
+        if self.quorum_info.using_raft and not self.quorum_info.has_broker_role:
             raise Exception("Must invoke kafka-acls against a broker, not a Raft controller")
         force_use_zk_connection = force_use_zk_connection or not self.all_nodes_acl_command_supports_bootstrap_server
         if force_use_zk_connection:
@@ -1264,7 +1267,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     def cluster_id(self):
         """ Get the current cluster id
         """
-        if self.using_raft:
+        if self.quorum_info.using_raft:
             return config_property.CLUSTER_ID
 
         self.logger.debug("Querying ZooKeeper to retrieve cluster id")
@@ -1333,7 +1336,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         return output
 
     def zk_connect_setting(self):
-        if self.using_raft:
+        if self.quorum_info.using_raft:
             raise Exception("No zookeeper connect string available when using Raft instead of ZooKeeper")
         return self.zk.connect_setting(self.zk_chroot, self.zk_client_secure)
 
@@ -1358,7 +1361,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     def controller(self):
         """ Get the controller node
         """
-        if self.using_raft:
+        if self.quorum_info.using_raft:
             raise Exception("Cannot obtain Controller node when using Raft instead of ZooKeeper")
         self.logger.debug("Querying zookeeper to find controller broker")
         controller_info = self.zk.query("/controller", chroot=self.zk_chroot)
@@ -1377,7 +1380,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         """
         Check whether a broker is registered in Zookeeper
         """
-        if self.using_raft:
+        if self.quorum_info.using_raft:
             raise Exception("Cannot obtain broker registration information when using Raft instead of ZooKeeper")
         self.logger.debug("Querying zookeeper to see if broker %s is registered", str(node))
         broker_info = self.zk.query("/brokers/ids/%s" % self.idx(node), chroot=self.zk_chroot)

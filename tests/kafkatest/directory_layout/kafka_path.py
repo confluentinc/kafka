@@ -47,9 +47,8 @@ JARS = {
         CORE_JAR_NAME: "core/build/*/*.jar",
         CORE_LIBS_JAR_NAME: "core/build/libs/*.jar",
         CORE_DEPENDANT_TEST_LIBS_JAR_NAME: "core/build/dependant-testlibs/*.jar",
-        # must use tools/common/build/... in confluentinc/kafka instead of the tools/build/... used in apache/kafka
-        TOOLS_JAR_NAME: "tools/common/build/libs/kafka-tools*.jar",
-        TOOLS_DEPENDANT_TEST_LIBS_JAR_NAME: "tools/common/build/dependant-libs*/*.jar"
+        TOOLS_JAR_NAME: "tools/build/libs/kafka-tools*.jar",
+        TOOLS_DEPENDANT_TEST_LIBS_JAR_NAME: "tools/build/dependant-libs*/*.jar"
     }
 }
 

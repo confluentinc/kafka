@@ -19,8 +19,7 @@ from ducktape.mark.resource import cluster
 from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
 
-from kafkatest.services.kafka import KafkaService
-from kafkatest.services.kafka.quorum_utils import all_quorum_styles
+from kafkatest.services.kafka import KafkaService, quorum
 from kafkatest.services.verifiable_producer import VerifiableProducer
 from kafkatest.services.zookeeper import ZookeeperService
 
@@ -31,7 +30,7 @@ class TestBounce(Test):
         super(TestBounce, self).__init__(test_context)
 
         self.topic = "topic"
-        self.zk = ZookeeperService(test_context, num_nodes=1)
+        self.zk = ZookeeperService(test_context, num_nodes=1) if quorum.for_test(test_context) == quorum.zk else None
         self.kafka = KafkaService(test_context, num_nodes=1, zk=self.zk,
                                   topics={self.topic: {"partitions": 1, "replication-factor": 1}})
         self.num_messages = 1000
@@ -41,10 +40,11 @@ class TestBounce(Test):
         self.producer = VerifiableProducer(self.test_context, num_nodes=1, kafka=self.kafka, topic=self.topic,
                                            max_messages=self.num_messages, throughput=self.num_messages // 10)
     def setUp(self):
-        self.zk.start()
+        if self.zk:
+            self.zk.start()
 
     @cluster(num_nodes=4)
-    @matrix(metadata_quorum=all_quorum_styles)
+    @matrix(metadata_quorum=quorum.all)
     def test_simple_run(self, metadata_quorum):
         """
         Test that we can start VerifiableProducer on the current branch snapshot version, and
@@ -62,6 +62,6 @@ class TestBounce(Test):
             assert num_produced == self.num_messages, "num_produced: %d, num_messages: %d" % (num_produced, self.num_messages)
             if first_time:
                 self.producer.stop()
-                if self.kafka.using_raft and self.kafka.remote_controller_quorum:
+                if self.kafka.quorum_info.using_raft and self.kafka.remote_controller_quorum:
                     self.kafka.remote_controller_quorum.restart_cluster()
                 self.kafka.restart_cluster()
