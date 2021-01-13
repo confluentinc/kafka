@@ -37,9 +37,9 @@ def for_test(test_context):
         raise Exception("Unknown %s value provided for the test: %s" % (arg_name, retval))
     return retval
 
-class Info:
+class ServiceQuorumInfo:
     """
-    Exposes quorum-related information for an instance of KafkaService
+    Exposes quorum-related information for a KafkaService
 
     Kafka can use either ZooKeeper or a Raft Controller quorum for its
     metadata.  Raft Controllers can either be co-located with Kafka in
@@ -59,19 +59,21 @@ class Info:
     quorum_type : str
         COLOCATED_RAFT, REMOTE_RAFT, or ZK
     using_zk : bool
-        True iff quorum_type == ZK
+        True iff quorum_type==ZK
     using_raft : bool
-        False iff quorum_type == ZK
-    has_broker_role : bool
-        True iff using_raft and the Kafka service doesn't itself have
-        a remote Kafka service (meaning it is not a remote controller)
-    has_controller_role : bool
-        True iff quorum_type == COLOCATED_RAFT or the Kafka service
-        itself has a remote Kafka service (meaning it is a remote
-        controller)
-    has_combined_broker_and_controller_roles :
-        True iff quorum_type == COLOCATED_RAFT
-
+        False iff quorum_type==ZK
+    has_brokers : bool
+        Whether there is at least one node with process.roles
+        containing 'broker'.  True iff using_raft and the Kafka
+        service doesn't itself have a remote Kafka service (meaning
+        it is not a remote controller quorum).
+    has_controllers : bool
+        Whether there is at least one node with process.roles
+        containing 'controller'.  True iff quorum_type ==
+        COLOCATED_RAFT or the Kafka service itself has a remote Kafka
+        service (meaning it is a remote controller quorum).
+    has_brokers_and_controllers :
+        True iff quorum_type==COLOCATED_RAFT
     """
 
     def __init__(self, kafka, context):
@@ -84,6 +86,7 @@ class Info:
             The test context within which the this instance and the
             given Kafka service is being instantiated
         """
+
         quorum_type = for_test(context)
         if quorum_type != zk and kafka.zk:
             raise Exception("Cannot use ZooKeeper while specifying a Raft metadata quorum (should not happen)")
@@ -93,6 +96,47 @@ class Info:
         self.quorum_type = quorum_type
         self.using_zk = quorum_type == zk
         self.using_raft = not self.using_zk
-        self.has_broker_role = self.using_raft and not kafka.remote_kafka
-        self.has_controller_role = quorum_type == colocated_raft or kafka.remote_kafka
-        self.has_combined_broker_and_controller_roles = quorum_type == colocated_raft
+        self.has_brokers = self.using_raft and not kafka.remote_kafka
+        self.has_controllers = quorum_type == colocated_raft or kafka.remote_kafka
+        self.has_brokers_and_controllers = quorum_type == colocated_raft
+
+class NodeQuorumInfo:
+    """
+    Exposes quorum-related information for a node in a KafkaService
+
+    Attributes
+    ----------
+    service_quorum_info : ServiceQuorumInfo
+        The quorum information about the service to which the node
+        belongs
+    has_broker_role : bool
+        True iff using_raft and the Kafka service doesn't itself have
+        a remote Kafka service (meaning it is not a remote controller)
+    has_controller_role : bool
+        True iff quorum_type==COLOCATED_RAFT and the node is one of
+        the first N in the cluster where N is the number of nodes
+        that have a controller role; or the Kafka service itself has a
+        remote Kafka service (meaning it is a remote controller
+        quorum).
+    has_combined_broker_and_controller_roles :
+        True iff has_broker_role==True and has_controller_role==true
+    """
+
+    def __init__(self, service_quorum_info, node):
+        """
+        :param service_quorum_info : ServiceQuorumInfo
+            The quorum information about the service to which the node
+            belongs
+        :param node : Node
+            The particular node for which this information applies.
+            In the co-located case, whether or not a node's broker's
+            process.roles contains 'controller' may vary based on the
+            particular node if the number of controller nodes is less
+            than the number of nodes in the service.
+        """
+
+        self.service_quorum_info = service_quorum_info
+        self.has_broker_role = self.service_quorum_info.has_brokers
+        idx = self.service_quorum_info.kafka.nodes.index(node)
+        self.has_controller_role = self.service_quorum_info.kafka.num_nodes_controller_role > idx
+        self.has_combined_broker_and_controller_roles = self.has_broker_role and self.has_controller_role
