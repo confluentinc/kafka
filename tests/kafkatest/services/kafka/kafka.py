@@ -58,36 +58,19 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     Metadata Quorums
     ----------------
     Kafka can use either ZooKeeper or a Raft Controller quorum for its
-    metadata.  Raft Controllers can either be co-located with Kafka in
-    the same JVM or remote in separate JVMs.  The choice is made via
-    the 'metadata_quorum' parameter defined for the system test: if it
-    is not explicitly defined, or if it is set to 'ZK', then ZooKeeper
-    is used.  If it is explicitly set to 'COLOCATED_RAFT' then Raft
-    controllers will be co-located with the brokers; the value
-    `REMOTE_RAFT` indicates remote controllers.
+    metadata.  See the kafkatest.services.kafka.quorum.Info class for
+    details.
 
     You can interrogate the state of the instance via these attributes:
 
-    using_zk : bool
-        True when using ZooKeeper otherwise False
-    using_raft : bool
-        False when using ZooKeeper otherwise True
-    has_broker_role : bool
-        True when using Raft and the instance is a Kafka broker
-        (i.e. it is not a remote controller), otherwise False
-    has_controller_role : bool
-        True when using Raft and the instance is a Raft Controller
-        (i.e. not a Kafka broker that has a remote controller),
-        otherwise False
-    has_combined_broker_and_controller_roles : bool
-        True when using Raft and the instance has an in-process Raft
-        quorum controller, otherwise False
+    quorum_info : kafkatest.services.kafka.quorum.Info
+        Information about the cluster and it's metadata quorum
     controller_quorum : KafkaService
         None when using ZooKeeper, otherwise the Kafka service for the
-        in-process case and the remote controller quorum service
+        co-located case and the remote controller quorum service
         instance for the remote case
     remote_controller_quorum : KafkaService
-        None for the in-process case or when using ZooKeeper, otherwise
+        None for the co-located case or when using ZooKeeper, otherwise
         the remote controller quorum service instance
 
 
@@ -109,15 +92,13 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
     ZooKeeper
     ---------
-    Provide an instance of ZookeeperService and set metadata_quorum
-    to ZK (or do not explicitly set it since this is the default).
+    Create an instance of ZookeeperService when metadata_quorum is ZK
+    (ZK is the default if metadata_quorum is not a test parameter).
 
     Raft Quorums
     ------------
     Set metadata_quorum accordingly (to COLOCATED_RAFT or REMOTE_RAFT).
-    Any provided instance of ZookeeperService will be ignored and will
-    not be started (this helps to minimize system test changes when
-    we wish to run existing tests with Raft in addition to ZooKeeper).
+    Do not instantiate a ZookeeperService instance.
 
     Starting Kafka will cause any remote controller quorum to
     automatically start first.  Explicitly stopping Kafka does not stop
@@ -245,7 +226,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         if self.quorum_info.using_raft:
             # Initially use the inter-broker security protocol for both
             # broker-to-controller and inter-controller communication. Both can be explicitly changed later if desired.
-            # Note, however, that the two must the same if the controller quorum is in-process/co-located with the
+            # Note, however, that the two must the same if the controller quorum is co-located with the
             # brokers.  Different security protocols for the two are only supported with a remote controller quorum.
             self.controller_security_protocol = interbroker_security_protocol
             self.controller_sasl_mechanism = interbroker_sasl_mechanism

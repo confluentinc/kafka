@@ -41,6 +41,15 @@ class Info:
     """
     Exposes quorum-related information for an instance of KafkaService
 
+    Kafka can use either ZooKeeper or a Raft Controller quorum for its
+    metadata.  Raft Controllers can either be co-located with Kafka in
+    the same JVM or remote in separate JVMs.  The choice is made via
+    the 'metadata_quorum' parameter defined for the system test: if it
+    is not explicitly defined, or if it is set to 'ZK', then ZooKeeper
+    is used.  If it is explicitly set to 'COLOCATED_RAFT' then Raft
+    controllers will be co-located with the brokers; the value
+    `REMOTE_RAFT` indicates remote controllers.
+
     Attributes
     ----------
 
@@ -69,9 +78,11 @@ class Info:
         """
 
         :param kafka : KafkaService
-            The service for which this instance exposes quorum-related information
+            The service for which this instance exposes quorum-related
+            information
         :param context : TestContext
-            The test context within which the given Kafka service is being instantiated
+            The test context within which the this instance and the
+            given Kafka service is being instantiated
         """
         quorum_type = for_test(context)
         if quorum_type != zk and kafka.zk:
