@@ -30,10 +30,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 
 @Timeout(value = 40)
 public class ClusterControlManagerTest {
@@ -87,7 +87,7 @@ public class ClusterControlManagerTest {
             assertTrue(clusterControl.isUsable(i));
         }
         for (int i = 0; i < 100; i++) {
-            Random random = new Random(123);
+            RandomSource random = new MockRandomSource();
             List<Integer> results = clusterControl.chooseRandomUsable(random, 3);
             HashSet<Integer> seen = new HashSet<>();
             for (Integer result : results) {

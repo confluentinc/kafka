@@ -65,7 +65,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -615,7 +614,7 @@ public final class QuorumController implements Controller {
         this.featureControl =
             new FeatureControlManager(supportedFeatures, snapshotRegistry);
         this.replicationControl = new ReplicationControlManager(snapshotRegistry,
-            logContext, new Random(), defaultReplicationFactor, defaultNumPartitions,
+            logContext, new StandardRandomSource(), defaultReplicationFactor, defaultNumPartitions,
             configurationControl, clusterControl);
         this.logManager = logManager;
         this.metaLogListener = new QuorumMetaLogListener();
