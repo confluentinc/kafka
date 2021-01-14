@@ -19,6 +19,8 @@ colocated_raft = 'COLOCATED_RAFT' # co-located KIP-500 Controllers, used during/
 remote_raft = 'REMOTE_RAFT' # separate KIP-500 Controllers, used during/after the KIP-500 bridge release(s)
 
 # How we will parameterize tests that exercise all quorum styles
+#   [“ZK”, “REMOTE_RAFT”, "COLOCATED_RAFT"] during the KIP-500 bridge release(s)
+#   [“REMOTE_RAFT”, "COLOCATED_RAFT”] after the KIP-500 bridge release(s)
 all = [zk, remote_raft, colocated_raft]
 # How we will parameterize tests that exercise all Raft quorum styles
 all_raft = [remote_raft, colocated_raft]

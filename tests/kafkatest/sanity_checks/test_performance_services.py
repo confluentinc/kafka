@@ -69,6 +69,7 @@ class PerformanceServiceTest(Test):
                 'buffer.memory': 64*1024*1024})
         self.producer_perf.run()
         producer_perf_data = compute_aggregate_throughput(self.producer_perf)
+        assert producer_perf_data['records_per_sec'] > 0
 
         # check basic run of end to end latency
         self.end_to_end = EndToEndLatencyService(
@@ -84,6 +85,7 @@ class PerformanceServiceTest(Test):
         self.consumer_perf.group = "test-consumer-group"
         self.consumer_perf.run()
         consumer_perf_data = compute_aggregate_throughput(self.consumer_perf)
+        assert consumer_perf_data['records_per_sec'] > 0
 
         return {
             "producer_performance": producer_perf_data,
