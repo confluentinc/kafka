@@ -17,11 +17,6 @@
 
 package kafka.server
 
-import java.util
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.locks.ReentrantLock
-
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.{ProducerIdGenerator, TransactionCoordinator}
 import kafka.log.LogManager
@@ -44,7 +39,12 @@ import org.apache.kafka.metadata.{BrokerState, VersionRange}
 import org.apache.kafka.metalog.MetaLogManager
 import org.apache.kafka.server.authorizer.Authorizer
 
+import java.util
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.{CompletableFuture, TimeUnit}
 import scala.collection.{Map, Seq}
+import scala.concurrent.TimeoutException
 import scala.jdk.CollectionConverters._
 
 /**
@@ -361,10 +361,16 @@ class Kip500Broker(
       // We request the heartbeat to initiate a controlled shutdown.
       info("Controlled shutdown requested")
 
-      // TODO: request controlled shutdown from broker lifecycle manager
-      // TODO: wait for controlled shutdown to complete
+      lifecycleManager.controlledBrokerShutdown()
+      try {
+        lifecycleManager.shutdownReadinessFuture.get(5L, TimeUnit.MINUTES)
+      } catch {
+        case _: TimeoutException =>
+          error("Timed out waiting for the controller to approve controlled shutdown")
+        case e: Throwable =>
+          throw e
+      }
     }
-    lifecycleManager.beginShutdown()
   }
 
   def shutdown(): Unit = {

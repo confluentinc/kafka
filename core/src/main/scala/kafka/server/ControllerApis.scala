@@ -381,7 +381,8 @@ class ControllerApis(val requestChannel: RequestChannel,
             setThrottleTimeMs(requestThrottleMs).
             setErrorCode(Errors.NONE.code()).
             setIsCaughtUp(reply.isCaughtUp).
-            setIsFenced(reply.isFenced))
+            setIsFenced(reply.isFenced).
+            setShouldShutdown(reply.shouldShutdown))
         }
       }
       apisUtils.sendResponseMaybeThrottle(request,

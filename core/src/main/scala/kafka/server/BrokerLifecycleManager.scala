@@ -16,10 +16,6 @@
  */
 package kafka.server
 
-import java.util
-import java.util.concurrent.TimeUnit.{MILLISECONDS, NANOSECONDS}
-import java.util.concurrent.{CompletableFuture, TimeUnit}
-
 import kafka.utils.Logging
 import org.apache.kafka.clients.{ClientResponse, RequestCompletionHandler}
 import org.apache.kafka.common.Uuid
@@ -30,6 +26,10 @@ import org.apache.kafka.common.requests.{BrokerHeartbeatRequest, BrokerHeartbeat
 import org.apache.kafka.common.utils.EventQueue.DeadlineFunction
 import org.apache.kafka.common.utils.{EventQueue, ExponentialBackoff, KafkaEventQueue, LogContext, Time}
 import org.apache.kafka.metadata.{BrokerState, VersionRange}
+
+import java.util
+import java.util.concurrent.TimeUnit.{MILLISECONDS, NANOSECONDS}
+import java.util.concurrent.{CompletableFuture, TimeUnit}
 import scala.jdk.CollectionConverters._
 
 class BrokerLifecycleManager(val config: KafkaConfig,
@@ -78,6 +78,11 @@ class BrokerLifecycleManager(val config: KafkaConfig,
   val initialCatchUpFuture = new CompletableFuture[Void]()
 
   /**
+   * A future which is completed when the controller approves our shutdown request
+   */
+  val shutdownReadinessFuture = new CompletableFuture[Void]()
+
+  /**
    * The broker epoch, or -1 if the broker has not yet registered.
    * This variable can only be written from the event queue thread.
    */
@@ -100,6 +105,12 @@ class BrokerLifecycleManager(val config: KafkaConfig,
    * This variable can only be accessed from the event queue thread.
    */
   private var readyToUnfence = false
+
+  /**
+   * True if the broker wants to initiate a controlled shutdown.
+   * This variable can only be accessed from the event queue thread.
+   */
+  private var startShutdown = false
 
   /**
    * Whether or not we this broker is registered with the controller quorum.
@@ -164,10 +175,18 @@ class BrokerLifecycleManager(val config: KafkaConfig,
 
   def state(): BrokerState = _state
 
+  def controlledBrokerShutdown(): Unit = {
+    _state = BrokerState.PENDING_CONTROLLED_SHUTDOWN
+    readyToUnfence = false
+    startShutdown = true
+    scheduleNextCommunicationImmediately()
+  }
+
   /**
    * Start shutting down the BrokerLifecycleManager, but do not block.
    */
   def beginShutdown(): Unit = {
+    // Shutdown event queue here
     eventQueue.beginShutdown("beginShutdown", new ShutdownEvent())
   }
 
@@ -269,7 +288,8 @@ class BrokerLifecycleManager(val config: KafkaConfig,
       setBrokerEpoch(_brokerEpoch).
       setBrokerId(brokerId).
       setCurrentMetadataOffset(metadataOffset).
-      setShouldFence(!readyToUnfence)
+      setShouldFence(!readyToUnfence).
+      setShouldShutdown(startShutdown)
     _channelManager.sendRequest(new BrokerHeartbeatRequest.Builder(data),
       new BrokerHeartbeatResponseHandler())
   }
@@ -316,6 +336,14 @@ class BrokerLifecycleManager(val config: KafkaConfig,
           } else if (_state == BrokerState.RUNNING) {
             debug(s"Broker ${brokerId} processed heartbeat response from RUNNING state.")
             scheduleNextCommunicationAfterSuccess()
+          } else if (_state == BrokerState.PENDING_CONTROLLED_SHUTDOWN) {
+            debug(s"Broker ${brokerId} is waiting to shutdown")
+            if (message.data.shouldShutdown) {
+              info(s"Broker ${brokerId} is ready to shutdown")
+              shutdownReadinessFuture.complete(null)
+            } else {
+              scheduleNextCommunicationAfterSuccess()
+            }
           } else if (_state == BrokerState.SHUTTING_DOWN) {
             info(s"Broker ${brokerId} is ignoring the heartbeat response since it is " +
               "SHUTTING_DOWN.")

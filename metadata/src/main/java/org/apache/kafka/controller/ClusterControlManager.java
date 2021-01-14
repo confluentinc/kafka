@@ -95,10 +95,12 @@ public class ClusterControlManager {
     public static class HeartbeatReply {
         private final boolean isCaughtUp;
         private final boolean isFenced;
+        private final boolean shouldShutdown;
 
-        HeartbeatReply(boolean isCaughtUp, boolean isFenced) {
+        HeartbeatReply(boolean isCaughtUp, boolean isFenced, boolean shouldShutdown) {
             this.isCaughtUp = isCaughtUp;
             this.isFenced = isFenced;
+            this.shouldShutdown = shouldShutdown;
         }
 
         public boolean isCaughtUp() {
@@ -109,9 +111,13 @@ public class ClusterControlManager {
             return isFenced;
         }
 
+        public boolean shouldShutdown() {
+            return shouldShutdown;
+        }
+
         @Override
         public int hashCode() {
-            return Objects.hash(isCaughtUp, isFenced);
+            return Objects.hash(isCaughtUp, isFenced, shouldShutdown);
         }
 
         @Override
@@ -119,13 +125,14 @@ public class ClusterControlManager {
             if (!(o instanceof HeartbeatReply)) return false;
             HeartbeatReply other = (HeartbeatReply) o;
             return other.isCaughtUp == isCaughtUp &&
-                other.isFenced == isFenced;
+                other.isFenced == isFenced &&
+                other.shouldShutdown == shouldShutdown;
         }
 
         @Override
         public String toString() {
             return "HeartbeatReply(isCaughtUp=" + isCaughtUp +
-                ", isFenced=" + isFenced + ")";
+                ", isFenced=" + isFenced + ", shouldShutdown=" + shouldShutdown + ")";
         }
     }
 
@@ -247,7 +254,9 @@ public class ClusterControlManager {
                     setId(brokerId).setEpoch(request.brokerEpoch()), (short) 0));
             }
         }
-        return new ControllerResult<>(records, new HeartbeatReply(isCaughtUp, isFenced));
+        // TODO: KC-1399 will implement the controller-side controlled shutdown sequence
+        //       Replace the default for shouldShutdown below as part of that
+        return new ControllerResult<>(records, new HeartbeatReply(isCaughtUp, isFenced, false));
     }
 
     void touchBroker(int brokerId) {
