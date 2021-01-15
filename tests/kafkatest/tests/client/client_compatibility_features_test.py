@@ -109,7 +109,7 @@ class ClientCompatibilityFeaturesTest(Test):
           raise
 
     @cluster(num_nodes=7)
-    @matrix(broker_version=str(DEV_BRANCH), metadata_quorum=quorum.non_upgrade_quorums)
+    @matrix(broker_version=[str(DEV_BRANCH)], metadata_quorum=quorum.non_upgrade_quorums)
     @cluster(num_nodes=7)
     @parametrize(broker_version=str(LATEST_0_10_0))
     @parametrize(broker_version=str(LATEST_0_10_1))
