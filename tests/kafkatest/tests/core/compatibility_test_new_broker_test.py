@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ducktape.mark import parametrize
+from ducktape.mark import matrix, parametrize
 from ducktape.utils.util import wait_until
 from ducktape.mark.resource import cluster
 
 from kafkatest.services.console_consumer import ConsoleConsumer
-from kafkatest.services.kafka import KafkaService
+from kafkatest.services.kafka import KafkaService, quorum
 from kafkatest.services.kafka import config_property
 from kafkatest.services.verifiable_producer import VerifiableProducer
 from kafkatest.services.zookeeper import ZookeeperService
@@ -33,9 +33,10 @@ class ClientCompatibilityTestNewBroker(ProduceConsumeValidateTest):
 
     def setUp(self):
         self.topic = "test_topic"
-        self.zk = ZookeeperService(self.test_context, num_nodes=1)
-            
-        self.zk.start()
+        self.zk = ZookeeperService(self.test_context, num_nodes=1) if quorum.for_test(self.test_context) == quorum.zk else None
+
+        if self.zk:
+            self.zk.start()
 
         # Producer and consumer
         self.producer_throughput = 10000
@@ -44,10 +45,10 @@ class ClientCompatibilityTestNewBroker(ProduceConsumeValidateTest):
         self.messages_per_producer = 1000
 
     @cluster(num_nodes=6)
-    @parametrize(producer_version=str(DEV_BRANCH), consumer_version=str(DEV_BRANCH), compression_types=["snappy"], timestamp_type=str("LogAppendTime"))
-    @parametrize(producer_version=str(DEV_BRANCH), consumer_version=str(DEV_BRANCH), compression_types=["none"], timestamp_type=str("LogAppendTime"))
+    @matrix(producer_version=[str(DEV_BRANCH)], consumer_version=[str(DEV_BRANCH)], compression_types=[["snappy"]], timestamp_type=[str("LogAppendTime")], metadata_quorum=quorum.non_upgrade_quorums)
+    @matrix(producer_version=[str(DEV_BRANCH)], consumer_version=[str(DEV_BRANCH)], compression_types=[["none"]], timestamp_type=[str("LogAppendTime")], metadata_quorum=quorum.non_upgrade_quorums)
     @parametrize(producer_version=str(DEV_BRANCH), consumer_version=str(LATEST_0_9), compression_types=["none"], new_consumer=False, timestamp_type=None)
-    @parametrize(producer_version=str(DEV_BRANCH), consumer_version=str(LATEST_0_9), compression_types=["snappy"], timestamp_type=str("CreateTime"))
+    @matrix(producer_version=[str(DEV_BRANCH)], consumer_version=[str(LATEST_0_9)], compression_types=[["snappy"]], timestamp_type=[str("CreateTime")], metadata_quorum=quorum.non_upgrade_quorums)
     @parametrize(producer_version=str(LATEST_2_2), consumer_version=str(LATEST_2_2), compression_types=["none"], timestamp_type=str("CreateTime"))
     @parametrize(producer_version=str(LATEST_2_3), consumer_version=str(LATEST_2_3), compression_types=["none"], timestamp_type=str("CreateTime"))
     @parametrize(producer_version=str(LATEST_2_4), consumer_version=str(LATEST_2_4), compression_types=["none"], timestamp_type=str("CreateTime"))
@@ -64,12 +65,13 @@ class ClientCompatibilityTestNewBroker(ProduceConsumeValidateTest):
     @parametrize(producer_version=str(LATEST_0_9), consumer_version=str(DEV_BRANCH), compression_types=["snappy"], timestamp_type=None)
     @parametrize(producer_version=str(LATEST_0_9), consumer_version=str(LATEST_0_9), compression_types=["snappy"], timestamp_type=str("LogAppendTime"))
     @parametrize(producer_version=str(LATEST_0_8_2), consumer_version=str(LATEST_0_8_2), compression_types=["none"], new_consumer=False, timestamp_type=None)
-    def test_compatibility(self, producer_version, consumer_version, compression_types, new_consumer=True, timestamp_type=None):
+    def test_compatibility(self, producer_version, consumer_version, compression_types, new_consumer=True, timestamp_type=None, metadata_quorum=quorum.zk):
 
         self.kafka = KafkaService(self.test_context, num_nodes=3, zk=self.zk, version=DEV_BRANCH, topics={self.topic: {
                                                                     "partitions": 3,
                                                                     "replication-factor": 3,
-                                                                    'configs': {"min.insync.replicas": 2}}})
+                                                                    'configs': {"min.insync.replicas": 2}}},
+                                  controller_num_nodes_override=1)
         for node in self.kafka.nodes:
             if timestamp_type is not None:
                 node.config[config_property.MESSAGE_TIMESTAMP_TYPE] = timestamp_type
