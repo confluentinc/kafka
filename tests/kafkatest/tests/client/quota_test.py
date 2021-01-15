@@ -129,8 +129,8 @@ class QuotaTest(Test):
 
     @cluster(num_nodes=5)
     @matrix(quota_type=[QuotaConfig.CLIENT_ID, QuotaConfig.USER, QuotaConfig.USER_CLIENT], override_quota=[True, False],
-            metadata_quorum=quorum.non_upgrade_quorums)
-    @matrix(quota_type=[QuotaConfig.CLIENT_ID], consumer_num=[2], metadata_quorum=quorum.non_upgrade_quorums)
+            metadata_quorum=quorum.all_non_upgrade)
+    @matrix(quota_type=[QuotaConfig.CLIENT_ID], consumer_num=[2], metadata_quorum=quorum.all_non_upgrade)
     @parametrize(quota_type=QuotaConfig.CLIENT_ID, old_broker_throttling_behavior=True)
     @parametrize(quota_type=QuotaConfig.CLIENT_ID, old_client_throttling_behavior=True)
     def test_quota(self, quota_type, override_quota=True, producer_num=1, consumer_num=1,

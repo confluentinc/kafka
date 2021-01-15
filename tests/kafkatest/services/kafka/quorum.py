@@ -26,9 +26,9 @@ all = [zk, remote_raft, colocated_raft]
 all_raft = [remote_raft, colocated_raft]
 # How we will parameterize tests that are unrelated to upgrades:
 #   [“ZK”] before the KIP-500 bridge release(s)
-#   [“ZK”, “REMOTE_RAFT”] during the KIP-500 bridge release(s)
+#   [“ZK”, “REMOTE_RAFT”] during the KIP-500 bridge release(s) and in preview releases
 #   [“REMOTE_RAFT”] after the KIP-500 bridge release(s)
-non_upgrade_quorums = [zk, remote_raft]
+all_non_upgrade = [zk, remote_raft]
 
 def for_test(test_context):
     # A test uses ZooKeeper if it doesn't specify a metadata quorum or if it explicitly specifies ZooKeeper

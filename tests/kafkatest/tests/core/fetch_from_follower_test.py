@@ -70,7 +70,7 @@ class FetchFromFollowerTest(ProduceConsumeValidateTest):
         self.kafka.start()
 
     @cluster(num_nodes=9)
-    @matrix(metadata_quorum=quorum.non_upgrade_quorums)
+    @matrix(metadata_quorum=quorum.all_non_upgrade)
     def test_consumer_preferred_read_replica(self, metadata_quorum=quorum.zk):
         """
         This test starts up brokers with "broker.rack" and "replica.selector.class" configurations set. The replica
