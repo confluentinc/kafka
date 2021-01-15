@@ -92,7 +92,6 @@ class KafkaRaftManager(
   val controllerQuorumVotersFuture: CompletableFuture[String]
 ) extends RaftManager with Logging {
 
-  private val raftConfig = new RaftConfig(config.originals)
   private val nodeId = if (config.processRoles.contains(ControllerRole)) {
     config.controllerId
   } else {
@@ -113,13 +112,17 @@ class KafkaRaftManager(
   private val raftIoThread = new RaftIoThread(raftClient)
   private val metaLogShim = new MetaLogRaftShim(raftClient, nodeId)
 
-  val voterNodes: Seq[Node] = raftConfig.quorumVoterNodes().asScala.toSeq
+  private var raftConfig: RaftConfig = _
 
   def currentLeader: Option[Node] = {
+    if (raftConfig == null) {
+      None
+    }
+
     val leaderAndEpoch = raftClient.leaderAndEpoch()
     if (leaderAndEpoch.leaderId.isPresent) {
       val leaderId = leaderAndEpoch.leaderId.getAsInt
-      voterNodes.find(_.id == leaderId)
+      raftConfig.quorumVoterNodes().asScala.find(_.id == leaderId)
     } else {
       None
     }
@@ -129,6 +132,14 @@ class KafkaRaftManager(
 
   def startup(): Unit = {
     netChannel.start()
+
+    // Wait for the controller quorum voters string to be set
+    // NOTE: This feels a bit hacky to modify the config after it was originally parsed.
+    //       But this way it allows us to not change the RaftConfig logic for parsing the
+    //       voter connect strings
+    val configProps = config.originals;
+    configProps.put(KafkaConfig.ControllerQuorumVotersProp, controllerQuorumVotersFuture.get());
+    raftConfig = new RaftConfig(configProps)
     raftClient.initialize(raftConfig)
     raftIoThread.start()
   }
@@ -185,9 +196,11 @@ class KafkaRaftManager(
     )
   }
 
+  private def requestTimeoutMs(): Int = config.getInt(RaftConfig.QUORUM_REQUEST_TIMEOUT_MS_CONFIG)
+
   private def buildNetworkChannel(): KafkaNetworkChannel = {
     val netClient = buildNetworkClient()
-    new KafkaNetworkChannel(time, netClient, raftConfig.requestTimeoutMs)
+    new KafkaNetworkChannel(time, netClient, requestTimeoutMs())
   }
 
   private def createDataDir(): File = {
@@ -259,7 +272,7 @@ class KafkaRaftManager(
       reconnectBackoffMsMs,
       Selectable.USE_DEFAULT_BUFFER_SIZE,
       config.socketReceiveBufferBytes,
-      raftConfig.requestTimeoutMs,
+      requestTimeoutMs(),
       config.connectionSetupTimeoutMs,
       config.connectionSetupTimeoutMaxMs,
       ClientDnsLookup.USE_ALL_DNS_IPS,

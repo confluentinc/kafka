@@ -1902,7 +1902,11 @@ public class KafkaRaftClient<T> implements RaftClient<T> {
 
     @Override
     public LeaderAndEpoch leaderAndEpoch() {
-        return quorum.leaderAndEpoch();
+        LeaderAndEpoch leaderAndEpoch = new LeaderAndEpoch(OptionalInt.empty(), -1);
+        if (quorum != null) {
+            leaderAndEpoch = quorum.leaderAndEpoch();
+        }
+        return leaderAndEpoch;
     }
 
     @Override

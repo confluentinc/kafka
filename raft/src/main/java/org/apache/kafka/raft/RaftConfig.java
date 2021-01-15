@@ -61,14 +61,13 @@ public class RaftConfig extends AbstractConfig {
     private static final String QUORUM_LINGER_MS_DOC = "The duration in milliseconds that the leader will " +
         "wait for writes to accumulate before flushing them to disk.";
 
-    // Package-private for testing
-    static final String QUORUM_REQUEST_TIMEOUT_MS_CONFIG = QUORUM_PREFIX +
+    public static final String QUORUM_REQUEST_TIMEOUT_MS_CONFIG = QUORUM_PREFIX +
         CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG;
 
-    // Package-private for testing
-    static final String QUORUM_RETRY_BACKOFF_MS_CONFIG = QUORUM_PREFIX +
+    public static final String QUORUM_RETRY_BACKOFF_MS_CONFIG = QUORUM_PREFIX +
         CommonClientConfigs.RETRY_BACKOFF_MS_CONFIG;
 
+    // TODO: Move these to KafkaConfig.scala and avoid duplication
     static {
         CONFIG = new ConfigDef()
             .define(QUORUM_REQUEST_TIMEOUT_MS_CONFIG,
