@@ -55,6 +55,8 @@ import static org.apache.kafka.common.config.ConfigResource.Type.TOPIC;
 public class ReplicationControlManager {
     private final static int[] EMPTY = new int[0];
 
+    private final static int[] NO_LEADER = new int[] {-1};
+
     static class TopicControlInfo {
         private final Uuid id;
         private final TimelineHashMap<Integer, PartitionControlInfo> parts;
@@ -242,7 +244,7 @@ public class ReplicationControlManager {
             log.info("Created partition {}:{} with {}.", record.topicId(),
                 record.partitionId(), newPartInfo.toString());
             topicInfo.parts.put(record.partitionId(), newPartInfo);
-            updateIsrMembers(record.topicId(), record.partitionId(), EMPTY, newPartInfo.isr);
+            updateIsrMembers(record.topicId(), record.partitionId(), null, newPartInfo.isr);
         } else {
             String diff = newPartInfo.diff(prevPartInfo);
             if (!diff.isEmpty()) {
@@ -272,15 +274,27 @@ public class ReplicationControlManager {
             prevPartitionInfo.isr, newPartitionInfo.isr);
     }
 
+    /**
+     * Update our records of a partition's ISR.
+     *
+     * @param topicId       The topic ID of the partition.
+     * @param partitionId   The partition ID of the partition.
+     * @param prevIsr       The previous ISR, or null if the partition is new.
+     * @param nextIsr       The new ISR, or null if the partition is being removed.
+     */
     private void updateIsrMembers(Uuid topicId, int partitionId, int[] prevIsr, int[] nextIsr) {
+        if (prevIsr == null) {
+            prevIsr = EMPTY;
+        } else if (prevIsr.length == 0) {
+            prevIsr = NO_LEADER;
+        }
+        if (nextIsr == null) {
+            nextIsr = EMPTY;
+        } else if (nextIsr.length == 0) {
+            nextIsr = NO_LEADER;
+        }
         List<Integer> added = new ArrayList<>();
         List<Integer> removed = new ArrayList<>();
-        if (prevIsr.length == 0) {
-            prevIsr = new int[] {-1};
-        }
-        if (nextIsr.length == 0) {
-            nextIsr = new int[] {-1};
-        }
         int i = 0, j = 0;
         while (true) {
             if (i == prevIsr.length) {

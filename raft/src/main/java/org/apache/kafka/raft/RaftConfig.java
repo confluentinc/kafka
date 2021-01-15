@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -62,10 +61,12 @@ public class RaftConfig extends AbstractConfig {
     private static final String QUORUM_LINGER_MS_DOC = "The duration in milliseconds that the leader will " +
         "wait for writes to accumulate before flushing them to disk.";
 
-    private static final String QUORUM_REQUEST_TIMEOUT_MS_CONFIG = QUORUM_PREFIX +
+    // Package-private for testing
+    static final String QUORUM_REQUEST_TIMEOUT_MS_CONFIG = QUORUM_PREFIX +
         CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG;
 
-    private static final String QUORUM_RETRY_BACKOFF_MS_CONFIG = QUORUM_PREFIX +
+    // Package-private for testing
+    static final String QUORUM_RETRY_BACKOFF_MS_CONFIG = QUORUM_PREFIX +
         CommonClientConfigs.RETRY_BACKOFF_MS_CONFIG;
 
     static {
@@ -132,16 +133,27 @@ public class RaftConfig extends AbstractConfig {
                 QUORUM_LINGER_MS_DOC);
     }
 
-    public RaftConfig(Properties props) {
-        super(CONFIG, props);
-    }
+    private final int requestTimeoutMs;
+    private final int retryBackoffMs;
+    private final int electionTimeoutMs;
+    private final int electionBackoffMaxMs;
+    private final int fetchTimeoutMs;
+    private final int appendLingerMs;
+    private final Map<Integer, InetSocketAddress> voterConnections;
 
-    public RaftConfig(Map<String, Object> props) {
-        super(CONFIG, props);
+    public RaftConfig(Map<?, ?> props) {
+        this(props, true);
     }
 
     protected RaftConfig(Map<?, ?> props, boolean doLog) {
         super(CONFIG, props, doLog);
+        requestTimeoutMs = getInt(QUORUM_REQUEST_TIMEOUT_MS_CONFIG);
+        retryBackoffMs = getInt(QUORUM_RETRY_BACKOFF_MS_CONFIG);
+        electionTimeoutMs = getInt(QUORUM_ELECTION_TIMEOUT_MS_CONFIG);
+        electionBackoffMaxMs = getInt(QUORUM_ELECTION_BACKOFF_MAX_MS_CONFIG);
+        fetchTimeoutMs = getInt(QUORUM_FETCH_TIMEOUT_MS_CONFIG);
+        appendLingerMs = getInt(QUORUM_LINGER_MS_CONFIG);
+        voterConnections = parseVoterConnections(getList(QUORUM_VOTERS_CONFIG));
     }
 
     public static Set<String> configNames() {
@@ -157,27 +169,27 @@ public class RaftConfig extends AbstractConfig {
     }
 
     public int requestTimeoutMs() {
-        return getInt(QUORUM_REQUEST_TIMEOUT_MS_CONFIG);
+        return requestTimeoutMs;
     }
 
     public int retryBackoffMs() {
-        return getInt(QUORUM_RETRY_BACKOFF_MS_CONFIG);
+        return retryBackoffMs;
     }
 
     public int electionTimeoutMs() {
-        return getInt(QUORUM_ELECTION_TIMEOUT_MS_CONFIG);
+        return electionTimeoutMs;
     }
 
     public int electionBackoffMaxMs() {
-        return getInt(QUORUM_ELECTION_BACKOFF_MAX_MS_CONFIG);
+        return electionBackoffMaxMs;
     }
 
     public int fetchTimeoutMs() {
-        return getInt(QUORUM_FETCH_TIMEOUT_MS_CONFIG);
+        return fetchTimeoutMs;
     }
 
     public int appendLingerMs() {
-        return getInt(QUORUM_LINGER_MS_CONFIG);
+        return appendLingerMs;
     }
 
     public Set<Integer> quorumVoterIds() {
@@ -185,7 +197,7 @@ public class RaftConfig extends AbstractConfig {
     }
 
     public Map<Integer, InetSocketAddress> quorumVoterConnections() {
-        return parseVoterConnections(getList(QUORUM_VOTERS_CONFIG));
+        return voterConnections;
     }
 
     public List<Node> quorumVoterNodes() {
@@ -240,7 +252,6 @@ public class RaftConfig extends AbstractConfig {
         }
 
         return new ArrayList<>(voterMap.values());
-
     }
 
 }
