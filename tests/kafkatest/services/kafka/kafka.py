@@ -245,8 +245,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         :param dict per_node_server_prop_overrides: overrides for kafka.properties file keyed by 0-based node number
         :param str extra_kafka_opts: jvm args to add to KAFKA_OPTS variable
         :param str tls_version: TLS version to use
-        :param KafkaService remote_kafka: process.roles=controller for this cluster when not None
-        :param int controller_num_nodes_override: the number of nodes to use in the cluster, instead of 5, 3, or 1 based on num_nodes, if positive and remote_kafka is not None; ignored otherwise
+        :param KafkaService remote_kafka: process.roles=controller for this cluster when not None; ignored when using ZooKeeper
+        :param int controller_num_nodes_override: the number of nodes to use in the cluster, instead of 5, 3, or 1 based on num_nodes, if positive, not using ZooKeeper, and remote_kafka is not None; ignored otherwise
 
         """
 
