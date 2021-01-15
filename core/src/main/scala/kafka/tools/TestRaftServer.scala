@@ -96,7 +96,6 @@ class TestRaftServer(
     networkChannel.start()
 
     val raftClient = buildRaftClient(
-      raftConfig,
       metadataLog,
       networkChannel,
       logContext,
@@ -197,8 +196,7 @@ class TestRaftServer(
     dir
   }
 
-  private def buildRaftClient(raftConfig: RaftConfig,
-                              metadataLog: KafkaMetadataLog,
+  private def buildRaftClient(metadataLog: KafkaMetadataLog,
                               networkChannel: KafkaNetworkChannel,
                               logContext: LogContext,
                               logDir: File): KafkaRaftClient[Array[Byte]] = {
