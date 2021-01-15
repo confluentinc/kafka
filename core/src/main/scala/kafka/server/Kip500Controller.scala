@@ -145,6 +145,7 @@ class Kip500Controller(
         setThreadNamePrefix(threadNamePrefixAsString).
         setLogManager(metaLogManager).
         setDefaultReplicationFactor(config.defaultReplicationFactor).
+        setDefaultNumPartitions(config.numPartitions.intValue()).
         build()
       quotaManagers = QuotaFactory.instantiate(config, metrics, time, threadNamePrefix.getOrElse(""))
       val controllerNodes =

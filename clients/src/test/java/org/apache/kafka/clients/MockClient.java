@@ -263,7 +263,7 @@ public class MockClient implements KafkaClient {
             if (remainingBlockingWakeups <= 0)
                 return;
 
-            while (numBlockingWakeups == remainingBlockingWakeups)
+            while (numBlockingWakeups == remainingBlockingWakeups && active)
                 wait();
         } catch (InterruptedException e) {
             throw new InterruptException(e);
@@ -533,7 +533,10 @@ public class MockClient implements KafkaClient {
 
     @Override
     public void close() {
-        active = false;
+        synchronized (this) {
+            active = false;
+            notifyAll();
+        }
         metadataUpdater.close();
     }
 

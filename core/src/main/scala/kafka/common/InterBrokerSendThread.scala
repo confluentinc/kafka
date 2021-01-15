@@ -49,7 +49,7 @@ class InterBrokerSendThread(
   override def shutdown(): Unit = {
     initiateShutdown()
     // wake up the thread in case it is blocked inside poll
-    networkClient.wakeup()
+    networkClient.initiateClose()
     awaitShutdown()
   }
 

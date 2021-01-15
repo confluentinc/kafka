@@ -90,7 +90,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Map, Seq, Set, immutable, mutable}
 import scala.util.{Failure, Success, Try}
 import kafka.coordinator.group.GroupOverview
-import kafka.server.metadata.BrokerMetadataListener
+import kafka.server.metadata.ConfigRepository
 import org.apache.kafka.common.message.DescribeConfigsRequestData.DescribeConfigsResource
 import org.apache.kafka.common.requests.DescribeConfigsResponse.ConfigSource
 
@@ -120,7 +120,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 val tokenManager: DelegationTokenManager,
                 val brokerFeatures: BrokerFeatures,
                 val finalizedFeatureCache: FinalizedFeatureCache,
-                brokerMetadataListener: BrokerMetadataListener) extends ApiRequestHandler with Logging {
+                val configRepository: ConfigRepository) extends ApiRequestHandler with Logging {
 
   val apisUtils = new ApisUtils(new LogContext(s"[BrokerApis id=${config.brokerId}] "),
     requestChannel, authorizer, quotas, time, Some(groupCoordinator), Some(txnCoordinator))
@@ -1373,21 +1373,22 @@ class KafkaApis(val requestChannel: RequestChannel,
       brokers.mkString(","), request.header.correlationId, request.header.clientId))
 
     val controllerId = if (config.processRoles.nonEmpty) {
-      // FIXME: When running in KIP-500 mode, we currently use the local brokerId as the controller
-      //  so that the AdminClient will send controller-bound requests to this broker This is a
-      //  temporary workaround until the AdminClient supports the assumption of forwarding.
-      config.brokerId
+      // When running in KIP-500 mode, we send back a random controller ID, reflecting the
+      // fact that requests for the controller can be sent to any node.
+      // TODO: new clients could be smarter about this and understand when it is and is
+      // not necessary to send to a specific controller node.
+      metadataCache.currentImage().brokers.randomAliveBrokerId()
     } else {
-      metadataCache.getControllerId.getOrElse(MetadataResponse.NO_CONTROLLER_ID)
+      metadataCache.getControllerId
     }
 
     apisUtils.sendResponseMaybeThrottle(request, requestThrottleMs =>
        MetadataResponse.prepareResponse(
          requestVersion,
          requestThrottleMs,
-         brokers.flatMap(_.getNode(request.context.listenerName)).asJava,
+         brokers.flatMap(_.endpoints.get(request.context.listenerName.value())).toList.asJava,
          clusterId,
-         controllerId,
+         controllerId.getOrElse(MetadataResponse.NO_CONTROLLER_ID),
          completeTopicMetadata.asJava,
          clusterAuthorizedOperations
       ))
@@ -1518,7 +1519,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             .find(_.partitionIndex == partition)
             .filter(_.leaderId != MetadataResponse.NO_LEADER_ID)
             .flatMap(metadata => metadataCache.getAliveBroker(metadata.leaderId))
-            .flatMap(_.getNode(request.context.listenerName))
+            .flatMap(_.endpoints.get(request.context.listenerName.value()))
             .filterNot(_.isEmpty)
 
           coordinatorEndpoint match {
@@ -3493,7 +3494,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             val topic = resource.resourceName
             Topic.validate(topic)
             if (metadataCache.contains(topic)) {
-              val topicProps = brokerMetadataListener.configProperties(new ConfigResource(ConfigResource.Type.TOPIC, topic))
+              val topicProps = configRepository.topicConfigs(topic)
               val logConfig = LogConfig.fromProps(KafkaBroker.copyKafkaConfigToLog(config), topicProps)
               createResponseConfig(allConfigs(logConfig), createTopicConfigEntry(logConfig, topicProps, includeSynonyms, includeDocumentation))
             } else {

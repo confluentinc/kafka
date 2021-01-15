@@ -17,8 +17,7 @@
 
 package kafka.server
 
-import java.util.Collections
-
+import kafka.server.metadata.{MetadataBroker, MetadataImageBuilder}
 import org.apache.kafka.common.Node
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.metalog.{MetaLogLeader, MetaLogManager}
@@ -26,10 +25,11 @@ import org.junit.Assert.assertEquals
 import org.junit.rules.Timeout
 import org.junit.{Rule, Test}
 import org.mockito.Mockito
-
-import scala.collection.mutable
+import org.slf4j.LoggerFactory
 
 class BrokerToControllerChannelManagerTest {
+  private val log = LoggerFactory.getLogger(classOf[BrokerToControllerChannelManagerTest])
+
   @Rule
   def globalTimeout = Timeout.millis(120000)
 
@@ -38,18 +38,21 @@ class BrokerToControllerChannelManagerTest {
     val cache = new MetadataCache(0)
     val provider = new MetadataCacheControllerNodeProvider(cache, new ListenerName("INTERNAL"))
     assertEquals(None, provider.controllerNode())
-    cache.updateController(2)
+
+    val builder = MetadataImageBuilder(cache.brokerId, log, cache.currentImage())
+    builder.setControllerId(Some(2))
+    cache.setImage(builder.build())
     assertEquals(None, provider.controllerNode())
-    val aliveNodes = new mutable.LongMap[collection.Map[ListenerName, Node]]()
-    aliveNodes.put(0, Map(new ListenerName("INTERNAL") -> new Node(0, "localhost", 100)))
-    aliveNodes.put(1, Map(new ListenerName("INTERNAL") -> new Node(1, "localhost", 101)))
-    aliveNodes.put(2, Map(new ListenerName("INTERNAL") -> new Node(2, "localhost", 102)))
-    cache.updatePartitionMetadata(mutable.AnyRefMap.empty,
-                                  mutable.LongMap.empty,
-                                  aliveNodes,
-                                  Collections.emptyMap(),
-                                  mutable.LongMap.empty,
-                                  mutable.LongMap.empty)
+
+    val builder2 = MetadataImageBuilder(cache.brokerId, log, cache.currentImage())
+    builder2.brokersBuilder().add(new MetadataBroker(0, null,
+      Map("INTERNAL" -> new Node(0, "localhost", 100)), false))
+    builder2.brokersBuilder().add(new MetadataBroker(1, null,
+      Map("INTERNAL" -> new Node(1, "localhost", 101)), false))
+    builder2.brokersBuilder().add(new MetadataBroker(2, null,
+      Map("INTERNAL" -> new Node(2, "localhost", 102)), false))
+    cache.setImage(builder2.build())
+
     assertEquals(Some(new Node(2, "localhost", 102)), provider.controllerNode())
   }
 

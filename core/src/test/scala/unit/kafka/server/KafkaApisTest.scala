@@ -32,10 +32,11 @@ import kafka.coordinator.group._
 import kafka.coordinator.transaction.{InitProducerIdResult, TransactionCoordinator}
 import kafka.log.AppendOrigin
 import kafka.network.RequestChannel
+import kafka.server.DynamicConfig.Broker.LeaderReplicationThrottledRateProp
 import kafka.server.QuotaFactory.QuotaManagers
-import kafka.server.metadata.BrokerMetadataListener
+import kafka.server.metadata.{ConfigRepository, LocalConfigRepository, ZkConfigRepository}
 import kafka.utils.{MockTime, TestUtils}
-import kafka.zk.KafkaZkClient
+import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.admin.AlterConfigOp.OpType
 import org.apache.kafka.clients.admin.{AlterConfigOp, ConfigEntry}
 import org.apache.kafka.common.acl.AclOperation
@@ -85,7 +86,6 @@ class KafkaApisTest {
   private val replicaManager: ReplicaManager = EasyMock.createNiceMock(classOf[ReplicaManager])
   private val groupCoordinator: GroupCoordinator = EasyMock.createNiceMock(classOf[GroupCoordinator])
   private val adminManager: LegacyAdminManager = EasyMock.createNiceMock(classOf[LegacyAdminManager])
-  private val brokerMetadataListener: BrokerMetadataListener = EasyMock.createNiceMock(classOf[BrokerMetadataListener])
   private val txnCoordinator: TransactionCoordinator = EasyMock.createNiceMock(classOf[TransactionCoordinator])
   private val controller: KafkaController = EasyMock.createNiceMock(classOf[KafkaController])
   private val forwardingManager: ForwardingManager = EasyMock.createNiceMock(classOf[ForwardingManager])
@@ -95,6 +95,7 @@ class KafkaApisTest {
     override def deserialize(bytes: Array[Byte]): KafkaPrincipal = null
   })
   private val zkClient: KafkaZkClient = EasyMock.createNiceMock(classOf[KafkaZkClient])
+  private val configRepository: ZkConfigRepository = new ZkConfigRepository(new AdminZkClient(zkClient))
   private val metrics = new Metrics()
   private val brokerId = 1
   private var metadataCache: MetadataCache = new MetadataCache(brokerId)
@@ -120,7 +121,8 @@ class KafkaApisTest {
 
   def createKafkaApisKip500(interBrokerProtocolVersion: ApiVersion = ApiVersion.latestVersion,
                             authorizer: Option[Authorizer] = None,
-                            metadataCache: MetadataCache = this.metadataCache): KafkaApis = {
+                            metadataCache: MetadataCache = this.metadataCache,
+                            configRepository: ConfigRepository = this.configRepository): KafkaApis = {
     createKafkaApis(interBrokerProtocolVersion, authorizer, true, metadataCache, null)
   }
 
@@ -128,7 +130,8 @@ class KafkaApisTest {
                       authorizer: Option[Authorizer] = None,
                       enableForwarding: Boolean = false,
                       metadataCache: MetadataCache = this.metadataCache,
-                      adminManager: LegacyAdminManager = this.adminManager): KafkaApis = {
+                      adminManager: LegacyAdminManager = this.adminManager,
+                      configRepository: ConfigRepository = this.configRepository): KafkaApis = {
     val brokerFeatures = BrokerFeatures.createDefault()
     val cache = new FinalizedFeatureCache(brokerFeatures)
     val properties = TestUtils.createBrokerConfig(brokerId, "zk")
@@ -156,7 +159,7 @@ class KafkaApisTest {
       null,
       brokerFeatures,
       cache,
-      brokerMetadataListener)
+      configRepository)
   }
 
   @Test
@@ -322,14 +325,12 @@ class KafkaApisTest {
       .andReturn(Seq(AuthorizationResult.ALLOWED).asJava)
       .once()
 
-    val configResource = new ConfigResource(ConfigResource.Type.TOPIC, resourceName)
     EasyMock.expect(mockMetadataCache.contains(resourceName)).andReturn(true)
-    EasyMock.expect(brokerMetadataListener.configProperties(EasyMock.eq(configResource))).andReturn(new Properties())
 
     val capturedResponse = expectNoThrottling()
 
     EasyMock.replay(replicaManager, clientRequestQuotaManager, requestChannel, authorizer,
-      mockMetadataCache, brokerMetadataListener)
+      mockMetadataCache)
 
     val request = buildRequest(new DescribeConfigsRequest.Builder(new DescribeConfigsRequestData()
       .setIncludeSynonyms(true)
@@ -338,7 +339,7 @@ class KafkaApisTest {
         .setResourceType(ConfigResource.Type.TOPIC.id)).asJava)).build(requestHeader.apiVersion))
     createKafkaApisKip500(authorizer = Some(authorizer), metadataCache = mockMetadataCache).handleDescribeConfigsRequest(request)
 
-    verify(authorizer, mockMetadataCache, brokerMetadataListener, clientRequestQuotaManager, requestChannel)
+    verify(authorizer, mockMetadataCache, clientRequestQuotaManager, requestChannel)
 
     val describeConfigsResponse = simulateSendResponse(
       request.header.apiKey(),
@@ -356,18 +357,18 @@ class KafkaApisTest {
   @Test
   def testDescribeConfigsWithNullConfigurationKeysKip500(): Unit = {
     val topic = "topic-1"
-    EasyMock.expect(brokerMetadataListener.configProperties(EasyMock.eq(new ConfigResource(ConfigResource.Type.TOPIC, topic))))
-      .andReturn(TestUtils.createBrokerConfig(brokerId, "zk"))
     EasyMock.expect(mockMetadataCache.contains(topic)).andReturn(true)
-
-    EasyMock.replay(brokerMetadataListener, mockMetadataCache)
+    EasyMock.replay(mockMetadataCache)
 
     val resources = List(new DescribeConfigsRequestData.DescribeConfigsResource()
       .setResourceName(topic)
       .setResourceType(ConfigResource.Type.TOPIC.id)
       .setConfigurationKeys(null))
+    val kafkaApis = createKafkaApisKip500(metadataCache = mockMetadataCache)
+    kafkaApis.configRepository.asInstanceOf[LocalConfigRepository].
+      setConfig(new ConfigResource(ConfigResource.Type.TOPIC, topic), "foo", "bar")
     val results: List[DescribeConfigsResponseData.DescribeConfigsResult] =
-      createKafkaApisKip500(metadataCache = mockMetadataCache).describeConfigs(resources, true, true)
+      kafkaApis.describeConfigs(resources, true, true)
     assertEquals(Errors.NONE.code, results.head.errorCode())
     assertFalse("Should return configs", results.head.configs().isEmpty)
   }
@@ -375,17 +376,18 @@ class KafkaApisTest {
   @Test
   def testDescribeConfigsWithEmptyConfigurationKeysKip500(): Unit = {
     val topic = "topic-1"
-    EasyMock.expect(brokerMetadataListener.configProperties(EasyMock.eq(new ConfigResource(ConfigResource.Type.TOPIC, topic))))
-      .andReturn(TestUtils.createBrokerConfig(brokerId, "zk"))
+    val topicResource = new ConfigResource(ConfigResource.Type.TOPIC, topic)
+    val localConfigRepository = new LocalConfigRepository()
+    localConfigRepository.setConfig(topicResource, "foo", "bar")
     EasyMock.expect(mockMetadataCache.contains(topic)).andReturn(true)
-
-    EasyMock.replay(brokerMetadataListener, mockMetadataCache)
+    EasyMock.replay(mockMetadataCache)
 
     val resources = List(new DescribeConfigsRequestData.DescribeConfigsResource()
       .setResourceName(topic)
       .setResourceType(ConfigResource.Type.TOPIC.id))
     val results: List[DescribeConfigsResponseData.DescribeConfigsResult] =
-      createKafkaApisKip500(metadataCache = mockMetadataCache).describeConfigs(resources, true, true)
+      createKafkaApisKip500(metadataCache = mockMetadataCache,
+        configRepository = localConfigRepository).describeConfigs(resources, true, true)
     assertEquals(Errors.NONE.code, results.head.errorCode())
     assertFalse("Should return configs", results.head.configs().isEmpty)
   }
@@ -393,12 +395,8 @@ class KafkaApisTest {
   @Test
   def testDescribeConfigsWithDocumentationKip500(): Unit = {
     val topic = "topic-1"
-    EasyMock.expect(brokerMetadataListener.configProperties(EasyMock.eq(new ConfigResource(ConfigResource.Type.TOPIC, topic))))
-      .andReturn(new Properties)
-    EasyMock.expect(brokerMetadataListener.configProperties(EasyMock.eq(new ConfigResource(ConfigResource.Type.BROKER, brokerId.toString))))
-      .andReturn(new Properties)
     EasyMock.expect(mockMetadataCache.contains(topic)).andReturn(true)
-    EasyMock.replay(brokerMetadataListener, mockMetadataCache)
+    EasyMock.replay(mockMetadataCache)
 
     val resources = List(
       new DescribeConfigsRequestData.DescribeConfigsResource()
@@ -407,9 +405,12 @@ class KafkaApisTest {
       new DescribeConfigsRequestData.DescribeConfigsResource()
         .setResourceName(brokerId.toString)
         .setResourceType(ConfigResource.Type.BROKER.id))
+    val localConfigRepository = new LocalConfigRepository()
+    localConfigRepository.setBrokerConfig(brokerId, LeaderReplicationThrottledRateProp, "123")
 
     val results: List[DescribeConfigsResponseData.DescribeConfigsResult] =
-      createKafkaApisKip500(metadataCache = mockMetadataCache).describeConfigs(resources, true, true)
+      createKafkaApisKip500(metadataCache = mockMetadataCache,
+        configRepository = localConfigRepository).describeConfigs(resources, true, true)
     assertEquals(2, results.size)
     results.foreach(r => {
       assertEquals(Errors.NONE.code, r.errorCode)

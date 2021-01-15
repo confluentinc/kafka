@@ -29,9 +29,8 @@ import kafka.metrics.KafkaYammerMetrics
 import kafka.network.SocketServer
 import kafka.security.CredentialProvider
 import kafka.server.KafkaBroker.metricsPrefix
-import kafka.server.metadata.BrokerMetadataListener
+import kafka.server.metadata.{BrokerMetadataListener, LocalConfigRepository}
 import kafka.utils.{CoreUtils, KafkaScheduler}
-import kafka.zk.KafkaZkClient
 import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.message.BrokerRegistrationRequestData.{Listener, ListenerCollection}
 import org.apache.kafka.common.metrics.Metrics
@@ -117,8 +116,9 @@ class Kip500Broker(
 
   val clusterId: String = metaProps.clusterId.toString
 
+  val configRepository = new LocalConfigRepository()
+
   var brokerMetadataListener: BrokerMetadataListener = null
-  val _brokerMetadataListenerFuture: CompletableFuture[BrokerMetadataListener] = new CompletableFuture[BrokerMetadataListener]()
 
   def kafkaYammerMetrics: kafka.metrics.KafkaYammerMetrics = KafkaYammerMetrics.INSTANCE
 
@@ -179,8 +179,14 @@ class Kip500Broker(
         Some(new LogContext(s"[SocketServer brokerId=${config.controllerId}] ")))
       socketServer.startup(startProcessingRequests = false)
 
-      // Create replica manager, but don't start it until we've started log manager.
-      replicaManager = createReplicaManager(isShuttingDown)
+      // Create replica manager.
+      val alterIsrManager = new AlterIsrManagerImpl(alterIsrChannelManager, kafkaScheduler,
+        time, config.brokerId, () => lifecycleManager.brokerEpoch())
+      // explicitly declare to eliminate spotbugs error in Scala 2.12
+      this.replicaManager = new ReplicaManager(config, metrics, time, None,
+        kafkaScheduler, logManager, isShuttingDown, quotaManagers,
+        brokerTopicStats, metadataCache, logDirFailureChannel, alterIsrManager,
+        configRepository, threadNamePrefix)
 
       /* start broker-to-controller channel managers */
       val controllerNodes =
@@ -216,11 +222,16 @@ class Kip500Broker(
       config.dynamicConfig.addReconfigurables(this)
 
       brokerMetadataListener = new BrokerMetadataListener(
-        config, metadataCache, time,
-        BrokerMetadataListener.defaultProcessors(
-          config, clusterId, metadataCache, groupCoordinator, quotaManagers, replicaManager, transactionCoordinator,
-          logManager))
-      brokerMetadataListener.start()
+        config.brokerId,
+        time,
+        metadataCache,
+        configRepository,
+        groupCoordinator,
+        quotaManagers,
+        replicaManager,
+        transactionCoordinator,
+        logManager,
+        threadNamePrefix)
 
       val networkListeners = new ListenerCollection()
       config.advertisedListeners.foreach { ep =>
@@ -230,7 +241,7 @@ class Kip500Broker(
           setPort(socketServer.boundPort(ep.listenerName)).
           setSecurityProtocol(ep.securityProtocol.id))
       }
-      lifecycleManager.start(() => brokerMetadataListener.currentMetadataOffset(),
+      lifecycleManager.start(() => brokerMetadataListener.highestMetadataOffset(),
         BrokerToControllerChannelManager(controllerNodeProvider, time, metrics, config,
           config.brokerSessionTimeoutMs.toLong, "heartbeat", threadNamePrefix),
         metaProps.clusterId, networkListeners, supportedFeatures)
@@ -280,7 +291,7 @@ class Kip500Broker(
       dataPlaneRequestProcessor = new KafkaApis(socketServer.dataPlaneRequestChannel,
         replicaManager, null, groupCoordinator, transactionCoordinator,
         null, forwardingManager, null, config.brokerId, config, metadataCache, metrics, authorizer, quotaManagers,
-        fetchManager, brokerTopicStats, clusterId, time, tokenManager, brokerFeatures, featureCache, brokerMetadataListener)
+        fetchManager, brokerTopicStats, clusterId, time, tokenManager, brokerFeatures, featureCache, configRepository)
 
       dataPlaneRequestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.dataPlaneRequestChannel, dataPlaneRequestProcessor, time,
         config.numIoThreads, s"${SocketServer.DataPlaneMetricPrefix}RequestHandlerAvgIdlePercent", SocketServer.DataPlaneThreadPrefix)
@@ -289,7 +300,7 @@ class Kip500Broker(
         controlPlaneRequestProcessor = new KafkaApis(controlPlaneRequestChannel,
           replicaManager, null, groupCoordinator, transactionCoordinator,
           null, forwardingManager, null, config.brokerId, config, metadataCache, metrics, authorizer, quotaManagers,
-          fetchManager, brokerTopicStats, clusterId, time, tokenManager, brokerFeatures, featureCache, brokerMetadataListener)
+          fetchManager, brokerTopicStats, clusterId, time, tokenManager, brokerFeatures, featureCache, configRepository)
 
         controlPlaneRequestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.controlPlaneRequestChannelOpt.get, controlPlaneRequestProcessor, time,
           1, s"${SocketServer.ControlPlaneMetricPrefix}RequestHandlerAvgIdlePercent", SocketServer.ControlPlaneThreadPrefix)
@@ -297,11 +308,11 @@ class Kip500Broker(
 
       // Block until we've caught up on the metadata log
       lifecycleManager.initialCatchUpFuture.get()
-      _brokerMetadataListenerFuture.complete(brokerMetadataListener)
       // Start log manager, which will perform (potentially lengthy) recovery-from-unclean-shutdown if required.
       logManager.startup()
       // Start other services that we've delayed starting, in the appropriate order.
       replicaManager.startup()
+      replicaManager.startHighWatermarkCheckPointThread()
       groupCoordinator.startup(metadataCache.numPartitions(Topic.GROUP_METADATA_TOPIC_NAME).
         getOrElse(config.offsetsTopicPartitions))
       transactionCoordinator.startup(metadataCache.numPartitions(Topic.TRANSACTION_STATE_TOPIC_NAME).
@@ -339,15 +350,6 @@ class Kip500Broker(
 
   def createTemporaryProducerIdManager(): ProducerIdGenerator = {
     new TemporaryProducerIdManager()
-  }
-
-  protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager = {
-    val alterIsrManager = new AlterIsrManagerImpl(alterIsrChannelManager, kafkaScheduler,
-      time, config.brokerId, () => lifecycleManager.brokerEpoch())
-    // explicitly declare to eliminate spotbugs error in Scala 2.12
-    val zkClient: Option[KafkaZkClient] = None
-    new ReplicaManager(config, metrics, time, zkClient, kafkaScheduler, logManager, isShuttingDown, quotaManagers,
-      brokerTopicStats, metadataCache, logDirFailureChannel, alterIsrManager, None, Some(_brokerMetadataListenerFuture))
   }
 
   /**
@@ -393,8 +395,6 @@ class Kip500Broker(
       if (brokerMetadataListener !=  null) {
         CoreUtils.swallow(brokerMetadataListener.close(), this)
       }
-      _brokerMetadataListenerFuture.cancel(true)
-
       if (transactionCoordinator != null)
         CoreUtils.swallow(transactionCoordinator.shutdown(), this)
       if (groupCoordinator != null)

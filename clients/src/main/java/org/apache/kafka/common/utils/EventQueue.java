@@ -17,6 +17,8 @@
 
 package org.apache.kafka.common.utils;
 
+import org.slf4j.Logger;
+
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -24,6 +26,19 @@ public interface EventQueue extends AutoCloseable {
     interface Event {
         void run() throws Exception;
         default void handleException(Throwable e) {}
+    }
+
+    abstract class FailureLoggingEvent implements Event {
+        private final Logger log;
+
+        public FailureLoggingEvent(Logger log) {
+            this.log = log;
+        }
+
+        @Override
+        public void handleException(Throwable e) {
+            log.error("Unexpected error handling {}", this.getClass().getSimpleName(), e);
+        }
     }
 
     class DeadlineFunction implements Function<Long, Long> {

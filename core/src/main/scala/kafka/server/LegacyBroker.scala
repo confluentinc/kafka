@@ -33,8 +33,9 @@ import kafka.log.LogManager
 import kafka.metrics.{KafkaMetricsReporter, KafkaYammerMetrics}
 import kafka.network.SocketServer
 import kafka.security.CredentialProvider
+import kafka.server.metadata.ZkConfigRepository
 import kafka.utils._
-import kafka.zk.{BrokerInfo, KafkaZkClient}
+import kafka.zk.{AdminZkClient, BrokerInfo, KafkaZkClient}
 import org.apache.kafka.clients.{ApiVersions, ClientDnsLookup, ManualMetadataUpdater, NetworkClient, NetworkClientUtils}
 import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.message.ControlledShutdownRequestData
@@ -385,8 +386,9 @@ class LegacyBroker(val config: KafkaConfig,
   protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager = {
     val alterIsrManager = new AlterIsrManagerImpl(alterIsrChannelManager, kafkaScheduler,
       time, config.brokerId, () => kafkaController.brokerEpoch)
-    new ReplicaManager(config, metrics, time, zkClient, kafkaScheduler, logManager, isShuttingDown, quotaManagers,
-      brokerTopicStats, metadataCache, logDirFailureChannel, alterIsrManager, None)
+    new ReplicaManager(config, metrics, time, Some(zkClient), kafkaScheduler, logManager,
+      isShuttingDown, quotaManagers, brokerTopicStats, metadataCache, logDirFailureChannel,
+      alterIsrManager, new ZkConfigRepository(new AdminZkClient(zkClient)), None)
   }
 
   private def initZkClient(time: Time): Unit = {

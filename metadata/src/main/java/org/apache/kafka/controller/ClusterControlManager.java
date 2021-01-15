@@ -46,10 +46,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Random;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
+
 
 public class ClusterControlManager {
     static class BrokerSoftState {
@@ -347,7 +347,7 @@ public class ClusterControlManager {
         return usable.contains(brokerId);
     }
 
-    public List<Integer> chooseRandomUsable(Random random, int numBrokers) {
+    public List<Integer> chooseRandomUsable(RandomSource random, int numBrokers) {
         if (usable.size() < numBrokers) {
             throw new RuntimeException("there are only " + usable.size() +
                 " usable brokers");

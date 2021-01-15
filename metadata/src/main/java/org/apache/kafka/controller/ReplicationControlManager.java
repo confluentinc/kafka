@@ -27,6 +27,7 @@ import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopic;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicCollection;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResult;
+import org.apache.kafka.common.metadata.IsrChangeRecord;
 import org.apache.kafka.common.metadata.PartitionRecord;
 import org.apache.kafka.common.metadata.TopicRecord;
 import org.apache.kafka.common.protocol.ApiMessageAndVersion;
@@ -46,12 +47,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Random;
 
 import static org.apache.kafka.clients.admin.AlterConfigOp.OpType.SET;
 import static org.apache.kafka.common.config.ConfigResource.Type.TOPIC;
 
+
 public class ReplicationControlManager {
+    private final static int[] EMPTY = new int[0];
+
     static class TopicControlInfo {
         private final Uuid id;
         private final TimelineHashMap<Integer, PartitionControlInfo> parts;
@@ -87,6 +90,15 @@ public class ReplicationControlManager {
             this.addingReplicas = addingReplicas;
             this.leader = leader;
             this.leaderEpoch = leaderEpoch;
+        }
+
+        PartitionControlInfo merge(IsrChangeRecord record) {
+            return new PartitionControlInfo(replicas,
+                toArray(record.isr()),
+                removingReplicas,
+                addingReplicas,
+                record.leader(),
+                record.leaderEpoch());
         }
 
         String diff(PartitionControlInfo prev) {
@@ -149,27 +161,67 @@ public class ReplicationControlManager {
 
     private final SnapshotRegistry snapshotRegistry;
     private final Logger log;
-    private final Random random;
+
+    /**
+     * The random number generator used by this object.
+     */
+    private final RandomSource random;
+
+    /**
+     * The KIP-464 default replication factor that is used if a CreateTopics request does
+     * not specify one.
+     */
     private final int defaultReplicationFactor;
+
+    /**
+     * The KIP-464 default number of partitions that is used if a CreateTopics request does
+     * not specify a number of partitions.
+     */
+    private final int defaultNumPartitions;
+
+    /**
+     * A reference to the controller's configuration control manager.
+     */
     private final ConfigurationControlManager configurationControl;
-    private final ClusterControlManager clusterControl;
+
+    /**
+     * A reference to the controller's cluster control manager.
+     */
+    final ClusterControlManager clusterControl;
+
+    /**
+     * Maps topic names to topic UUIDs.
+     */
     private final TimelineHashMap<String, Uuid> topicsByName;
+
+    /**
+     * Maps topic UUIDs to structures containing topic information, including partitions.
+     */
     private final TimelineHashMap<Uuid, TopicControlInfo> topics;
+
+    /**
+     * A map of broker IDs to the partitions that the broker is in the ISR for.
+     * Partitions with no isr members appear in this map under id -1.
+     */
+    private final TimelineHashMap<Integer, TimelineHashMap<Uuid, int[]>> isrMembers;
 
     ReplicationControlManager(SnapshotRegistry snapshotRegistry,
                               LogContext logContext,
-                              Random random,
+                              RandomSource random,
                               int defaultReplicationFactor,
+                              int defaultNumPartitions,
                               ConfigurationControlManager configurationControl,
                               ClusterControlManager clusterControl) {
         this.snapshotRegistry = snapshotRegistry;
         this.log = logContext.logger(ReplicationControlManager.class);
         this.random = random;
         this.defaultReplicationFactor = defaultReplicationFactor;
+        this.defaultNumPartitions = defaultNumPartitions;
         this.configurationControl = configurationControl;
         this.clusterControl = clusterControl;
         this.topicsByName = new TimelineHashMap<>(snapshotRegistry, 0);
         this.topics = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.isrMembers = new TimelineHashMap<>(snapshotRegistry, 0);
     }
 
     public void replay(TopicRecord record) {
@@ -178,24 +230,128 @@ public class ReplicationControlManager {
         log.info("Created topic {} with ID {}.", record.name(), record.topicId());
     }
 
-    public void replay(PartitionRecord message) {
-        TopicControlInfo topicInfo = topics.get(message.topicId());
+    public void replay(PartitionRecord record) {
+        TopicControlInfo topicInfo = topics.get(record.topicId());
         if (topicInfo == null) {
-            throw new RuntimeException("Tried to create partition " + message.topicId() +
-                "-" + message.partitionId() + ", but no topic with that ID was found.");
+            throw new RuntimeException("Tried to create partition " + record.topicId() +
+                ":" + record.partitionId() + ", but no topic with that ID was found.");
         }
-        PartitionControlInfo newPartInfo = new PartitionControlInfo(message);
-        PartitionControlInfo prevPartInfo = topicInfo.parts.get(message.partitionId());
+        PartitionControlInfo newPartInfo = new PartitionControlInfo(record);
+        PartitionControlInfo prevPartInfo = topicInfo.parts.get(record.partitionId());
         if (prevPartInfo == null) {
-            log.info("Created partition {}-{} with {}.", message.topicId(),
-                message.partitionId(), newPartInfo.toString());
-            topicInfo.parts.put(message.partitionId(), newPartInfo);
+            log.info("Created partition {}:{} with {}.", record.topicId(),
+                record.partitionId(), newPartInfo.toString());
+            topicInfo.parts.put(record.partitionId(), newPartInfo);
+            updateIsrMembers(record.topicId(), record.partitionId(), EMPTY, newPartInfo.isr);
         } else {
             String diff = newPartInfo.diff(prevPartInfo);
             if (!diff.isEmpty()) {
-                log.info("Modified partition {}-{}: {}.", message.topicId(),
-                    message.partitionId(), diff);
-                topicInfo.parts.put(message.partitionId(), newPartInfo);
+                log.info("Modified partition {}:{}: {}.", record.topicId(),
+                    record.partitionId(), diff);
+                topicInfo.parts.put(record.partitionId(), newPartInfo);
+                updateIsrMembers(record.topicId(), record.partitionId(),
+                    prevPartInfo.isr, newPartInfo.isr);
+            }
+        }
+    }
+
+    public void replay(IsrChangeRecord record) {
+        TopicControlInfo topicInfo = topics.get(record.topicId());
+        if (topicInfo == null) {
+            throw new RuntimeException("Tried to create partition " + record.topicId() +
+                ":" + record.partitionId() + ", but no topic with that ID was found.");
+        }
+        PartitionControlInfo prevPartitionInfo = topicInfo.parts.get(record.partitionId());
+        if (prevPartitionInfo == null) {
+            throw new RuntimeException("Tried to create partition " + record.topicId() +
+                ":" + record.partitionId() + ", but no partition with that id was found.");
+        }
+        PartitionControlInfo newPartitionInfo = prevPartitionInfo.merge(record);
+        topicInfo.parts.put(record.partitionId(), newPartitionInfo);
+        updateIsrMembers(record.topicId(), record.partitionId(),
+            prevPartitionInfo.isr, newPartitionInfo.isr);
+    }
+
+    private void updateIsrMembers(Uuid topicId, int partitionId, int[] prevIsr, int[] nextIsr) {
+        List<Integer> added = new ArrayList<>();
+        List<Integer> removed = new ArrayList<>();
+        if (prevIsr.length == 0) {
+            prevIsr = new int[] {-1};
+        }
+        if (nextIsr.length == 0) {
+            nextIsr = new int[] {-1};
+        }
+        int i = 0, j = 0;
+        while (true) {
+            if (i == prevIsr.length) {
+                if (j == nextIsr.length) {
+                    break;
+                }
+                added.add(nextIsr[j]);
+                j++;
+            } else if (j == nextIsr.length) {
+                removed.add(prevIsr[i]);
+                i++;
+            } else {
+                int prevPartition = prevIsr[i];
+                int newPartition = nextIsr[j];
+                if (prevPartition < newPartition) {
+                    removed.add(prevPartition);
+                    i++;
+                } else if (prevPartition > newPartition) {
+                    added.add(newPartition);
+                    j++;
+                } else {
+                    i++;
+                    j++;
+                }
+            }
+        }
+        for (Integer addedBroker : added) {
+            TimelineHashMap<Uuid, int[]> topicMap = isrMembers.get(addedBroker);
+            if (topicMap == null) {
+                topicMap = new TimelineHashMap<>(snapshotRegistry, 0);
+                isrMembers.put(addedBroker, topicMap);
+            }
+            int[] partitions = topicMap.get(topicId);
+            int[] newPartitions;
+            if (partitions == null) {
+                newPartitions = new int[1];
+                newPartitions[0] = partitionId;
+            } else {
+                newPartitions = new int[partitions.length + 1];
+                System.arraycopy(partitions, 0, newPartitions, 0, partitions.length);
+                newPartitions[newPartitions.length - 1] = partitionId;
+                Arrays.sort(newPartitions);
+            }
+            topicMap.put(topicId, newPartitions);
+        }
+        for (Integer removedBroker : removed) {
+            TimelineHashMap<Uuid, int[]> topicMap = isrMembers.get(removedBroker);
+            if (topicMap == null) {
+                throw new RuntimeException("Broker " + removedBroker + " is not in " +
+                    "isrMembers for " + topicId + ":" + partitionId);
+            }
+            int[] partitions = topicMap.get(topicId);
+            if (partitions == null) {
+                throw new RuntimeException("Broker " + removedBroker + " has no " +
+                    "partition entry in isrMembers for " + topicId + ":" + partitionId);
+            }
+            if (partitions.length == 1) {
+                topicMap.remove(topicId);
+                if (topicMap.isEmpty()) {
+                    isrMembers.remove(removedBroker);
+                }
+            } else {
+                int[] newPartitions = new int[partitions.length - 1];
+                int a = 0;
+                for (int b = 0; b < partitions.length; b++) {
+                    int prev = partitions[b];
+                    if (prev != partitionId) {
+                        newPartitions[a++] = prev;
+                    }
+                }
+                topicMap.put(topicId, newPartitions);
             }
         }
     }
@@ -222,9 +378,10 @@ public class ReplicationControlManager {
         records.addAll(configResult.records());
 
         // Try to create whatever topics are needed.
+        Map<String, CreatableTopicResult> successes = new HashMap<>();
         for (CreatableTopic topic : request.topics()) {
             if (topicErrors.containsKey(topic.name())) continue;
-            ApiError error = createTopic(topic, records);
+            ApiError error = createTopic(topic, records, successes);
             if (error.isFailure()) {
                 topicErrors.put(topic.name(), error);
             }
@@ -246,10 +403,7 @@ public class ReplicationControlManager {
                 resultsPrefix = ", ";
                 continue;
             }
-            CreatableTopicResult result = new CreatableTopicResult().
-                setName(topic.name()).
-                setErrorCode((short) 0).
-                setErrorMessage(null);
+            CreatableTopicResult result = successes.get(topic.name());
             data.topics().add(result);
             resultsBuilder.append(resultsPrefix).append(topic).append(": ").
                 append("SUCCESS");
@@ -259,19 +413,17 @@ public class ReplicationControlManager {
         return new ControllerResult<>(records, data);
     }
 
-    private ApiError createTopic(CreatableTopic topic, List<ApiMessageAndVersion> records) {
+    private ApiError createTopic(CreatableTopic topic,
+                                 List<ApiMessageAndVersion> records,
+                                 Map<String, CreatableTopicResult> successes) {
         Map<Integer, PartitionControlInfo> newParts = new HashMap<>();
-        if (topic.numPartitions() <= 0) {
-            return new ApiError(Errors.INVALID_REQUEST,
-                "The number of partitions must be greater than 0.");
-        }
         if (!topic.assignments().isEmpty()) {
             if (topic.replicationFactor() != -1) {
                 return new ApiError(Errors.INVALID_REQUEST,
                     "A manual partition assignment was specified, but replication " +
                     "factor was not set to -1.");
             } else if (topic.assignments().size() != topic.numPartitions()) {
-                return new ApiError(Errors.INVALID_REQUEST, "" + topic.numPartitions() +
+                return new ApiError(Errors.INVALID_REPLICA_ASSIGNMENT, "" + topic.numPartitions() +
                     " partitions were specified, but only " + topic.assignments().size() +
                     " manual partition assignments were given.");
             }
@@ -305,21 +457,26 @@ public class ReplicationControlManager {
                     new PartitionControlInfo(replicas, isr, null, null, isr[0], 0));
             }
         } else if (topic.replicationFactor() < -1 || topic.replicationFactor() == 0) {
-            return new ApiError(Errors.INVALID_REQUEST,
+            return new ApiError(Errors.INVALID_REPLICATION_FACTOR,
                 "Replication factor was set to an invalid non-positive value.");
         } else if (!topic.assignments().isEmpty()) {
             return new ApiError(Errors.INVALID_REQUEST,
                 "Replication factor was not set to -1 but a manual partition " +
                     "assignment was specified.");
+        } else if (topic.numPartitions() < -1 || topic.numPartitions() == 0) {
+            return new ApiError(Errors.INVALID_PARTITIONS,
+                "Number of partitions was set to an invalid non-positive value.");
         } else {
+            int numPartitions = topic.numPartitions() == -1 ?
+                defaultNumPartitions : topic.numPartitions();
             int replicationFactor = topic.replicationFactor() == -1 ?
                 defaultReplicationFactor : topic.replicationFactor();
-            for (int partitionId = 0; partitionId < topic.numPartitions(); partitionId++) {
+            for (int partitionId = 0; partitionId < numPartitions; partitionId++) {
                 List<Integer> replicas;
                 try {
                     replicas = clusterControl.chooseRandomUsable(random, replicationFactor);
                 } catch (Exception e) {
-                    return new ApiError(Errors.INVALID_REQUEST,
+                    return new ApiError(Errors.INVALID_REPLICATION_FACTOR,
                         "Unable to replicate the partition " + replicationFactor +
                             " times: " + e.getMessage());
                 }
@@ -328,6 +485,12 @@ public class ReplicationControlManager {
             }
         }
         Uuid topicId = Uuid.randomUuid();
+        successes.put(topic.name(), new CreatableTopicResult().
+            setName(topic.name()).
+            setErrorCode((short) 0).
+            setErrorMessage(null).
+            setNumPartitions(newParts.size()).
+            setReplicationFactor((short) newParts.get(0).replicas.length));
         records.add(new ApiMessageAndVersion(new TopicRecord().
             setName(topic.name()).
             setTopicId(topicId), (short) 0));

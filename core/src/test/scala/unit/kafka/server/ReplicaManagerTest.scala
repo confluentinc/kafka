@@ -31,10 +31,11 @@ import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
 import kafka.server.checkpoints.LazyOffsetCheckpoints
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
-import kafka.utils.TestUtils.createBroker
+import kafka.server.metadata.ZkConfigRepository
+import kafka.utils.TestUtils.createMetadataBroker
 import kafka.utils.timer.MockTimer
 import kafka.utils.{MockScheduler, MockTime, TestUtils}
-import kafka.zk.KafkaZkClient
+import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.common.message.LeaderAndIsrRequestData.LeaderAndIsrPartitionState
 import org.apache.kafka.common.message.OffsetForLeaderEpochResponseData.EpochEndOffset
 import org.apache.kafka.common.message.StopReplicaRequestData.StopReplicaPartitionState
@@ -164,7 +165,7 @@ class ReplicaManagerTest {
     val config = KafkaConfig.fromProps(props)
     val logProps = new Properties()
     val mockLogMgr = TestUtils.createLogManager(config.logDirs.map(new File(_)), LogConfig(logProps))
-    val aliveBrokers = Seq(createBroker(0, "host0", 0), createBroker(1, "host1", 1))
+    val aliveBrokers = Seq(createMetadataBroker(0, "host0", 9092), createMetadataBroker(1, "host1", 9093))
     val metadataCache: MetadataCache = EasyMock.createMock(classOf[MetadataCache])
     EasyMock.expect(metadataCache.getAliveBrokers).andReturn(aliveBrokers).anyTimes()
     EasyMock.replay(metadataCache)
@@ -1494,13 +1495,13 @@ class ReplicaManagerTest {
     EasyMock.replay(mockLogMgr)
 
     val aliveBrokerIds = Seq[Integer](followerBrokerId, leaderBrokerId)
-    val aliveBrokers = aliveBrokerIds.map(brokerId => createBroker(brokerId, s"host$brokerId", brokerId))
+    val aliveBrokers = aliveBrokerIds.map(brokerId => createMetadataBroker(brokerId, s"host$brokerId", brokerId))
 
     val metadataCache: MetadataCache = EasyMock.createMock(classOf[MetadataCache])
     EasyMock.expect(metadataCache.getAliveBrokers).andReturn(aliveBrokers).anyTimes
     aliveBrokerIds.foreach { brokerId =>
       EasyMock.expect(metadataCache.getAliveBroker(EasyMock.eq(brokerId)))
-        .andReturn(Option(createBroker(brokerId, s"host$brokerId", brokerId)))
+        .andReturn(Option(createMetadataBroker(brokerId, s"host$brokerId", brokerId)))
         .anyTimes
     }
     EasyMock
@@ -1533,7 +1534,8 @@ class ReplicaManagerTest {
     val replicaManager = new ReplicaManager(config, metrics, time, Some(kafkaZkClient), mockScheduler, mockLogMgr,
       new AtomicBoolean(false), quotaManager, mockBrokerTopicStats,
       metadataCache, mockLogDirFailureChannel, mockProducePurgatory, mockFetchPurgatory,
-      mockDeleteRecordsPurgatory, mockElectLeaderPurgatory, Option(this.getClass.getName), alterIsrManager) {
+      mockDeleteRecordsPurgatory, mockElectLeaderPurgatory, Option(this.getClass.getName),
+      new ZkConfigRepository(new AdminZkClient(kafkaZkClient)), alterIsrManager) {
 
       override protected def createReplicaFetcherManager(metrics: Metrics,
                                                      time: Time,
@@ -1687,14 +1689,14 @@ class ReplicaManagerTest {
     val config = KafkaConfig.fromProps(props)
     val logProps = new Properties()
     val mockLogMgr = TestUtils.createLogManager(config.logDirs.map(new File(_)), LogConfig(logProps))
-    val aliveBrokers = aliveBrokerIds.map(brokerId => createBroker(brokerId, s"host$brokerId", brokerId))
+    val aliveBrokers = aliveBrokerIds.map(brokerId => createMetadataBroker(brokerId, s"host$brokerId", 9092 + brokerId))
 
     val metadataCache: MetadataCache = Mockito.mock(classOf[MetadataCache])
     Mockito.when(metadataCache.getAliveBrokers).thenReturn(aliveBrokers)
 
     aliveBrokerIds.foreach { brokerId =>
       Mockito.when(metadataCache.getAliveBroker(brokerId))
-        .thenReturn(Option(createBroker(brokerId, s"host$brokerId", brokerId)))
+        .thenReturn(Option(createMetadataBroker(brokerId, s"host$brokerId", 9092 + brokerId)))
     }
 
     val mockProducePurgatory = new DelayedOperationPurgatory[DelayedProduce](
@@ -1709,7 +1711,8 @@ class ReplicaManagerTest {
     new ReplicaManager(config, metrics, time, Some(kafkaZkClient), new MockScheduler(time), mockLogMgr,
       new AtomicBoolean(false), quotaManager, new BrokerTopicStats,
       metadataCache, new LogDirFailureChannel(config.logDirs.size), mockProducePurgatory, mockFetchPurgatory,
-      mockDeleteRecordsPurgatory, mockDelayedElectLeaderPurgatory, Option(this.getClass.getName), alterIsrManager)
+      mockDeleteRecordsPurgatory, mockDelayedElectLeaderPurgatory, Option(this.getClass.getName),
+      new ZkConfigRepository(new AdminZkClient(kafkaZkClient)), alterIsrManager)
   }
 
   @Test
@@ -1906,7 +1909,7 @@ class ReplicaManagerTest {
     val metadataCache0: MetadataCache = EasyMock.createMock(classOf[MetadataCache])
     val metadataCache1: MetadataCache = EasyMock.createMock(classOf[MetadataCache])
 
-    val aliveBrokers = Seq(createBroker(0, "host0", 0), createBroker(1, "host1", 1))
+    val aliveBrokers = Seq(createMetadataBroker(0, "host0", 0), createMetadataBroker(1, "host1", 1))
 
     EasyMock.expect(metadataCache0.getAliveBrokers).andReturn(aliveBrokers).anyTimes()
     EasyMock.replay(metadataCache0)

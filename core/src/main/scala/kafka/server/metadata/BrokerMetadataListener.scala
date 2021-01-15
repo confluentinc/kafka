@@ -14,227 +14,249 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package kafka.server.metadata
+
+import java.util
+import java.util.concurrent.TimeUnit
 
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.TransactionCoordinator
 import kafka.log.LogManager
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server._
-import kafka.utils.ShutdownableThread
+import kafka.server.{ApisUtils, MetadataCache, QuotaFactory, ReplicaManager}
+import kafka.utils.Logging
 import org.apache.kafka.common.config.ConfigResource
+import org.apache.kafka.common.metadata.MetadataRecordType._
+import org.apache.kafka.common.metadata._
 import org.apache.kafka.common.protocol.ApiMessage
-import org.apache.kafka.common.utils.Time
+import org.apache.kafka.common.utils.{EventQueue, KafkaEventQueue, LogContext, Time}
 import org.apache.kafka.metalog.{MetaLogLeader, MetaLogListener}
-import java.util
-import java.util.Properties
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
-object BrokerMetadataListener {
-  val ThreadNamePrefix = "broker-"
-  val ThreadNameSuffix = "-metadata-event-thread"
-  val EventQueueTimeMetricName = "EventQueueTimeMs"
-  val EventQueueSizeMetricName = "EventQueueSize"
-  val ErrorCountMetricName = "ErrorCount"
-  val DefaultEventQueueTimeoutMs = 300000
+import scala.jdk.CollectionConverters._
 
-  def defaultProcessors(kafkaConfig: KafkaConfig,
-                        clusterId: String,
-                        metadataCache: MetadataCache,
-                        groupCoordinator: GroupCoordinator,
-                        quotaManagers: QuotaFactory.QuotaManagers,
-                        replicaManager: ReplicaManager,
-                        txnCoordinator: TransactionCoordinator,
-                        logManager: LogManager): List[BrokerMetadataProcessor] = {
-    val configHandlers = Map[ConfigResource.Type, ConfigHandler](
-      ConfigResource.Type.TOPIC -> new TopicConfigHandler(logManager, kafkaConfig, quotaManagers, None),
-      ConfigResource.Type.BROKER -> new BrokerConfigHandler(kafkaConfig, quotaManagers))
-    List(
-      new PartitionMetadataProcessor(kafkaConfig, clusterId, metadataCache, groupCoordinator, quotaManagers,
-        replicaManager, txnCoordinator, configHandlers)
-    )
-  }
+object BrokerMetadataListener{
+  val MetadataBatchProcessingTimeUs = "MetadataBatchProcessingTimeUs"
+  val MetadataBatchSizes = "MetadataBatchSizes"
 }
 
-/**
- * A metadata event appearing either in the metadata log or originating out-of-band from the broker's heartbeat
- */
-sealed trait BrokerMetadataEvent
+class BrokerMetadataListener(val brokerId: Int,
+                             val time: Time,
+                             val metadataCache: MetadataCache,
+                             val configRepository: LocalConfigRepository,
+                             val groupCoordinator: GroupCoordinator,
+                             val quotaManagers: QuotaFactory.QuotaManagers,
+                             val replicaManager: ReplicaManager,
+                             val txnCoordinator: TransactionCoordinator,
+                             val logManager: LogManager,
+                             val threadNamePrefix: Option[String]
+                            ) extends MetaLogListener with KafkaMetricsGroup with Logging {
+  val logContext = new LogContext(s"[BrokerMetadataListener id=${brokerId}] ")
 
-/**
- * A batch of messages from the metadata log
- *
- * @param apiMessages the batch of messages
- * @param lastOffset the metadata offset of the last message in the batch
- */
-final case class MetadataLogEvent(apiMessages: util.List[ApiMessage], lastOffset: Long) extends BrokerMetadataEvent
+  this.logIdent = logContext.logPrefix()
 
-/**
- * A fence-broker event that occurs when either:
- *
- * 1) The local broker's heartbeat is unable to contact the active controller within the
- * defined lease duration and loses its lease.
- * 2) The local broker's heartbeat is told by the controller that it should be in the fenced state.
- *
- * The listener injects this event into the event stream such that processors receive it as soon as they finish their
- * current message batch, if any, otherwise they receive it immediately.
- *
- * @param brokerEpoch the broker epoch that was fenced
- * @param fenced true or false if the broker has been fenced or unfenced, respectively
- */
-final case class FenceBrokerEvent(brokerEpoch: Long, fenced: Boolean) extends BrokerMetadataEvent
+  /**
+   * A histogram tracking the time in microseconds it took to process batches of events.
+   */
+  private val batchProcessingTimeHist = newHistogram(BrokerMetadataListener.MetadataBatchProcessingTimeUs)
 
-/**
- * Used to wakeup the polling thread in order to shutdown.
- */
-case object ShutdownEvent extends BrokerMetadataEvent
+  /**
+   * A histogram tracking the sizes of batches that we have processed.
+   */
+  private val metadataBatchSizeHist = newHistogram(BrokerMetadataListener.MetadataBatchSizes)
 
-class QueuedEvent(val event: BrokerMetadataEvent, val enqueueTimeMs: Long) {
-  override def toString: String = {
-    s"QueuedEvent(event=$event, enqueueTimeMs=$enqueueTimeMs)"
-  }
-}
+  /**
+   * The highest metadata offset that we've seen.  Written only from the event queue thread.
+   */
+  @volatile private var _highestMetadataOffset = -1L
 
-trait BrokerMetadataProcessor {
-  def process(event: BrokerMetadataEvent): Unit
-}
+  val eventQueue = new KafkaEventQueue(time, logContext, threadNamePrefix.getOrElse(""))
 
-trait ConfigRepository {
-  def topicConfigProperties(topicName: String): Properties = {
-    configProperties(new ConfigResource(ConfigResource.Type.TOPIC, topicName))
+  def highestMetadataOffset(): Long = _highestMetadataOffset
+
+  /**
+   * Handle new metadata records.
+   */
+  override def handleCommits(lastOffset: Long, records: util.List[ApiMessage]): Unit = {
+    eventQueue.append(new HandleCommitsEvent(lastOffset, records))
   }
 
-  def brokerConfigProperties(brokerId: Int): Properties = {
-    configProperties(new ConfigResource(ConfigResource.Type.BROKER, brokerId.toString))
-  }
-
-  def configProperties(configResource: ConfigResource): Properties
-}
-
-class BrokerMetadataListener(
-  config: KafkaConfig,
-  metadataCache: MetadataCache,
-  time: Time,
-  processors: List[BrokerMetadataProcessor],
-  eventQueueTimeoutMs: Long = BrokerMetadataListener.DefaultEventQueueTimeoutMs)
-    extends MetaLogListener with KafkaMetricsGroup with ConfigRepository {
-
-  this.logIdent = s"[BrokerMetadataListener id=${config.brokerId}] "
-
-  if (processors.isEmpty) {
-    throw new IllegalArgumentException(s"Empty processors list!")
-  }
-
-  private val configRepositoryProcessor: Option[ConfigRepository] = {
-    val configRepositoryProcessors = processors.filter(_.isInstanceOf[ConfigRepository])
-    if (configRepositoryProcessors.isEmpty) {
-      warn("No config repository processors")
-      None
-    } else if (configRepositoryProcessors.size > 1) {
-      throw new IllegalArgumentException(s"Cannot provide multiple config repository processors: $configRepositoryProcessors")
-    } else {
-      Some(configRepositoryProcessors.head.asInstanceOf[ConfigRepository])
+  class HandleCommitsEvent(lastOffset: Long,
+                           records: util.List[ApiMessage])
+      extends EventQueue.FailureLoggingEvent(logger.underlying) {
+    override def run(): Unit = {
+      if (isDebugEnabled) {
+        debug(s"Metadata batch ${lastOffset}: handling ${records.size()} record(s).")
+      }
+      val imageBuilder =
+        MetadataImageBuilder(brokerId, logger.underlying, metadataCache.currentImage())
+      val startNs = time.nanoseconds()
+      var index = 0
+      metadataBatchSizeHist.update(records.size())
+      records.iterator().asScala.foreach { case record =>
+        try {
+          if (isTraceEnabled) {
+            trace("Metadata batch %d: processing [%d/%d]: %s.".format(lastOffset, index + 1,
+              records.size(), record.toString()))
+          }
+          handleMessage(imageBuilder, record, lastOffset)
+        } catch {
+          case e: Exception => error(s"Unable to handle record ${index} in batch " +
+            s"ending at offset ${lastOffset}", e)
+        }
+        index = index + 1
+      }
+      if (imageBuilder.hasChanges()) {
+        val newImage = imageBuilder.build()
+        if (isTraceEnabled) {
+          trace(s"Metadata batch ${lastOffset}: creating new metadata image ${newImage}")
+        } else if (isDebugEnabled) {
+          debug(s"Metadata batch ${lastOffset}: creating new metadata image")
+        }
+        metadataCache.setImage(newImage)
+      } else if (isDebugEnabled) {
+        debug(s"Metadata batch ${lastOffset}: no new metadata image required.")
+      }
+      if (imageBuilder.hasPartitionChanges()) {
+        if (isDebugEnabled) {
+          debug(s"Metadata batch ${lastOffset}: applying partition changes")
+        }
+        replicaManager.handleMetadataRecords(imageBuilder, lastOffset,
+          ApisUtils.onLeadershipChange(groupCoordinator, txnCoordinator, _, _))
+      } else if (isDebugEnabled) {
+        debug(s"Metadata batch ${lastOffset}: no partition changes found.")
+      }
+      _highestMetadataOffset = lastOffset
+      val endNs = time.nanoseconds()
+      val deltaUs = TimeUnit.MICROSECONDS.convert(endNs - startNs, TimeUnit.NANOSECONDS)
+      debug(s"Metadata batch ${lastOffset}: advanced highest metadata offset in ${deltaUs} " +
+        "microseconds.")
+      batchProcessingTimeHist.update(deltaUs)
     }
   }
 
-  def configProperties(configResource: ConfigResource): Properties = {
-    configRepositoryProcessor.getOrElse(throw new IllegalStateException("No config metadata processors")).configProperties(configResource)
-  }
-
-  private val queue = new LinkedBlockingQueue[QueuedEvent]()
-  private val thread = new BrokerMetadataEventThread(
-    s"${BrokerMetadataListener.ThreadNamePrefix}${config.brokerId}${BrokerMetadataListener.ThreadNameSuffix}")
-
-  // metrics
-  private val eventQueueTimeHist = newHistogram(BrokerMetadataListener.EventQueueTimeMetricName)
-  newGauge(BrokerMetadataListener.EventQueueSizeMetricName, () => pendingEvents)
-
-  @volatile private var _currentMetadataOffset: Long = -1
-
-  def start(): Unit = {
-    thread.start()
-  }
-
-  // For testing, it is useful to be able to drain all events synchronously
-  private[metadata] def drain(): Unit = {
-    while (!queue.isEmpty) {
-      thread.doWork()
+  private def handleMessage(imageBuilder: MetadataImageBuilder,
+                            record: ApiMessage,
+                            lastOffset: Long): Unit = {
+    val recordType = try {
+      fromId(record.apiKey())
+    } catch {
+      case e: Exception => throw new RuntimeException("Unknown metadata record type " +
+      s"${record.apiKey()} in batch ending at offset ${lastOffset}.")
+    }
+    recordType match {
+      case REGISTER_BROKER_RECORD => handleRegisterBrokerRecord(imageBuilder,
+        record.asInstanceOf[RegisterBrokerRecord])
+      case UNREGISTER_BROKER_RECORD => handleUnregisterBrokerRecord(imageBuilder,
+        record.asInstanceOf[UnregisterBrokerRecord])
+      case TOPIC_RECORD => handleTopicRecord(imageBuilder,
+        record.asInstanceOf[TopicRecord])
+      case PARTITION_RECORD => handlePartitionRecord(imageBuilder,
+        record.asInstanceOf[PartitionRecord])
+      case CONFIG_RECORD => handleConfigRecord(record.asInstanceOf[ConfigRecord])
+      case ISR_CHANGE_RECORD => handleIsrChangeRecord(imageBuilder,
+        record.asInstanceOf[IsrChangeRecord])
+      case FENCE_BROKER_RECORD => handleFenceBrokerRecord(imageBuilder,
+        record.asInstanceOf[FenceBrokerRecord])
+      case UNFENCE_BROKER_RECORD => handleUnfenceBrokerRecord(imageBuilder,
+        record.asInstanceOf[UnfenceBrokerRecord])
+      case REMOVE_TOPIC_RECORD => handleRemoveTopicRecord(imageBuilder,
+        record.asInstanceOf[RemoveTopicRecord])
+      // TODO: handle FEATURE_LEVEL_RECORD
+      case _ => throw new RuntimeException(s"Unsupported record type ${recordType}")
     }
   }
 
-  // For testing, in cases where we want to block synchronously while we wait for an event
-  private[metadata] def poll(): Unit = {
-    thread.doWork()
+  def handleRegisterBrokerRecord(imageBuilder: MetadataImageBuilder,
+                                 record: RegisterBrokerRecord): Unit = {
+    val broker = MetadataBroker(record)
+    imageBuilder.brokersBuilder().add(broker)
   }
 
-  // For testing, to verify event queuing
-  private[metadata] def pendingEvents: Int = {
-    queue.size
+  def handleUnregisterBrokerRecord(imageBuilder: MetadataImageBuilder,
+                                   record: UnregisterBrokerRecord): Unit = {
+    imageBuilder.brokersBuilder().remove(record.brokerId())
   }
 
-  def close(): Unit = {
-    try {
-      thread.initiateShutdown()
-      put(ShutdownEvent) // wake up the thread in case it is blocked on queue.take()
-      thread.awaitShutdown()
-    } finally {
-      removeMetric(BrokerMetadataListener.EventQueueTimeMetricName)
-      removeMetric(BrokerMetadataListener.ErrorCountMetricName)
-      removeMetric(BrokerMetadataListener.EventQueueSizeMetricName)
+  def handleTopicRecord(imageBuilder: MetadataImageBuilder,
+                        record: TopicRecord): Unit = {
+    imageBuilder.partitionsBuilder().addUuidMapping(record.name(), record.topicId())
+  }
+
+  def handlePartitionRecord(imageBuilder: MetadataImageBuilder,
+                            record: PartitionRecord): Unit = {
+    imageBuilder.topicIdToName(record.topicId()) match {
+      case None => throw new RuntimeException(s"Unable to locate topic with ID ${record.topicId}")
+      case Some(name) =>
+        val partition = MetadataPartition(name, record)
+        imageBuilder.partitionsBuilder().set(partition)
     }
   }
 
-  override def handleCommits(lastOffset: Long, messages: util.List[ApiMessage]): Unit = {
-    put(MetadataLogEvent(messages, lastOffset))
+  def handleConfigRecord(record: ConfigRecord): Unit = {
+    val t = ConfigResource.Type.forId(record.resourceType())
+    if (t == ConfigResource.Type.UNKNOWN) {
+      throw new RuntimeException("Unable to understand config resource type " +
+        s"${Integer.valueOf(record.resourceType())}")
+    }
+    val resource = new ConfigResource(t, record.resourceName())
+    configRepository.setConfig(resource, record.name(), record.value())
+  }
+
+  def handleIsrChangeRecord(imageBuilder: MetadataImageBuilder,
+                            record: IsrChangeRecord): Unit = {
+    imageBuilder.partitionsBuilder().handleIsrChange(record)
+  }
+
+  def handleFenceBrokerRecord(imageBuilder: MetadataImageBuilder,
+                              record: FenceBrokerRecord): Unit = {
+    // TODO: add broker epoch to metadata cache, and check it here.
+    imageBuilder.brokersBuilder().changeFencing(record.id(), true)
+  }
+
+  def handleUnfenceBrokerRecord(imageBuilder: MetadataImageBuilder,
+                                record: UnfenceBrokerRecord): Unit = {
+    // TODO: add broker epoch to metadata cache, and check it here.
+    imageBuilder.brokersBuilder().changeFencing(record.id(), false)
+  }
+
+  def handleRemoveTopicRecord(imageBuilder: MetadataImageBuilder,
+                              record: RemoveTopicRecord): Unit = {
+    val removedPartitions = imageBuilder.partitionsBuilder().
+      removeTopicById(record.topicId())
+    groupCoordinator.handleDeletedPartitions(removedPartitions.map(_.toTopicPartition()).toSeq)
+  }
+
+  class HandleNewLeaderEvent(leader: MetaLogLeader)
+      extends EventQueue.FailureLoggingEvent(logger.underlying) {
+    override def run(): Unit = {
+      val imageBuilder =
+        MetadataImageBuilder(brokerId, logger.underlying, metadataCache.currentImage())
+      if (leader.nodeId() < 0) {
+        imageBuilder.setControllerId(None)
+      } else {
+        imageBuilder.setControllerId(Some(leader.nodeId()))
+      }
+      metadataCache.setImage(imageBuilder.build())
+    }
   }
 
   override def handleNewLeader(leader: MetaLogLeader): Unit = {
-    metadataCache.updateController(leader.nodeId)
+    eventQueue.append(new HandleNewLeaderEvent(leader))
   }
 
-  def put(event: BrokerMetadataEvent): QueuedEvent = {
-    val queuedEvent = new QueuedEvent(event, time.milliseconds())
-    queue.put(queuedEvent)
-    queuedEvent
+  class ShutdownEvent() extends EventQueue.FailureLoggingEvent(logger.underlying) {
+    override def run(): Unit = {
+      removeMetric(BrokerMetadataListener.MetadataBatchProcessingTimeUs)
+      removeMetric(BrokerMetadataListener.MetadataBatchSizes)
+    }
   }
 
-  def currentMetadataOffset(): Long = _currentMetadataOffset
+  override def beginShutdown(): Unit = {
+    eventQueue.beginShutdown("beginShutdown", new ShutdownEvent())
+  }
 
-  private class BrokerMetadataEventThread(name: String) extends ShutdownableThread(name = name, isInterruptible = false) {
-    logIdent = s"[BrokerMetadataEventThread] "
-
-    private def process(event: BrokerMetadataEvent): Unit = {
-      processors.foreach(_.process(event))
-    }
-
-    override def doWork(): Unit = {
-      val dequeued = queue.poll(eventQueueTimeoutMs, TimeUnit.MILLISECONDS)
-      if (dequeued == null) {
-        // Clear the histogram after a timeout without any activity. This
-        // ensures that the histogram does not continue to report stale telemetry.
-        eventQueueTimeHist.clear()
-        return
-      }
-
-      val currentTimeMs = time.milliseconds()
-      eventQueueTimeHist.update(math.max(0, currentTimeMs - dequeued.enqueueTimeMs))
-
-      trace(s"Processing event ${dequeued.event}")
-      dequeued.event match {
-        case ShutdownEvent =>
-          // Do nothing since we are shutting down
-
-        case logEvent: MetadataLogEvent =>
-          if (logEvent.lastOffset < _currentMetadataOffset + logEvent.apiMessages.size) {
-            throw new IllegalStateException(s"Non-monotonic offset found in $logEvent. Our " +
-              s"current offset is ${_currentMetadataOffset}.")
-          }
-          process(logEvent)
-          _currentMetadataOffset = logEvent.lastOffset
-        case fenceBrokerEvent: FenceBrokerEvent =>
-          process(fenceBrokerEvent)
-      }
-    }
+  def close(): Unit = {
+    beginShutdown()
+    eventQueue.close()
   }
 }

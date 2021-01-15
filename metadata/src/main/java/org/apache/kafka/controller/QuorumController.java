@@ -31,6 +31,7 @@ import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.metadata.ConfigRecord;
 import org.apache.kafka.common.metadata.FenceBrokerRecord;
+import org.apache.kafka.common.metadata.IsrChangeRecord;
 import org.apache.kafka.common.metadata.MetadataRecordType;
 import org.apache.kafka.common.metadata.PartitionRecord;
 import org.apache.kafka.common.metadata.QuotaRecord;
@@ -65,7 +66,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -85,6 +85,7 @@ public final class QuorumController implements Controller {
         private MetaLogManager logManager = null;
         private Map<String, VersionRange> supportedFeatures = Collections.emptyMap();
         private int defaultReplicationFactor = 3;
+        private int defaultNumPartitions = 1;
 
         public Builder(int nodeId) {
             this.nodeId = nodeId;
@@ -125,6 +126,11 @@ public final class QuorumController implements Controller {
             return this;
         }
 
+        public Builder setDefaultNumPartitions(int defaultNumPartitions) {
+            this.defaultNumPartitions = defaultNumPartitions;
+            return this;
+        }
+
         public QuorumController build() throws Exception {
             if (logManager == null) {
                 throw new RuntimeException("You must set a metadata log manager.");
@@ -139,7 +145,8 @@ public final class QuorumController implements Controller {
             try {
                 queue = new KafkaEventQueue(time, logContext, threadNamePrefix);
                 return new QuorumController(logContext, nodeId, queue, time, configDefs,
-                        logManager, supportedFeatures, defaultReplicationFactor);
+                        logManager, supportedFeatures, defaultReplicationFactor,
+                        defaultNumPartitions);
             } catch (Exception e) {
                 Utils.closeQuietly(queue, "event queue");
                 throw e;
@@ -491,8 +498,9 @@ public final class QuorumController implements Controller {
                 clientQuotaControlManager.replay((QuotaRecord) message);
                 break;
             case ISR_CHANGE_RECORD:
-                throw new RuntimeException("Unhandled record type " + type);
-            case ACCESS_CONTROL_RECORD:
+                replicationControl.replay((IsrChangeRecord) message);
+                break;
+            default:
                 throw new RuntimeException("Unhandled record type " + type);
         }
     }
@@ -591,7 +599,8 @@ public final class QuorumController implements Controller {
                              Map<ConfigResource.Type, ConfigDef> configDefs,
                              MetaLogManager logManager,
                              Map<String, VersionRange> supportedFeatures,
-                             int defaultReplicationFactor) throws Exception {
+                             int defaultReplicationFactor,
+                             int defaultNumPartitions) throws Exception {
         this.log = logContext.logger(QuorumController.class);
         this.nodeId = nodeId;
         this.queue = queue;
@@ -607,8 +616,8 @@ public final class QuorumController implements Controller {
         this.featureControl =
             new FeatureControlManager(supportedFeatures, snapshotRegistry);
         this.replicationControl = new ReplicationControlManager(snapshotRegistry,
-            logContext, new Random(), defaultReplicationFactor, configurationControl,
-            clusterControl);
+            logContext, new StandardRandomSource(), defaultReplicationFactor, defaultNumPartitions,
+            configurationControl, clusterControl);
         this.logManager = logManager;
         this.metaLogListener = new QuorumMetaLogListener();
         this.curClaimEpoch = -1L;
