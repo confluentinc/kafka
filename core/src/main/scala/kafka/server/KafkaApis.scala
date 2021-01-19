@@ -21,7 +21,7 @@ import java.lang.{Long => JLong}
 import java.nio.ByteBuffer
 import java.util
 import java.util.{Collections, Optional, Properties}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap}
 import java.util.concurrent.atomic.AtomicInteger
 
 import kafka.admin.{AdminUtils, RackAwareMode}
@@ -89,8 +89,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Map, Seq, Set, immutable, mutable}
 import scala.util.{Failure, Success, Try}
 import kafka.coordinator.group.GroupOverview
-import org.apache.kafka.clients.ClientResponse
 import kafka.server.metadata.ConfigRepository
+import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.message.DescribeConfigsRequestData.DescribeConfigsResource
 import org.apache.kafka.common.requests.DescribeConfigsResponse.ConfigSource
 
@@ -1196,10 +1196,21 @@ class KafkaApis(val requestChannel: RequestChannel,
         val configs = new CreateableTopicConfigCollection()
         properties.forEach { (k, v) => configs.add(new CreateableTopicConfig().setName(k.toString).setValue(v.toString)) }
         topics.add(new CreatableTopic().setName(topic).setNumPartitions(numPartitions).setReplicationFactor(replicationFactor.toShort).setConfigs(configs))
+        // send the request and block waiting for it to complete
+        val topicCreateFuture = new CompletableFuture[ClientResponse]()
         forwardingManager.channelManager.sendRequest(
           new CreateTopicsRequest.Builder(new CreateTopicsRequestData().setTopics(topics)),
-          (_: ClientResponse) => {})
-        metadataResponseTopic(Errors.LEADER_NOT_AVAILABLE, topic, isInternal(topic), util.Collections.emptyList())
+          (clientResponse: ClientResponse) => {topicCreateFuture.complete(clientResponse)})
+        val clientResponse = topicCreateFuture.get()
+        val createTopicResponse = clientResponse.responseBody().asInstanceOf[CreateTopicsResponse]
+        val topicResult = createTopicResponse.data().topics().find(topic)
+        val errorCode = topicResult.errorCode()
+        val errorToReturn = if (errorCode == Errors.NONE.code() || errorCode == Errors.TOPIC_ALREADY_EXISTS.code()) {
+          Errors.LEADER_NOT_AVAILABLE // this is what we return upon either our or somebody else's success
+        } else {
+          Errors.forCode(errorCode) // failure for some reason; return that back
+        }
+        metadataResponseTopic(errorToReturn, topic, isInternal(topic), util.Collections.emptyList())
       } else {
         adminZkClient.createTopic(topic, numPartitions, replicationFactor, properties, RackAwareMode.Safe)
         info("Auto creation of topic %s with %d partitions and replication factor %d is successful"
