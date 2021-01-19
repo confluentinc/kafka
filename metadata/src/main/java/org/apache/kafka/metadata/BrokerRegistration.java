@@ -37,13 +37,15 @@ public class BrokerRegistration {
     private final Map<String, Endpoint> listeners;
     private final Map<String, VersionRange> supportedFeatures;
     private final String rack;
+    private final boolean fenced;
 
     public BrokerRegistration(int id,
                               long epoch,
                               Uuid incarnationId,
                               List<Endpoint> listeners,
                               Map<String, VersionRange> supportedFeatures,
-                              String rack) {
+                              String rack,
+                              boolean fenced) {
         this.id = id;
         this.epoch = epoch;
         this.incarnationId = incarnationId;
@@ -55,6 +57,7 @@ public class BrokerRegistration {
         Objects.requireNonNull(supportedFeatures);
         this.supportedFeatures = supportedFeatures;
         this.rack = rack;
+        this.fenced = fenced;
     }
 
     public int id() {
@@ -81,9 +84,14 @@ public class BrokerRegistration {
         return rack;
     }
 
+    public boolean fenced() {
+        return fenced;
+    }
+
     @Override
     public int hashCode() {
-        return Objects.hash(id, epoch, incarnationId, listeners, supportedFeatures, rack);
+        return Objects.hash(id, epoch, incarnationId, listeners, supportedFeatures,
+            rack, fenced);
     }
 
     @Override
@@ -95,7 +103,8 @@ public class BrokerRegistration {
             other.incarnationId.equals(incarnationId) &&
             other.listeners.equals(listeners) &&
             other.supportedFeatures.equals(supportedFeatures) &&
-            Objects.equals(other.rack, rack);
+            Objects.equals(other.rack, rack) &&
+            other.fenced == fenced;
     }
 
     @Override
@@ -116,6 +125,7 @@ public class BrokerRegistration {
         if (rack != null) {
             bld.append(", rack=").append(rack);
         }
+        bld.append(", fenced=").append(fenced);
         bld.append(")");
         return bld.toString();
     }

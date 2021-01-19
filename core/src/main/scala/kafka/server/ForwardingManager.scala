@@ -29,7 +29,7 @@ import org.apache.kafka.common.utils.{LogContext, Time}
 import scala.compat.java8.OptionConverters._
 import scala.concurrent.TimeoutException
 
-class ForwardingManager(channelManager: BrokerToControllerChannelManager,
+class ForwardingManager(val channelManager: BrokerToControllerChannelManager,
                         time: Time,
                         retryTimeoutMs: Long,
                         logContext: LogContext) extends Logging {

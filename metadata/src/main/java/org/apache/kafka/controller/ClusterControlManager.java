@@ -61,6 +61,10 @@ public class ClusterControlManager {
         BrokerSoftState(long lastContactNs) {
             this.lastContactNs = lastContactNs;
         }
+
+        private boolean leaseExpired(long exclusiveLeaseDurationNs, long nowNs) {
+            return (nowNs - lastContactNs) > exclusiveLeaseDurationNs;
+        }
     }
 
     public static class RegistrationReply {
@@ -132,7 +136,8 @@ public class ClusterControlManager {
         @Override
         public String toString() {
             return "HeartbeatReply(isCaughtUp=" + isCaughtUp +
-                ", isFenced=" + isFenced + ", shouldShutdown=" + shouldShutdown + ")";
+                ", isFenced=" + isFenced +
+                ", shouldShutdown = " + shouldShutdown + ")";
         }
     }
 
@@ -191,8 +196,11 @@ public class ClusterControlManager {
             FeatureManager.FinalizedFeaturesAndEpoch finalizedFeaturesAndEpoch) {
         int brokerId = request.brokerId();
         BrokerRegistration existing = brokerRegistrations.get(brokerId);
-        if (existing != null && !existing.incarnationId().equals(request.incarnationId())) {
-            throw new DuplicateBrokerRegistrationException("Another broker has " +
+        BrokerSoftState softState = brokerSoftStates.get(brokerId);
+        long nowNs = time.nanoseconds();
+        if (existing != null && !existing.incarnationId().equals(request.incarnationId()) &&
+                softState != null && !softState.leaseExpired(exclusiveLeaseDurationNs, nowNs)) {
+            throw new DuplicateBrokerRegistrationException("Another broker is " +
                 "registered with that broker id.");
         }
         RegisterBrokerRecord record = new RegisterBrokerRecord().setBrokerId(brokerId).
@@ -218,6 +226,12 @@ public class ClusterControlManager {
                 setMinSupportedVersion(feature.minSupportedVersion()).
                 setMaxSupportedVersion(feature.maxSupportedVersion()));
         }
+
+        // Update the soft state of the broker. This state is only in memory and does
+        // not appear in the metadata log. That is why we make the change here rather than
+        // in the replay() function.
+        brokerSoftStates.put(brokerId, new BrokerSoftState(nowNs));
+
         return new ControllerResult<>(
             Collections.singletonList(new ApiMessageAndVersion(record, (short) 0)),
                 new RegistrationReply(brokerEpoch));
@@ -228,11 +242,18 @@ public class ClusterControlManager {
         if (existing == null) {
             return new ControllerResult<>(Collections.emptyList(), null);
         }
-        return new ControllerResult<>(Collections.singletonList(new ApiMessageAndVersion(
-            new UnregisterBrokerRecord().
-                setBrokerId(brokerId).
-                setBrokerEpoch(existing.epoch()),
-            (short) 0)), null);
+        ControllerResult<Void> result = new ControllerResult<>(
+            Collections.singletonList(new ApiMessageAndVersion(
+                new UnregisterBrokerRecord().
+                    setBrokerId(brokerId).
+                    setBrokerEpoch(existing.epoch()),
+                (short) 0)), null);
+
+        // Update the broker's soft state.
+        brokerSoftStates.remove(brokerId);
+        usable.remove(brokerId);
+
+        return result;
     }
 
     public ControllerResult<HeartbeatReply> processBrokerHeartbeat(BrokerHeartbeatRequestData request,
@@ -254,8 +275,6 @@ public class ClusterControlManager {
                     setId(brokerId).setEpoch(request.brokerEpoch()), (short) 0));
             }
         }
-        // TODO: KC-1399 will implement the controller-side controlled shutdown sequence
-        //       Replace the default for shouldShutdown below as part of that
         return new ControllerResult<>(records, new HeartbeatReply(isCaughtUp, isFenced, false));
     }
 
@@ -290,9 +309,6 @@ public class ClusterControlManager {
 
     public void replay(RegisterBrokerRecord record) {
         int brokerId = record.brokerId();
-        long nowNs = time.nanoseconds();
-        brokerSoftStates.remove(brokerId);
-        brokerSoftStates.put(brokerId, new BrokerSoftState(nowNs));
         List<Endpoint> listeners = new ArrayList<>();
         for (RegisterBrokerRecord.BrokerEndpoint endpoint : record.endPoints()) {
             listeners.add(new Endpoint(endpoint.name(),
@@ -304,11 +320,28 @@ public class ClusterControlManager {
             features.put(feature.name(), new VersionRange(
                 feature.minSupportedVersion(), feature.maxSupportedVersion()));
         }
+        // Normally, all newly registered brokers start off in the fenced state.
+        // If this registration record is for a broker incarnation that was already
+        // registered, though, we preserve the existing fencing state.
+        boolean fenced = true;
+        BrokerRegistration prevRegistration = brokerRegistrations.get(brokerId);
+        if (prevRegistration != null &&
+                prevRegistration.incarnationId().equals(record.incarnationId())) {
+            fenced = prevRegistration.fenced();
+        }
+
+        // Update broker registrations.
         brokerRegistrations.put(brokerId, new BrokerRegistration(brokerId,
             record.brokerEpoch(), record.incarnationId(), listeners, features,
-            record.rack()));
-        touchBroker(brokerId);
-        log.trace("Replayed {}", record);
+            record.rack(), fenced));
+
+        if (prevRegistration == null) {
+            log.info("Registered new broker: {}", record);
+        } else if (prevRegistration.incarnationId().equals(record.incarnationId())) {
+            log.info("Re-registered broker incarnation: {}", record);
+        } else {
+            log.info("Re-registered broker id {}: {}", brokerId, record);
+        }
     }
 
     public void replay(UnregisterBrokerRecord record) {
@@ -320,8 +353,6 @@ public class ClusterControlManager {
             log.error("Unable to replay {}: no broker registration with that epoch found", record);
         } else {
             brokerRegistrations.remove(brokerId);
-            brokerSoftStates.remove(brokerId);
-            usable.remove(brokerId);
             log.trace("Replayed {}", record);
         }
     }

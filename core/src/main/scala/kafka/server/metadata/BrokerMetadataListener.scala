@@ -18,12 +18,11 @@ package kafka.server.metadata
 
 import java.util
 import java.util.concurrent.TimeUnit
-
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.TransactionCoordinator
 import kafka.log.LogManager
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.{ApisUtils, MetadataCache, QuotaFactory, ReplicaManager}
+import kafka.server.{MetadataCache, QuotaFactory, ReplicaManager, RequestHandlerHelper}
 import kafka.utils.Logging
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.metadata.MetadataRecordType._
@@ -121,7 +120,7 @@ class BrokerMetadataListener(val brokerId: Int,
           debug(s"Metadata batch ${lastOffset}: applying partition changes")
         }
         replicaManager.handleMetadataRecords(imageBuilder, lastOffset,
-          ApisUtils.onLeadershipChange(groupCoordinator, txnCoordinator, _, _))
+          RequestHandlerHelper.onLeadershipChange(groupCoordinator, txnCoordinator, _, _))
       } else if (isDebugEnabled) {
         debug(s"Metadata batch ${lastOffset}: no partition changes found.")
       }
