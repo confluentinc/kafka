@@ -17,8 +17,6 @@
 
 package kafka.server
 
-import java.util.Properties
-
 import org.apache.kafka.common.protocol.Errors
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -26,11 +24,6 @@ import org.junit.Test
 import scala.jdk.CollectionConverters._
 
 class CreateTopicsRequestWithForwardingTest extends AbstractCreateTopicsRequestTest {
-
-  override def brokerPropertyOverrides(properties: Properties): Unit = {
-    properties.put(KafkaConfig.EnableMetadataQuorumProp, true.toString)
-  }
-
   @Test
   def testForwardToController(): Unit = {
     val req = topicsReq(Seq(topicReq("topic1")))

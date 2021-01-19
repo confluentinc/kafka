@@ -137,7 +137,6 @@ class KafkaApisTest {
     val properties = TestUtils.createBrokerConfig(brokerId, "zk")
     properties.put(KafkaConfig.InterBrokerProtocolVersionProp, interBrokerProtocolVersion.toString)
     properties.put(KafkaConfig.LogMessageFormatVersionProp, interBrokerProtocolVersion.toString)
-    properties.put(KafkaConfig.EnableMetadataQuorumProp, enableForwarding.toString)
     new KafkaApis(requestChannel,
       replicaManager,
       adminManager,
@@ -415,7 +414,7 @@ class KafkaApisTest {
     results.foreach(r => {
       assertEquals(Errors.NONE.code, r.errorCode)
       assertFalse("Should return configs", r.configs.isEmpty)
-      r.configs.asScala.filter { c => c.name != KafkaConfig.EnableMetadataQuorumProp }.foreach(c => {
+      r.configs.asScala.foreach(c => {
         assertNotNull(s"Config ${c.name} should have non null documentation", c.documentation)
         assertNotEquals(s"Config ${c.name} should have non blank documentation", "", c.documentation.trim)
       })

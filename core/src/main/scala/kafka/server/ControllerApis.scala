@@ -17,11 +17,15 @@
 
 package kafka.server
 
+import java.util
+
 import kafka.network.RequestChannel
 import kafka.raft.RaftManager
 import kafka.server.QuotaFactory.QuotaManagers
 import kafka.utils.Logging
+import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.common.acl.AclOperation.{ALTER, ALTER_CONFIGS, CLUSTER_ACTION, CREATE, DESCRIBE}
+import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.errors.ApiException
 import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.message.ApiVersionsResponseData.{ApiVersionsResponseKey, FinalizedFeatureKey, SupportedFeatureKey}
@@ -84,7 +88,7 @@ class ControllerApis(val requestChannel: RequestChannel,
     //ApiKeys.EXPIRE_DELEGATION_TOKEN
     //ApiKeys.DESCRIBE_DELEGATION_TOKEN
     //ApiKeys.ELECT_LEADERS
-    //ApiKeys.INCREMENTAL_ALTER_CONFIGS
+    ApiKeys.INCREMENTAL_ALTER_CONFIGS,
     //ApiKeys.ALTER_PARTITION_REASSIGNMENTS
     //ApiKeys.LIST_PARTITION_REASSIGNMENTS
     ApiKeys.ALTER_CLIENT_QUOTAS,
@@ -144,6 +148,7 @@ class ControllerApis(val requestChannel: RequestChannel,
         case ApiKeys.BROKER_HEARTBEAT => handleBrokerHeartBeatRequest(request)
         case ApiKeys.DECOMMISSION_BROKER => handleDecommissionBroker(request)
         case ApiKeys.ALTER_CLIENT_QUOTAS => handleAlterClientQuotas(request)
+        case ApiKeys.INCREMENTAL_ALTER_CONFIGS => handleIncrementalAlterConfigs(request)
         case _ => throw new ApiException(s"Unsupported ApiKey ${request.context.header.apiKey()}")
       }
     } catch {
@@ -455,6 +460,30 @@ class ControllerApis(val requestChannel: RequestChannel,
         } else {
           apisUtils.sendResponseMaybeThrottle(request, requestThrottleMs =>
             AlterClientQuotasResponse.fromQuotaEntities(results, requestThrottleMs))
+        }
+      })
+  }
+
+  def handleIncrementalAlterConfigs(request: RequestChannel.Request): Unit = {
+    val alterConfigsRequest = request.body[IncrementalAlterConfigsRequest]
+    apisUtils.authorize(request.context, ALTER_CONFIGS, CLUSTER, CLUSTER_NAME)
+    val configChanges = new util.HashMap[ConfigResource, util.Map[String, util.Map.Entry[AlterConfigOp.OpType, String]]]()
+    alterConfigsRequest.data.resources.forEach { resource =>
+      val configResource = new ConfigResource(ConfigResource.Type.forId(resource.resourceType()), resource.resourceName())
+      val altersByName = new util.HashMap[String, util.Map.Entry[AlterConfigOp.OpType, String]]()
+      resource.configs.forEach { config =>
+        altersByName.put(config.name(), new util.AbstractMap.SimpleEntry[AlterConfigOp.OpType, String](
+          AlterConfigOp.OpType.forId(config.configOperation()), config.value()))
+      }
+      configChanges.put(configResource, altersByName)
+    }
+    controller.incrementalAlterConfigs(configChanges, alterConfigsRequest.data().validateOnly())
+      .whenComplete((results, exception) => {
+        if (exception != null) {
+          apisUtils.handleError(request, exception)
+        } else {
+          apisUtils.sendResponseMaybeThrottle(request, requestThrottleMs =>
+            new IncrementalAlterConfigsResponse(requestThrottleMs, results))
         }
       })
   }

@@ -358,7 +358,6 @@ object KafkaConfig {
   val RequestTimeoutMsProp = CommonClientConfigs.REQUEST_TIMEOUT_MS_CONFIG
   val ConnectionSetupTimeoutMsProp = CommonClientConfigs.SOCKET_CONNECTION_SETUP_TIMEOUT_MS_CONFIG
   val ConnectionSetupTimeoutMaxMsProp = CommonClientConfigs.SOCKET_CONNECTION_SETUP_TIMEOUT_MAX_MS_CONFIG
-  val EnableMetadataQuorumProp = "enable.metadata.quorum"
   val ProcessRolesProp = "process.roles"
   val ControllerQuorumVotersProp = "controller.quorum.voters"
   val InitialBrokerRegistrationTimeoutMs = "initial.broker.registration.timeout.ms"
@@ -1062,9 +1061,6 @@ object KafkaConfig {
       .define(BrokerSessionTimeoutMsProp, INT, Defaults.BrokerSessionTimeoutMs, MEDIUM, BrokerSessionTimeoutMsDoc)
       .define(MetadataLogDirProp, STRING, null, HIGH, MetadataLogDirDoc)
 
-      // Experimental flag to turn on APIs required for the internal metadata quorum (KIP-500)
-      .defineInternal(EnableMetadataQuorumProp, BOOLEAN, false, LOW)
-
       /************* Authorizer Configuration ***********/
       .define(AuthorizerClassNameProp, STRING, Defaults.AuthorizerClassName, LOW, AuthorizerClassNameDoc)
 
@@ -1520,6 +1516,7 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val connectionSetupTimeoutMs = getLong(KafkaConfig.ConnectionSetupTimeoutMsProp)
   val connectionSetupTimeoutMaxMs = getLong(KafkaConfig.ConnectionSetupTimeoutMaxMsProp)
   val processRoles = parseProcessRoles()
+  val quorumControlPlaneEnabled = processRoles.nonEmpty
   val controllerQuorumVoters = getString(KafkaConfig.ControllerQuorumVotersProp)
   val initialRegistrationTimeoutMs = getInt(KafkaConfig.InitialBrokerRegistrationTimeoutMs)
   val brokerHeartbeatIntervalMs = getInt(KafkaConfig.BrokerHeartbeatIntervalMsProp)
@@ -1651,9 +1648,6 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
 
   /** ********* Feature configuration ***********/
   def isFeatureVersioningSupported = interBrokerProtocolVersion >= KAFKA_2_7_IV0
-
-  /** ********* Experimental metadata quorum configuration ***********/
-  def metadataQuorumEnabled = getBoolean(KafkaConfig.EnableMetadataQuorumProp)
 
   /** ********* Group coordinator configuration ***********/
   val groupMinSessionTimeoutMs = getInt(KafkaConfig.GroupMinSessionTimeoutMsProp)

@@ -259,7 +259,7 @@ class LegacyBroker(val config: KafkaConfig,
         // Note that we allow the use of disabled APIs when experimental support for
         // the internal metadata quorum has been enabled
         socketServer = new SocketServer(config, metrics, time, credentialProvider,
-          allowDisabledApis = config.metadataQuorumEnabled)
+          allowDisabledApis = true)
         socketServer.startup(startProcessingRequests = false)
 
         /* start replica manager */
@@ -286,14 +286,12 @@ class LegacyBroker(val config: KafkaConfig,
         kafkaController.startup()
 
         var forwardingManager: ForwardingManager = null
-        if (config.metadataQuorumEnabled) {
-          /* start forwarding manager */
-          forwardingChannelManager = BrokerToControllerChannelManager(controllerNodeProvider,
-            time, metrics, config, 60000, "forwarding", threadNamePrefix)
-          forwardingChannelManager.start()
-          forwardingManager = new ForwardingManager(forwardingChannelManager, time,
-            config.requestTimeoutMs.longValue(), logContext)
-        }
+        /* start forwarding manager */
+        forwardingChannelManager = BrokerToControllerChannelManager(controllerNodeProvider,
+          time, metrics, config, 60000, "forwarding", threadNamePrefix)
+        forwardingChannelManager.start()
+        forwardingManager = new ForwardingManager(forwardingChannelManager, time,
+          config.requestTimeoutMs.longValue(), logContext)
 
         adminManager = new LegacyAdminManager(config, metrics, metadataCache, zkClient)
 

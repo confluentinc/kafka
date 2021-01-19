@@ -183,13 +183,10 @@ Found problem:
           "others.", e.getMessage)
       }
 
-      try {
-        assertEquals(1, StorageTool.
-          formatCommand(new PrintStream(new ByteArrayOutputStream()), Seq(tempDir.toString), metaProperties, true))
-      } catch {
-        case e: TerseFailure => assertEquals("All of the log directories are already " +
-          "formatted.", e.getMessage)
-      }
+      val stream2 = new ByteArrayOutputStream()
+      assertEquals(0, StorageTool.
+        formatCommand(new PrintStream(stream2), Seq(tempDir.toString), metaProperties, true))
+      assertEquals("All of the log directories are already formatted.%n".format(), stream2.toString());
     } finally {
       Utils.delete(tempDir)
     }

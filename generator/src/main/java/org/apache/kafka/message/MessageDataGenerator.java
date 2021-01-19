@@ -1901,7 +1901,9 @@ public final class MessageDataGenerator implements MessageClassGenerator {
             buffer.printf("+ \"%s%s=\" + %s%n",
                     prefix, field.camelCaseName(), field.camelCaseName());
         } else if (field.type().isStruct() ||
-            field.type() instanceof FieldType.UUIDFieldType) {
+                field.type() instanceof FieldType.UUIDFieldType) {
+            buffer.printf("+ \"%s%s=\" + %s.toString()%n",
+                prefix, field.camelCaseName(), field.camelCaseName());
         } else if (field.type().isStruct()) {
             buffer.printf("+ \"%s%s=\" + %s.toString()%n",
                 prefix, field.camelCaseName(), field.camelCaseName());

@@ -18,10 +18,14 @@
 package org.apache.kafka.timeline;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -119,6 +123,22 @@ public class BaseHashTableTest {
         for (int i = 0; i < 4096; i++) {
             assertEquals(4096 - i, table.baseSize());
             assertEquals(Integer.valueOf(i), table.baseRemove(Integer.valueOf(i)));
+        }
+    }
+
+    @Test
+    public void testPickRandomElement() {
+        Set<Long> values = new HashSet<Long>(
+            Arrays.asList(12345L, 7890L, 45345L, 2345324L, 35463456L, 467578L, 56785768L));
+        BaseHashTable<Long> table = new BaseHashTable<>(20);
+        Random random = new Random();
+        assertThrows(RuntimeException.class, () -> table.pickRandomEntry(random));
+        for (long value : values) {
+            assertEquals(null, table.baseAddOrReplace(value));
+        }
+        while (!values.isEmpty()) {
+            long value = table.pickRandomEntry(random);
+            values.remove(value);
         }
     }
 }

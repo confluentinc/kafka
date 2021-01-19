@@ -19,6 +19,7 @@ package org.apache.kafka.controller;
 
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.errors.DuplicateBrokerRegistrationException;
+import org.apache.kafka.common.errors.InvalidReplicationFactorException;
 import org.apache.kafka.common.errors.StaleBrokerEpochException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
@@ -42,14 +43,16 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
+
 
 public class ClusterControlManager {
     static class BrokerSoftState {
@@ -348,26 +351,22 @@ public class ClusterControlManager {
     }
 
     public List<Integer> chooseRandomUsable(Random random, int numBrokers) {
-        if (usable.size() < numBrokers) {
-            throw new RuntimeException("there are only " + usable.size() +
+        if (numBrokers == 0) {
+            return Collections.emptyList();
+        } else if (usable.size() < numBrokers) {
+            throw new InvalidReplicationFactorException("there are only " + usable.size() +
                 " usable brokers");
         }
-        List<Integer> choices = new ArrayList<>();
-        // TODO: rack-awareness
-        List<Integer> indexes = new ArrayList<>();
-        int initialIndex = random.nextInt(usable.size());
-        for (int i = 0; i < numBrokers; i++) {
-            indexes.add((initialIndex + i) % usable.size());
-        }
-        indexes.sort(Integer::compareTo);
-        Iterator<Integer> iter = usable.iterator();
-        for (int i = 0; choices.size() < indexes.size(); i++) {
-            int brokerId = iter.next();
-            if (indexes.get(choices.size()) == i) {
-                choices.add(brokerId);
+        // TODO: rack awareness?
+        List<Integer> results = new ArrayList<>();
+        Set<Integer> found = new HashSet<>();
+        do {
+            int brokerId = usable.pickRandomElement(random);
+            if (!found.contains(brokerId)) {
+                results.add(brokerId);
+                found.add(brokerId);
             }
-        }
-        Collections.shuffle(choices);
-        return choices;
+        } while (results.size() < numBrokers);
+        return results;
     }
 }

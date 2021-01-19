@@ -143,7 +143,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       apisUtils.sendErrorResponseMaybeThrottle(envelope, error.exception)
     }
 
-    if (!config.metadataQuorumEnabled || !envelope.context.fromPrivilegedListener) {
+    if (!config.quorumControlPlaneEnabled || !envelope.context.fromPrivilegedListener) {
       // If the designated forwarding request is not coming from a privileged listener, or
       // forwarding is not enabled yet, we would not handle the request.
       requestChannel.closeConnection(envelope, Collections.emptyMap())
@@ -164,7 +164,7 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   private def isForwardingEnabled(request: RequestChannel.Request): Boolean = {
-    (config.processRoles.nonEmpty || config.metadataQuorumEnabled) &&
+    config.quorumControlPlaneEnabled &&
       request.context.principalSerde.isPresent &&
       request.header.apiKey().forwardable
   }
@@ -1383,7 +1383,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     trace("Sending topic metadata %s and brokers %s for correlation id %d to client %s".format(completeTopicMetadata.mkString(","),
       brokers.mkString(","), request.header.correlationId, request.header.clientId))
 
-    val controllerId = if (config.processRoles.nonEmpty) {
+    val controllerId = if (config.quorumControlPlaneEnabled) {
       // When running in KIP-500 mode, we send back a random controller ID, reflecting the
       // fact that requests for the controller can be sent to any node.
       // TODO: new clients could be smarter about this and understand when it is and is

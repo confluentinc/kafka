@@ -176,7 +176,7 @@ class Kip500Broker(
       // Delay starting processors until the end of the initialization sequence to ensure
       // that credentials have been loaded before processing authentications.
       socketServer = new SocketServer(config, metrics, time, credentialProvider, Some(config.brokerId),
-        Some(new LogContext(s"[SocketServer brokerId=${config.controllerId}] ")))
+        Some(new LogContext(s"[SocketServer brokerId=${config.controllerId}] ")), allowDisabledApis = true)
       socketServer.startup(startProcessingRequests = false)
 
       // Create replica manager.

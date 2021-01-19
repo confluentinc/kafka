@@ -400,5 +400,4 @@ public class SimpleExampleMessageTest {
         assertEquals(message, messageFromJson);
         assertEquals(message.hashCode(), messageFromJson.hashCode());
     }
-
 }

@@ -16,12 +16,12 @@
 from ducktape.tests.test import Test
 from ducktape.mark.resource import cluster
 from ducktape.utils.util import wait_until
-from ducktape.mark import parametrize
+from ducktape.mark import matrix
 from ducktape.cluster.remoteaccount import RemoteCommandError
 from ducktape.errors import TimeoutError
 
 from kafkatest.services.zookeeper import ZookeeperService
-from kafkatest.services.kafka import KafkaService
+from kafkatest.services.kafka import KafkaService, quorum
 from kafkatest.services.connect import ConnectServiceBase, ConnectStandaloneService, ErrorTolerance
 from kafkatest.services.console_consumer import ConsoleConsumer
 from kafkatest.services.security.security_config import SecurityConfig
@@ -63,16 +63,17 @@ class ConnectStandaloneFileTest(Test):
             'test' : { 'partitions': 1, 'replication-factor': 1 }
         }
 
-        self.zk = ZookeeperService(test_context, self.num_zk)
+        self.zk = ZookeeperService(test_context, self.num_zk) if quorum.for_test(test_context) == quorum.zk else None
 
     @cluster(num_nodes=5)
-    @parametrize(converter="org.apache.kafka.connect.json.JsonConverter", schemas=True)
-    @parametrize(converter="org.apache.kafka.connect.json.JsonConverter", schemas=False)
-    @parametrize(converter="org.apache.kafka.connect.storage.StringConverter", schemas=None)
-    @parametrize(security_protocol=SecurityConfig.PLAINTEXT)
+    @matrix(converter=["org.apache.kafka.connect.json.JsonConverter"], schemas=[True], metadata_quorum=quorum.all_non_upgrade)
+    @matrix(converter=["org.apache.kafka.connect.json.JsonConverter"], schemas=[False], metadata_quorum=quorum.all_non_upgrade)
+    @matrix(converter=["org.apache.kafka.connect.storage.StringConverter"], schemas=[None], metadata_quorum=quorum.all_non_upgrade)
+    @matrix(security_protocol=[SecurityConfig.PLAINTEXT], metadata_quorum=quorum.all_non_upgrade)
     @cluster(num_nodes=6)
-    @parametrize(security_protocol=SecurityConfig.SASL_SSL)
-    def test_file_source_and_sink(self, converter="org.apache.kafka.connect.json.JsonConverter", schemas=True, security_protocol='PLAINTEXT'):
+    @matrix(security_protocol=[SecurityConfig.SASL_SSL], metadata_quorum=quorum.all_non_upgrade)
+    def test_file_source_and_sink(self, converter="org.apache.kafka.connect.json.JsonConverter", schemas=True, security_protocol='PLAINTEXT',
+                                  metadata_quorum=quorum.zk):
         """
         Validates basic end-to-end functionality of Connect standalone using the file source and sink converters. Includes
         parameterizations to test different converters (which also test per-connector converter overrides), schema/schemaless
@@ -88,14 +89,15 @@ class ConnectStandaloneFileTest(Test):
 
         self.kafka = KafkaService(self.test_context, self.num_brokers, self.zk,
                                   security_protocol=security_protocol, interbroker_security_protocol=security_protocol,
-                                  topics=self.topics)
+                                  topics=self.topics, controller_num_nodes_override=self.num_zk)
 
         self.source = ConnectStandaloneService(self.test_context, self.kafka, [self.INPUT_FILE, self.OFFSETS_FILE])
         self.sink = ConnectStandaloneService(self.test_context, self.kafka, [self.OUTPUT_FILE, self.OFFSETS_FILE])
         self.consumer_validator = ConsoleConsumer(self.test_context, 1, self.kafka, self.TOPIC_TEST,
                                                   consumer_timeout_ms=10000)
 
-        self.zk.start()
+        if self.zk:
+            self.zk.start()
         self.kafka.start()
 
         self.source.set_configs(lambda node: self.render("connect-standalone.properties", node=node), [self.render("connect-file-source.properties")])
@@ -134,10 +136,11 @@ class ConnectStandaloneFileTest(Test):
             return False
 
     @cluster(num_nodes=5)
-    @parametrize(error_tolerance=ErrorTolerance.ALL)
-    @parametrize(error_tolerance=ErrorTolerance.NONE)
-    def test_skip_and_log_to_dlq(self, error_tolerance):
-        self.kafka = KafkaService(self.test_context, self.num_brokers, self.zk, topics=self.topics)
+    @matrix(error_tolerance=[ErrorTolerance.ALL], metadata_quorum=quorum.all_non_upgrade)
+    @matrix(error_tolerance=[ErrorTolerance.NONE], metadata_quorum=quorum.all_non_upgrade)
+    def test_skip_and_log_to_dlq(self, error_tolerance, metadata_quorum=quorum.zk):
+        self.kafka = KafkaService(self.test_context, self.num_brokers, self.zk, topics=self.topics,
+                                  controller_num_nodes_override=self.num_zk)
 
         # set config props
         self.override_error_tolerance_props = error_tolerance
@@ -165,7 +168,8 @@ class ConnectStandaloneFileTest(Test):
         self.source = ConnectStandaloneService(self.test_context, self.kafka, [self.INPUT_FILE, self.OFFSETS_FILE])
         self.sink = ConnectStandaloneService(self.test_context, self.kafka, [self.OUTPUT_FILE, self.OFFSETS_FILE])
 
-        self.zk.start()
+        if self.zk:
+            self.zk.start()
         self.kafka.start()
 
         self.override_key_converter = "org.apache.kafka.connect.storage.StringConverter"

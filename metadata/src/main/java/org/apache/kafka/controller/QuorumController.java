@@ -31,6 +31,7 @@ import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.metadata.ConfigRecord;
 import org.apache.kafka.common.metadata.FenceBrokerRecord;
+import org.apache.kafka.common.metadata.IsrChangeRecord;
 import org.apache.kafka.common.metadata.MetadataRecordType;
 import org.apache.kafka.common.metadata.PartitionRecord;
 import org.apache.kafka.common.metadata.QuotaRecord;
@@ -498,8 +499,9 @@ public final class QuorumController implements Controller {
                 clientQuotaControlManager.replay((QuotaRecord) message);
                 break;
             case ISR_CHANGE_RECORD:
-                throw new RuntimeException("Unhandled record type " + type);
-            case ACCESS_CONTROL_RECORD:
+                replicationControl.replay((IsrChangeRecord) message);
+                break;
+            default:
                 throw new RuntimeException("Unhandled record type " + type);
         }
     }

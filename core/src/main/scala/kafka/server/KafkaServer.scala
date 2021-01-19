@@ -61,6 +61,9 @@ trait KafkaServer {
     val metricsContext = KafkaBroker.createKafkaMetricsContext(clusterId, config)
     new Metrics(metricConfig, reporters, time, true, metricsContext)
   }
+
+  // System tests grep the logs for 'Kafka\s*Server.*started' to identify when the service has started.
+  val logLineForSystemTests = "KafkaServer started"
 }
 
 class LegacyServer(
@@ -79,6 +82,7 @@ class LegacyServer(
 
   override def startup(): Unit = {
     broker.startup()
+    info(logLineForSystemTests)
   }
 
   override def shutdown(): Unit = {
@@ -181,6 +185,7 @@ class Kip500Server(
     raftManager.startup()
     controller.foreach(_.startup())
     broker.foreach(_.startup())
+    info(logLineForSystemTests)
   }
 
   def shutdown(): Unit = {
