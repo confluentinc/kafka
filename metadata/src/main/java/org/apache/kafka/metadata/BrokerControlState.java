@@ -17,16 +17,6 @@
 
 package org.apache.kafka.metadata;
 
-import org.apache.kafka.common.Endpoint;
-import org.apache.kafka.common.Uuid;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
 /**
  * The state of a broker on the controller.
  */
