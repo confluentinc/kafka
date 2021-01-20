@@ -17,17 +17,24 @@
 
 package org.apache.kafka.controller;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.kafka.common.protocol.ApiMessage;
+import org.apache.kafka.common.protocol.ApiMessageAndVersion;
+
+import java.lang.reflect.Method;
+import java.util.List;
 
 
-/**
- * A very crude but deterministic random source intended for unit tests.
- */
-public class MockRandomSource implements RandomSource {
-    private final AtomicInteger val = new AtomicInteger(0);
-
-    @Override
-    public int nextInt(int bound) {
-        return val.getAndAdd(123) % bound;
+public class ControllerTestUtils {
+    public static void replayAll(Object target,
+                                 List<ApiMessageAndVersion> recordsAndVersions) throws Exception {
+        for (ApiMessageAndVersion recordAndVersion : recordsAndVersions) {
+            ApiMessage record = recordAndVersion.message();
+            try {
+                Method method = target.getClass().getMethod("replay", record.getClass());
+                method.invoke(target, record);
+            } catch (NoSuchMethodException e) {
+                // ignore
+            }
+        }
     }
 }

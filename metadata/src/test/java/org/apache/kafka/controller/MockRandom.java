@@ -17,11 +17,18 @@
 
 package org.apache.kafka.controller;
 
+import java.util.Random;
 
-public interface RandomSource {
-    /**
-     * Returns a pseudorandom, uniformly distributed int value between 0
-     * (inclusive) and the specified value (exclusive).
-     */
-    int nextInt(int bound);
+
+/**
+ * A subclass of Random with a fixed seed and generation algorithm.
+ */
+public class MockRandom extends Random {
+    private long state = 17;
+
+    @Override
+    protected int next(int bits) {
+        state = (state * 2862933555777941757L) + 3037000493L;
+        return (int) (state >>> (64 - bits));
+    }
 }

@@ -17,30 +17,24 @@
 
 package kafka.server
 
-import java.lang.{Byte => JByte}
-import java.util.Collections
-
 import kafka.cluster.Partition
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.TransactionCoordinator
 import kafka.network.RequestChannel
-import kafka.security.authorizer.AclEntry
 import kafka.server.QuotaFactory.QuotaManagers
 import kafka.utils.Logging
-import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.errors.ClusterAuthorizationException
 import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.network.Send
-import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse, RequestContext}
-import org.apache.kafka.common.resource.Resource.CLUSTER_NAME
-import org.apache.kafka.common.resource.ResourceType.CLUSTER
-import org.apache.kafka.common.resource.{PatternType, Resource, ResourcePattern, ResourceType}
-import org.apache.kafka.common.utils.{LogContext, Time, Utils}
-import org.apache.kafka.server.authorizer.{Action, AuthorizationResult, Authorizer}
+import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse}
+import org.apache.kafka.common.utils.Time
 
 import scala.jdk.CollectionConverters._
 
-object ApisUtils {
+
+object RequestHandlerHelper {
+
   def onLeadershipChange(groupCoordinator: GroupCoordinator,
                          txnCoordinator: TransactionCoordinator,
                          updatedLeaders: Iterable[Partition],
@@ -64,56 +58,14 @@ object ApisUtils {
   }
 }
 
-/**
- * Helper class for request handlers. Provides common functionality around throttling, authorizations, and error handling
- */
-class ApisUtils(
-  val logContext: LogContext,
-  val requestChannel: RequestChannel,
-  val authorizer: Option[Authorizer],
-  val quotas: QuotaManagers,
-  val time: Time,
-  val groupCoordinator: Option[GroupCoordinator] = None,
-  val txnCoordinator: Option[TransactionCoordinator] = None
-) extends Logging {
 
-  this.logIdent = logContext.logPrefix()
 
-  // private package for testing
-  def authorize(requestContext: RequestContext,
-                operation: AclOperation,
-                resourceType: ResourceType,
-                resourceName: String,
-                logIfAllowed: Boolean = true,
-                logIfDenied: Boolean = true,
-                refCount: Int = 1): Boolean = {
-    authorizer.forall { authZ =>
-      val resource = new ResourcePattern(resourceType, resourceName, PatternType.LITERAL)
-      val actions = Collections.singletonList(new Action(operation, resource, refCount, logIfAllowed, logIfDenied))
-      authZ.authorize(requestContext, actions).get(0) == AuthorizationResult.ALLOWED
-    }
-  }
+class RequestHandlerHelper(requestChannel: RequestChannel,
+                           quotas: QuotaManagers,
+                           time: Time,
+                           logPrefix: String) extends Logging {
 
-  def authorizeClusterOperation(request: RequestChannel.Request, operation: AclOperation): Unit = {
-    if (!authorize(request.context, operation, CLUSTER, CLUSTER_NAME))
-      throw new ClusterAuthorizationException(s"Request $request is not authorized.")
-  }
-
-  def authorizedOperations(request: RequestChannel.Request, resource: Resource): Int = {
-    val supportedOps = AclEntry.supportedOperations(resource.resourceType).toList
-    val authorizedOps = authorizer match {
-      case Some(authZ) =>
-        val resourcePattern = new ResourcePattern(resource.resourceType, resource.name, PatternType.LITERAL)
-        val actions = supportedOps.map { op => new Action(op, resourcePattern, 1, false, false) }
-        authZ.authorize(request.context, actions.asJava).asScala
-          .zip(supportedOps)
-          .filter(_._1 == AuthorizationResult.ALLOWED)
-          .map(_._2).toSet
-      case None =>
-        supportedOps.toSet
-    }
-    Utils.to32BitField(authorizedOps.map(operation => operation.code.asInstanceOf[JByte]).asJava)
-  }
+  this.logIdent = logPrefix
 
   def handleError(request: RequestChannel.Request, e: Throwable): Unit = {
     val mayThrottle = e.isInstanceOf[ClusterAuthorizationException] || !request.header.apiKey.clusterAction
@@ -122,12 +74,20 @@ class ApisUtils(
       s"correlationId=${request.header.correlationId}, " +
       s"api=${request.header.apiKey}, " +
       s"version=${request.header.apiVersion}, " +
-      s"body=${request.body[AbstractRequest]}, " +
-      s"envelope=${request.envelope}", e)
+      s"body=${request.body[AbstractRequest]}", e)
     if (mayThrottle)
       sendErrorResponseMaybeThrottle(request, e)
     else
       sendErrorResponseExemptThrottle(request, e)
+  }
+
+  def sendForwardedResponse(request: RequestChannel.Request,
+                            response: AbstractResponse): Unit = {
+    // For forwarded requests, we take the throttle time from the broker that
+    // the request was forwarded to
+    val throttleTimeMs = response.throttleTimeMs()
+    quotas.request.throttle(request, throttleTimeMs, requestChannel.sendResponse)
+    sendResponse(request, Some(response), None)
   }
 
   // Throttle the channel if the request quota is enabled but has been violated. Regardless of throttling, send the
@@ -138,7 +98,7 @@ class ApisUtils(
     // Only throttle non-forwarded requests
     if (!request.isForwarded)
       quotas.request.throttle(request, throttleTimeMs, requestChannel.sendResponse)
-    requestChannel.sendResponse(request, Some(createResponse(throttleTimeMs)), None)
+    sendResponse(request, Some(createResponse(throttleTimeMs)), None)
   }
 
   def sendErrorResponseMaybeThrottle(request: RequestChannel.Request, error: Throwable): Unit = {
@@ -149,17 +109,50 @@ class ApisUtils(
     sendErrorOrCloseConnection(request, error, throttleTimeMs)
   }
 
-  private def maybeRecordAndGetThrottleTimeMs(request: RequestChannel.Request): Int = {
+  def maybeRecordAndGetThrottleTimeMs(request: RequestChannel.Request): Int = {
     val throttleTimeMs = quotas.request.maybeRecordAndGetThrottleTimeMs(request, time.milliseconds())
     request.apiThrottleTimeMs = throttleTimeMs
     throttleTimeMs
+  }
+
+  /**
+   * Throttle the channel if the controller mutations quota or the request quota have been violated.
+   * Regardless of throttling, send the response immediately.
+   */
+  def sendResponseMaybeThrottleWithControllerQuota(controllerMutationQuota: ControllerMutationQuota,
+                                                   request: RequestChannel.Request,
+                                                   createResponse: Int => AbstractResponse): Unit = {
+    val timeMs = time.milliseconds
+    val controllerThrottleTimeMs = controllerMutationQuota.throttleTime
+    val requestThrottleTimeMs = quotas.request.maybeRecordAndGetThrottleTimeMs(request, timeMs)
+    val maxThrottleTimeMs = Math.max(controllerThrottleTimeMs, requestThrottleTimeMs)
+    // Only throttle non-forwarded requests
+    if (maxThrottleTimeMs > 0 && !request.isForwarded) {
+      request.apiThrottleTimeMs = maxThrottleTimeMs
+      if (controllerThrottleTimeMs > requestThrottleTimeMs) {
+        quotas.controllerMutation.throttle(request, controllerThrottleTimeMs, requestChannel.sendResponse)
+      } else {
+        quotas.request.throttle(request, requestThrottleTimeMs, requestChannel.sendResponse)
+      }
+    }
+
+    sendResponse(request, Some(createResponse(maxThrottleTimeMs)), None)
   }
 
   def sendResponseExemptThrottle(request: RequestChannel.Request,
                                  response: AbstractResponse,
                                  onComplete: Option[Send => Unit] = None): Unit = {
     quotas.request.maybeRecordExempt(request)
-    requestChannel.sendResponse(request, Some(response), onComplete)
+    sendResponse(request, Some(response), onComplete)
+  }
+
+  def sendErrorOrCloseConnection(request: RequestChannel.Request, error: Throwable, throttleMs: Int): Unit = {
+    val requestBody = request.body[AbstractRequest]
+    val response = requestBody.getErrorResponse(throttleMs, error)
+    if (response == null)
+      closeConnection(request, requestBody.errorCounts(error))
+    else
+      sendResponse(request, Some(response), None)
   }
 
   def sendErrorResponseExemptThrottle(request: RequestChannel.Request, error: Throwable): Unit = {
@@ -167,17 +160,36 @@ class ApisUtils(
     sendErrorOrCloseConnection(request, error, 0)
   }
 
-  def sendErrorOrCloseConnection(request: RequestChannel.Request, error: Throwable, throttleMs: Int): Unit = {
-    val requestBody = request.body[AbstractRequest]
-    val response = requestBody.getErrorResponse(throttleMs, error)
-    if (response == null)
-      requestChannel.closeConnection(request, requestBody.errorCounts(error))
-    else
-      requestChannel.sendResponse(request, Some(response), None)
-  }
-
   def sendNoOpResponseExemptThrottle(request: RequestChannel.Request): Unit = {
     quotas.request.maybeRecordExempt(request)
-    requestChannel.sendResponse(request, None, None)
+    sendResponse(request, None, None)
+  }
+
+  def closeConnection(request: RequestChannel.Request, errorCounts: java.util.Map[Errors, Integer]): Unit = {
+    // This case is used when the request handler has encountered an error, but the client
+    // does not expect a response (e.g. when produce request has acks set to 0)
+    requestChannel.updateErrorMetrics(request.header.apiKey, errorCounts.asScala)
+    requestChannel.sendResponse(new RequestChannel.CloseConnectionResponse(request))
+  }
+
+  def sendResponse(request: RequestChannel.Request,
+                   responseOpt: Option[AbstractResponse],
+                   onComplete: Option[Send => Unit]): Unit = {
+    // Update error metrics for each error code in the response including Errors.NONE
+    responseOpt.foreach(response => requestChannel.updateErrorMetrics(request.header.apiKey, response.errorCounts.asScala))
+
+    val response = responseOpt match {
+      case Some(response) =>
+        new RequestChannel.SendResponse(
+          request,
+          request.buildResponseSend(response),
+          request.responseString(response),
+          onComplete
+        )
+      case None =>
+        new RequestChannel.NoOpResponse(request)
+    }
+
+    requestChannel.sendResponse(response)
   }
 }

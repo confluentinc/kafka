@@ -29,9 +29,9 @@ import org.apache.kafka.common.Uuid
 import org.apache.kafka.common.errors.ClusterAuthorizationException
 import org.apache.kafka.common.memory.MemoryPool
 import org.apache.kafka.common.message.BrokerRegistrationRequestData
-import org.apache.kafka.common.network.{ClientInformation, ListenerName, Send}
+import org.apache.kafka.common.network.{ClientInformation, ListenerName}
 import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse, BrokerRegistrationRequest, RequestContext, RequestHeader, RequestTestUtils}
+import org.apache.kafka.common.requests.{AbstractRequest, BrokerRegistrationRequest, RequestContext, RequestHeader, RequestTestUtils}
 import org.apache.kafka.common.security.auth.{KafkaPrincipal, SecurityProtocol}
 import org.apache.kafka.controller.Controller
 import org.apache.kafka.metadata.VersionRange
@@ -113,12 +113,8 @@ class ControllerApisTest {
 
     val request = buildRequest(brokerRegistrationRequest)
 
-    val capturedResponse: Capture[Option[AbstractResponse]] = EasyMock.newCapture()
-    EasyMock.expect(requestChannel.sendResponse(
-      EasyMock.anyObject[RequestChannel.Request](),
-      EasyMock.capture(capturedResponse),
-      EasyMock.anyObject[Option[Send => Unit]]()
-    ))
+    val capturedResponse: Capture[RequestChannel.Response] = EasyMock.newCapture()
+    EasyMock.expect(requestChannel.sendResponse(EasyMock.capture(capturedResponse)))
 
     val authorizer = Some[Authorizer](EasyMock.createNiceMock(classOf[Authorizer]))
     EasyMock.expect(authorizer.get.authorize(EasyMock.anyObject[AuthorizableRequestContext](), EasyMock.anyObject())).andAnswer(

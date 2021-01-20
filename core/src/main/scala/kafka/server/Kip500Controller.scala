@@ -144,7 +144,7 @@ class Kip500Controller(
         setConfigDefs(configDefs).
         setThreadNamePrefix(threadNamePrefixAsString).
         setLogManager(metaLogManager).
-        setDefaultReplicationFactor(config.defaultReplicationFactor).
+        setDefaultReplicationFactor(config.defaultReplicationFactor.toShort).
         setDefaultNumPartitions(config.numPartitions.intValue()).
         build()
       quotaManagers = QuotaFactory.instantiate(config, metrics, time, threadNamePrefix.getOrElse(""))

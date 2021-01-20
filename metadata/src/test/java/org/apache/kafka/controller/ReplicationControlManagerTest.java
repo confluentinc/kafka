@@ -18,20 +18,28 @@
 package org.apache.kafka.controller;
 
 import org.apache.kafka.common.message.CreateTopicsRequestData;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopic;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicCollection;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResult;
 import org.apache.kafka.common.metadata.RegisterBrokerRecord;
+import org.apache.kafka.common.metadata.TopicRecord;
 import org.apache.kafka.common.metadata.UnfenceBrokerRecord;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.requests.ApiError;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.controller.ReplicationControlManager.PartitionControlInfo;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
+import static org.apache.kafka.common.protocol.Errors.INVALID_TOPIC_EXCEPTION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
@@ -41,14 +49,16 @@ public class ReplicationControlManagerTest {
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(-1);
         LogContext logContext = new LogContext();
         MockTime time = new MockTime();
-        ClusterControlManager clusterControl =
-            new ClusterControlManager(logContext, time, snapshotRegistry, 1000, 100);
+        MockRandom random = new MockRandom();
+        ClusterControlManager clusterControl = new ClusterControlManager(
+            logContext, time, snapshotRegistry, 1000, 100,
+            new SimpleReplicaPlacementPolicy(random));
         ConfigurationControlManager configurationControl =
             new ConfigurationControlManager(snapshotRegistry, Collections.emptyMap());
         return new ReplicationControlManager(snapshotRegistry,
             new LogContext(),
-            new MockRandomSource(),
-            3,
+            random,
+            (short) 3,
             1,
             configurationControl,
             clusterControl);
@@ -75,7 +85,7 @@ public class ReplicationControlManagerTest {
     public void testCreateTopics() throws Exception {
         ReplicationControlManager replicationControl = newReplicationControlManager();
         CreateTopicsRequestData request = new CreateTopicsRequestData();
-        request.topics().add(new CreateTopicsRequestData.CreatableTopic().setName("foo").
+        request.topics().add(new CreatableTopic().setName("foo").
             setNumPartitions(-1).setReplicationFactor((short) -1));
         ControllerResult<CreateTopicsResponseData> result =
             replicationControl.createTopics(request);
@@ -97,5 +107,33 @@ public class ReplicationControlManagerTest {
         expectedResponse2.topics().add(new CreatableTopicResult().setName("foo").
             setNumPartitions(1).setReplicationFactor((short) 3));
         assertEquals(expectedResponse2, result2.response());
+        ControllerTestUtils.replayAll(replicationControl, result2.records());
+        assertEquals(new PartitionControlInfo(new int[] {1, 2, 0},
+            new int[] {1, 2, 0}, null, null, 1, 0),
+            replicationControl.getPartition(
+                ((TopicRecord) result2.records().get(0).message()).topicId(), 0));
+        ControllerResult<CreateTopicsResponseData> result3 =
+                replicationControl.createTopics(request);
+        CreateTopicsResponseData expectedResponse3 = new CreateTopicsResponseData();
+        expectedResponse3.topics().add(new CreatableTopicResult().setName("foo").
+                setErrorCode(Errors.TOPIC_ALREADY_EXISTS.code()).
+                setErrorMessage(Errors.TOPIC_ALREADY_EXISTS.exception().getMessage()));
+        assertEquals(expectedResponse3, result3.response());
+    }
+
+    @Test
+    public void testValidateNewTopicNames() throws Exception {
+        Map<String, ApiError> topicErrors = new HashMap<>();
+        CreatableTopicCollection topics = new CreatableTopicCollection();
+        topics.add(new CreatableTopic().setName(""));
+        topics.add(new CreatableTopic().setName("woo"));
+        topics.add(new CreatableTopic().setName("."));
+        ReplicationControlManager.validateNewTopicNames(topicErrors, topics);
+        Map<String, ApiError> expectedTopicErrors = new HashMap<>();
+        expectedTopicErrors.put("", new ApiError(INVALID_TOPIC_EXCEPTION,
+            "Topic name is illegal, it can't be empty"));
+        expectedTopicErrors.put(".", new ApiError(INVALID_TOPIC_EXCEPTION,
+            "Topic name cannot be \".\" or \"..\""));
+        assertEquals(expectedTopicErrors, topicErrors);
     }
 }

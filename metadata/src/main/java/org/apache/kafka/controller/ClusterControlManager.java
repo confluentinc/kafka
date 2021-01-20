@@ -19,6 +19,7 @@ package org.apache.kafka.controller;
 
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.errors.DuplicateBrokerRegistrationException;
+import org.apache.kafka.common.errors.InvalidReplicationFactorException;
 import org.apache.kafka.common.errors.StaleBrokerEpochException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
@@ -42,10 +43,12 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
+import java.util.Set;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
@@ -57,6 +60,10 @@ public class ClusterControlManager {
 
         BrokerSoftState(long lastContactNs) {
             this.lastContactNs = lastContactNs;
+        }
+
+        private boolean leaseExpired(long exclusiveLeaseDurationNs, long nowNs) {
+            return (nowNs - lastContactNs) > exclusiveLeaseDurationNs;
         }
     }
 
@@ -92,10 +99,12 @@ public class ClusterControlManager {
     public static class HeartbeatReply {
         private final boolean isCaughtUp;
         private final boolean isFenced;
+        private final boolean shouldShutdown;
 
-        HeartbeatReply(boolean isCaughtUp, boolean isFenced) {
+        HeartbeatReply(boolean isCaughtUp, boolean isFenced, boolean shouldShutdown) {
             this.isCaughtUp = isCaughtUp;
             this.isFenced = isFenced;
+            this.shouldShutdown = shouldShutdown;
         }
 
         public boolean isCaughtUp() {
@@ -106,9 +115,13 @@ public class ClusterControlManager {
             return isFenced;
         }
 
+        public boolean shouldShutdown() {
+            return shouldShutdown;
+        }
+
         @Override
         public int hashCode() {
-            return Objects.hash(isCaughtUp, isFenced);
+            return Objects.hash(isCaughtUp, isFenced, shouldShutdown);
         }
 
         @Override
@@ -116,13 +129,15 @@ public class ClusterControlManager {
             if (!(o instanceof HeartbeatReply)) return false;
             HeartbeatReply other = (HeartbeatReply) o;
             return other.isCaughtUp == isCaughtUp &&
-                other.isFenced == isFenced;
+                other.isFenced == isFenced &&
+                other.shouldShutdown == shouldShutdown;
         }
 
         @Override
         public String toString() {
             return "HeartbeatReply(isCaughtUp=" + isCaughtUp +
-                ", isFenced=" + isFenced + ")";
+                ", isFenced=" + isFenced +
+                ", shouldShutdown = " + shouldShutdown + ")";
         }
     }
 
@@ -158,11 +173,17 @@ public class ClusterControlManager {
      */
     private final HashMap<Integer, BrokerSoftState> brokerSoftStates;
 
+    /**
+     * The replica placement policy to use.
+     */
+    private final ReplicaPlacementPolicy placementPolicy;
+
     ClusterControlManager(LogContext logContext,
                           Time time,
                           SnapshotRegistry snapshotRegistry,
                           long leaseDurationMs,
-                          long exclusiveLeaseDurationMs) {
+                          long exclusiveLeaseDurationMs,
+                          ReplicaPlacementPolicy placementPolicy) {
         this.log = logContext.logger(ClusterControlManager.class);
         this.time = time;
         this.leaseDurationNs = NANOSECONDS.convert(leaseDurationMs, MILLISECONDS);
@@ -171,6 +192,7 @@ public class ClusterControlManager {
         this.brokerRegistrations = new TimelineHashMap<>(snapshotRegistry, 0);
         this.usable = new TimelineHashSet<>(snapshotRegistry, 0);
         this.brokerSoftStates = new HashMap<>();
+        this.placementPolicy = placementPolicy;
     }
 
     /**
@@ -181,8 +203,11 @@ public class ClusterControlManager {
             FeatureManager.FinalizedFeaturesAndEpoch finalizedFeaturesAndEpoch) {
         int brokerId = request.brokerId();
         BrokerRegistration existing = brokerRegistrations.get(brokerId);
-        if (existing != null && !existing.incarnationId().equals(request.incarnationId())) {
-            throw new DuplicateBrokerRegistrationException("Another broker has " +
+        BrokerSoftState softState = brokerSoftStates.get(brokerId);
+        long nowNs = time.nanoseconds();
+        if (existing != null && !existing.incarnationId().equals(request.incarnationId()) &&
+                softState != null && !softState.leaseExpired(exclusiveLeaseDurationNs, nowNs)) {
+            throw new DuplicateBrokerRegistrationException("Another broker is " +
                 "registered with that broker id.");
         }
         RegisterBrokerRecord record = new RegisterBrokerRecord().setBrokerId(brokerId).
@@ -208,6 +233,12 @@ public class ClusterControlManager {
                 setMinSupportedVersion(feature.minSupportedVersion()).
                 setMaxSupportedVersion(feature.maxSupportedVersion()));
         }
+
+        // Update the soft state of the broker. This state is only in memory and does
+        // not appear in the metadata log. That is why we make the change here rather than
+        // in the replay() function.
+        brokerSoftStates.put(brokerId, new BrokerSoftState(nowNs));
+
         return new ControllerResult<>(
             Collections.singletonList(new ApiMessageAndVersion(record, (short) 0)),
                 new RegistrationReply(brokerEpoch));
@@ -218,11 +249,18 @@ public class ClusterControlManager {
         if (existing == null) {
             return new ControllerResult<>(Collections.emptyList(), null);
         }
-        return new ControllerResult<>(Collections.singletonList(new ApiMessageAndVersion(
-            new UnregisterBrokerRecord().
-                setBrokerId(brokerId).
-                setBrokerEpoch(existing.epoch()),
-            (short) 0)), null);
+        ControllerResult<Void> result = new ControllerResult<>(
+            Collections.singletonList(new ApiMessageAndVersion(
+                new UnregisterBrokerRecord().
+                    setBrokerId(brokerId).
+                    setBrokerEpoch(existing.epoch()),
+                (short) 0)), null);
+
+        // Update the broker's soft state.
+        brokerSoftStates.remove(brokerId);
+        usable.remove(brokerId);
+
+        return result;
     }
 
     public ControllerResult<HeartbeatReply> processBrokerHeartbeat(BrokerHeartbeatRequestData request,
@@ -244,7 +282,7 @@ public class ClusterControlManager {
                     setId(brokerId).setEpoch(request.brokerEpoch()), (short) 0));
             }
         }
-        return new ControllerResult<>(records, new HeartbeatReply(isCaughtUp, isFenced));
+        return new ControllerResult<>(records, new HeartbeatReply(isCaughtUp, isFenced, false));
     }
 
     void touchBroker(int brokerId) {
@@ -278,9 +316,6 @@ public class ClusterControlManager {
 
     public void replay(RegisterBrokerRecord record) {
         int brokerId = record.brokerId();
-        long nowNs = time.nanoseconds();
-        brokerSoftStates.remove(brokerId);
-        brokerSoftStates.put(brokerId, new BrokerSoftState(nowNs));
         List<Endpoint> listeners = new ArrayList<>();
         for (RegisterBrokerRecord.BrokerEndpoint endpoint : record.endPoints()) {
             listeners.add(new Endpoint(endpoint.name(),
@@ -292,11 +327,28 @@ public class ClusterControlManager {
             features.put(feature.name(), new VersionRange(
                 feature.minSupportedVersion(), feature.maxSupportedVersion()));
         }
+        // Normally, all newly registered brokers start off in the fenced state.
+        // If this registration record is for a broker incarnation that was already
+        // registered, though, we preserve the existing fencing state.
+        boolean fenced = true;
+        BrokerRegistration prevRegistration = brokerRegistrations.get(brokerId);
+        if (prevRegistration != null &&
+                prevRegistration.incarnationId().equals(record.incarnationId())) {
+            fenced = prevRegistration.fenced();
+        }
+
+        // Update broker registrations.
         brokerRegistrations.put(brokerId, new BrokerRegistration(brokerId,
             record.brokerEpoch(), record.incarnationId(), listeners, features,
-            record.rack()));
-        touchBroker(brokerId);
-        log.trace("Replayed {}", record);
+            record.rack(), fenced));
+
+        if (prevRegistration == null) {
+            log.info("Registered new broker: {}", record);
+        } else if (prevRegistration.incarnationId().equals(record.incarnationId())) {
+            log.info("Re-registered broker incarnation: {}", record);
+        } else {
+            log.info("Re-registered broker id {}: {}", brokerId, record);
+        }
     }
 
     public void replay(UnregisterBrokerRecord record) {
@@ -308,8 +360,6 @@ public class ClusterControlManager {
             log.error("Unable to replay {}: no broker registration with that epoch found", record);
         } else {
             brokerRegistrations.remove(brokerId);
-            brokerSoftStates.remove(brokerId);
-            usable.remove(brokerId);
             log.trace("Replayed {}", record);
         }
     }
@@ -347,27 +397,18 @@ public class ClusterControlManager {
         return usable.contains(brokerId);
     }
 
-    public List<Integer> chooseRandomUsable(RandomSource random, int numBrokers) {
-        if (usable.size() < numBrokers) {
-            throw new RuntimeException("there are only " + usable.size() +
-                " usable brokers");
-        }
-        List<Integer> choices = new ArrayList<>();
-        // TODO: rack-awareness
-        List<Integer> indexes = new ArrayList<>();
-        int initialIndex = random.nextInt(usable.size());
-        for (int i = 0; i < numBrokers; i++) {
-            indexes.add((initialIndex + i) % usable.size());
-        }
-        indexes.sort(Integer::compareTo);
-        Iterator<Integer> iter = usable.iterator();
-        for (int i = 0; choices.size() < indexes.size(); i++) {
-            int brokerId = iter.next();
-            if (indexes.get(choices.size()) == i) {
-                choices.add(brokerId);
+    public List<List<Integer>> placeReplicas(int numPartitions, short numReplicas) {
+        List<Integer> allActive = new ArrayList<>();
+        Map<String, List<Integer>> activeByRack = new HashMap<>();
+        for (Integer brokerId : usable) {
+            allActive.add(brokerId);
+            BrokerRegistration registration = brokerRegistrations.get(brokerId);
+            if (registration.rack() != null) {
+                activeByRack.computeIfAbsent(registration.rack(),
+                    __ -> new ArrayList<>()).add(brokerId);
             }
         }
-        Collections.shuffle(choices);
-        return choices;
+        return placementPolicy.createPlacement(
+            numPartitions, numReplicas, allActive, activeByRack);
     }
 }

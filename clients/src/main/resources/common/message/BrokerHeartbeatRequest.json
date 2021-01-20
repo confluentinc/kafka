@@ -27,6 +27,8 @@
     { "name": "CurrentMetadataOffset", "type": "int64", "versions": "0+",
       "about": "The highest metadata offset which the broker has reached." },
     { "name": "ShouldFence", "type": "bool", "versions": "0+",
-      "about": "True if the broker wants to be fenced, false otherwise." }
+      "about": "True if the broker wants to be fenced, false otherwise." },
+    { "name": "ShouldShutdown", "type": "bool", "versions": "0+",
+      "about": "True if the broker wants to be shut down, false otherwise." }
   ]
 }

@@ -20,6 +20,7 @@ package org.apache.kafka.timeline;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -230,6 +231,11 @@ public class TimelineHashSet<T>
             iter.next();
             iter.remove();
         }
+    }
+
+    public T pickRandomElement(Random random) {
+        TimelineHashSetEntry<T> entry = pickRandomEntry(random);
+        return entry.value;
     }
 
     @Override
