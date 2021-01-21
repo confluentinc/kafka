@@ -125,7 +125,7 @@ class KafkaRaftManager(
     val leaderAndEpoch = raftClient.leaderAndEpoch()
     if (leaderAndEpoch.leaderId.isPresent) {
       val leaderId = leaderAndEpoch.leaderId.getAsInt
-      raftConfig.quorumVoterNodes().asScala.find(_.id == leaderId)
+      voterNodes.find(_.id == leaderId)
     } else {
       None
     }
