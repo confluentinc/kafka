@@ -41,9 +41,8 @@ import org.apache.kafka.common.resource.Resource.CLUSTER_NAME
 import org.apache.kafka.common.resource.ResourceType.{CLUSTER, TOPIC}
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.common.{Node, TopicPartition}
-import org.apache.kafka.controller.ClusterControlManager.{HeartbeatReply, RegistrationReply}
 import org.apache.kafka.controller.{Controller, LeaderAndIsr}
-import org.apache.kafka.metadata.{FeatureManager, VersionRange}
+import org.apache.kafka.metadata.{BrokerHeartbeatReply, BrokerRegistrationReply, FeatureManager, VersionRange}
 import org.apache.kafka.server.authorizer.Authorizer
 
 import scala.collection.mutable
@@ -370,7 +369,7 @@ class ControllerApis(val requestChannel: RequestChannel,
 
     controller.processBrokerHeartbeat(heartbeatRequest.data).handle[Unit]((reply, e) => {
       def createResponseCallback(requestThrottleMs: Int,
-                                 reply: HeartbeatReply,
+                                 reply: BrokerHeartbeatReply,
                                  e: Throwable): BrokerHeartbeatResponse = {
         if (e != null) {
           new BrokerHeartbeatResponse(new BrokerHeartbeatResponseData().
@@ -380,9 +379,9 @@ class ControllerApis(val requestChannel: RequestChannel,
           new BrokerHeartbeatResponse(new BrokerHeartbeatResponseData().
             setThrottleTimeMs(requestThrottleMs).
             setErrorCode(Errors.NONE.code()).
-            setIsCaughtUp(reply.isCaughtUp).
-            setIsFenced(reply.isFenced).
-            setShouldShutdown(reply.isFenced))
+            setIsCaughtUp(reply.isCaughtUp()).
+            setIsFenced(reply.isFenced()).
+            setShouldShutdown(reply.shouldShutdown()))
         }
       }
       requestHelper.sendResponseMaybeThrottle(request,
@@ -417,7 +416,7 @@ class ControllerApis(val requestChannel: RequestChannel,
 
     controller.registerBroker(registrationRequest.data).handle[Unit]((reply, e) => {
       def createResponseCallback(requestThrottleMs: Int,
-                                 reply: RegistrationReply,
+                                 reply: BrokerRegistrationReply,
                                  e: Throwable): BrokerRegistrationResponse = {
         if (e != null) {
           new BrokerRegistrationResponse(new BrokerRegistrationResponseData().

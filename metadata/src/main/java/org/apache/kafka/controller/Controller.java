@@ -28,8 +28,8 @@ import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.quota.ClientQuotaAlteration;
 import org.apache.kafka.common.quota.ClientQuotaEntity;
 import org.apache.kafka.common.requests.ApiError;
-import org.apache.kafka.controller.ClusterControlManager.HeartbeatReply;
-import org.apache.kafka.controller.ClusterControlManager.RegistrationReply;
+import org.apache.kafka.metadata.BrokerHeartbeatReply;
+import org.apache.kafka.metadata.BrokerRegistrationReply;
 import org.apache.kafka.metadata.FeatureManager;
 
 import java.util.Collection;
@@ -132,7 +132,7 @@ public interface Controller extends AutoCloseable {
      *
      * @return              A future yielding a heartbeat reply.
      */
-    CompletableFuture<HeartbeatReply> processBrokerHeartbeat(
+    CompletableFuture<BrokerHeartbeatReply> processBrokerHeartbeat(
         BrokerHeartbeatRequestData request);
 
     /**
@@ -142,7 +142,7 @@ public interface Controller extends AutoCloseable {
      *
      * @return              A future yielding a registration reply.
      */
-    CompletableFuture<RegistrationReply> registerBroker(
+    CompletableFuture<BrokerRegistrationReply> registerBroker(
         BrokerRegistrationRequestData request);
 
     /**

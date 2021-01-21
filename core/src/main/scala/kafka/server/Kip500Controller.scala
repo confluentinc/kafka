@@ -17,7 +17,8 @@
 
 package kafka.server
 
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.{CompletableFuture, TimeUnit}
+import java.util
 import java.util.concurrent.locks.ReentrantLock
 
 import kafka.log.LogConfig
@@ -36,6 +37,7 @@ import org.apache.kafka.common.{ClusterResource, Endpoint}
 import org.apache.kafka.controller.{Controller, QuorumController}
 import org.apache.kafka.metadata.VersionRange
 import org.apache.kafka.metalog.MetaLogManager
+import org.apache.kafka.raft.RaftConfig
 import org.apache.kafka.server.authorizer.Authorizer
 
 import scala.jdk.CollectionConverters._
@@ -51,7 +53,7 @@ class Kip500Controller(
   val time: Time,
   val metrics: Metrics,
   val threadNamePrefix: Option[String],
-  val controllerQuorumVotersFuture: CompletableFuture[String]
+  val controllerQuorumVotersFuture: CompletableFuture[util.List[String]]
 ) extends Logging with KafkaMetricsGroup {
   import kafka.server.KafkaServer._
 
@@ -146,10 +148,12 @@ class Kip500Controller(
         setLogManager(metaLogManager).
         setDefaultReplicationFactor(config.defaultReplicationFactor.toShort).
         setDefaultNumPartitions(config.numPartitions.intValue()).
+        setSessionTimeoutNs(TimeUnit.NANOSECONDS.convert(config.brokerSessionTimeoutMs.longValue(),
+          TimeUnit.MILLISECONDS)).
         build()
       quotaManagers = QuotaFactory.instantiate(config, metrics, time, threadNamePrefix.getOrElse(""))
       val controllerNodes =
-        KafkaConfig.controllerQuorumVoterStringsToNodes(controllerQuorumVotersFuture.get())
+        RaftConfig.quorumVoterStringsToNodes(controllerQuorumVotersFuture.get()).asScala
       controllerApis = new ControllerApis(socketServer.dataPlaneRequestChannel,
         authorizer,
         quotaManagers,

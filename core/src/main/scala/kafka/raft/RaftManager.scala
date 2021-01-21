@@ -38,6 +38,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
 import scala.jdk.CollectionConverters._
+import java.util
 
 object KafkaRaftManager {
   class RaftIoThread(
@@ -89,7 +90,7 @@ class KafkaRaftManager(
   config: KafkaConfig,
   time: Time,
   metrics: Metrics,
-  val controllerQuorumVotersFuture: CompletableFuture[String]
+  val controllerQuorumVotersFuture: CompletableFuture[util.List[String]]
 ) extends RaftManager with Logging {
 
   private val nodeId = if (config.processRoles.contains(ControllerRole)) {
@@ -114,6 +115,8 @@ class KafkaRaftManager(
 
   private var raftConfig: RaftConfig = _
 
+  def voterNodes: Seq[Node] = raftConfig.quorumVoterNodes().asScala.toSeq
+
   def currentLeader: Option[Node] = {
     if (raftConfig == null) {
       None
@@ -134,12 +137,9 @@ class KafkaRaftManager(
     netChannel.start()
 
     // Wait for the controller quorum voters string to be set
-    // NOTE: This feels a bit hacky to modify the config after it was originally parsed.
-    //       But this way it allows us to not change the RaftConfig logic for parsing the
-    //       voter connect strings
-    val configProps = config.originals;
-    configProps.put(KafkaConfig.ControllerQuorumVotersProp, controllerQuorumVotersFuture.get());
-    raftConfig = new RaftConfig(configProps)
+    raftConfig = new RaftConfig(RaftConfig.parseVoterConnections(controllerQuorumVotersFuture.get()),
+      config.quorumRequestTimeoutMs, config.quorumRetryBackoffMs, config.quorumElectionTimeoutMs,
+      config.quorumElectionBackoffMs, config.quorumFetchTimeoutMs, config.quorumLingerMs)
     raftClient.initialize(raftConfig)
     raftIoThread.start()
   }
@@ -196,11 +196,9 @@ class KafkaRaftManager(
     )
   }
 
-  private def requestTimeoutMs(): Int = config.getInt(RaftConfig.QUORUM_REQUEST_TIMEOUT_MS_CONFIG)
-
   private def buildNetworkChannel(): KafkaNetworkChannel = {
     val netClient = buildNetworkClient()
-    new KafkaNetworkChannel(time, netClient, requestTimeoutMs())
+    new KafkaNetworkChannel(time, netClient, config.quorumRequestTimeoutMs)
   }
 
   private def createDataDir(): File = {
@@ -272,7 +270,7 @@ class KafkaRaftManager(
       reconnectBackoffMsMs,
       Selectable.USE_DEFAULT_BUFFER_SIZE,
       config.socketReceiveBufferBytes,
-      requestTimeoutMs(),
+      config.quorumRequestTimeoutMs,
       config.connectionSetupTimeoutMs,
       config.connectionSetupTimeoutMaxMs,
       ClientDnsLookup.USE_ALL_DNS_IPS,

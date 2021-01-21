@@ -262,6 +262,7 @@
     <allow pkg="net.sourceforge.argparse4j" />
     <allow pkg="org.apache.kafka.common"/>
     <allow pkg="org.apache.kafka.metalog"/>
+    <allow pkg="org.apache.kafka.raft"/>
     <allow pkg="org.apache.kafka.shell"/>
     <allow pkg="org.apache.log4j" />
     <allow pkg="org.jline"/>

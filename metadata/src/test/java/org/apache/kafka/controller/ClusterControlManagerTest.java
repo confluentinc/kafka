@@ -17,11 +17,13 @@
 
 package org.apache.kafka.controller;
 
+import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.metadata.RegisterBrokerRecord;
 import org.apache.kafka.common.metadata.UnfenceBrokerRecord;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.metadata.BrokerHeartbeatReply;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -32,6 +34,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,9 +47,10 @@ public class ClusterControlManagerTest {
 
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(-1);
         ClusterControlManager clusterControl = new ClusterControlManager(
-            new LogContext(), time, snapshotRegistry, 1000, 100,
+            new LogContext(), time, snapshotRegistry, 1000,
                 new SimpleReplicaPlacementPolicy(new Random()));
-        assertFalse(clusterControl.isUsable(0));
+        clusterControl.activate();
+        assertFalse(clusterControl.unfenced(0));
 
         RegisterBrokerRecord brokerRecord = new RegisterBrokerRecord().setBrokerEpoch(100).setBrokerId(1);
         brokerRecord.endPoints().add(new RegisterBrokerRecord.BrokerEndpoint().
@@ -55,25 +59,26 @@ public class ClusterControlManagerTest {
             setName("PLAINTEXT").
             setHost("example.com"));
         clusterControl.replay(brokerRecord);
-        assertFalse(clusterControl.isUsable(0));
-        assertFalse(clusterControl.isUsable(1));
+        assertFalse(clusterControl.unfenced(0));
+        assertFalse(clusterControl.unfenced(1));
 
         UnfenceBrokerRecord unfenceBrokerRecord =
             new UnfenceBrokerRecord().setId(1).setEpoch(100);
         clusterControl.replay(unfenceBrokerRecord);
-        assertFalse(clusterControl.isUsable(0));
-        assertTrue(clusterControl.isUsable(1));
+        assertFalse(clusterControl.unfenced(0));
+        assertTrue(clusterControl.unfenced(1));
     }
 
     @ParameterizedTest
     @ValueSource(ints = {3, 10})
-    public void testChooseRandomRegistered(int numUsableBrokers) {
+    public void testChooseRandomRegistered(int numUsableBrokers) throws Exception {
         MockTime time = new MockTime(0, 0, 0);
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(-1);
         MockRandom random = new MockRandom();
         ClusterControlManager clusterControl = new ClusterControlManager(
-            new LogContext(), time, snapshotRegistry, 1000, 100,
+            new LogContext(), time, snapshotRegistry, 1000,
             new SimpleReplicaPlacementPolicy(random));
+        clusterControl.activate();
         for (int i = 0; i < numUsableBrokers; i++) {
             RegisterBrokerRecord brokerRecord =
                 new RegisterBrokerRecord().setBrokerEpoch(100).setBrokerId(i);
@@ -83,12 +88,16 @@ public class ClusterControlManagerTest {
                 setName("PLAINTEXT").
                 setHost("example.com"));
             clusterControl.replay(brokerRecord);
-            UnfenceBrokerRecord unfenceBrokerRecord =
-                new UnfenceBrokerRecord().setId(i).setEpoch(100);
-            clusterControl.replay(unfenceBrokerRecord);
+            ControllerResult<BrokerHeartbeatReply> result = clusterControl.
+                processBrokerHeartbeat(new BrokerHeartbeatRequestData().
+                    setBrokerId(i).setBrokerEpoch(100).setCurrentMetadataOffset(1).
+                    setShouldFence(false).setShouldShutdown(false), 0);
+            assertEquals(new BrokerHeartbeatReply(true, false, false), result.response());
+            ControllerTestUtils.replayAll(clusterControl, result.records());
         }
         for (int i = 0; i < numUsableBrokers; i++) {
-            assertTrue(clusterControl.isUsable(i));
+            assertTrue(clusterControl.unfenced(i),
+                String.format("broker %d was not unfenced.", i));
         }
         for (int i = 0; i < 100; i++) {
             List<List<Integer>> results = clusterControl.placeReplicas(1, (short) 3);

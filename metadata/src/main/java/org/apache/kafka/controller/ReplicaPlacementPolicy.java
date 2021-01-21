@@ -35,6 +35,8 @@ interface ReplicaPlacementPolicy {
      * @param activeByRack          A map from racks to the brokers in that rack.
      *                              Brokers without a rack will not appear here.
      *
+     * @return                      A list of replica lists.
+     *
      * @throws InvalidReplicationFactorException    If too many replicas were requested.
      */
     List<List<Integer>> createPlacement(int numPartitions,

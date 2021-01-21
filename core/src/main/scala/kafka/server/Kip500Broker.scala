@@ -21,7 +21,6 @@ import java.util
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
-
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.{ProducerIdGenerator, TransactionCoordinator}
 import kafka.log.LogManager
@@ -42,6 +41,7 @@ import org.apache.kafka.common.utils.{AppInfoParser, LogContext, Time}
 import org.apache.kafka.common.{ClusterResource, Endpoint, KafkaException}
 import org.apache.kafka.metadata.{BrokerState, VersionRange}
 import org.apache.kafka.metalog.MetaLogManager
+import org.apache.kafka.raft.RaftConfig
 import org.apache.kafka.server.authorizer.Authorizer
 
 import scala.collection.{Map, Seq}
@@ -58,7 +58,7 @@ class Kip500Broker(
   val metrics: Metrics,
   val threadNamePrefix: Option[String],
   val initialOfflineDirs: Seq[String],
-  val controllerQuorumVotersFuture: CompletableFuture[String],
+  val controllerQuorumVotersFuture: CompletableFuture[util.List[String]],
   val supportedFeatures: util.Map[String, VersionRange]
 ) extends KafkaBroker {
 
@@ -190,7 +190,7 @@ class Kip500Broker(
 
       /* start broker-to-controller channel managers */
       val controllerNodes =
-        KafkaConfig.controllerQuorumVoterStringsToNodes(controllerQuorumVotersFuture.get())
+        RaftConfig.quorumVoterStringsToNodes(controllerQuorumVotersFuture.get()).asScala
       val controllerNodeProvider = new RaftControllerNodeProvider(metaLogManager, controllerNodes)
       alterIsrChannelManager = BrokerToControllerChannelManager(controllerNodeProvider,
         time, metrics, config, 60000,"alterisr", threadNamePrefix)

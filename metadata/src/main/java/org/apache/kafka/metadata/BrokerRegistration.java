@@ -60,6 +60,22 @@ public class BrokerRegistration {
         this.fenced = fenced;
     }
 
+    public BrokerRegistration(int id,
+                              long epoch,
+                              Uuid incarnationId,
+                              Map<String, Endpoint> listeners,
+                              Map<String, VersionRange> supportedFeatures,
+                              String rack,
+                              boolean fenced) {
+        this.id = id;
+        this.epoch = epoch;
+        this.incarnationId = incarnationId;
+        this.listeners = listeners;
+        this.supportedFeatures = supportedFeatures;
+        this.rack = rack;
+        this.fenced = fenced;
+    }
+
     public int id() {
         return id;
     }
@@ -128,5 +144,10 @@ public class BrokerRegistration {
         bld.append(", fenced=").append(fenced);
         bld.append(")");
         return bld.toString();
+    }
+
+    public BrokerRegistration cloneWithFencing(boolean fencing) {
+        return new BrokerRegistration(id, epoch, incarnationId, listeners,
+            supportedFeatures, rack, fencing);
     }
 }

@@ -28,11 +28,15 @@ import org.apache.kafka.common.metrics.Sensor
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.record.Records
 import org.apache.kafka.common.security.auth.SecurityProtocol
+import org.apache.kafka.raft.RaftConfig
 import org.junit.Assert._
 import org.junit.Test
 import org.scalatest.Assertions.intercept
 
-import java.util.Properties
+import java.net.InetSocketAddress
+import java.util
+import java.util.{Collections, Properties}
+import scala.jdk.CollectionConverters._
 
 class KafkaConfigTest {
 
@@ -656,7 +660,6 @@ class KafkaConfigTest {
         case KafkaConfig.ConnectionSetupTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.ConnectionSetupTimeoutMaxMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.ProcessRolesProp => // ignore string
-        case KafkaConfig.ControllerQuorumVotersProp => // ignore string
         case KafkaConfig.InitialBrokerRegistrationTimeoutMs => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.BrokerHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
         case KafkaConfig.BrokerSessionTimeoutMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number")
@@ -827,6 +830,15 @@ class KafkaConfigTest {
         //Kafka Yammer metrics reporter configs
         case KafkaConfig.KafkaMetricsReporterClassesProp => // ignore
         case KafkaConfig.KafkaMetricsPollingIntervalSecondsProp => //ignore
+
+        // Raft Quorum Configs
+        case RaftConfig.QUORUM_VOTERS_CONFIG => // ignore string
+        case RaftConfig.QUORUM_ELECTION_TIMEOUT_MS_CONFIG => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case RaftConfig.QUORUM_FETCH_TIMEOUT_MS_CONFIG => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case RaftConfig.QUORUM_ELECTION_BACKOFF_MAX_MS_CONFIG => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case RaftConfig.QUORUM_LINGER_MS_CONFIG => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case RaftConfig.QUORUM_REQUEST_TIMEOUT_MS_CONFIG => assertPropertyInvalid(baseProperties, name, "not_a_number")
+        case RaftConfig.QUORUM_RETRY_BACKOFF_MS_CONFIG => assertPropertyInvalid(baseProperties, name, "not_a_number")
 
         case _ => assertPropertyInvalid(baseProperties, name, "not_a_number", "-1")
       }
@@ -1042,17 +1054,16 @@ class KafkaConfigTest {
 
   @Test
   def testControllerQuorumVoterStringsToNodes(): Unit = {
-    assertEquals(Seq.empty, KafkaConfig.controllerQuorumVoterStringsToNodes(""))
+    assertThrows(classOf[ConfigException], () => RaftConfig.quorumVoterStringsToNodes(Collections.singletonList("")))
     assertEquals(Seq(new Node(3000, "example.com", 9093)),
-      KafkaConfig.controllerQuorumVoterStringsToNodes("3000@example.com:9093"))
+      RaftConfig.quorumVoterStringsToNodes(util.Arrays.asList("3000@example.com:9093")).asScala.toSeq)
     assertEquals(Seq(new Node(3000, "example.com", 9093),
                      new Node(3001, "example.com", 9094)),
-      KafkaConfig.controllerQuorumVoterStringsToNodes("3000@example.com:9093,3001@example.com:9094"))
+      RaftConfig.quorumVoterStringsToNodes(util.Arrays.asList("3000@example.com:9093","3001@example.com:9094")).asScala.toSeq)
   }
 
   @Test
   def testInvalidControllerQuorumVoterStringsToNodes(): Unit = {
-    assertInvalidQuorumVoters("")
     assertInvalidQuorumVoters("1")
     assertInvalidQuorumVoters("1@")
     assertInvalidQuorumVoters("1:")
@@ -1068,14 +1079,30 @@ class KafkaConfigTest {
   }
 
   private def assertInvalidQuorumVoters(value: String): Unit = {
-    try {
-      intercept[Exception] {
-        KafkaConfig.controllerQuorumVoterStringsToNodes(value)
-      }
-    } catch {
-      case e: NumberFormatException => { return }
-      case e: RuntimeException => { return }
-      case e: Throwable => throw e
-    }
+    val props = TestUtils.createBrokerConfig(0, TestUtils.MockZkConnect)
+    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, value)
+    assertThrows(classOf[ConfigException], () => KafkaConfig.fromProps(props))
+  }
+
+  @Test
+  def testValidQuorumVotersConfig(): Unit = {
+    val expected = new util.HashMap[Integer, InetSocketAddress]()
+    assertValidQuorumVoters("", expected)
+
+    expected.put(1, new InetSocketAddress("127.0.0.1", 9092))
+    assertValidQuorumVoters("1@127.0.0.1:9092", expected)
+
+    expected.clear()
+    expected.put(1, new InetSocketAddress("kafka1", 9092))
+    expected.put(2, new InetSocketAddress("kafka2", 9092))
+    expected.put(3, new InetSocketAddress("kafka3", 9092))
+    assertValidQuorumVoters("1@kafka1:9092,2@kafka2:9092,3@kafka3:9092", expected)
+  }
+
+  private def assertValidQuorumVoters(value: String, expectedVoters: util.Map[Integer, InetSocketAddress]): Unit = {
+    val props = TestUtils.createBrokerConfig(0, TestUtils.MockZkConnect)
+    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, value)
+    val raftConfig = new RaftConfig(KafkaConfig.fromProps(props))
+    assertEquals(expectedVoters, raftConfig.quorumVoterConnections())
   }
 }

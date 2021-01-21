@@ -37,6 +37,7 @@ import org.apache.kafka.common.requests.RequestHeader;
 import org.apache.kafka.common.utils.ThreadUtils;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.raft.RaftConfig;
 import org.apache.kafka.test.TestUtils;
 import scala.collection.JavaConverters;
 import scala.compat.java8.OptionConverters;
@@ -74,7 +75,7 @@ public class KafkaClusterTestKit implements AutoCloseable {
      */
     private static class ControllerQuorumVotersFutureManager implements AutoCloseable {
         private final int expectedControllers;
-        private final CompletableFuture<String> future = new CompletableFuture<>();
+        private final CompletableFuture<List<String>> future = new CompletableFuture<>();
         private final Map<Integer, Integer> controllerPorts = new TreeMap<>();
 
         ControllerQuorumVotersFutureManager(int expectedControllers) {
@@ -86,7 +87,7 @@ public class KafkaClusterTestKit implements AutoCloseable {
             if (controllerPorts.size() >= expectedControllers) {
                 future.complete(controllerPorts.entrySet().stream().
                     map(e -> String.format("%d@localhost:%d", e.getKey(), e.getValue())).
-                    collect(Collectors.joining(",")));
+                    collect(Collectors.toList()));
             }
         }
 
@@ -149,9 +150,10 @@ public class KafkaClusterTestKit implements AutoCloseable {
                     // Note: we can't accurately set controller.quorum.voters yet, since we don't
                     // yet know what ports each controller will pick.  Set it to an
                     // empty string for now as a placeholder.
-                    props.put(KafkaConfig$.MODULE$.ControllerQuorumVotersProp(), "");
+                    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, "");
                     setupNodeDirectories(baseDirectory, node.metadataDirectory(), Collections.emptyList());
-                    KafkaConfig config = new KafkaConfig(props, false, OptionConverters.toScala(Optional.empty()));
+                    KafkaConfig config = new KafkaConfig(props, false,
+                        OptionConverters.toScala(Optional.empty()));
 
                     String threadNamePrefix = String.format("controller%d_", node.id());
                     MetaProperties metaProperties = MetaProperties.apply(nodes.clusterId(),
@@ -199,8 +201,11 @@ public class KafkaClusterTestKit implements AutoCloseable {
                     setupNodeDirectories(baseDirectory, node.metadataDirectory(),
                         node.logDataDirectories());
 
-                    props.put(KafkaConfig$.MODULE$.ControllerQuorumVotersProp(), "");
-                    KafkaConfig config = new KafkaConfig(props, false, OptionConverters.toScala(Optional.empty()));
+                    // Just like above, we set a placeholder voter list here until we
+                    //find out what ports the controllers picked.
+                    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, "");
+                    KafkaConfig config = new KafkaConfig(props, false,
+                        OptionConverters.toScala(Optional.empty()));
 
                     String threadNamePrefix = String.format("broker%d_", node.id());
                     MetaProperties metaProperties = MetaProperties.apply(nodes.clusterId(),
@@ -372,9 +377,9 @@ public class KafkaClusterTestKit implements AutoCloseable {
     public Properties controllerClientProperties() throws ExecutionException, InterruptedException {
         Properties properties = new Properties();
         if (!controllers.isEmpty()) {
-            Collection<Node> controllerNodes = JavaConverters.asJavaCollection(
-                KafkaConfig$.MODULE$.controllerQuorumVoterStringsToNodes(
-                    controllerQuorumVotersFutureManager.future.get()));
+            Collection<Node> controllerNodes = RaftConfig.quorumVoterStringsToNodes(
+                    controllerQuorumVotersFutureManager.future.get());
+
             StringBuilder bld = new StringBuilder();
             String prefix = "";
             for (Node node : controllerNodes) {
@@ -382,7 +387,7 @@ public class KafkaClusterTestKit implements AutoCloseable {
                 bld.append(node.host()).append(":").append(node.port());
                 prefix = ",";
             }
-            properties.setProperty(KafkaConfig$.MODULE$.ControllerQuorumVotersProp(), bld.toString());
+            properties.setProperty(RaftConfig.QUORUM_VOTERS_CONFIG, bld.toString());
             properties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
                 controllerNodes.stream().map(n -> n.host() + ":" + n.port()).
                     collect(Collectors.joining(",")));

@@ -275,6 +275,7 @@ public class ReplicationControlManager {
         topicInfo.parts.put(record.partitionId(), newPartitionInfo);
         updateIsrMembers(record.topicId(), record.partitionId(),
             prevPartitionInfo.isr, newPartitionInfo.isr);
+        log.debug("Applied ISR change record: {}", record.toString());
     }
 
     /**
@@ -460,7 +461,7 @@ public class ReplicationControlManager {
                         return new ApiError(Errors.INVALID_REPLICA_ASSIGNMENT,
                             "The manual partition assignment specifies the same node " +
                                 "id more than once.");
-                    } else if (!clusterControl.isUsable(brokerId)) {
+                    } else if (!clusterControl.unfenced(brokerId)) {
                         return new ApiError(Errors.INVALID_REPLICA_ASSIGNMENT,
                             "The manual partition assignment contains node " + brokerId +
                                 ", but that node is not usable.");
