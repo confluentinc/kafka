@@ -46,6 +46,7 @@ import org.apache.kafka.common.quota.ClientQuotaAlteration;
 import org.apache.kafka.common.quota.ClientQuotaEntity;
 import org.apache.kafka.common.requests.ApiError;
 import org.apache.kafka.common.utils.EventQueue;
+import org.apache.kafka.common.utils.EventQueue.EarliestDeadlineFunction;
 import org.apache.kafka.common.utils.KafkaEventQueue;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
@@ -72,6 +73,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
 
 public final class QuorumController implements Controller {
     /**
@@ -483,6 +485,40 @@ public final class QuorumController implements Controller {
         snapshotRegistry.deleteSnapshotsUpTo(lastCommittedOffset);
         writeOffset = -1;
         clusterControl.deactivate();
+        cancelMaybeFenceReplicas();
+    }
+
+    private <T> void scheduleDeferredWriteEvent(String name,
+                                                long deadlineNs,
+                                                Supplier<ControllerResult<T>> handler) {
+        ControllerWriteEvent<T> event = new ControllerWriteEvent<>(name, handler);
+        queue.scheduleDeferred(name, new EarliestDeadlineFunction(deadlineNs), event);
+    }
+
+    static final String MAYBE_FENCE_REPLICAS = "maybeFenceReplicas";
+
+    class MaybeFenceReplicas implements Supplier<ControllerResult<Void>> {
+        @Override
+        public ControllerResult<Void> get() {
+            List<ApiMessageAndVersion> records =
+                clusterControl.maybeFenceLeastRecentlyContacted();
+            rescheduleMaybeFenceReplicas();
+            return new ControllerResult<>(records, null);
+        }
+    }
+
+    private void rescheduleMaybeFenceReplicas() {
+        long nextCheckTimeNs = clusterControl.nextCheckTimeNs();
+        if (nextCheckTimeNs == Long.MAX_VALUE) {
+            cancelMaybeFenceReplicas();
+        } else {
+            scheduleDeferredWriteEvent(MAYBE_FENCE_REPLICAS, nextCheckTimeNs,
+                new MaybeFenceReplicas());
+        }
+    }
+
+    private void cancelMaybeFenceReplicas() {
+        queue.cancelDeferred(MAYBE_FENCE_REPLICAS);
     }
 
     @SuppressWarnings("unchecked")
@@ -723,16 +759,24 @@ public final class QuorumController implements Controller {
     @Override
     public CompletableFuture<BrokerHeartbeatReply>
             processBrokerHeartbeat(BrokerHeartbeatRequestData request) {
-        return appendWriteEvent("processBrokerHeartbeat", () ->
-            clusterControl.processBrokerHeartbeat(request, lastCommittedOffset));
+        return appendWriteEvent("processBrokerHeartbeat", () -> {
+            ControllerResult<BrokerHeartbeatReply> result = clusterControl.
+                processBrokerHeartbeat(request, lastCommittedOffset);
+            rescheduleMaybeFenceReplicas();
+            return result;
+        });
     }
 
     @Override
     public CompletableFuture<BrokerRegistrationReply>
             registerBroker(BrokerRegistrationRequestData request) {
-        return appendWriteEvent("registerBroker", () ->
-            clusterControl.registerBroker(request, writeOffset + 1,
-                featureControl.finalizedFeaturesAndEpoch(Long.MAX_VALUE)));
+        return appendWriteEvent("registerBroker", () -> {
+            ControllerResult<BrokerRegistrationReply> result = clusterControl.
+                registerBroker(request, writeOffset + 1, featureControl.
+                    finalizedFeaturesAndEpoch(Long.MAX_VALUE));
+            rescheduleMaybeFenceReplicas();
+            return result;
+        });
     }
 
     @Override

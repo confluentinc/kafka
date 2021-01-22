@@ -317,6 +317,13 @@ public final class KafkaEventQueue implements EventQueue {
                 lock.unlock();
             }
         }
+
+        public void cancelDeferred(String tag) {
+            EventContext eventContext = tagToEventContext.get(tag);
+            if (eventContext != null) {
+                remove(eventContext);
+            }
+        }
     }
 
     private final Time time;
@@ -370,6 +377,16 @@ public final class KafkaEventQueue implements EventQueue {
                 eventHandler.enqueue(eventContext,
                     deadlineNsCalculator == null ? __ -> null : deadlineNsCalculator);
             }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public void cancelDeferred(String tag) {
+        lock.lock();
+        try {
+            eventHandler.cancelDeferred(tag);
         } finally {
             lock.unlock();
         }

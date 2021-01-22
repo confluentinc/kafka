@@ -322,4 +322,31 @@ public class ClusterControlManager {
         if (registration == null) return false;
         return !registration.fenced();
     }
+
+    public List<ApiMessageAndVersion> maybeFenceLeastRecentlyContacted() {
+        if (heartbeatManager == null) {
+            throw new RuntimeException("ClusterControlManager is not active.");
+        }
+        List<ApiMessageAndVersion> records = new ArrayList<>();
+        while (true) {
+            int brokerId = heartbeatManager.maybeFenceLeastRecentlyContacted();
+            if (brokerId == -1) {
+                return records;
+            }
+            BrokerRegistration registration = brokerRegistrations.get(brokerId);
+            if (registration == null) {
+                throw new RuntimeException("Failed to find registration for " +
+                    "broker " + brokerId);
+            }
+            records.add(new ApiMessageAndVersion(new FenceBrokerRecord().
+                setId(brokerId).setEpoch(registration.epoch()), (short) 0));
+        }
+    }
+
+    public long nextCheckTimeNs() {
+        if (heartbeatManager == null) {
+            throw new RuntimeException("ClusterControlManager is not active.");
+        }
+        return heartbeatManager.nextCheckTimeNs();
+    }
 }
