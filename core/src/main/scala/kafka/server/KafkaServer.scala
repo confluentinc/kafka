@@ -30,6 +30,7 @@ import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.common.metrics.{JmxReporter, Metrics, MetricsReporter}
 import org.apache.kafka.common.utils.{AppInfoParser, Time}
 import org.apache.kafka.metadata.VersionRange
+import org.apache.kafka.raft.RaftConfig
 import org.apache.kafka.server.authorizer.AuthorizerServerInfo
 
 import scala.jdk.CollectionConverters._
@@ -107,8 +108,8 @@ class Kip500Server(
     throw new ConfigException(s"Duplicate role names found in roles config $roles")
   }
 
-  if (config.controllerQuorumVoters == null || config.controllerQuorumVoters.isEmpty) {
-    throw new ConfigException(s"You must specify a value for ${KafkaConfig.ControllerQuorumVotersProp}")
+  if (config.quorumVoters == null || config.quorumVoters.isEmpty) {
+    throw new ConfigException(s"You must specify a value for ${RaftConfig.QUORUM_VOTERS_CONFIG}")
   }
 
   private val (metaProps, offlineDirs) = loadMetaProperties()
@@ -131,7 +132,7 @@ class Kip500Server(
       metrics,
       threadNamePrefix,
       offlineDirs,
-      CompletableFuture.completedFuture(config.controllerQuorumVoters),
+      CompletableFuture.completedFuture(config.quorumVoters),
       KafkaServer.SUPPORTED_FEATURES
     ))
   } else {
@@ -147,7 +148,7 @@ class Kip500Server(
       time,
       metrics,
       threadNamePrefix,
-      CompletableFuture.completedFuture(config.controllerQuorumVoters)
+      CompletableFuture.completedFuture(config.quorumVoters)
     ))
   } else {
     None

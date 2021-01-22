@@ -23,6 +23,7 @@ import org.apache.kafka.common.metadata.ConfigRecord;
 import org.apache.kafka.common.protocol.ApiMessageAndVersion;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.ApiError;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
 import java.util.AbstractMap.SimpleImmutableEntry;
@@ -82,7 +83,7 @@ public class ConfigurationControlManagerTest {
     public void testReplay() {
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(0);
         ConfigurationControlManager manager =
-            new ConfigurationControlManager(snapshotRegistry, CONFIGS);
+            new ConfigurationControlManager(new LogContext(), snapshotRegistry, CONFIGS);
         assertEquals(Collections.emptyMap(), manager.getConfigs(BROKER0));
         manager.replay(new ConfigRecord().
             setResourceType(BROKER.id()).setResourceName("0").
@@ -132,7 +133,7 @@ public class ConfigurationControlManagerTest {
     public void testIncrementalAlterConfigs() {
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(0);
         ConfigurationControlManager manager =
-            new ConfigurationControlManager(snapshotRegistry, CONFIGS);
+            new ConfigurationControlManager(new LogContext(), snapshotRegistry, CONFIGS);
         assertEquals(new ControllerResult<Map<ConfigResource, ApiError>>(Collections.singletonList(
             new ApiMessageAndVersion(new ConfigRecord().
                 setResourceType(TOPIC.id()).setResourceName("mytopic").
@@ -151,7 +152,7 @@ public class ConfigurationControlManagerTest {
     public void testIsSplittable() {
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(0);
         ConfigurationControlManager manager =
-            new ConfigurationControlManager(snapshotRegistry, CONFIGS);
+            new ConfigurationControlManager(new LogContext(), snapshotRegistry, CONFIGS);
         assertTrue(manager.isSplittable(BROKER, "foo.bar"));
         assertFalse(manager.isSplittable(BROKER, "baz"));
         assertFalse(manager.isSplittable(BROKER, "foo.baz.quux"));
@@ -163,7 +164,7 @@ public class ConfigurationControlManagerTest {
     public void testGetConfigValueDefault() {
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(0);
         ConfigurationControlManager manager =
-            new ConfigurationControlManager(snapshotRegistry, CONFIGS);
+            new ConfigurationControlManager(new LogContext(), snapshotRegistry, CONFIGS);
         assertEquals("1", manager.getConfigValueDefault(BROKER, "foo.bar"));
         assertEquals(null, manager.getConfigValueDefault(BROKER, "foo.baz.quux"));
         assertEquals(null, manager.getConfigValueDefault(TOPIC, "abc"));
@@ -174,7 +175,7 @@ public class ConfigurationControlManagerTest {
     public void testLegacyAlterConfigs() {
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(0);
         ConfigurationControlManager manager =
-            new ConfigurationControlManager(snapshotRegistry, CONFIGS);
+            new ConfigurationControlManager(new LogContext(), snapshotRegistry, CONFIGS);
         List<ApiMessageAndVersion> expectedRecords1 = Arrays.asList(
             new ApiMessageAndVersion(new ConfigRecord().
                 setResourceType(TOPIC.id()).setResourceName("mytopic").

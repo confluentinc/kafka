@@ -32,6 +32,7 @@ import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.utils.Exit;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.raft.RaftConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.compat.java8.OptionConverters;
@@ -99,10 +100,10 @@ public final class MetadataShell {
                 properties = new Properties();
             }
             if (controllers != null) {
-                properties.setProperty(KafkaConfig$.MODULE$.ControllerQuorumVotersProp(),
+                properties.setProperty(RaftConfig.QUORUM_VOTERS_CONFIG,
                     controllers);
             }
-            if (properties.getProperty(KafkaConfig$.MODULE$.ControllerQuorumVotersProp()) == null) {
+            if (properties.getProperty(RaftConfig.QUORUM_VOTERS_CONFIG) == null) {
                 throw new TerseFailure("Please use --controllers to specify the quorum voters.");
             }
             // TODO: we really shouldn't have to set up a fake broker config like this.

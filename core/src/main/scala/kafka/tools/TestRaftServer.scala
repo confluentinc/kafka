@@ -90,7 +90,7 @@ class TestRaftServer(
     val logDirName = Log.logDirName(partition)
     val logDir = createLogDirectory(new File(config.logDirs.head), logDirName)
 
-    val raftConfig = new RaftConfig(config.originals)
+    val raftConfig = new RaftConfig(config)
     val metadataLog = buildMetadataLog(logDir)
     val networkChannel = buildNetworkChannel(raftConfig, logContext)
 

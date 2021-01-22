@@ -17,6 +17,7 @@
 
 package org.apache.kafka.controller;
 
+import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopic;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicCollection;
@@ -24,13 +25,13 @@ import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResult;
 import org.apache.kafka.common.metadata.RegisterBrokerRecord;
 import org.apache.kafka.common.metadata.TopicRecord;
-import org.apache.kafka.common.metadata.UnfenceBrokerRecord;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.ApiError;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.controller.ReplicationControlManager.PartitionControlInfo;
+import org.apache.kafka.metadata.BrokerHeartbeatReply;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -49,14 +50,17 @@ public class ReplicationControlManagerTest {
         SnapshotRegistry snapshotRegistry = new SnapshotRegistry(-1);
         LogContext logContext = new LogContext();
         MockTime time = new MockTime();
-        ClusterControlManager clusterControl =
-            new ClusterControlManager(logContext, time, snapshotRegistry, 1000, 100);
-        ConfigurationControlManager configurationControl =
-            new ConfigurationControlManager(snapshotRegistry, Collections.emptyMap());
+        MockRandom random = new MockRandom();
+        ClusterControlManager clusterControl = new ClusterControlManager(
+            logContext, time, snapshotRegistry, 1000,
+            new SimpleReplicaPlacementPolicy(random));
+        clusterControl.activate();
+        ConfigurationControlManager configurationControl = new ConfigurationControlManager(
+            new LogContext(), snapshotRegistry, Collections.emptyMap());
         return new ReplicationControlManager(snapshotRegistry,
             new LogContext(),
-            new MockRandom(),
-            3,
+            random,
+            (short) 3,
             1,
             configurationControl,
             clusterControl);
@@ -73,10 +77,14 @@ public class ReplicationControlManagerTest {
         clusterControl.replay(brokerRecord);
     }
 
-    private static void unfenceBroker(int brokerId, ClusterControlManager clusterControl) {
-        UnfenceBrokerRecord unfenceBrokerRecord =
-            new UnfenceBrokerRecord().setId(brokerId).setEpoch(100);
-        clusterControl.replay(unfenceBrokerRecord);
+    private static void unfenceBroker(int brokerId,
+                                      ClusterControlManager clusterControl) throws Exception {
+        ControllerResult<BrokerHeartbeatReply> result = clusterControl.
+            processBrokerHeartbeat(new BrokerHeartbeatRequestData().
+                setBrokerId(brokerId).setBrokerEpoch(100).setCurrentMetadataOffset(1).
+                setShouldFence(false).setShouldShutdown(false), 0);
+        assertEquals(new BrokerHeartbeatReply(true, false, false), result.response());
+        ControllerTestUtils.replayAll(clusterControl, result.records());
     }
 
     @Test
@@ -106,8 +114,8 @@ public class ReplicationControlManagerTest {
             setNumPartitions(1).setReplicationFactor((short) 3));
         assertEquals(expectedResponse2, result2.response());
         ControllerTestUtils.replayAll(replicationControl, result2.records());
-        assertEquals(new PartitionControlInfo(new int[] {1, 2, 0},
-            new int[] {1, 2, 0}, null, null, 1, 0),
+        assertEquals(new PartitionControlInfo(new int[] {2, 0, 1},
+            new int[] {2, 0, 1}, null, null, 2, 0),
             replicationControl.getPartition(
                 ((TopicRecord) result2.records().get(0).message()).topicId(), 0));
         ControllerResult<CreateTopicsResponseData> result3 =
@@ -120,7 +128,7 @@ public class ReplicationControlManagerTest {
     }
 
     @Test
-    public void testValidateNewTopicNames() throws Exception {
+    public void testValidateNewTopicNames() {
         Map<String, ApiError> topicErrors = new HashMap<>();
         CreatableTopicCollection topics = new CreatableTopicCollection();
         topics.add(new CreatableTopic().setName(""));

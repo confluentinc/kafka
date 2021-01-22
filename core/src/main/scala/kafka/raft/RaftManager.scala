@@ -91,7 +91,6 @@ class KafkaRaftManager(
   metrics: Metrics
 ) extends RaftManager with Logging {
 
-  private val raftConfig = new RaftConfig(config.originals)
   private val nodeId = if (config.processRoles.contains(ControllerRole)) {
     config.controllerId
   } else {
@@ -112,7 +111,9 @@ class KafkaRaftManager(
   private val raftIoThread = new RaftIoThread(raftClient)
   private val metaLogShim = new MetaLogRaftShim(raftClient, nodeId)
 
-  val voterNodes: Seq[Node] = raftConfig.quorumVoterNodes().asScala.toSeq
+  private var raftConfig: RaftConfig = _
+
+  def voterNodes: Seq[Node] = raftConfig.quorumVoterNodes().asScala.toSeq
 
   def currentLeader: Option[Node] = {
     val leaderAndEpoch = raftClient.leaderAndEpoch()
@@ -128,6 +129,7 @@ class KafkaRaftManager(
 
   def startup(): Unit = {
     netChannel.start()
+    raftConfig = new RaftConfig(config)
     raftClient.initialize(raftConfig)
     raftIoThread.start()
   }
@@ -186,7 +188,7 @@ class KafkaRaftManager(
 
   private def buildNetworkChannel(): KafkaNetworkChannel = {
     val netClient = buildNetworkClient()
-    new KafkaNetworkChannel(time, netClient, raftConfig.requestTimeoutMs)
+    new KafkaNetworkChannel(time, netClient, config.quorumRequestTimeoutMs)
   }
 
   private def createDataDir(): File = {
@@ -258,7 +260,7 @@ class KafkaRaftManager(
       reconnectBackoffMsMs,
       Selectable.USE_DEFAULT_BUFFER_SIZE,
       config.socketReceiveBufferBytes,
-      raftConfig.requestTimeoutMs,
+      config.quorumRequestTimeoutMs,
       config.connectionSetupTimeoutMs,
       config.connectionSetupTimeoutMaxMs,
       ClientDnsLookup.USE_ALL_DNS_IPS,

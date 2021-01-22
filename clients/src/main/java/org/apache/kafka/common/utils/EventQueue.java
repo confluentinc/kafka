@@ -54,6 +54,25 @@ public interface EventQueue extends AutoCloseable {
         }
     }
 
+    class EarliestDeadlineFunction implements Function<Long, Long> {
+        private final long newDeadlineNs;
+
+        public EarliestDeadlineFunction(long newDeadlineNs) {
+            this.newDeadlineNs = newDeadlineNs;
+        }
+
+        @Override
+        public Long apply(Long prevDeadlineNs) {
+            if (prevDeadlineNs == null) {
+                return newDeadlineNs;
+            } else if (prevDeadlineNs < newDeadlineNs) {
+                return prevDeadlineNs;
+            } else {
+                return newDeadlineNs;
+            }
+        }
+    }
+
     class VoidEvent implements Event {
         public final static VoidEvent INSTANCE = new VoidEvent();
 
@@ -110,6 +129,15 @@ public interface EventQueue extends AutoCloseable {
                                   Event event) {
         enqueue(EventInsertionType.DEFERRED, tag, deadlineNsCalculator, event);
     }
+
+    /**
+     * Cancel a deferred event.
+     *
+     * @param tag                   The unique tag for the event to be cancelled.  Must be
+     *                              non-null.  If the event with the tag has not been
+     *                              scheduled, this call will be ignored.
+     */
+    void cancelDeferred(String tag);
 
     enum EventInsertionType {
         PREPEND,

@@ -27,8 +27,10 @@ import org.apache.kafka.common.metadata.ConfigRecord;
 import org.apache.kafka.common.protocol.ApiMessageAndVersion;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.ApiError;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -43,12 +45,15 @@ import java.util.Objects;
 import static org.apache.kafka.clients.admin.AlterConfigOp.OpType.APPEND;
 
 public class ConfigurationControlManager {
+    private final Logger log;
     private final SnapshotRegistry snapshotRegistry;
     private final Map<ConfigResource.Type, ConfigDef> configDefs;
     private final TimelineHashMap<ConfigResource, TimelineHashMap<String, String>> configData;
 
-    ConfigurationControlManager(SnapshotRegistry snapshotRegistry,
+    ConfigurationControlManager(LogContext logContext,
+                                SnapshotRegistry snapshotRegistry,
                                 Map<ConfigResource.Type, ConfigDef> configDefs) {
+        this.log = logContext.logger(ConfigurationControlManager.class);
         this.snapshotRegistry = snapshotRegistry;
         this.configDefs = configDefs;
         this.configData = new TimelineHashMap<>(snapshotRegistry, 0);
@@ -311,6 +316,7 @@ public class ConfigurationControlManager {
         } else {
             configs.put(record.name(), record.value());
         }
+        log.info("{}: set configuration {} to {}", configResource, record.name(), record.value());
     }
 
     // VisibleForTesting

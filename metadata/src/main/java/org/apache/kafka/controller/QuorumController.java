@@ -46,12 +46,13 @@ import org.apache.kafka.common.quota.ClientQuotaAlteration;
 import org.apache.kafka.common.quota.ClientQuotaEntity;
 import org.apache.kafka.common.requests.ApiError;
 import org.apache.kafka.common.utils.EventQueue;
+import org.apache.kafka.common.utils.EventQueue.EarliestDeadlineFunction;
 import org.apache.kafka.common.utils.KafkaEventQueue;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.controller.ClusterControlManager.HeartbeatReply;
-import org.apache.kafka.controller.ClusterControlManager.RegistrationReply;
+import org.apache.kafka.metadata.BrokerHeartbeatReply;
+import org.apache.kafka.metadata.BrokerRegistrationReply;
 import org.apache.kafka.metadata.FeatureManager;
 import org.apache.kafka.metadata.VersionRange;
 import org.apache.kafka.metalog.MetaLogLeader;
@@ -73,6 +74,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+
 public final class QuorumController implements Controller {
     /**
      * A builder class which creates the QuorumController.
@@ -85,8 +87,11 @@ public final class QuorumController implements Controller {
         private Map<ConfigResource.Type, ConfigDef> configDefs = Collections.emptyMap();
         private MetaLogManager logManager = null;
         private Map<String, VersionRange> supportedFeatures = Collections.emptyMap();
-        private int defaultReplicationFactor = 3;
+        private short defaultReplicationFactor = 3;
         private int defaultNumPartitions = 1;
+        private ReplicaPlacementPolicy replicaPlacementPolicy =
+            new SimpleReplicaPlacementPolicy(new Random());
+        private long sessionTimeoutNs = TimeUnit.NANOSECONDS.convert(18, TimeUnit.SECONDS);
 
         public Builder(int nodeId) {
             this.nodeId = nodeId;
@@ -122,13 +127,23 @@ public final class QuorumController implements Controller {
             return this;
         }
 
-        public Builder setDefaultReplicationFactor(int defaultReplicationFactor) {
+        public Builder setDefaultReplicationFactor(short defaultReplicationFactor) {
             this.defaultReplicationFactor = defaultReplicationFactor;
             return this;
         }
 
         public Builder setDefaultNumPartitions(int defaultNumPartitions) {
             this.defaultNumPartitions = defaultNumPartitions;
+            return this;
+        }
+
+        public Builder setReplicaPlacementPolicy(ReplicaPlacementPolicy replicaPlacementPolicy) {
+            this.replicaPlacementPolicy = replicaPlacementPolicy;
+            return this;
+        }
+
+        public Builder setSessionTimeoutNs(long sessionTimeoutNs) {
+            this.sessionTimeoutNs = sessionTimeoutNs;
             return this;
         }
 
@@ -147,7 +162,7 @@ public final class QuorumController implements Controller {
                 queue = new KafkaEventQueue(time, logContext, threadNamePrefix);
                 return new QuorumController(logContext, nodeId, queue, time, configDefs,
                         logManager, supportedFeatures, defaultReplicationFactor,
-                        defaultNumPartitions);
+                        defaultNumPartitions, replicaPlacementPolicy, sessionTimeoutNs);
             } catch (Exception e) {
                 Utils.closeQuietly(queue, "event queue");
                 throw e;
@@ -440,6 +455,7 @@ public final class QuorumController implements Controller {
                     log.info("Becoming active at controller epoch {}.", newEpoch);
                     curClaimEpoch = newEpoch;
                     writeOffset = lastCommittedOffset;
+                    clusterControl.activate();
                 });
             }
         }
@@ -468,41 +484,80 @@ public final class QuorumController implements Controller {
         snapshotRegistry.revertToSnapshot(lastCommittedOffset);
         snapshotRegistry.deleteSnapshotsUpTo(lastCommittedOffset);
         writeOffset = -1;
+        clusterControl.deactivate();
+        cancelMaybeFenceReplicas();
+    }
+
+    private <T> void scheduleDeferredWriteEvent(String name,
+                                                long deadlineNs,
+                                                Supplier<ControllerResult<T>> handler) {
+        ControllerWriteEvent<T> event = new ControllerWriteEvent<>(name, handler);
+        queue.scheduleDeferred(name, new EarliestDeadlineFunction(deadlineNs), event);
+    }
+
+    static final String MAYBE_FENCE_REPLICAS = "maybeFenceReplicas";
+
+    class MaybeFenceReplicas implements Supplier<ControllerResult<Void>> {
+        @Override
+        public ControllerResult<Void> get() {
+            List<ApiMessageAndVersion> records =
+                clusterControl.maybeFenceLeastRecentlyContacted();
+            rescheduleMaybeFenceReplicas();
+            return new ControllerResult<>(records, null);
+        }
+    }
+
+    private void rescheduleMaybeFenceReplicas() {
+        long nextCheckTimeNs = clusterControl.nextCheckTimeNs();
+        if (nextCheckTimeNs == Long.MAX_VALUE) {
+            cancelMaybeFenceReplicas();
+        } else {
+            scheduleDeferredWriteEvent(MAYBE_FENCE_REPLICAS, nextCheckTimeNs,
+                new MaybeFenceReplicas());
+        }
+    }
+
+    private void cancelMaybeFenceReplicas() {
+        queue.cancelDeferred(MAYBE_FENCE_REPLICAS);
     }
 
     @SuppressWarnings("unchecked")
     private void replay(ApiMessage message) {
-        MetadataRecordType type = MetadataRecordType.fromId(message.apiKey());
-        switch (type) {
-            case REGISTER_BROKER_RECORD:
-                clusterControl.replay((RegisterBrokerRecord) message);
-                break;
-            case UNREGISTER_BROKER_RECORD:
-                clusterControl.replay((UnregisterBrokerRecord) message);
-                break;
-            case FENCE_BROKER_RECORD:
-                clusterControl.replay((FenceBrokerRecord) message);
-                break;
-            case UNFENCE_BROKER_RECORD:
-                clusterControl.replay((UnfenceBrokerRecord) message);
-                break;
-            case TOPIC_RECORD:
-                replicationControl.replay((TopicRecord) message);
-                break;
-            case PARTITION_RECORD:
-                replicationControl.replay((PartitionRecord) message);
-                break;
-            case CONFIG_RECORD:
-                configurationControl.replay((ConfigRecord) message);
-                break;
-            case QUOTA_RECORD:
-                clientQuotaControlManager.replay((QuotaRecord) message);
-                break;
-            case ISR_CHANGE_RECORD:
-                replicationControl.replay((IsrChangeRecord) message);
-                break;
-            default:
-                throw new RuntimeException("Unhandled record type " + type);
+        try {
+            MetadataRecordType type = MetadataRecordType.fromId(message.apiKey());
+            switch (type) {
+                case REGISTER_BROKER_RECORD:
+                    clusterControl.replay((RegisterBrokerRecord) message);
+                    break;
+                case UNREGISTER_BROKER_RECORD:
+                    clusterControl.replay((UnregisterBrokerRecord) message);
+                    break;
+                case FENCE_BROKER_RECORD:
+                    clusterControl.replay((FenceBrokerRecord) message);
+                    break;
+                case UNFENCE_BROKER_RECORD:
+                    clusterControl.replay((UnfenceBrokerRecord) message);
+                    break;
+                case TOPIC_RECORD:
+                    replicationControl.replay((TopicRecord) message);
+                    break;
+                case PARTITION_RECORD:
+                    replicationControl.replay((PartitionRecord) message);
+                    break;
+                case CONFIG_RECORD:
+                    configurationControl.replay((ConfigRecord) message);
+                    break;
+                case QUOTA_RECORD:
+                    clientQuotaControlManager.replay((QuotaRecord) message);
+                    break;
+                case ISR_CHANGE_RECORD:
+                    replicationControl.replay((IsrChangeRecord) message);
+                    break;
+                default:
+                    throw new RuntimeException("Unhandled record type " + type);
+            }
+        } catch (Exception e) {
+            log.error("Error replaying record {}", message.toString(), e);
         }
     }
 
@@ -600,8 +655,10 @@ public final class QuorumController implements Controller {
                              Map<ConfigResource.Type, ConfigDef> configDefs,
                              MetaLogManager logManager,
                              Map<String, VersionRange> supportedFeatures,
-                             int defaultReplicationFactor,
-                             int defaultNumPartitions) throws Exception {
+                             short defaultReplicationFactor,
+                             int defaultNumPartitions,
+                             ReplicaPlacementPolicy replicaPlacementPolicy,
+                             long sessionTimeoutNs) throws Exception {
         this.log = logContext.logger(QuorumController.class);
         this.nodeId = nodeId;
         this.queue = queue;
@@ -609,13 +666,12 @@ public final class QuorumController implements Controller {
         this.snapshotRegistry = new SnapshotRegistry(logContext, -1);
         snapshotRegistry.createSnapshot(-1);
         this.purgatory = new ControllerPurgatory();
-        this.configurationControl = new ConfigurationControlManager(snapshotRegistry,
-            configDefs);
+        this.configurationControl = new ConfigurationControlManager(logContext,
+            snapshotRegistry, configDefs);
         this.clientQuotaControlManager = new ClientQuotaControlManager(snapshotRegistry);
-        this.clusterControl =
-            new ClusterControlManager(logContext, time, snapshotRegistry, 18000, 9000);
-        this.featureControl =
-            new FeatureControlManager(supportedFeatures, snapshotRegistry);
+        this.clusterControl = new ClusterControlManager(logContext, time,
+            snapshotRegistry, sessionTimeoutNs, replicaPlacementPolicy);
+        this.featureControl = new FeatureControlManager(supportedFeatures, snapshotRegistry);
         this.replicationControl = new ReplicationControlManager(snapshotRegistry,
             logContext, new Random(), defaultReplicationFactor, defaultNumPartitions,
             configurationControl, clusterControl);
@@ -701,18 +757,26 @@ public final class QuorumController implements Controller {
     }
 
     @Override
-    public CompletableFuture<HeartbeatReply>
+    public CompletableFuture<BrokerHeartbeatReply>
             processBrokerHeartbeat(BrokerHeartbeatRequestData request) {
-        return appendWriteEvent("processBrokerHeartbeat", () ->
-            clusterControl.processBrokerHeartbeat(request, lastCommittedOffset));
+        return appendWriteEvent("processBrokerHeartbeat", () -> {
+            ControllerResult<BrokerHeartbeatReply> result = clusterControl.
+                processBrokerHeartbeat(request, lastCommittedOffset);
+            rescheduleMaybeFenceReplicas();
+            return result;
+        });
     }
 
     @Override
-    public CompletableFuture<RegistrationReply>
+    public CompletableFuture<BrokerRegistrationReply>
             registerBroker(BrokerRegistrationRequestData request) {
-        return appendWriteEvent("registerBroker", () ->
-            clusterControl.registerBroker(request, writeOffset + 1,
-                featureControl.finalizedFeaturesAndEpoch(Long.MAX_VALUE)));
+        return appendWriteEvent("registerBroker", () -> {
+            ControllerResult<BrokerRegistrationReply> result = clusterControl.
+                registerBroker(request, writeOffset + 1, featureControl.
+                    finalizedFeaturesAndEpoch(Long.MAX_VALUE));
+            rescheduleMaybeFenceReplicas();
+            return result;
+        });
     }
 
     @Override
