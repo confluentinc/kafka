@@ -48,7 +48,7 @@ class KafkaServerStartable(
     catch {
       case _: Throwable =>
         // KafkaServerStartable.startup() calls shutdown() in case of exceptions, so we invoke `exit` to set the status code
-        fatal("Exiting Kafka." )
+        fatal("Exiting Kafka.")
         Exit.exit(1)
     }
   }
