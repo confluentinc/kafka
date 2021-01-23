@@ -211,21 +211,34 @@ public class ClusterControlManager {
         boolean isCaughtUp = request.currentMetadataOffset() >= lastCommittedOffset;
         List<ApiMessageAndVersion> records = new ArrayList<>();
         boolean isFenced = registration.fenced();
+        boolean shouldShutdown = false;
         if (isFenced) {
-            if (isCaughtUp && !request.shouldFence()) {
+            if (request.shouldShutdown()) {
+                // If the broker is fenced, and requests a shutdown, do it immediately.
+                shouldShutdown = true;
+            } else if (isCaughtUp && !request.shouldFence()) {
                 records.add(new ApiMessageAndVersion(new UnfenceBrokerRecord().
                     setId(brokerId).setEpoch(request.brokerEpoch()), (short) 0));
                 isFenced = false;
             }
         } else {
-            if (request.shouldFence()) {
+            if (request.shouldShutdown()) {
+                // If the broker is fenced, and requests a shutdown, enter controlled
+                // shutdown.
+                // TODO: implement this.  This is just a stub.
+                records.add(new ApiMessageAndVersion(new FenceBrokerRecord().
+                    setId(brokerId).setEpoch(request.brokerEpoch()), (short) 0));
+                isFenced = true;
+                shouldShutdown = true;
+            } else if (request.shouldFence()) {
                 records.add(new ApiMessageAndVersion(new FenceBrokerRecord().
                     setId(brokerId).setEpoch(request.brokerEpoch()), (short) 0));
                 isFenced = true;
             }
         }
         heartbeatManager.touch(brokerId, isFenced);
-        return new ControllerResult<>(records, new BrokerHeartbeatReply(isCaughtUp, isFenced, false));
+        return new ControllerResult<>(records, new BrokerHeartbeatReply(
+            isCaughtUp, isFenced, shouldShutdown));
     }
 
     public void replay(RegisterBrokerRecord record) {

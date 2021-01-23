@@ -18,9 +18,10 @@
 package kafka.server
 
 import java.util
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.{CompletableFuture, TimeUnit, TimeoutException}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
+
 import kafka.coordinator.group.GroupCoordinator
 import kafka.coordinator.transaction.{ProducerIdGenerator, TransactionCoordinator}
 import kafka.log.LogManager
@@ -352,27 +353,23 @@ class Kip500Broker(
     new TemporaryProducerIdManager()
   }
 
-  /**
-   * Performs controlled shutdown
-   */
-  private def controlledShutdown(): Unit = {
-
-    if (config.controlledShutdownEnable) {
-      // We request the heartbeat to initiate a controlled shutdown.
-      info("Controlled shutdown requested")
-
-      // TODO: request controlled shutdown from broker lifecycle manager
-      // TODO: wait for controlled shutdown to complete
-    }
-    lifecycleManager.beginShutdown()
-  }
-
   def shutdown(): Unit = {
     if (!maybeChangeStatus(STARTED, SHUTTING_DOWN)) return
     try {
       info("shutting down")
 
-      CoreUtils.swallow(controlledShutdown(), this)
+      if (config.controlledShutdownEnable) {
+        lifecycleManager.beginControlledShutdown()
+        try {
+          lifecycleManager.controlledShutdownFuture.get(5L, TimeUnit.MINUTES)
+        } catch {
+          case _: TimeoutException =>
+            error("Timed out waiting for the controller to approve controlled shutdown")
+          case e: Throwable =>
+            error("Got unexpected exception waiting for controlled shutdown future", e)
+        }
+      }
+      lifecycleManager.beginShutdown()
 
       // Stop socket server to stop accepting any more connections and requests.
       // Socket server will be shutdown towards the end of the sequence.

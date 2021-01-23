@@ -25,9 +25,9 @@ import org.apache.kafka.clients.{ManualMetadataUpdater, Metadata, MockClient}
 import org.apache.kafka.common.{Node, Uuid}
 import org.apache.kafka.common.internals.ClusterResourceListeners
 import org.apache.kafka.common.message.BrokerRegistrationRequestData.{Listener, ListenerCollection}
-import org.apache.kafka.common.message.BrokerRegistrationResponseData
+import org.apache.kafka.common.message.{BrokerHeartbeatResponseData, BrokerRegistrationResponseData}
 import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.common.requests.BrokerRegistrationResponse
+import org.apache.kafka.common.requests.{BrokerHeartbeatResponse, BrokerRegistrationResponse}
 import org.apache.kafka.common.utils.LogContext
 import org.apache.kafka.metadata.BrokerState
 import org.junit.rules.Timeout
@@ -150,6 +150,46 @@ class BrokerLifecycleManagerTest {
       Assert.assertTrue(manager.initialCatchUpFuture.isCompletedExceptionally())
       Assert.assertEquals(-1L, manager.brokerEpoch())
     }
+    manager.close()
+  }
+
+  @Test
+  def testControlledShutdown(): Unit = {
+    val context = new BrokerLifecycleManagerTestContext(configProperties)
+    val manager = new BrokerLifecycleManager(context.config, context.time, None)
+    val controllerNode = new Node(3000, "localhost", 8021)
+    context.controllerNodeProvider.node.set(controllerNode)
+    context.mockClient.prepareResponseFrom(new BrokerRegistrationResponse(
+      new BrokerRegistrationResponseData().setBrokerEpoch(1000)), controllerNode)
+    context.mockClient.prepareResponseFrom(new BrokerHeartbeatResponse(
+      new BrokerHeartbeatResponseData().setIsCaughtUp(true)), controllerNode)
+    manager.start(() => context.highestMetadataOffset.get(),
+      context.channelManager, context.clusterId, context.advertisedListeners,
+      Collections.emptyMap())
+    TestUtils.retry(10000) {
+      context.mockClient.wakeup()
+      Assert.assertEquals(BrokerState.RECOVERY, manager.state())
+    }
+    context.mockClient.prepareResponseFrom(new BrokerHeartbeatResponse(
+      new BrokerHeartbeatResponseData().setIsFenced(false)), controllerNode)
+    context.time.sleep(20)
+    TestUtils.retry(10000) {
+      context.mockClient.wakeup()
+      Assert.assertEquals(BrokerState.RUNNING, manager.state())
+    }
+    manager.beginControlledShutdown()
+    TestUtils.retry(10000) {
+      context.mockClient.wakeup()
+      Assert.assertEquals(BrokerState.PENDING_CONTROLLED_SHUTDOWN, manager.state())
+    }
+    context.mockClient.prepareResponseFrom(new BrokerHeartbeatResponse(
+      new BrokerHeartbeatResponseData().setShouldShutdown(true)), controllerNode)
+    context.time.sleep(3000)
+    TestUtils.retry(10000) {
+      context.mockClient.wakeup()
+      Assert.assertEquals(BrokerState.SHUTTING_DOWN, manager.state())
+    }
+    manager.controlledShutdownFuture.get()
     manager.close()
   }
 }

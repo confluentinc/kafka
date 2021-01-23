@@ -76,9 +76,10 @@ public class BrokerHeartbeatManager {
             if (list == null) {
                 this.lastContactNs = lastContactNs;
             } else {
-                list.remove(this);
+                BrokerHeartbeatStateList curList = list;
+                curList.remove(this);
                 this.lastContactNs = lastContactNs;
-                list.add(this);
+                curList.add(this);
             }
         }
 

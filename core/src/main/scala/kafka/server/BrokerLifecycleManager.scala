@@ -78,6 +78,11 @@ class BrokerLifecycleManager(val config: KafkaConfig,
   val initialCatchUpFuture = new CompletableFuture[Void]()
 
   /**
+   * A future which is completed when controlled shutdown is done.
+   */
+  val controlledShutdownFuture = new CompletableFuture[Void]()
+
+  /**
    * The broker epoch, or -1 if the broker has not yet registered.
    * This variable can only be written from the event queue thread.
    */
@@ -163,6 +168,30 @@ class BrokerLifecycleManager(val config: KafkaConfig,
   def brokerEpoch(): Long = _brokerEpoch
 
   def state(): BrokerState = _state
+
+  class BeginControlledShutdownEvent extends EventQueue.Event {
+    override def run(): Unit = {
+      _state match {
+        case BrokerState.PENDING_CONTROLLED_SHUTDOWN =>
+          info(s"Attempted to enter controlled shutdown state, but we are already in " +
+            s"that state.")
+        case BrokerState.RUNNING =>
+          info(s"Beginning controlled shutdown.")
+          _state = BrokerState.PENDING_CONTROLLED_SHUTDOWN
+        case _ =>
+          info(s"Skipping controlled shutdown because we are in state ${_state}.")
+          beginShutdown()
+      }
+    }
+  }
+
+  /**
+   * Enter the controlled shutdown state if we are in RUNNING state.
+   * Or, if we're not running, shut down immediately.
+   */
+  def beginControlledShutdown(): Unit = {
+    eventQueue.append(new BeginControlledShutdownEvent())
+  }
 
   /**
    * Start shutting down the BrokerLifecycleManager, but do not block.
@@ -269,7 +298,8 @@ class BrokerLifecycleManager(val config: KafkaConfig,
       setBrokerEpoch(_brokerEpoch).
       setBrokerId(brokerId).
       setCurrentMetadataOffset(metadataOffset).
-      setShouldFence(!readyToUnfence)
+      setShouldFence(!readyToUnfence).
+      setShouldShutdown(_state == BrokerState.PENDING_CONTROLLED_SHUTDOWN)
     _channelManager.sendRequest(new BrokerHeartbeatRequest.Builder(data),
       new BrokerHeartbeatResponseHandler())
   }
@@ -296,32 +326,42 @@ class BrokerLifecycleManager(val config: KafkaConfig,
         val errorCode = Errors.forCode(message.data().errorCode())
         if (errorCode == Errors.NONE) {
           failedAttempts = 0
-          if (_state == BrokerState.STARTING) {
-            if (message.data().isCaughtUp()) {
-              info(s"Broker ${brokerId} has caught up. Transitioning to RECOVERY state.")
-              _state = BrokerState.RECOVERY
-              initialCatchUpFuture.complete(null)
-            } else {
-              info(s"Broker ${brokerId} is still waiting to catch up.")
-            }
-            scheduleNextCommunicationAfterSuccess()
-          } else if (_state == BrokerState.RECOVERY) {
-            if (!message.data().isFenced()) {
-              info(s"Broker ${brokerId} has been unfenced. Transitioning to RUNNING state.")
-              _state = BrokerState.RUNNING
-            } else {
-              info(s"Broker ${brokerId} is still waiting to be unfenced.")
-            }
-            scheduleNextCommunicationAfterSuccess()
-          } else if (_state == BrokerState.RUNNING) {
-            debug(s"Broker ${brokerId} processed heartbeat response from RUNNING state.")
-            scheduleNextCommunicationAfterSuccess()
-          } else if (_state == BrokerState.SHUTTING_DOWN) {
-            info(s"Broker ${brokerId} is ignoring the heartbeat response since it is " +
-              "SHUTTING_DOWN.")
-          } else {
-            error(s"Unexpected broker state ${_state}")
-            scheduleNextCommunicationAfterSuccess()
+          _state match {
+            case BrokerState.STARTING =>
+              if (message.data().isCaughtUp()) {
+                info(s"The broker has caught up. Transitioning from STARTING to RECOVERY.")
+                _state = BrokerState.RECOVERY
+                initialCatchUpFuture.complete(null)
+              } else {
+                info(s"The broker is STARTING. Still waiting to catch up with cluster metadata.")
+              }
+              // Schedule the heartbeat after only 10 ms so that in the case where
+              //there is no recovery work to be done, we start up a bit quicker.
+              scheduleNextCommunication(NANOSECONDS.convert(10, MILLISECONDS))
+            case BrokerState.RECOVERY =>
+              if (!message.data().isFenced()) {
+                info(s"The broker has been unfenced. Transitioning from RECOVERY to RUNNING.")
+                _state = BrokerState.RUNNING
+              } else {
+                info(s"The broker is in RECOVERY.")
+              }
+              scheduleNextCommunicationAfterSuccess()
+            case BrokerState.RUNNING =>
+              debug(s"The broker is RUNNING. Processing heartbeat response.")
+              scheduleNextCommunicationAfterSuccess()
+            case BrokerState.PENDING_CONTROLLED_SHUTDOWN =>
+              if (!message.data().shouldShutdown()) {
+                info(s"The broker is in PENDING_CONTROLLED_SHUTDOWN state, still waiting " +
+                  "for the active controller.")
+              } else {
+                info(s"Transitioning from PENDING_CONTROLLED_SHUTDOWN to SHUTTING_DOWN.")
+                beginShutdown()
+              }
+            case BrokerState.SHUTTING_DOWN =>
+              info(s"The broker is SHUTTING_DOWN. Ignoring heartbeat response.")
+            case _ =>
+              error(s"Unexpected broker state ${_state}")
+              scheduleNextCommunicationAfterSuccess()
           }
         } else {
           warn(s"Broker ${brokerId} sent a heartbeat request but received error ${errorCode}.")
@@ -374,8 +414,10 @@ class BrokerLifecycleManager(val config: KafkaConfig,
 
   class ShutdownEvent extends EventQueue.Event {
     override def run(): Unit = {
-      initialCatchUpFuture.cancel(false)
+      info(s"Transitioning from ${_state} to ${BrokerState.SHUTTING_DOWN}.")
       _state = BrokerState.SHUTTING_DOWN
+      controlledShutdownFuture.complete(null)
+      initialCatchUpFuture.cancel(false)
       _channelManager.shutdown()
     }
   }
