@@ -205,7 +205,11 @@ public class RaftEventSimulationTest {
             long highWatermark = cluster.maxHighWatermarkReached();
 
             // Restart the node and verify it catches up
-            cluster.start(leaderId);
+            try {
+                cluster.start(leaderId);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to start leader ID: " + leaderId);
+            }
             scheduler.runUntil(() -> cluster.allReachedHighWatermark(highWatermark + 10));
         }
     }
@@ -248,7 +252,11 @@ public class RaftEventSimulationTest {
             Iterator<Integer> nodeIdsIterator = cluster.nodes().iterator();
             for (int i = 0; i < cluster.majoritySize(); i++) {
                 Integer nodeId = nodeIdsIterator.next();
-                cluster.start(nodeId);
+                try {
+                    cluster.start(nodeId);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to start node ID: " + nodeId);
+                }
             }
 
             scheduler.runUntil(() -> cluster.allReachedHighWatermark(highWatermark + 10));
@@ -735,15 +743,20 @@ public class RaftEventSimulationTest {
         void startAll() {
             if (!running.isEmpty())
                 throw new IllegalStateException("Some nodes are already started");
-            for (int voterId : nodes.keySet())
-                start(voterId);
+            for (int voterId : nodes.keySet()) {
+                try {
+                    start(voterId);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to start voter ID: " + voterId);
+                }
+            }
         }
 
         private static InetSocketAddress nodeAddress(int id) {
             return new InetSocketAddress("localhost", 9990 + id);
         }
 
-        void start(int nodeId) {
+        void start(int nodeId) throws IOException {
             LogContext logContext = new LogContext("[Node " + nodeId + "] ");
             PersistentState persistentState = nodes.get(nodeId);
             MockNetworkChannel channel = new MockNetworkChannel(correlationIdCounter);
@@ -772,7 +785,8 @@ public class RaftEventSimulationTest {
                 FETCH_MAX_WAIT_MS,
                 nodeId,
                 logContext,
-                random
+                random,
+                raftConfig
             );
             RaftNode node = new RaftNode(
                 nodeId,
@@ -783,8 +797,7 @@ public class RaftEventSimulationTest {
                 persistentState.store,
                 logContext,
                 time,
-                random,
-                raftConfig
+                random
             );
             node.initialize();
             running.put(nodeId, node);
@@ -802,7 +815,6 @@ public class RaftEventSimulationTest {
         final ReplicatedCounter counter;
         final Time time;
         final Random random;
-        final RaftConfig raftConfig;
 
         private RaftNode(
             int nodeId,
@@ -813,8 +825,7 @@ public class RaftEventSimulationTest {
             MockQuorumStateStore store,
             LogContext logContext,
             Time time,
-            Random random,
-            RaftConfig raftConfig
+            Random random
         ) {
             this.nodeId = nodeId;
             this.client = client;
@@ -826,13 +837,12 @@ public class RaftEventSimulationTest {
             this.time = time;
             this.random = random;
             this.counter = new ReplicatedCounter(nodeId, client, logContext);
-            this.raftConfig = raftConfig;
         }
 
         void initialize() {
             try {
                 client.register(this.counter);
-                client.initialize(raftConfig);
+                client.initialize();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

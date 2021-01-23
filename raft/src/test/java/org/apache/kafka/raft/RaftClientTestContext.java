@@ -202,11 +202,12 @@ public final class RaftClientTestContext {
                 FETCH_MAX_WAIT_MS,
                 localId,
                 logContext,
-                random
+                random,
+                raftConfig
             );
 
             client.register(listener);
-            client.initialize(raftConfig);
+            client.initialize();
 
             return new RaftClientTestContext(
                 localId,

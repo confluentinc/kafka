@@ -118,10 +118,14 @@ public class KafkaClusterTestKit implements AutoCloseable {
             Map<Integer, Kip500Controller> controllers = new HashMap<>();
             Map<Integer, Kip500Broker> kip500Brokers = new HashMap<>();
             Map<Integer, KafkaRaftManager> raftManagers = new HashMap<>();
-
-            // Number of threads = Total number of brokers + Total number of controllers + Total number of Raft Managers
-            //                   = Total number of brokers + Total number of controllers * 2
-            //                     (Raft Manager per broker/controller)
+            String dummyQuorumVotersString = nodes.controllerNodes().keySet().stream().
+                map(controllerNode -> String.format("%d@0.0.0.0:1337", controllerNode)).
+                collect(Collectors.joining(","));
+            /*
+              Number of threads = Total number of brokers + Total number of controllers + Total number of Raft Managers
+                                = Total number of brokers + Total number of controllers * 2
+                                  (Raft Manager per broker/controller)
+             */
             int numOfExecutorThreads = (nodes.brokerNodes().size() + nodes.controllerNodes().size()) * 2;
             ExecutorService executorService = null;
             ControllerQuorumVotersFutureManager connectFutureManager =
@@ -148,9 +152,9 @@ public class KafkaClusterTestKit implements AutoCloseable {
                     props.put(KafkaConfig$.MODULE$.ControllerListenerNamesProp(),
                         "CONTROLLER");
                     // Note: we can't accurately set controller.quorum.voters yet, since we don't
-                    // yet know what ports each controller will pick.  Set it to an
-                    // empty string for now as a placeholder.
-                    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, "");
+                    // yet know what ports each controller will pick.  Set it to a dummy string \
+                    // for now as a placeholder.
+                    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, dummyQuorumVotersString);
                     setupNodeDirectories(baseDirectory, node.metadataDirectory(), Collections.emptyList());
                     KafkaConfig config = new KafkaConfig(props, false,
                         OptionConverters.toScala(Optional.empty()));
@@ -202,8 +206,8 @@ public class KafkaClusterTestKit implements AutoCloseable {
                         node.logDataDirectories());
 
                     // Just like above, we set a placeholder voter list here until we
-                    //find out what ports the controllers picked.
-                    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, "");
+                    // find out what ports the controllers picked.
+                    props.put(RaftConfig.QUORUM_VOTERS_CONFIG, dummyQuorumVotersString);
                     KafkaConfig config = new KafkaConfig(props, false,
                         OptionConverters.toScala(Optional.empty()));
 

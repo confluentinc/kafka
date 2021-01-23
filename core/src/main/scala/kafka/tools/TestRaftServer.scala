@@ -99,7 +99,8 @@ class TestRaftServer(
       metadataLog,
       networkChannel,
       logContext,
-      logDir
+      logDir,
+      raftConfig
     )
 
     workloadGenerator = new RaftWorkloadGenerator(
@@ -110,7 +111,7 @@ class TestRaftServer(
     )
 
     raftClient.register(workloadGenerator)
-    raftClient.initialize(raftConfig)
+    raftClient.initialize()
 
     val requestHandler = new TestRaftRequestHandler(
       raftClient,
@@ -199,7 +200,8 @@ class TestRaftServer(
   private def buildRaftClient(metadataLog: KafkaMetadataLog,
                               networkChannel: KafkaNetworkChannel,
                               logContext: LogContext,
-                              logDir: File): KafkaRaftClient[Array[Byte]] = {
+                              logDir: File,
+                              raftConfig: RaftConfig): KafkaRaftClient[Array[Byte]] = {
 
     val expirationTimer = new SystemTimer("raft-expiration-executor")
     val expirationService = new TimingWheelExpirationService(expirationTimer)
@@ -215,7 +217,8 @@ class TestRaftServer(
       metrics,
       expirationService,
       logContext,
-      config.brokerId
+      config.brokerId,
+      raftConfig,
     )
   }
 

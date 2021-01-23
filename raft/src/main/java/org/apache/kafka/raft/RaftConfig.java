@@ -79,7 +79,6 @@ public class RaftConfig {
     private final int fetchTimeoutMs;
     private final int appendLingerMs;
     private final Map<Integer, InetSocketAddress> voterConnections;
-    private final List<Node> voterNodes;
 
     public RaftConfig(AbstractConfig abstractConfig) {
         this(parseVoterConnections(abstractConfig.getList(QUORUM_VOTERS_CONFIG)),
@@ -100,17 +99,13 @@ public class RaftConfig {
         int fetchTimeoutMs,
         int appendLingerMs
     ) {
+        this.voterConnections = voterConnections;
         this.requestTimeoutMs = requestTimeoutMs;
         this.retryBackoffMs = retryBackoffMs;
         this.electionTimeoutMs = electionTimeoutMs;
         this.electionBackoffMaxMs = electionBackoffMaxMs;
         this.fetchTimeoutMs = fetchTimeoutMs;
         this.appendLingerMs = appendLingerMs;
-        this.voterConnections = voterConnections;
-        this.voterNodes = this.voterConnections.entrySet().stream()
-            .map(connection -> new Node(connection.getKey(), connection.getValue().getHostName(),
-                connection.getValue().getPort()))
-            .collect(Collectors.toList());
     }
 
     public static Map<Integer, InetSocketAddress> parseVoterConnections(List<String> voterEntries) {
@@ -184,12 +179,14 @@ public class RaftConfig {
         return quorumVoterConnections().keySet();
     }
 
-    public Map<Integer, InetSocketAddress> quorumVoterConnections() {
-        return voterConnections;
+    // Note: This is not thread-safe. But practically, this should be called
+    //       only once at startup when the voter connect strings are ready.
+    public void updateQuorumVoters(List<String> voterEntries) {
+        parseVoterConnections(voterEntries).forEach(voterConnections::put);
     }
 
-    public List<Node> quorumVoterNodes() {
-        return voterNodes;
+    public Map<Integer, InetSocketAddress> quorumVoterConnections() {
+        return voterConnections;
     }
 
     private static Integer parseVoterId(String idString) {

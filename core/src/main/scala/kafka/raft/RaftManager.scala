@@ -93,6 +93,7 @@ class KafkaRaftManager(
   val controllerQuorumVotersFuture: CompletableFuture[util.List[String]]
 ) extends RaftManager with Logging {
 
+  private val raftConfig: RaftConfig = new RaftConfig(config)
   private val nodeId = if (config.processRoles.contains(ControllerRole)) {
     config.controllerId
   } else {
@@ -113,19 +114,12 @@ class KafkaRaftManager(
   private val raftIoThread = new RaftIoThread(raftClient)
   private val metaLogShim = new MetaLogRaftShim(raftClient, nodeId)
 
-  private var raftConfig: RaftConfig = _
-
-  def voterNodes: Seq[Node] = raftConfig.quorumVoterNodes().asScala.toSeq
-
   def currentLeader: Option[Node] = {
-    if (raftConfig == null) {
-      None
-    }
-
     val leaderAndEpoch = raftClient.leaderAndEpoch()
     if (leaderAndEpoch.leaderId.isPresent) {
       val leaderId = leaderAndEpoch.leaderId.getAsInt
-      voterNodes.find(_.id == leaderId)
+      val leaderAddress = raftConfig.quorumVoterConnections().asScala(leaderId)
+      Some(new Node(leaderId, leaderAddress.getHostName, leaderAddress.getPort))
     } else {
       None
     }
@@ -137,10 +131,8 @@ class KafkaRaftManager(
     netChannel.start()
 
     // Wait for the controller quorum voters string to be set
-    raftConfig = new RaftConfig(RaftConfig.parseVoterConnections(controllerQuorumVotersFuture.get()),
-      config.quorumRequestTimeoutMs, config.quorumRetryBackoffMs, config.quorumElectionTimeoutMs,
-      config.quorumElectionBackoffMs, config.quorumFetchTimeoutMs, config.quorumLingerMs)
-    raftClient.initialize(raftConfig)
+    raftConfig.updateQuorumVoters(controllerQuorumVotersFuture.get())
+    raftClient.initialize()
     raftIoThread.start()
   }
 
@@ -192,7 +184,8 @@ class KafkaRaftManager(
       metrics,
       expirationService,
       logContext,
-      nodeId
+      nodeId,
+      raftConfig
     )
   }
 

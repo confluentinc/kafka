@@ -17,11 +17,11 @@
 
 package kafka.server
 
-import java.util.Properties
-
 import kafka.metrics.KafkaMetricsReporter
 import kafka.utils.{Exit, Logging, VerifiableProperties}
 import org.apache.kafka.common.utils.Time
+
+import java.util.Properties
 
 object KafkaServerStartable {
   def fromProps(serverProps: Properties): KafkaServerStartable = {
