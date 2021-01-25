@@ -36,9 +36,9 @@ import org.apache.kafka.raft.{FileBasedStateStore, KafkaRaftClient, RaftConfig, 
 
 import java.io.File
 import java.nio.file.Files
+import java.util
 import java.util.concurrent.CompletableFuture
 import scala.jdk.CollectionConverters._
-import java.util
 
 object KafkaRaftManager {
   class RaftIoThread(
@@ -128,11 +128,15 @@ class KafkaRaftManager(
   def metaLogManager: MetaLogManager = metaLogShim
 
   def startup(): Unit = {
-    netChannel.start()
-
     // Wait for the controller quorum voters string to be set
     raftConfig.updateQuorumVoters(controllerQuorumVotersFuture.get())
-    raftClient.initialize()
+
+    // Update RaftClient voter channel endpoints
+    val voterAddresses = raftConfig.quorumVoterConnections
+    for (voterAddressEntry <- voterAddresses.entrySet.asScala) {
+      netChannel.updateEndpoint(voterAddressEntry.getKey, voterAddressEntry.getValue)
+    }
+    netChannel.start()
     raftIoThread.start()
   }
 
@@ -175,7 +179,7 @@ class KafkaRaftManager(
     val expirationTimer = new SystemTimer("raft-expiration-executor")
     val expirationService = new TimingWheelExpirationService(expirationTimer)
 
-    new KafkaRaftClient(
+    val client = new KafkaRaftClient(
       new MetadataRecordSerde,
       netChannel,
       metadataLog,
@@ -187,6 +191,8 @@ class KafkaRaftManager(
       nodeId,
       raftConfig
     )
+    client.initialize()
+    client
   }
 
   private def buildNetworkChannel(): KafkaNetworkChannel = {

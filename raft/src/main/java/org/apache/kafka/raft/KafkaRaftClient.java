@@ -218,7 +218,6 @@ public class KafkaRaftClient<T> implements RaftClient<T> {
         Set<Integer> quorumVoterIds = raftConfig.quorumVoterIds();
         this.requestManager = new RequestManager(quorumVoterIds, raftConfig.retryBackoffMs(),
             raftConfig.requestTimeoutMs(), random);
-
         this.quorum = new QuorumState(
             nodeId,
             quorumVoterIds,
@@ -228,9 +227,14 @@ public class KafkaRaftClient<T> implements RaftClient<T> {
             time,
             logContext,
             random);
-        quorum.initialize(new OffsetAndEpoch(log.endOffset().offset, log.lastFetchedEpoch()));
         this.kafkaRaftMetrics = new KafkaRaftMetrics(metrics, "raft", quorum);
         kafkaRaftMetrics.updateNumUnknownVoterConnections(quorum.remoteVoters().size());
+
+        // Update the voter endpoints with what's in RaftConfig
+        Map<Integer, InetSocketAddress> voterAddresses = raftConfig.quorumVoterConnections();
+        for (Map.Entry<Integer, InetSocketAddress> voterAddressEntry : voterAddresses.entrySet()) {
+            this.channel.updateEndpoint(voterAddressEntry.getKey(), voterAddressEntry.getValue());
+        }
     }
 
     private void updateFollowerHighWatermark(
@@ -329,10 +333,7 @@ public class KafkaRaftClient<T> implements RaftClient<T> {
 
     @Override
     public void initialize() throws IOException {
-        Map<Integer, InetSocketAddress> voterAddresses = raftConfig.quorumVoterConnections();
-        for (Map.Entry<Integer, InetSocketAddress> voterAddressEntry : voterAddresses.entrySet()) {
-            channel.updateEndpoint(voterAddressEntry.getKey(), voterAddressEntry.getValue());
-        }
+        quorum.initialize(new OffsetAndEpoch(log.endOffset().offset, log.lastFetchedEpoch()));
 
         long currentTimeMs = time.milliseconds();
         if (quorum.isLeader()) {
