@@ -25,6 +25,8 @@ import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.NotControllerException;
 import org.apache.kafka.common.errors.UnknownServerException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
+import org.apache.kafka.common.message.AlterIsrRequestData;
+import org.apache.kafka.common.message.AlterIsrResponseData;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.message.BrokerRegistrationRequestData;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
@@ -41,7 +43,6 @@ import org.apache.kafka.common.metadata.UnfenceBrokerRecord;
 import org.apache.kafka.common.metadata.UnregisterBrokerRecord;
 import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.ApiMessageAndVersion;
-import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.quota.ClientQuotaAlteration;
 import org.apache.kafka.common.quota.ClientQuotaEntity;
 import org.apache.kafka.common.requests.ApiError;
@@ -488,11 +489,17 @@ public final class QuorumController implements Controller {
         cancelMaybeFenceReplicas();
     }
 
-    private <T> void scheduleDeferredWriteEvent(String name,
-                                                long deadlineNs,
+    private <T> void scheduleDeferredWriteEvent(String name, long deadlineNs,
                                                 Supplier<ControllerResult<T>> handler) {
         ControllerWriteEvent<T> event = new ControllerWriteEvent<>(name, handler);
         queue.scheduleDeferred(name, new EarliestDeadlineFunction(deadlineNs), event);
+        event.future.exceptionally(e -> {
+            log.error("Unexpected exception while executing deferred write event {}. " +
+                "Rescheduling for a minute from now.", name, e);
+            scheduleDeferredWriteEvent(name,
+                deadlineNs + TimeUnit.NANOSECONDS.convert(1, TimeUnit.MINUTES), handler);
+            return null;
+        });
     }
 
     static final String MAYBE_FENCE_REPLICAS = "maybeFenceReplicas";
@@ -500,10 +507,12 @@ public final class QuorumController implements Controller {
     class MaybeFenceReplicas implements Supplier<ControllerResult<Void>> {
         @Override
         public ControllerResult<Void> get() {
-            List<ApiMessageAndVersion> records =
+            ControllerResult<Set<Integer>> result =
                 clusterControl.maybeFenceLeastRecentlyContacted();
+            result.records().addAll(
+                replicationControl.handleNewlyFenced(result.response()));
             rescheduleMaybeFenceReplicas();
-            return new ControllerResult<>(records, null);
+            return new ControllerResult<>(result.records(), null);
         }
     }
 
@@ -684,12 +693,9 @@ public final class QuorumController implements Controller {
     }
 
     @Override
-    public CompletableFuture<Map<TopicPartition, Errors>>
-            alterIsr(int brokerId, long brokerEpoch,
-                     Map<TopicPartition, LeaderAndIsr> changes) {
-        CompletableFuture<Map<TopicPartition, Errors>> future = new CompletableFuture<>();
-        future.completeExceptionally(new UnsupportedVersionException("unimplemented"));
-        return future;
+    public CompletableFuture<AlterIsrResponseData> alterIsr(AlterIsrRequestData request) {
+        return appendWriteEvent("alterIsr", () ->
+            replicationControl.alterIsr(request));
     }
 
     @Override

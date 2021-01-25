@@ -17,8 +17,11 @@
 
 package org.apache.kafka.controller;
 
+import org.apache.kafka.common.errors.InvalidReplicationFactorException;
+import org.apache.kafka.metadata.UsableBroker;
+
+import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
 
 /**
@@ -31,16 +34,13 @@ interface ReplicaPlacementPolicy {
      * @param numPartitions         The number of partitions to create placements for.
      * @param numReplicas           The number of replicas to create for each partitions.
      *                              Must be positive.
-     * @param allActive             A list of all the active brokers.
-     * @param activeByRack          A map from racks to the brokers in that rack.
-     *                              Brokers without a rack will not appear here.
+     * @param iterator              An iterator that yields all the usable brokers.
      *
      * @return                      A list of replica lists.
      *
      * @throws InvalidReplicationFactorException    If too many replicas were requested.
      */
-    List<List<Integer>> createPlacement(int numPartitions,
-                                        short numReplicas,
-                                        List<Integer> allActive,
-                                        Map<String, List<Integer>> activeByRack);
+    List<List<Integer>> createPlacement(int numPartitions, short numReplicas,
+                                        Iterator<UsableBroker> iterator)
+        throws InvalidReplicationFactorException;
 }

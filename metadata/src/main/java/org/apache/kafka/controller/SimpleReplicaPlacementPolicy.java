@@ -21,10 +21,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 
 import org.apache.kafka.common.errors.InvalidReplicationFactorException;
+import org.apache.kafka.metadata.UsableBroker;
 
 
 /**
@@ -43,10 +43,13 @@ public class SimpleReplicaPlacementPolicy implements ReplicaPlacementPolicy {
     @Override
     public List<List<Integer>> createPlacement(int numPartitions,
                                                short numReplicas,
-                                               List<Integer> allActive,
-                                               Map<String, List<Integer>> active) {
-        if (allActive.size() < numReplicas) {
-            throw new InvalidReplicationFactorException("there are only " + allActive.size() +
+                                               Iterator<UsableBroker> iterator) {
+        List<UsableBroker> usable = new ArrayList<>();
+        while (iterator.hasNext()) {
+            usable.add(iterator.next());
+        }
+        if (usable.size() < numReplicas) {
+            throw new InvalidReplicationFactorException("there are only " + usable.size() +
                 " usable brokers");
         }
         List<List<Integer>> results = new ArrayList<>();
@@ -54,14 +57,14 @@ public class SimpleReplicaPlacementPolicy implements ReplicaPlacementPolicy {
             List<Integer> choices = new ArrayList<>();
             // TODO: rack-awareness
             List<Integer> indexes = new ArrayList<>();
-            int initialIndex = random.nextInt(allActive.size());
+            int initialIndex = random.nextInt(usable.size());
             for (int i = 0; i < numReplicas; i++) {
-                indexes.add((initialIndex + i) % allActive.size());
+                indexes.add((initialIndex + i) % usable.size());
             }
             indexes.sort(Integer::compareTo);
-            Iterator<Integer> iter = allActive.iterator();
+            Iterator<UsableBroker> iter = usable.iterator();
             for (int i = 0; choices.size() < indexes.size(); i++) {
-                int brokerId = iter.next();
+                int brokerId = iter.next().id();
                 if (indexes.get(choices.size()) == i) {
                     choices.add(brokerId);
                 }

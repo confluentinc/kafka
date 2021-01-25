@@ -20,14 +20,14 @@ package org.apache.kafka.controller;
 import org.apache.kafka.common.errors.InvalidReplicationFactorException;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.metadata.UsableBroker;
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.function.Function;
 
 
@@ -310,19 +310,47 @@ public class BrokerHeartbeatManager {
      * @throws InvalidReplicationFactorException    If too many replicas were requested.
      */
     public List<List<Integer>> placeReplicas(int numPartitions, short numReplicas,
-                                             Function<Integer, String> idToRack,
+                                             Function<Integer, Optional<String>> idToRack,
                                              ReplicaPlacementPolicy policy) {
-        List<Integer> allActive = new ArrayList<>();
-        Map<String, List<Integer>> activeByRack = new HashMap<>();
-        for (Iterator<BrokerHeartbeatState> iter = unfenced.iterator(); iter.hasNext(); ) {
-            int brokerId = iter.next().id();
-            allActive.add(brokerId);
-            String rack = idToRack.apply(brokerId);
-            if (rack != null) {
-                activeByRack.computeIfAbsent(rack, __ -> new ArrayList<>()).add(brokerId);
-            }
+        Iterator<UsableBroker> iterator = new UsableBrokerIterator(
+            unfenced.iterator(), idToRack);
+        return policy.createPlacement(numPartitions, numReplicas, iterator);
+    }
+
+    static class UsableBrokerIterator implements Iterator<UsableBroker> {
+        private final Iterator<BrokerHeartbeatState> iterator;
+        private final Function<Integer, Optional<String>> idToRack;
+        private UsableBroker next;
+
+        UsableBrokerIterator(Iterator<BrokerHeartbeatState> iterator,
+                             Function<Integer, Optional<String>> idToRack) {
+            this.iterator = iterator;
+            this.idToRack = idToRack;
+            this.next = null;
         }
-        return policy.createPlacement(
-            numPartitions, numReplicas, allActive, activeByRack);
+
+        @Override
+        public boolean hasNext() {
+            if (next != null) {
+                return true;
+            }
+            if (!iterator.hasNext()) {
+                return false;
+            }
+            BrokerHeartbeatState result = iterator.next();
+            Optional<String> rack = idToRack.apply(result.id());
+            next = new UsableBroker(result.id(), rack);
+            return true;
+        }
+
+        @Override
+        public UsableBroker next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            UsableBroker result = next;
+            next = null;
+            return result;
+        }
     }
 }

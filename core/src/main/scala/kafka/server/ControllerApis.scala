@@ -32,7 +32,7 @@ import org.apache.kafka.common.message.ApiVersionsResponseData.{ApiVersionsRespo
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicCollection
 import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResult
 import org.apache.kafka.common.message.MetadataResponseData.MetadataResponseBroker
-import org.apache.kafka.common.message.{AlterIsrResponseData, ApiVersionsResponseData, BeginQuorumEpochResponseData, BrokerHeartbeatResponseData, BrokerRegistrationResponseData, CreateTopicsResponseData, DecommissionBrokerResponseData, DescribeQuorumResponseData, EndQuorumEpochResponseData, FetchResponseData, MetadataResponseData, VoteResponseData}
+import org.apache.kafka.common.message.{ApiVersionsResponseData, BeginQuorumEpochResponseData, BrokerHeartbeatResponseData, BrokerRegistrationResponseData, CreateTopicsResponseData, DecommissionBrokerResponseData, DescribeQuorumResponseData, EndQuorumEpochResponseData, FetchResponseData, MetadataResponseData, VoteResponseData}
 import org.apache.kafka.common.protocol.{ApiKeys, ApiMessage, Errors}
 import org.apache.kafka.common.record.BaseRecords
 import org.apache.kafka.common.requests._
@@ -40,8 +40,8 @@ import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.Resource.CLUSTER_NAME
 import org.apache.kafka.common.resource.ResourceType.{CLUSTER, TOPIC}
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.common.{Node, TopicPartition}
-import org.apache.kafka.controller.{Controller, LeaderAndIsr}
+import org.apache.kafka.common.Node
+import org.apache.kafka.controller.Controller
 import org.apache.kafka.metadata.{BrokerHeartbeatReply, BrokerRegistrationReply, FeatureManager, VersionRange}
 import org.apache.kafka.server.authorizer.Authorizer
 
@@ -314,50 +314,13 @@ class ControllerApis(val requestChannel: RequestChannel,
 
   def handleAlterIsrRequest(request: RequestChannel.Request): Unit = {
     authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
-
     val alterIsrRequest = request.body[AlterIsrRequest]
-    val isrsToAlter = mutable.Map[TopicPartition, LeaderAndIsr]()
-    alterIsrRequest.data.topics.forEach { topicReq =>
-      topicReq.partitions.forEach { partitionReq =>
-        val tp = new TopicPartition(topicReq.name, partitionReq.partitionIndex)
-        val newIsr = partitionReq.newIsr()
-        isrsToAlter.put(tp, new LeaderAndIsr(
-          alterIsrRequest.data.brokerId,
-          partitionReq.leaderEpoch,
-          newIsr,
-          partitionReq.currentIsrVersion))
-      }
-    }
-
-    val future = controller.alterIsr(
-      alterIsrRequest.data.brokerId,
-      alterIsrRequest.data.brokerEpoch,
-      isrsToAlter.asJava
-    )
-
-    future.whenComplete((responses, exception) => {
+    val future = controller.alterIsr(alterIsrRequest.data())
+    future.whenComplete((result, exception) => {
       val response = if (exception != null) {
         alterIsrRequest.getErrorResponse(exception)
       } else {
-        val responseData = new AlterIsrResponseData()
-          .setErrorCode(Errors.NONE.code)
-
-        responses.forEach { (topicPartition, error) =>
-          var topicData = responseData.topics.find(topicPartition.topic)
-          if (topicData == null) {
-            topicData = new AlterIsrResponseData.TopicData()
-              .setName(topicPartition.topic)
-            responseData.topics.add(topicData)
-          }
-
-          // TODO: Partition response data expects ISR info
-          val partitionResult = new AlterIsrResponseData.PartitionData()
-            .setPartitionIndex(topicPartition.partition)
-            .setErrorCode(error.code)
-          topicData.partitions.add(partitionResult)
-        }
-
-        new AlterIsrResponse(responseData)
+        new AlterIsrResponse(result)
       }
       requestHelper.sendResponseExemptThrottle(request, response)
     })

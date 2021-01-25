@@ -43,8 +43,11 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 
 public class ClusterControlManager {
@@ -266,7 +269,7 @@ public class ClusterControlManager {
         // Update broker registrations.
         brokerRegistrations.put(brokerId, new BrokerRegistration(brokerId,
             record.brokerEpoch(), record.incarnationId(), listeners, features,
-            record.rack(), fenced));
+            Optional.ofNullable(record.rack()), fenced));
 
         if (prevRegistration == null) {
             log.info("Registered new broker: {}", record);
@@ -336,16 +339,18 @@ public class ClusterControlManager {
         return !registration.fenced();
     }
 
-    public List<ApiMessageAndVersion> maybeFenceLeastRecentlyContacted() {
+    public ControllerResult<Set<Integer>> maybeFenceLeastRecentlyContacted() {
         if (heartbeatManager == null) {
             throw new RuntimeException("ClusterControlManager is not active.");
         }
+        Set<Integer> newlyFenced = new HashSet<>();
         List<ApiMessageAndVersion> records = new ArrayList<>();
         while (true) {
             int brokerId = heartbeatManager.maybeFenceLeastRecentlyContacted();
             if (brokerId == -1) {
-                return records;
+                return new ControllerResult<>(records, newlyFenced);
             }
+            newlyFenced.add(brokerId);
             BrokerRegistration registration = brokerRegistrations.get(brokerId);
             if (registration == null) {
                 throw new RuntimeException("Failed to find registration for " +
@@ -361,5 +366,17 @@ public class ClusterControlManager {
             throw new RuntimeException("ClusterControlManager is not active.");
         }
         return heartbeatManager.nextCheckTimeNs();
+    }
+
+    public void checkBrokerEpoch(int brokerId, long brokerEpoch) {
+        BrokerRegistration registration = brokerRegistrations.get(brokerId);
+        if (registration == null) {
+            throw new StaleBrokerEpochException("No broker registration found for " +
+                "broker id " + brokerId);
+        }
+        if (registration.epoch() != brokerEpoch) {
+            throw new StaleBrokerEpochException("Expected broker epoch " +
+                registration.epoch() + ", but got broker epoch " + brokerEpoch);
+        }
     }
 }

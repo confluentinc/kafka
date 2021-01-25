@@ -115,7 +115,7 @@ public class ReplicationControlManagerTest {
         assertEquals(expectedResponse2, result2.response());
         ControllerTestUtils.replayAll(replicationControl, result2.records());
         assertEquals(new PartitionControlInfo(new int[] {2, 0, 1},
-            new int[] {2, 0, 1}, null, null, 2, 0),
+            new int[] {2, 0, 1}, null, null, 2, 0, 0),
             replicationControl.getPartition(
                 ((TopicRecord) result2.records().get(0).message()).topicId(), 0));
         ControllerResult<CreateTopicsResponseData> result3 =

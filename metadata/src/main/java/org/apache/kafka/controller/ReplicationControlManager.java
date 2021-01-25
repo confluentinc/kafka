@@ -23,6 +23,8 @@ import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.InvalidReplicationFactorException;
 import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.internals.Topic;
+import org.apache.kafka.common.message.AlterIsrRequestData;
+import org.apache.kafka.common.message.AlterIsrResponseData;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignment;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopic;
@@ -50,6 +52,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 
 import static org.apache.kafka.clients.admin.AlterConfigOp.OpType.SET;
 import static org.apache.kafka.common.config.ConfigResource.Type.TOPIC;
@@ -77,33 +80,38 @@ public class ReplicationControlManager {
         private final int[] addingReplicas;
         private final int leader;
         private final int leaderEpoch;
+        private final int partitionEpoch;
 
         PartitionControlInfo(PartitionRecord record) {
-            this(toArray(record.replicas()),
-                toArray(record.isr()),
-                toArray(record.removingReplicas()),
-                toArray(record.addingReplicas()),
+            this(Replicas.toArray(record.replicas()),
+                Replicas.toArray(record.isr()),
+                Replicas.toArray(record.removingReplicas()),
+                Replicas.toArray(record.addingReplicas()),
                 record.leader(),
-                record.leaderEpoch());
+                record.leaderEpoch(),
+                record.partitionEpoch());
         }
 
         PartitionControlInfo(int[] replicas, int[] isr, int[] removingReplicas,
-                             int[] addingReplicas, int leader, int leaderEpoch) {
+                             int[] addingReplicas, int leader, int leaderEpoch,
+                             int partitionEpoch) {
             this.replicas = replicas;
             this.isr = isr;
             this.removingReplicas = removingReplicas;
             this.addingReplicas = addingReplicas;
             this.leader = leader;
             this.leaderEpoch = leaderEpoch;
+            this.partitionEpoch = partitionEpoch;
         }
 
         PartitionControlInfo merge(IsrChangeRecord record) {
             return new PartitionControlInfo(replicas,
-                toArray(record.isr()),
+                Replicas.toArray(record.isr()),
                 removingReplicas,
                 addingReplicas,
                 record.leader(),
-                record.leaderEpoch());
+                record.leaderEpoch(),
+                record.partitionEpoch());
         }
 
         String diff(PartitionControlInfo prev) {
@@ -134,13 +142,16 @@ public class ReplicationControlManager {
             if (leaderEpoch != prev.leaderEpoch) {
                 builder.append(prefix).append("leaderEpoch=").append(leaderEpoch);
             }
+            if (partitionEpoch != prev.partitionEpoch) {
+                builder.append(prefix).append("partitionEpoch=").append(partitionEpoch);
+            }
             return builder.toString();
         }
 
         @Override
         public int hashCode() {
             return Objects.hash(replicas, isr, removingReplicas, addingReplicas, leader,
-                leaderEpoch);
+                leaderEpoch, partitionEpoch);
         }
 
         @Override
@@ -159,8 +170,19 @@ public class ReplicationControlManager {
             builder.append(", addingReplicas=").append(Arrays.toString(addingReplicas));
             builder.append(", leader=").append(leader);
             builder.append(", leaderEpoch=").append(leaderEpoch);
+            builder.append(", partitionEpoch=").append(partitionEpoch);
             builder.append(")");
             return builder.toString();
+        }
+
+        public int chooseNewLeader(int[] newIsr) {
+            for (int i = 0; i < replicas.length; i++) {
+                int replica = replicas[i];
+                if (Replicas.contains(newIsr, replica)) {
+                    return replica;
+                }
+            }
+            return -1;
         }
     }
 
@@ -469,14 +491,14 @@ public class ReplicationControlManager {
                 }
                 int[] replicas = new int[assignment.brokerIds().size()];
                 for (int i = 0; i < replicas.length; i++) {
-                    replicas[i] = assignment.brokerIds().get(0);
+                    replicas[i] = assignment.brokerIds().get(i);
                 }
                 int[] isr = new int[assignment.brokerIds().size()];
                 for (int i = 0; i < replicas.length; i++) {
-                    isr[i] = assignment.brokerIds().get(0);
+                    isr[i] = assignment.brokerIds().get(i);
                 }
                 newParts.put(assignment.partitionIndex(),
-                    new PartitionControlInfo(replicas, isr, null, null, isr[0], 0));
+                    new PartitionControlInfo(replicas, isr, null, null, isr[0], 0, 0));
             }
         } else if (topic.replicationFactor() < -1 || topic.replicationFactor() == 0) {
             return new ApiError(Errors.INVALID_REPLICATION_FACTOR,
@@ -497,8 +519,9 @@ public class ReplicationControlManager {
                 List<List<Integer>> replicas = clusterControl.
                     placeReplicas(numPartitions, replicationFactor);
                 for (int partitionId = 0; partitionId < replicas.size(); partitionId++) {
-                    int[] r = toArray(replicas.get(partitionId));
-                    newParts.put(partitionId, new PartitionControlInfo(r, r, null, null, r[0], 0));
+                    int[] r = Replicas.toArray(replicas.get(partitionId));
+                    newParts.put(partitionId,
+                        new PartitionControlInfo(r, r, null, null, r[0], 0, 0));
                 }
             } catch (InvalidReplicationFactorException e) {
                 return new ApiError(Errors.INVALID_REPLICATION_FACTOR,
@@ -522,32 +545,15 @@ public class ReplicationControlManager {
             records.add(new ApiMessageAndVersion(new PartitionRecord().
                 setPartitionId(partitionIndex).
                 setTopicId(topicId).
-                setReplicas(toList(info.replicas)).
-                setIsr(toList(info.isr)).
+                setReplicas(Replicas.toList(info.replicas)).
+                setIsr(Replicas.toList(info.isr)).
                 setRemovingReplicas(null).
                 setAddingReplicas(null).
                 setLeader(info.leader).
-                setLeaderEpoch(info.leaderEpoch), (short) 0));
+                setLeaderEpoch(info.leaderEpoch).
+                setPartitionEpoch(0), (short) 0));
         }
         return ApiError.NONE;
-    }
-
-    private static List<Integer> toList(int[] array) {
-        if (array == null) return null;
-        ArrayList<Integer> list = new ArrayList<>(array.length);
-        for (int i = 0; i < array.length; i++) {
-            list.add(array[i]);
-        }
-        return list;
-    }
-
-    private static int[] toArray(List<Integer> list) {
-        if (list == null) return null;
-        int[] array = new int[list.size()];
-        for (int i = 0; i < list.size(); i++) {
-            array[i] = list.get(i);
-        }
-        return array;
     }
 
     static void validateNewTopicNames(Map<String, ApiError> topicErrors,
@@ -589,4 +595,108 @@ public class ReplicationControlManager {
         return topic.parts.get(partitionId);
     }
 
+    public ControllerResult<AlterIsrResponseData> alterIsr(AlterIsrRequestData request) {
+        clusterControl.checkBrokerEpoch(request.brokerId(), request.brokerEpoch());
+        AlterIsrResponseData response = new AlterIsrResponseData();
+        List<ApiMessageAndVersion> records = new ArrayList<>();
+        for (AlterIsrRequestData.TopicData topicData : request.topics()) {
+            AlterIsrResponseData.TopicData responseTopicData =
+                new AlterIsrResponseData.TopicData().setName(topicData.name());
+            response.topics().add(responseTopicData);
+            Uuid topicId = topicsByName.get(topicData.name());
+            if (topicId == null || !topics.containsKey(topicId)) {
+                for (AlterIsrRequestData.PartitionData partitionData : topicData.partitions()) {
+                    responseTopicData.partitions().add(new AlterIsrResponseData.PartitionData().
+                        setPartitionIndex(partitionData.partitionIndex()).
+                        setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code()));
+                }
+                continue;
+            }
+            TopicControlInfo topic = topics.get(topicId);
+            for (AlterIsrRequestData.PartitionData partitionData : topicData.partitions()) {
+                PartitionControlInfo partition = topic.parts.get(partitionData.partitionIndex());
+                if (partition == null) {
+                    responseTopicData.partitions().add(new AlterIsrResponseData.PartitionData().
+                        setPartitionIndex(partitionData.partitionIndex()).
+                        setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code()));
+                    continue;
+                }
+                if (partitionData.leaderEpoch() != partition.leaderEpoch) {
+                    responseTopicData.partitions().add(new AlterIsrResponseData.PartitionData().
+                        setPartitionIndex(partitionData.partitionIndex()).
+                        setErrorCode(Errors.FENCED_LEADER_EPOCH.code()));
+                    continue;
+                }
+                if (partitionData.currentIsrVersion() != partition.partitionEpoch) {
+                    responseTopicData.partitions().add(new AlterIsrResponseData.PartitionData().
+                        setPartitionIndex(partitionData.partitionIndex()).
+                        setErrorCode(Errors.INVALID_UPDATE_VERSION.code()));
+                    continue;
+                }
+                int[] newIsr = Replicas.toArray(partitionData.newIsr());
+                if (!Replicas.validateIsr(partition.replicas, newIsr)) {
+                    responseTopicData.partitions().add(new AlterIsrResponseData.PartitionData().
+                        setPartitionIndex(partitionData.partitionIndex()).
+                        setErrorCode(Errors.INVALID_REQUEST.code()));
+                }
+                int newLeader, newLeaderEpoch;
+                if (Replicas.contains(newIsr, partition.leader)) {
+                    newLeader = partition.leader;
+                    newLeaderEpoch = partition.leaderEpoch;
+                } else {
+                    newLeader = partition.chooseNewLeader(newIsr);
+                    newLeaderEpoch = partition.leaderEpoch + 1;
+                }
+                records.add(new ApiMessageAndVersion(new IsrChangeRecord().
+                    setPartitionId(partitionData.partitionIndex()).
+                    setTopicId(topic.id).
+                    setIsr(partitionData.newIsr()).
+                    setLeader(newLeader).
+                    setLeaderEpoch(newLeaderEpoch).
+                    setPartitionEpoch(partition.partitionEpoch + 1), (short) 0));
+            }
+        }
+        return new ControllerResult<>(records, response);
+    }
+
+    public List<ApiMessageAndVersion> handleNewlyFenced(Set<Integer> newlyFenced) {
+        List<ApiMessageAndVersion> records = new ArrayList<>();
+        for (Integer brokerId : newlyFenced) {
+            TimelineHashMap<Uuid, int[]> topicMap = isrMembers.get(brokerId);
+            for (Entry<Uuid, int[]> entry : topicMap.entrySet()) {
+               Uuid topicId = entry.getKey();
+               int[] partitionIds = entry.getValue();
+               TopicControlInfo topic = topics.get(topicId);
+               if (topic == null) {
+                   throw new RuntimeException("Topic ID " + topicId + " existed in " +
+                       "isrMembers, but not in the topics map.");
+               }
+               for (int partitionId : partitionIds) {
+                   PartitionControlInfo partition = topic.parts.get(partitionId);
+                   if (partition == null) {
+                       throw new RuntimeException("Partition " +
+                           topicId + ":" + partitionId + " existed in " +
+                           "isrMembers, but not in the partitions map.");
+                   }
+                   int[] newIsr = Replicas.copyWithout(partition.isr, brokerId);
+                   int newLeader, newLeaderEpoch;
+                   if (partition.leader == brokerId) {
+                       newLeader = partition.chooseNewLeader(newIsr);
+                       newLeaderEpoch = partition.leaderEpoch + 1;
+                   } else {
+                       newLeader = partition.leader;
+                       newLeaderEpoch = partition.leaderEpoch;
+                   }
+                   records.add(new ApiMessageAndVersion(new IsrChangeRecord().
+                       setPartitionId(partitionId).
+                       setTopicId(topic.id).
+                       setIsr(Replicas.toList(newIsr)).
+                       setLeader(newLeader).
+                       setLeaderEpoch(newLeaderEpoch).
+                       setPartitionEpoch(partition.partitionEpoch + 1), (short) 0));
+               }
+            }
+        }
+        return records;
+    }
 }

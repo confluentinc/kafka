@@ -17,6 +17,7 @@
 
 package org.apache.kafka.controller;
 
+import org.apache.kafka.common.errors.StaleBrokerEpochException;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.metadata.RegisterBrokerRecord;
 import org.apache.kafka.common.metadata.UnfenceBrokerRecord;
@@ -36,6 +37,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -59,6 +61,11 @@ public class ClusterControlManagerTest {
             setName("PLAINTEXT").
             setHost("example.com"));
         clusterControl.replay(brokerRecord);
+        clusterControl.checkBrokerEpoch(1, 100);
+        assertThrows(StaleBrokerEpochException.class,
+            () -> clusterControl.checkBrokerEpoch(1, 101));
+        assertThrows(StaleBrokerEpochException.class,
+            () -> clusterControl.checkBrokerEpoch(2, 100));
         assertFalse(clusterControl.unfenced(0));
         assertFalse(clusterControl.unfenced(1));
 
