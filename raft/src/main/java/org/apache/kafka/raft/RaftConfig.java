@@ -179,12 +179,6 @@ public class RaftConfig {
         return quorumVoterConnections().keySet();
     }
 
-    // Note: This is not thread-safe. But practically, this should be called
-    //       only once at startup when the voter connect strings are ready.
-    public void updateQuorumVoters(List<String> voterEntries) {
-        parseVoterConnections(voterEntries).forEach(voterConnections::put);
-    }
-
     public Map<Integer, InetSocketAddress> quorumVoterConnections() {
         return voterConnections;
     }

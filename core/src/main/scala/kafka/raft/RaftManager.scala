@@ -118,7 +118,7 @@ class KafkaRaftManager(
     val leaderAndEpoch = raftClient.leaderAndEpoch()
     if (leaderAndEpoch.leaderId.isPresent) {
       val leaderId = leaderAndEpoch.leaderId.getAsInt
-      val leaderAddress = raftConfig.quorumVoterConnections().asScala(leaderId)
+      val leaderAddress = raftConfig.quorumVoterConnections().get(leaderId)
       Some(new Node(leaderId, leaderAddress.getHostName, leaderAddress.getPort))
     } else {
       None
@@ -129,10 +129,9 @@ class KafkaRaftManager(
 
   def startup(): Unit = {
     // Wait for the controller quorum voters string to be set
-    raftConfig.updateQuorumVoters(controllerQuorumVotersFuture.get())
+    val voterAddresses = RaftConfig.parseVoterConnections(controllerQuorumVotersFuture.get())
 
     // Update RaftClient voter channel endpoints
-    val voterAddresses = raftConfig.quorumVoterConnections
     for (voterAddressEntry <- voterAddresses.entrySet.asScala) {
       netChannel.updateEndpoint(voterAddressEntry.getKey, voterAddressEntry.getValue)
     }

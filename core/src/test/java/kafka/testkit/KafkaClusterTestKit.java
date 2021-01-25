@@ -124,7 +124,7 @@ public class KafkaClusterTestKit implements AutoCloseable {
             Map<Integer, Kip500Broker> kip500Brokers = new HashMap<>();
             Map<Integer, KafkaRaftManager> raftManagers = new HashMap<>();
             String dummyQuorumVotersString = nodes.controllerNodes().keySet().stream().
-                map(controllerNode -> String.format("%d@0.0.0.0:1337", controllerNode)).
+                map(controllerNode -> String.format("%d@0.0.0.0:0", controllerNode)).
                 collect(Collectors.joining(","));
             /*
               Number of threads = Total number of brokers + Total number of controllers + Total number of Raft Managers
