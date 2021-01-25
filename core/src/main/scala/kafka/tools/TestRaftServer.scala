@@ -22,9 +22,9 @@ import kafka.log.{Log, LogConfig, LogManager}
 import kafka.network.SocketServer
 import kafka.raft.{KafkaMetadataLog, KafkaNetworkChannel, TimingWheelExpirationService}
 import kafka.security.CredentialProvider
-import kafka.server._
-import kafka.utils._
+import kafka.server.{BrokerTopicStats, KafkaBroker, KafkaConfig, KafkaRequestHandlerPool, LogDirFailureChannel}
 import kafka.utils.timer.SystemTimer
+import kafka.utils.{CommandDefaultOptions, CommandLineUtils, CoreUtils, Exit, KafkaScheduler, Logging, ShutdownableThread}
 import org.apache.kafka.clients.{ApiVersions, ClientDnsLookup, ManualMetadataUpdater, NetworkClient}
 import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.common.metrics.Metrics
@@ -38,7 +38,7 @@ import org.apache.kafka.common.security.token.delegation.internals.DelegationTok
 import org.apache.kafka.common.utils.{LogContext, Time, Utils}
 import org.apache.kafka.common.{TopicPartition, protocol}
 import org.apache.kafka.raft.BatchReader.Batch
-import org.apache.kafka.raft._
+import org.apache.kafka.raft.{BatchReader, FileBasedStateStore, KafkaRaftClient, RaftClient, RaftConfig, RecordSerde}
 
 import java.io.File
 import java.nio.file.Files
@@ -89,6 +89,7 @@ class TestRaftServer(
 
     val logDirName = Log.logDirName(partition)
     val logDir = createLogDirectory(new File(config.logDirs.head), logDirName)
+
     val raftConfig = new RaftConfig(config)
     val metadataLog = buildMetadataLog(logDir)
     val networkChannel = buildNetworkChannel(raftConfig, logContext)
