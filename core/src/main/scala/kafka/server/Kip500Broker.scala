@@ -187,7 +187,7 @@ class Kip500Broker(
       this.replicaManager = new ReplicaManager(config, metrics, time, None,
         kafkaScheduler, logManager, isShuttingDown, quotaManagers,
         brokerTopicStats, metadataCache, logDirFailureChannel, alterIsrManager,
-        configRepository, threadNamePrefix, true)
+        configRepository, threadNamePrefix)
 
       /* start broker-to-controller channel managers */
       val controllerNodes =
