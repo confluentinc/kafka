@@ -187,7 +187,7 @@ class Kip500Broker(
       this.replicaManager = new ReplicaManager(config, metrics, time, None,
         kafkaScheduler, logManager, isShuttingDown, quotaManagers,
         brokerTopicStats, metadataCache, logDirFailureChannel, alterIsrManager,
-        configRepository, threadNamePrefix)
+        configRepository, threadNamePrefix, true)
 
       /* start broker-to-controller channel managers */
       val controllerNodes =
@@ -324,7 +324,6 @@ class Kip500Broker(
       // We're now ready to unfence the broker.
       lifecycleManager.setReadyToUnfence()
 
-      info(KafkaBroker.STARTED_MESSAGE)
       maybeChangeStatus(STARTING, STARTED)
     } catch {
       case e: Throwable =>

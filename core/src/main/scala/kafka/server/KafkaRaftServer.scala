@@ -123,9 +123,7 @@ class KafkaRaftServer(
     raftManager.startup()
     controller.foreach(_.startup())
     broker.foreach(_.startup())
-    if (broker.isEmpty) {
-      info(KafkaBroker.STARTED_MESSAGE)
-    }
+    info(KafkaBroker.STARTED_MESSAGE)
   }
 
   def shutdown(): Unit = {
