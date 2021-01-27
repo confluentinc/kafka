@@ -20,7 +20,7 @@ import java.util.concurrent.CompletableFuture
 
 import kafka.metrics.{KafkaMetricsReporter, KafkaYammerMetrics}
 import kafka.raft.KafkaRaftManager
-import kafka.server.KafkaRaftServer.{BrokerRole, ControllerRole}
+import kafka.server.Server.{BrokerRole, ControllerRole}
 import kafka.utils.{Logging, Mx4jLoader}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.ConfigException
@@ -123,7 +123,9 @@ class KafkaRaftServer(
     raftManager.startup()
     controller.foreach(_.startup())
     broker.foreach(_.startup())
-    info(logLineForSystemTests)
+    if (broker.isEmpty) {
+      info(KafkaBroker.STARTED_MESSAGE)
+    }
   }
 
   def shutdown(): Unit = {
@@ -142,8 +144,4 @@ class KafkaRaftServer(
 object KafkaRaftServer {
   val MetadataTopic = "@metadata"
   val MetadataPartition = new TopicPartition(MetadataTopic, 0)
-
-  sealed trait ProcessRole
-  case object BrokerRole extends ProcessRole
-  case object ControllerRole extends ProcessRole
 }

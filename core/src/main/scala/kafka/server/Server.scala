@@ -56,11 +56,7 @@ trait Server {
     val metricsContext = KafkaBroker.createKafkaMetricsContext(clusterId, config)
     new Metrics(metricConfig, reporters, time, true, metricsContext)
   }
-
-  // System tests grep the logs for 'Kafka\s*Server.*started' to identify when the service has started.
-  val logLineForSystemTests = "KafkaServer started"
 }
-
 
 object Server {
   val metadataTopicName = "@metadata"
