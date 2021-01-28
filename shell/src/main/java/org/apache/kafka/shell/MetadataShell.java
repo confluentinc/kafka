@@ -133,7 +133,8 @@ public final class MetadataShell {
                     config,
                     Time.SYSTEM,
                     new Metrics(),
-                    CompletableFuture.completedFuture(config.quorumVoters()));
+                    CompletableFuture.completedFuture(config.quorumVoters()),
+                    5000);
                 nodeManager = new MetadataNodeManager();
             } catch (Throwable e) {
                 log.error("Initialization error", e);
