@@ -2171,7 +2171,6 @@ public class DistributedHerderTest {
     public void testKeyRotationWhenWorkerBecomesLeader() throws Exception {
         EasyMock.expect(member.memberId()).andStubReturn("member");
         EasyMock.expect(member.currentProtocolVersion()).andStubReturn(CONNECT_PROTOCOL_V2);
-        EasyMock.expect(worker.getPlugins()).andReturn(plugins);
 
         expectRebalance(1, Collections.emptyList(), Collections.emptyList());
         expectPostRebalanceCatchup(SNAPSHOT);
@@ -2217,7 +2216,6 @@ public class DistributedHerderTest {
     public void testKeyRotationDisabledWhenWorkerBecomesFollower() throws Exception {
         EasyMock.expect(member.memberId()).andStubReturn("member");
         EasyMock.expect(member.currentProtocolVersion()).andStubReturn(CONNECT_PROTOCOL_V2);
-        EasyMock.expect(worker.getPlugins()).andReturn(plugins);
 
         expectRebalance(1, Collections.emptyList(), Collections.emptyList(), "member", MEMBER_URL);
         SecretKey initialSecretKey = EasyMock.mock(SecretKey.class);
@@ -2234,7 +2232,6 @@ public class DistributedHerderTest {
         EasyMock.expectLastCall();
 
         expectRebalance(1, Collections.emptyList(), Collections.emptyList());
-        expectPostRebalanceCatchup(snapshotWithKey);
         // Second rebalance: poll indefinitely as worker is no longer leader, so key expiration doesn't come into play
         member.poll(Long.MAX_VALUE);
         EasyMock.expectLastCall();
