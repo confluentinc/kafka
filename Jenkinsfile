@@ -68,31 +68,6 @@ def job = {
                 "--no-daemon --stacktrace -PxmlSpotBugsReport=true"
     }
 
-    if (config.publish) {
-      stage("Publish to artifactory") {
-        if (!config.isReleaseJob && !config.isPrJob) {
-            ciTool("ci-push-tag ${env.WORKSPACE} kafka")
-        }
-
-        if (config.isDevJob) {
-          publishStep('artifactory_snapshots_settings')
-        } else if (config.isPreviewJob) {
-          publishStep('artifactory_preview_release_settings')
-        }
-      }
-    }
-
-    if (config.publish && config.isDevJob && !config.isReleaseJob && !config.isPrJob) {
-        stage("Start Downstream Builds") {
-            config.downStreamRepos.each { repo ->
-                build(job: "confluentinc/${repo}/${env.BRANCH_NAME}",
-                    wait: false,
-                    propagate: false
-                )
-            }
-        }
-    }
-
     def runTestsStepName = "Step run-tests"
     def downstreamBuildsStepName = "Step cp-downstream-builds"
     def testTargets = [
@@ -131,6 +106,32 @@ def job = {
     ]
 
     result = parallel testTargets
+
+    if (config.publish) {
+      stage("Publish to artifactory") {
+        if (!config.isReleaseJob && !config.isPrJob) {
+            ciTool("ci-push-tag ${env.WORKSPACE} kafka")
+        }
+
+        if (config.isDevJob) {
+          publishStep('artifactory_snapshots_settings')
+        } else if (config.isPreviewJob) {
+          publishStep('artifactory_preview_release_settings')
+        }
+      }
+    }
+
+    if (config.publish && config.isDevJob && !config.isReleaseJob && !config.isPrJob) {
+        stage("Start Downstream Builds") {
+            config.downStreamRepos.each { repo ->
+                build(job: "confluentinc/${repo}/${env.BRANCH_NAME}",
+                    wait: false,
+                    propagate: false
+                )
+            }
+        }
+    }
+
     // combine results of the two targets into one result string
     return result.runTestsStepName + "\n" + result.downstreamBuildsStepName
 }
