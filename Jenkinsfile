@@ -53,8 +53,8 @@ def job = {
             "master": "master"
     ]
 
-    if (!config.isReleaseJob) {
-        ciTool("ci-update-version ${env.WORKSPACE} kafka")
+    if (config.nanoVersion && !config.isReleaseJob) {
+        ciTool("ci-update-version ${env.WORKSPACE} kafka", config.isPrJob)
     }
 
     stage("Check compilation compatibility with Scala 2.12") {
