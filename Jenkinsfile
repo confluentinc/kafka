@@ -26,6 +26,7 @@ def config = jobConfig {
     runMergeCheck = false
     downStreamValidate = true
     downStreamRepos = ["common",]
+    nanoVersion = true
     disableConcurrentBuilds = true
 }
 
@@ -122,7 +123,7 @@ def job = {
             echo "Building cp-downstream-builds"
             stage('Downstream validation') {
                 if (config.isPrJob && config.downStreamValidate) {
-                    downStreamValidation(true, true)
+                    downStreamValidation(nanoVersion, true, true)
                 } else {
                     return "skip downStreamValidation"
                 }
