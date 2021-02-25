@@ -123,7 +123,7 @@ def job = {
             echo "Building cp-downstream-builds"
             stage('Downstream validation') {
                 if (config.isPrJob && config.downStreamValidate) {
-                    downStreamValidation(nanoVersion, true, true)
+                    downStreamValidation(config.nanoVersion, true, true)
                 } else {
                     return "skip downStreamValidation"
                 }
