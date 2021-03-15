@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -81,6 +82,7 @@ class WorkerSourceTask extends WorkerTask {
     private KafkaProducer<byte[], byte[]> producer;
     private final CloseableOffsetStorageReader offsetReader;
     private final OffsetStorageWriter offsetWriter;
+    private final Executor closeExecutor;
     private final SourceTaskMetricsGroup sourceTaskMetricsGroup;
     private final AtomicReference<Exception> producerSendException;
     private final boolean isTopicTrackingEnabled;
@@ -115,7 +117,8 @@ class WorkerSourceTask extends WorkerTask {
                             ClassLoader loader,
                             Time time,
                             RetryWithToleranceOperator retryWithToleranceOperator,
-                            StatusBackingStore statusBackingStore) {
+                            StatusBackingStore statusBackingStore,
+                            Executor closeExecutor) {
 
         super(id, statusListener, initialState, loader, connectMetrics,
                 retryWithToleranceOperator, time, statusBackingStore);
@@ -130,6 +133,7 @@ class WorkerSourceTask extends WorkerTask {
         this.producer = producer;
         this.offsetReader = offsetReader;
         this.offsetWriter = offsetWriter;
+        this.closeExecutor = closeExecutor;
 
         this.toSend = null;
         this.lastSendFailed = false;
@@ -161,13 +165,7 @@ class WorkerSourceTask extends WorkerTask {
                 log.warn("Could not stop task", t);
             }
         }
-        if (producer != null) {
-            try {
-                producer.close(Duration.ofSeconds(30));
-            } catch (Throwable t) {
-                log.warn("Could not close producer", t);
-            }
-        }
+        closeProducer(Duration.ofSeconds(30));
         try {
             transformationChain.close();
         } catch (Throwable t) {
@@ -189,6 +187,14 @@ class WorkerSourceTask extends WorkerTask {
     public void cancel() {
         super.cancel();
         offsetReader.close();
+        // We proactively close the producer here as the main work thread for the task may
+        // be blocked indefinitely in a call to Producer::send if automatic topic creation is
+        // not enabled on either the connector or the Kafka cluster. Closing the producer should
+        // unblock it in that case and allow shutdown to proceed normally.
+        // With a duration of 0, the producer's own shutdown logic should be fairly quick,
+        // but closing user-pluggable classes like interceptors may lag indefinitely. So, we
+        // call close on a separate thread in order to avoid blocking the herder's tick thread.
+        closeExecutor.execute(() -> closeProducer(Duration.ZERO));
     }
 
     @Override
@@ -243,6 +249,16 @@ class WorkerSourceTask extends WorkerTask {
             // and commit offsets. Worst case, task.flush() will also throw an exception causing the offset commit
             // to fail.
             commitOffsets();
+        }
+    }
+
+    private void closeProducer(Duration duration) {
+        if (producer != null) {
+            try {
+                producer.close(duration);
+            } catch (Throwable t) {
+                log.warn("Could not close producer for {}", id, t);
+            }
         }
     }
 
@@ -432,7 +448,9 @@ class WorkerSourceTask extends WorkerTask {
             while (!outstandingMessages.isEmpty()) {
                 try {
                     long timeoutMs = timeout - time.milliseconds();
-                    if (timeoutMs <= 0) {
+                    // If the task has been cancelled, no more records will be sent from the producer; in that case, if any outstanding messages remain,
+                    // we can stop flushing immediately
+                    if (isCancelled() || timeoutMs <= 0) {
                         log.error("{} Failed to flush, timed out while waiting for producer to flush outstanding {} messages", this, outstandingMessages.size());
                         finishFailedFlush();
                         recordCommitFailure(time.milliseconds() - started, null);

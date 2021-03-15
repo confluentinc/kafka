@@ -73,6 +73,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonList;
@@ -514,7 +515,7 @@ public class ErrorHandlingTaskTest {
                 taskId, sourceTask, statusListener, initialState, converter, converter, headerConverter, sourceTransforms,
                 producer, offsetReader, offsetWriter, workerConfig,
                 ClusterConfigState.EMPTY, metrics, pluginLoader, time, retryWithToleranceOperator,
-                statusBackingStore);
+                statusBackingStore, (Executor) Runnable::run);
     }
 
     private ConsumerRecords<byte[], byte[]> records(ConsumerRecord<byte[], byte[]> record) {

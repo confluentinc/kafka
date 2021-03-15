@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.connect.runtime;
 
+import java.util.concurrent.Executor;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -569,7 +570,8 @@ public class WorkerTest extends ThreadedTest {
                 anyObject(ClassLoader.class),
                 anyObject(Time.class),
                 anyObject(RetryWithToleranceOperator.class),
-                anyObject(StatusBackingStore.class))
+                anyObject(StatusBackingStore.class),
+                anyObject(Executor.class))
                 .andReturn(workerTask);
         Map<String, String> origProps = new HashMap<>();
         origProps.put(TaskConfig.TASK_CLASS_CONFIG, TestSourceTask.class.getName());
@@ -668,7 +670,8 @@ public class WorkerTest extends ThreadedTest {
             anyObject(ClassLoader.class),
             anyObject(Time.class),
             anyObject(RetryWithToleranceOperator.class),
-            anyObject(StatusBackingStore.class)).andReturn(workerTask);
+            anyObject(StatusBackingStore.class),
+            anyObject(Executor.class)).andReturn(workerTask);
         Map<String, String> origProps = new HashMap<>();
         origProps.put(TaskConfig.TASK_CLASS_CONFIG, TestSourceTask.class.getName());
 
@@ -886,7 +889,8 @@ public class WorkerTest extends ThreadedTest {
                 EasyMock.eq(pluginLoader),
                 anyObject(Time.class),
                 anyObject(RetryWithToleranceOperator.class),
-                anyObject(StatusBackingStore.class))
+                anyObject(StatusBackingStore.class),
+                anyObject(Executor.class))
                 .andReturn(workerTask);
         Map<String, String> origProps = new HashMap<>();
         origProps.put(TaskConfig.TASK_CLASS_CONFIG, TestSourceTask.class.getName());
@@ -986,7 +990,8 @@ public class WorkerTest extends ThreadedTest {
                 EasyMock.eq(pluginLoader),
                 anyObject(Time.class),
                 anyObject(RetryWithToleranceOperator.class),
-                anyObject(StatusBackingStore.class))
+                anyObject(StatusBackingStore.class),
+                anyObject(Executor.class))
                 .andReturn(workerTask);
         Map<String, String> origProps = new HashMap<>();
         origProps.put(TaskConfig.TASK_CLASS_CONFIG, TestSourceTask.class.getName());
@@ -1306,9 +1311,9 @@ public class WorkerTest extends ThreadedTest {
         if (expectDefaultConverters) {
 
             // Instantiate and configure default
-            EasyMock.expect(plugins.newConverter(config, WorkerConfig.KEY_CONVERTER_CLASS_CONFIG, ClassLoaderUsage.PLUGINS))
+            EasyMock.expect(eq(plugins.newConverter(config, WorkerConfig.KEY_CONVERTER_CLASS_CONFIG, ClassLoaderUsage.PLUGINS)))
                     .andReturn(keyConverter);
-            EasyMock.expect(plugins.newConverter(config, WorkerConfig.VALUE_CONVERTER_CLASS_CONFIG, ClassLoaderUsage.PLUGINS))
+            EasyMock.expect(eq(plugins.newConverter(config, WorkerConfig.VALUE_CONVERTER_CLASS_CONFIG, ClassLoaderUsage.PLUGINS)))
                     .andReturn(valueConverter);
             EasyMock.expectLastCall();
         }
@@ -1319,18 +1324,19 @@ public class WorkerTest extends ThreadedTest {
 
         // Instantiate and configure internal
         EasyMock.expect(
-                plugins.newConverter(
-                        config,
-                        WorkerConfig.INTERNAL_KEY_CONVERTER_CLASS_CONFIG,
-                        ClassLoaderUsage.PLUGINS
-                )
+            plugins.newConverter(
+                config,
+                WorkerConfig.INTERNAL_KEY_CONVERTER_CLASS_CONFIG,
+                ClassLoaderUsage.PLUGINS
+            )
         ).andReturn(internalKeyConverter);
+
         EasyMock.expect(
-                plugins.newConverter(
-                        config,
-                        WorkerConfig.INTERNAL_VALUE_CONVERTER_CLASS_CONFIG,
-                        ClassLoaderUsage.PLUGINS
-                )
+            plugins.newConverter(
+                config,
+                WorkerConfig.INTERNAL_VALUE_CONVERTER_CLASS_CONFIG,
+                ClassLoaderUsage.PLUGINS
+            )
         ).andReturn(internalValueConverter);
         EasyMock.expectLastCall();
     }
