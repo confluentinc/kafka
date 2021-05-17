@@ -60,6 +60,8 @@ def job = {
     }
 
     stage("Check compilation compatibility with Scala 2.12") {
+        sh "ls /"
+        sh "java -version"
         sh "./gradlew clean assemble spotlessScalaCheck checkstyleMain checkstyleTest spotbugsMain " +
                  "--no-daemon --stacktrace -PxmlSpotBugsReport=true -PscalaVersion=2.12"
     }
