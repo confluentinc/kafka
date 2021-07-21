@@ -21,3 +21,6 @@ Some portions of this file Copyright (c) 2004-2006 Intel Corporation and license
 
 This project contains the following code copied from Apache Hive:
 streams/src/main/java/org/apache/kafka/streams/state/internals/Murmur3.java
+
+This distribution has a binary dependency on logredactor, which is available under the Apache License 2.0.
+The original code was copyrighted (c) 2015, Cloudera, Inc. All Rights Reserved. <https://github.com/cloudera/logredactor>
