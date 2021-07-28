@@ -51,7 +51,7 @@ versions += [
   apacheda: "1.0.2",
   apacheds: "2.0.0-M24",
   argparse4j: "0.7.0",
-  bcpkix: "1.60",
+  bcpkix: "1.68",
   httpclient: "4.5.13",
   easymock: "4.0.2",
   commonsCodec: "1.15",
