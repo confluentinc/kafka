@@ -19,7 +19,7 @@
 
 def config = jobConfig {
     cron = '@weekly'
-    nodeLabel = 'docker-oraclejdk8'
+    nodeLabel = 'docker-debian-10-jdk8'
     testResultSpecs = ['junit': '**/build/test-results/**/TEST-*.xml']
     slackChannel = '#kafka-warn'
     timeoutHours = 4
