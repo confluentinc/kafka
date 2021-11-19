@@ -1492,6 +1492,30 @@ class SocketServerTest {
     }
   }
 
+  @Test
+  def testUnmuteChannelWithBufferedReceives(): Unit = {
+    val time = new MockTime()
+    props ++= sslServerProps
+    val testableServer = new TestableSocketServer(time = time)
+    testableServer.startup()
+    val proxyServer = new ProxyServer(testableServer)
+    try {
+      val testableSelector = testableServer.testableSelector
+      val (socket, request) = makeSocketWithBufferedRequests(testableServer, testableSelector, proxyServer)
+      testableSelector.operationCounts.clear()
+      testableSelector.waitForOperations(SelectorOperation.Poll, 1)
+      val keysWithBufferedRead: util.Set[SelectionKey] = JTestUtils.fieldValue(testableSelector, classOf[Selector], "keysWithBufferedRead")
+      assertEquals(Set.empty, keysWithBufferedRead.asScala)
+      processRequest(testableServer.dataPlaneRequestChannel, request)
+      // buffered requests should be processed after channel is unmuted
+      receiveRequest(testableServer.dataPlaneRequestChannel)
+      socket.close()
+    } finally {
+      proxyServer.close()
+      shutdownServerAndMetrics(testableServer)
+    }
+  }
+
   /**
    * Tests exception handling in [[Processor.processCompletedReceives]]. Exception is
    * injected into [[Selector.mute]] which is used to mute the channel when a receive is complete.
@@ -1670,6 +1694,23 @@ class SocketServerTest {
     }
   }
 
+  @Test
+  def testListenBacklogSize(): Unit = {
+    val backlogSize = 128
+    props.put("socket.listen.backlog.size", backlogSize.toString)
+
+    // TCP listen backlog size is the max count of pending connections (i.e. connections such that
+    // 3-way handshake is done at kernel level and waiting to be accepted by the server application.
+    // From client perspective, such connections should be visible as already "connected")
+    // Hence, we can check if listen backlog size is properly configured by trying to connect the server
+    // without starting acceptor thread.
+    withTestableServer(KafkaConfig.fromProps(props), { testableServer =>
+      1 to backlogSize foreach { _ =>
+        assertTrue(connect(testableServer).isConnected)
+      }
+    }, false)
+  }
+
   private def sslServerProps: Properties = {
     val trustStoreFile = File.createTempFile("truststore", ".jks")
     val sslProps = TestUtils.createBrokerConfig(0, TestUtils.MockZkConnect, interBrokerSecurityProtocol = Some(SecurityProtocol.SSL),
@@ -1679,9 +1720,10 @@ class SocketServerTest {
   }
 
   private def withTestableServer(config : KafkaConfig = KafkaConfig.fromProps(props),
-                                 testWithServer: TestableSocketServer => Unit): Unit = {
+                                 testWithServer: TestableSocketServer => Unit,
+                                 startProcessingRequests: Boolean = true): Unit = {
     val testableServer = new TestableSocketServer(config)
-    testableServer.startup()
+    testableServer.startup(startProcessingRequests = startProcessingRequests)
     try {
         testWithServer(testableServer)
     } finally {

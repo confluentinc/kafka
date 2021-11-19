@@ -277,7 +277,8 @@ class SocketServer(val config: KafkaConfig,
     val sendBufferSize = config.socketSendBufferBytes
     val recvBufferSize = config.socketReceiveBufferBytes
     val brokerId = config.brokerId
-    new Acceptor(endPoint, sendBufferSize, recvBufferSize, brokerId, connectionQuotas, metricPrefix)
+    val listenBacklogSize = config.socketListenBacklogSize
+    new Acceptor(endPoint, sendBufferSize, recvBufferSize, listenBacklogSize, brokerId, connectionQuotas, metricPrefix, time)
   }
 
   private def addDataPlaneProcessors(acceptor: Acceptor, endpoint: EndPoint, newProcessorsPerListener: Int): Unit = {
@@ -531,12 +532,13 @@ private[kafka] abstract class AbstractServerThread(connectionQuotas: ConnectionQ
 private[kafka] class Acceptor(val endPoint: EndPoint,
                               val sendBufferSize: Int,
                               val recvBufferSize: Int,
+                              val listenBacklogSize: Int,
                               brokerId: Int,
                               connectionQuotas: ConnectionQuotas,
                               metricPrefix: String) extends AbstractServerThread(connectionQuotas) with KafkaMetricsGroup {
 
   private val nioSelector = NSelector.open()
-  val serverChannel = openServerSocket(endPoint.host, endPoint.port)
+  val serverChannel = openServerSocket(endPoint.host, endPoint.port, listenBacklogSize)
   private val processors = new ArrayBuffer[Processor]()
   private val processorsStarted = new AtomicBoolean
   private val blockedPercentMeter = newMeter(s"${metricPrefix}AcceptorBlockedPercent",
@@ -652,7 +654,7 @@ private[kafka] class Acceptor(val endPoint: EndPoint,
   /**
   * Create a server socket to listen for connections on.
   */
-  private def openServerSocket(host: String, port: Int): ServerSocketChannel = {
+  private def openServerSocket(host: String, port: Int, listenBacklogSize: Int): ServerSocketChannel = {
     val socketAddress =
       if (host == null || host.trim.isEmpty)
         new InetSocketAddress(port)
@@ -664,7 +666,7 @@ private[kafka] class Acceptor(val endPoint: EndPoint,
       serverChannel.socket().setReceiveBufferSize(recvBufferSize)
 
     try {
-      serverChannel.socket.bind(socketAddress)
+      serverChannel.socket.bind(socketAddress, listenBacklogSize)
       info(s"Awaiting socket connections on ${socketAddress.getHostString}:${serverChannel.socket.getLocalPort}.")
     } catch {
       case e: SocketException =>
