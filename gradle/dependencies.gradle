@@ -67,7 +67,7 @@ versions += [
   // Override jackson-mapper-asl with Redhat 1.9.14.jdk17-redhat-00001 to fix CVE-2019-10172
   jacksonMapperAsl : "1.9.14.jdk17-redhat-00001",
   jacoco: "0.8.3",
-  jetty: "9.4.43.v20210629",
+  jetty: "9.4.44.v20210927",
   jersey: "2.34",
   jmh: "1.21",
   hamcrest: "2.1",
