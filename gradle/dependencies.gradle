@@ -78,7 +78,7 @@ versions += [
   jackson: "2.10.5",
   jacksonDatabind: "2.10.5.1",
   jacoco: "0.8.3",
-  jetty: "9.4.43.v20210629",
+  jetty: "9.4.44.v20210927",
   jersey: "2.34",
   jmh: "1.21",
   hamcrest: "2.1",
