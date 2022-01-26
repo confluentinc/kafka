@@ -101,7 +101,7 @@ allprojects {
       all {
         resolutionStrategy {
           dependencySubstitution {
-            substitute module("log4j:log4j:1.2.17") because "we use a custom version with security patches" with module("io.confluent:confluent-log4j:1.2.17-cp2")
+            substitute module("log4j:log4j:1.2.17") because "we use a custom version with security patches" with module("io.confluent:confluent-log4j:1.2.17-cp2.2")
           }
           dependencySubstitution {
             substitute module("org.codehaus.jackson:jackson-mapper-asl:1.9.13") because "we use a redhat jackson-mapper-asl version with security patches" with module("org.codehaus.jackson:jackson-mapper-asl:1.9.14.jdk17-redhat-00001")
