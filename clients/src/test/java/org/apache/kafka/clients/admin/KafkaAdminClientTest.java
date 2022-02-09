@@ -52,7 +52,6 @@ import org.apache.kafka.common.errors.GroupAuthorizationException;
 import org.apache.kafka.common.errors.GroupSubscribedToTopicException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.InvalidTopicException;
-import org.apache.kafka.common.errors.InvalidConfigurationException;
 import org.apache.kafka.common.errors.LeaderNotAvailableException;
 import org.apache.kafka.common.errors.LogDirNotFoundException;
 import org.apache.kafka.common.errors.NotLeaderOrFollowerException;
@@ -3604,7 +3603,7 @@ public class KafkaAdminClientTest {
             responseData.responses().add(new AlterConfigsResourceResponse()
                     .setResourceName("metric1")
                     .setResourceType(ConfigResource.Type.CLIENT_METRICS.id())
-                    .setErrorCode(Errors.INVALID_CONFIG.code())
+                    .setErrorCode(Errors.INVALID_REQUEST.code())
                     .setErrorMessage("Subscription is not allowed"));
 
             responseData.responses().add(new AlterConfigsResourceResponse()
@@ -3617,7 +3616,7 @@ public class KafkaAdminClientTest {
 
             ConfigResource brokerResource = new ConfigResource(ConfigResource.Type.BROKER, "");
             ConfigResource topicResource = new ConfigResource(ConfigResource.Type.TOPIC, "topic1");
-            ConfigResource subscriptionResource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, "metric1");
+            ConfigResource metricResource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, "metric1");
 
             AlterConfigOp alterConfigOp1 = new AlterConfigOp(
                     new ConfigEntry("log.segment.bytes", "1073741"),
@@ -3634,12 +3633,12 @@ public class KafkaAdminClientTest {
             final Map<ConfigResource, Collection<AlterConfigOp>> configs = new HashMap<>();
             configs.put(brokerResource, singletonList(alterConfigOp1));
             configs.put(topicResource, singletonList(alterConfigOp2));
-            configs.put(subscriptionResource, singletonList(alterConfigOp3));
+            configs.put(metricResource, singletonList(alterConfigOp3));
 
             AlterConfigsResult result = env.adminClient().incrementalAlterConfigs(configs);
             TestUtils.assertFutureError(result.values().get(brokerResource), ClusterAuthorizationException.class);
             TestUtils.assertFutureError(result.values().get(topicResource), InvalidRequestException.class);
-            TestUtils.assertFutureError(result.values().get(subscriptionResource), InvalidConfigurationException.class);
+            TestUtils.assertFutureError(result.values().get(metricResource), InvalidRequestException.class);
 
             // Test a call where there are no errors.
             responseData =  new IncrementalAlterConfigsResponseData();
@@ -3650,12 +3649,16 @@ public class KafkaAdminClientTest {
                     .setErrorMessage(ApiError.NONE.message()));
             responseData.responses().add(new AlterConfigsResourceResponse()
                     .setResourceName("metric1")
-                    .setResourceType(ConfigResource.Type.CLIENT_METRICS.id())
+                    .setResourceType(ConfigResource.Type.TOPIC.id())
                     .setErrorCode(Errors.NONE.code())
                     .setErrorMessage(ApiError.NONE.message()));
 
             env.kafkaClient().prepareResponse(new IncrementalAlterConfigsResponse(responseData));
-            env.adminClient().incrementalAlterConfigs(Collections.singletonMap(brokerResource, singletonList(alterConfigOp1))).all().get();
+            final Map<ConfigResource, Collection<AlterConfigOp>> successConfig = new HashMap<>();
+            successConfig.put(brokerResource, singletonList(alterConfigOp1));
+            successConfig.put(metricResource, singletonList(alterConfigOp3));
+            assertTrue(env.adminClient().incrementalAlterConfigs(successConfig).values().containsKey(brokerResource));
+            assertTrue(env.adminClient().incrementalAlterConfigs(successConfig).values().containsKey(metricResource));
         }
     }
 
