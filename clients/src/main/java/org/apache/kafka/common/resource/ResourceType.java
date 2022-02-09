@@ -63,7 +63,8 @@ public enum ResourceType {
     /**
      * A token ID.
      */
-    DELEGATION_TOKEN((byte) 6);
+    DELEGATION_TOKEN((byte) 6),
+    CLIENT_METRICS((byte) 7);
 
     private final static HashMap<Byte, ResourceType> CODE_TO_VALUE = new HashMap<>();
 
