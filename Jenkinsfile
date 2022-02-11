@@ -26,7 +26,7 @@ def config = jobConfig {
     runMergeCheck = false
     downStreamValidate = true
     downStreamRepos = ["common",]
-    nanoVersion = true
+    nanoVersion = false
     disableConcurrentBuilds = true
 }
 
