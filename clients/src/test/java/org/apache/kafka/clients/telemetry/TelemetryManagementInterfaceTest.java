@@ -19,6 +19,7 @@ package org.apache.kafka.clients.telemetry;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.kafka.common.record.CompressionType;
@@ -26,8 +27,10 @@ import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class TelemetryManagementInterfaceTest {
 
@@ -54,6 +57,68 @@ public class TelemetryManagementInterfaceTest {
     @Test
     public void testNoneCompressedSerialization() throws IOException {
         testSerialization(CompressionType.NONE);
+    }
+
+    @Test
+    public void testValidateTransitionForInitialized() {
+        TelemetryState currState = TelemetryState.initialized;
+
+        List<TelemetryState> validStates = new ArrayList<>();
+        // Happy path...
+        validStates.add(TelemetryState.subscription_needed);
+
+        // 'Shutdown w/o having done anything' case
+        validStates.add(TelemetryState.terminating);
+
+        testValidateTransition(currState, validStates);
+    }
+
+    @Test
+    public void testValidateTransitionForSubscriptionNeeded() {
+        TelemetryState currState = TelemetryState.subscription_needed;
+
+        List<TelemetryState> validStates = new ArrayList<>();
+        // Happy path...
+        validStates.add(TelemetryState.subscription_in_progress);
+
+        // 'Shutdown w/o having done anything' case
+        validStates.add(TelemetryState.terminating);
+
+        testValidateTransition(currState, validStates);
+    }
+
+    @Test
+    public void testValidateTransitionForSubscriptionInProgress() {
+        TelemetryState currState = TelemetryState.subscription_in_progress;
+
+        List<TelemetryState> validStates = new ArrayList<>();
+        // Happy path...
+        validStates.add(TelemetryState.push_needed);
+
+        // 'Subscription had errors or requested/matches no metrics' case
+        validStates.add(TelemetryState.subscription_needed);
+
+        // 'Shutdown w/o having done anything' case
+        validStates.add(TelemetryState.terminating);
+
+        testValidateTransition(currState, validStates);
+    }
+
+    private void testValidateTransition(TelemetryState oldState, List<TelemetryState> validStates) {
+        for (TelemetryState newState : validStates)
+            TelemetryManagementInterface.validateTransition(oldState, newState);
+
+        // Have to copy to a new list because asList returns an unmodifiable list
+        List<TelemetryState> invalidStates = new ArrayList<>(Arrays.asList(TelemetryState.values()));
+
+        // Remove the valid states from the list of all states, leaving only the invalid
+        invalidStates.removeAll(validStates);
+
+        for (TelemetryState newState : invalidStates) {
+            Executable e = () -> TelemetryManagementInterface.validateTransition(oldState, newState);
+            String unexpectedSuccessMessage = "Should have thrown an IllegalTelemetryStateException for transitioning from " + oldState + " to " + newState;
+            assertThrows(IllegalTelemetryStateException.class, e, unexpectedSuccessMessage);
+        }
     }
 
     private void testSerialization(CompressionType compressionType) throws IOException {
