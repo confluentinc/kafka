@@ -417,6 +417,9 @@ public class TelemetryManagementInterface implements Closeable {
     }
 
     public static Uuid validateClientInstanceId(Uuid clientInstanceId) {
+        if(clientInstanceId == null) {
+            throw new IllegalArgumentException("invalid client instance id");
+        }
         return clientInstanceId.equals(Uuid.ZERO_UUID) ? Uuid.randomUuid() : clientInstanceId;
     }
 

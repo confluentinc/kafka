@@ -40,6 +40,7 @@ import org.mockito.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -96,6 +97,7 @@ public class TelemetryManagementInterfaceTest {
 
     @Test
     public void testValidateClientInstanceId() {
+        assertThrows(IllegalArgumentException.class, () -> TelemetryManagementInterface.validateClientInstanceId(null));
         Uuid uuid = Uuid.randomUuid();
         assertEquals(uuid, TelemetryManagementInterface.validateClientInstanceId(uuid));
     }
