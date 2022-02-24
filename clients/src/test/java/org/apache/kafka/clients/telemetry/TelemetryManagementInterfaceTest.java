@@ -20,17 +20,30 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+
+import org.apache.kafka.common.MetricName;
+import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.metrics.KafkaMetric;
+import org.apache.kafka.common.metrics.Measurable;
+import org.apache.kafka.common.metrics.stats.Histogram;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.utils.BufferSupplier;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.jupiter.api.Test;
+import org.mockito.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 
 public class TelemetryManagementInterfaceTest {
-
     @Test
     public void testLZ4CompressedSerialization() throws IOException {
         testSerialization(CompressionType.LZ4);
@@ -54,6 +67,55 @@ public class TelemetryManagementInterfaceTest {
     @Test
     public void testNoneCompressedSerialization() throws IOException {
         testSerialization(CompressionType.NONE);
+    }
+
+    @Test
+    public void testValidateMetricNames() {
+        // empty metric names
+        assertTrue(TelemetryManagementInterface.validateMetricNames(Arrays.asList()).isEmpty());
+        assertTrue(TelemetryManagementInterface.validateMetricNames(null).isEmpty());
+    }
+
+    @Test
+    public void testValidateAcceptedCompressionTypes() {
+        // invalid compression types
+        assertTrue(TelemetryManagementInterface.validateAcceptedCompressionTypes(null).isEmpty());
+        assertTrue(TelemetryManagementInterface.validateAcceptedCompressionTypes(new ArrayList<>()).isEmpty());
+
+        List<Byte> compressionTypes = new ArrayList<>();
+        compressionTypes.add((byte) CompressionType.GZIP.id);
+        compressionTypes.add((byte) CompressionType.LZ4.id);
+        compressionTypes.add((byte) CompressionType.SNAPPY.id);
+        compressionTypes.add((byte) CompressionType.ZSTD.id);
+        compressionTypes.add((byte) CompressionType.NONE.id);
+        compressionTypes.add((byte) -1);
+
+        // should take the first compression type
+        assertEquals(5, TelemetryManagementInterface.validateAcceptedCompressionTypes(compressionTypes).size());
+    }
+
+    @Test
+    public void testValidateClientInstanceId() {
+        Uuid uuid = Uuid.randomUuid();
+        assertEquals(uuid, TelemetryManagementInterface.validateClientInstanceId(uuid));
+    }
+
+    @Test
+    public void testValidatePushInterval() {
+        // invalid push interval
+        assertEquals(10000, TelemetryManagementInterface.validatePushInteravlMs(-1));
+        assertEquals(10000, TelemetryManagementInterface.validatePushInteravlMs(null));
+
+        // valid push interval
+        assertEquals(100, TelemetryManagementInterface.validatePushInteravlMs(100));
+    }
+
+    @Test
+    public void testPreferredCompressionType() {
+        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(new ArrayList<>()));
+        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(null));
+        assertEquals(CompressionType.GZIP, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.GZIP, CompressionType.LZ4, CompressionType.ZSTD)));
+        assertEquals(CompressionType.LZ4, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.LZ4)));
     }
 
     private void testSerialization(CompressionType compressionType) throws IOException {
@@ -81,5 +143,4 @@ public class TelemetryManagementInterfaceTest {
             value,
             "Description for " + name);
     }
-
 }
