@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.RecordBatch;
@@ -67,7 +68,7 @@ public class TelemetryManagementInterfaceTest {
         // Happy path...
         validStates.add(TelemetryState.subscription_needed);
 
-        // 'Shutdown w/o having done anything' case
+        // 'Start shutdown w/o having done anything' case
         validStates.add(TelemetryState.terminating);
 
         testValidateTransition(currState, validStates);
@@ -81,7 +82,7 @@ public class TelemetryManagementInterfaceTest {
         // Happy path...
         validStates.add(TelemetryState.subscription_in_progress);
 
-        // 'Shutdown w/o having done anything' case
+        // 'Start shutdown w/o having done anything' case
         validStates.add(TelemetryState.terminating);
 
         testValidateTransition(currState, validStates);
@@ -98,10 +99,75 @@ public class TelemetryManagementInterfaceTest {
         // 'Subscription had errors or requested/matches no metrics' case
         validStates.add(TelemetryState.subscription_needed);
 
-        // 'Shutdown w/o having done anything' case
+        // 'Start shutdown while waiting for the subscription' case
         validStates.add(TelemetryState.terminating);
 
         testValidateTransition(currState, validStates);
+    }
+
+    @Test
+    public void testValidateTransitionForPushNeeded() {
+        TelemetryState currState = TelemetryState.push_needed;
+
+        List<TelemetryState> validStates = new ArrayList<>();
+        // Happy path...
+        validStates.add(TelemetryState.push_in_progress);
+
+        // 'Attempt to send push request failed (maybe a network issue?), so loop back to getting
+        // the subscription' case
+        validStates.add(TelemetryState.subscription_needed);
+
+        // 'Start shutdown while waiting for a telemetry push' case
+        validStates.add(TelemetryState.terminating);
+
+        testValidateTransition(currState, validStates);
+    }
+
+    @Test
+    public void testValidateTransitionForPushInProgress() {
+        TelemetryState currState = TelemetryState.push_in_progress;
+
+        List<TelemetryState> validStates = new ArrayList<>();
+        // Happy path...
+        validStates.add(TelemetryState.subscription_needed);
+
+        // 'Start shutdown while we happen to be pushing telemetry' case
+        validStates.add(TelemetryState.terminating);
+
+        testValidateTransition(currState, validStates);
+    }
+
+    @Test
+    public void testValidateTransitionForTerminating() {
+        TelemetryState currState = TelemetryState.terminating;
+
+        List<TelemetryState> validStates = new ArrayList<>();
+        // Happy path...
+        validStates.add(TelemetryState.terminating_push_in_progress);
+
+        // 'Forced shutdown w/o terminal push' case
+        validStates.add(TelemetryState.terminated);
+
+        testValidateTransition(currState, validStates);
+    }
+
+    @Test
+    public void testValidateTransitionForTerminatingPushInProgress() {
+        TelemetryState currState = TelemetryState.terminating_push_in_progress;
+
+        List<TelemetryState> validStates = new ArrayList<>();
+        // Happy path...
+        validStates.add(TelemetryState.terminated);
+
+        testValidateTransition(currState, validStates);
+    }
+
+    @Test
+    public void testValidateTransitionForTerminated() {
+        TelemetryState currState = TelemetryState.terminated;
+
+        // There's no transitioning out of the terminated state
+        testValidateTransition(currState, Collections.emptyList());
     }
 
     private void testValidateTransition(TelemetryState oldState, List<TelemetryState> validStates) {
