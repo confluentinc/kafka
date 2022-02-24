@@ -72,15 +72,15 @@ public class TelemetryManagementInterfaceTest {
     @Test
     public void testValidateMetricNames() {
         // empty metric names
-        assertTrue(TelemetryManagementInterface.validateMetricNames(Arrays.asList()).isEmpty());
+        assertTrue(TelemetryManagementInterface.validateMetricNames(Collections.emptyList()).isEmpty());
         assertTrue(TelemetryManagementInterface.validateMetricNames(null).isEmpty());
     }
 
     @Test
     public void testValidateAcceptedCompressionTypes() {
         // invalid compression types
-        assertTrue(TelemetryManagementInterface.validateAcceptedCompressionTypes(null).isEmpty());
-        assertTrue(TelemetryManagementInterface.validateAcceptedCompressionTypes(new ArrayList<>()).isEmpty());
+        assertEquals(0, TelemetryManagementInterface.validateAcceptedCompressionTypes(null).size());
+        assertEquals(0, TelemetryManagementInterface.validateAcceptedCompressionTypes(Collections.emptyList()).size());
 
         List<Byte> compressionTypes = new ArrayList<>();
         compressionTypes.add((byte) CompressionType.GZIP.id);
@@ -112,7 +112,7 @@ public class TelemetryManagementInterfaceTest {
 
     @Test
     public void testPreferredCompressionType() {
-        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(new ArrayList<>()));
+        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(Collections.emptyList()));
         assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(null));
         assertEquals(CompressionType.GZIP, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.GZIP, CompressionType.LZ4, CompressionType.ZSTD)));
         assertEquals(CompressionType.LZ4, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.LZ4)));
