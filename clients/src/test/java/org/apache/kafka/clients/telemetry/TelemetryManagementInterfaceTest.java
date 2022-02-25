@@ -277,15 +277,15 @@ public class TelemetryManagementInterfaceTest {
             return;
 
         Class<IllegalArgumentException> e = IllegalArgumentException.class;
+        ProducerConfig config = newConfig();
 
         assertThrows(e,
-            () -> TelemetryManagementInterface.maybeCreate(enableMetricsPush, time, clientId),
-            String.format("maybeCreate should have thrown a %s for enableMetricsPush: %s, time: %s, clientId: %s", e.getName(), enableMetricsPush, time, clientId));
+            () -> TelemetryManagementInterface.maybeCreate(true, time, clientId),
+            String.format("maybeCreate should have thrown a %s for time: %s and clientId: %s", e.getName(), time, clientId));
 
-        ProducerConfig config = newConfig(enableMetricsPush);
         assertThrows(e,
             () -> TelemetryManagementInterface.maybeCreate(config, time, clientId),
-            String.format("maybeCreate should have thrown a %s for config: %s, time: %s, clientId: %s",  e.getName(), config.getBoolean(ProducerConfig.ENABLE_METRICS_PUSH_CONFIG), time, clientId));
+            String.format("maybeCreate should have thrown a %s for time: %s, clientId: %s",  e.getName(), time, clientId));
     }
 
     private TelemetryMetric newTelemetryMetric(String name, long value) {
@@ -295,15 +295,12 @@ public class TelemetryManagementInterfaceTest {
             "Description for " + name);
     }
 
-    private ProducerConfig newConfig(Boolean enableMetricsPush) {
+    private ProducerConfig newConfig() {
         Map<String, Object> map = new HashMap<>();
         map.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         map.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         map.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-
-        if (enableMetricsPush != null)
-            map.put(ProducerConfig.ENABLE_METRICS_PUSH_CONFIG, enableMetricsPush);
-
+        map.put(ProducerConfig.ENABLE_METRICS_PUSH_CONFIG, true);
         return new ProducerConfig(map);
     }
 
