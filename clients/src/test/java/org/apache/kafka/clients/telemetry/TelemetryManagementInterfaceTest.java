@@ -38,7 +38,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -276,7 +275,7 @@ public class TelemetryManagementInterfaceTest {
             return;
 
         Class<IllegalArgumentException> e = IllegalArgumentException.class;
-        ProducerConfig config = newConfig();
+        ProducerConfig config = bootstrapTestProducerConfig();
 
         assertThrows(e,
             () -> TelemetryManagementInterface.maybeCreate(true, time, clientId),
@@ -294,7 +293,7 @@ public class TelemetryManagementInterfaceTest {
             "Description for " + name);
     }
 
-    private ProducerConfig newConfig() {
+    private ProducerConfig bootstrapTestProducerConfig() {
         Map<String, Object> map = new HashMap<>();
         map.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         map.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
