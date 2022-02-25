@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -99,14 +100,17 @@ public class TelemetryManagementInterfaceTest {
         assertEquals(uuid, TelemetryManagementInterface.validateClientInstanceId(uuid));
     }
 
-    @Test
-    public void testValidatePushInterval() {
-        // invalid push interval
-        assertEquals(10000, TelemetryManagementInterface.validatePushIntervalMs(-1));
-        assertEquals(10000, TelemetryManagementInterface.validatePushIntervalMs(null));
+    @ParameterizedTest
+    @ValueSource(ints = {-1})
+    @NullSource
+    public void testValidatePushIntervalInvalid(Integer pushIntervalMs) {
+        assertEquals(TelemetryManagementInterface.DEFAULT_PUSH_INTERVAL_MS, TelemetryManagementInterface.validatePushIntervalMs(pushIntervalMs));
+    }
 
-        // valid push interval
-        assertEquals(100, TelemetryManagementInterface.validatePushIntervalMs(100));
+    @ParameterizedTest
+    @ValueSource(ints = {0, TelemetryManagementInterface.DEFAULT_PUSH_INTERVAL_MS, Integer.MAX_VALUE - 1, Integer.MAX_VALUE})
+    public void testValidatePushIntervalValid(Integer pushIntervalMs) {
+        assertEquals(pushIntervalMs, TelemetryManagementInterface.validatePushIntervalMs(pushIntervalMs));
     }
 
     @Test
@@ -114,7 +118,7 @@ public class TelemetryManagementInterfaceTest {
         assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(Collections.emptyList()));
         assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(null));
         assertEquals(CompressionType.GZIP, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.GZIP, CompressionType.LZ4, CompressionType.ZSTD)));
-        assertEquals(CompressionType.LZ4, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.LZ4)));
+        assertEquals(CompressionType.LZ4, TelemetryManagementInterface.preferredCompressionType(Collections.singletonList(CompressionType.LZ4)));
     }
 
     @Test

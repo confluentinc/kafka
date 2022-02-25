@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.KafkaException;
@@ -67,6 +68,10 @@ public class TelemetryManagementInterface implements Closeable {
     private static final String CONTEXT = "kafka.telemetry";
 
     private static final String CLIENT_ID_METRIC_TAG = "client-id";
+
+    public static final int DEFAULT_PUSH_INTERVAL_MS = 5 * 60 * 1000;
+
+    public static final int MAX_PUSH_INTERVAL_MS = Integer.MAX_VALUE;
 
     private final Time time;
 
@@ -405,8 +410,25 @@ public class TelemetryManagementInterface implements Closeable {
     }
 
     public static int validatePushIntervalMs(Integer pushIntervalMs) {
-        // TODO: TELEMETRY_TODO: I don't think we'll need this, but maybe it's good to be paranoid?
-        return pushIntervalMs != null && pushIntervalMs > 0 ? pushIntervalMs : 10000;
+        long value;
+
+        if (pushIntervalMs == null) {
+            // Missing
+            log.warn("Telemetry subscription push interval value from broker was missing, substituting a value of {}", DEFAULT_PUSH_INTERVAL_MS);
+            return DEFAULT_PUSH_INTERVAL_MS;
+        } else if (pushIntervalMs < 0) {
+            // Too small
+            log.warn("Telemetry subscription push interval value from broker was invalid ({}), substituting a value of {}", pushIntervalMs, DEFAULT_PUSH_INTERVAL_MS);
+            return DEFAULT_PUSH_INTERVAL_MS;
+        } else if (pushIntervalMs > MAX_PUSH_INTERVAL_MS) {
+            // AToo big
+            log.warn("Telemetry subscription push interval value from broker was too large ({}), substituting a value of {}", pushIntervalMs, MAX_PUSH_INTERVAL_MS);
+            return MAX_PUSH_INTERVAL_MS;
+        } else {
+            // Just right!
+            log.debug("Telemetry subscription push interval value from broker was {}", pushIntervalMs);
+            return pushIntervalMs;
+        }
     }
 
     public static CompressionType preferredCompressionType(List<CompressionType> acceptedCompressionTypes) {
