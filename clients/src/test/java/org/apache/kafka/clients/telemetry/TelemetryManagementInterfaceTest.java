@@ -102,14 +102,13 @@ public class TelemetryManagementInterfaceTest {
 
     @ParameterizedTest
     @ValueSource(ints = {-1})
-    @NullSource
-    public void testValidatePushIntervalInvalid(Integer pushIntervalMs) {
+    public void testValidatePushIntervalInvalid(int pushIntervalMs) {
         assertEquals(TelemetryManagementInterface.DEFAULT_PUSH_INTERVAL_MS, TelemetryManagementInterface.validatePushIntervalMs(pushIntervalMs));
     }
 
     @ParameterizedTest
     @ValueSource(ints = {0, TelemetryManagementInterface.DEFAULT_PUSH_INTERVAL_MS, Integer.MAX_VALUE - 1, Integer.MAX_VALUE})
-    public void testValidatePushIntervalValid(Integer pushIntervalMs) {
+    public void testValidatePushIntervalValid(int pushIntervalMs) {
         assertEquals(pushIntervalMs, TelemetryManagementInterface.validatePushIntervalMs(pushIntervalMs));
     }
 

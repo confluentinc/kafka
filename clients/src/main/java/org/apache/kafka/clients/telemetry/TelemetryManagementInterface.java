@@ -70,8 +70,6 @@ public class TelemetryManagementInterface implements Closeable {
 
     public static final int DEFAULT_PUSH_INTERVAL_MS = 5 * 60 * 1000;
 
-    public static final int MAX_PUSH_INTERVAL_MS = Integer.MAX_VALUE;
-
     private final Time time;
 
     private final Metrics metrics;
@@ -408,26 +406,14 @@ public class TelemetryManagementInterface implements Closeable {
         return clientInstanceId.equals(Uuid.ZERO_UUID) ? Uuid.randomUuid() : clientInstanceId;
     }
 
-    public static int validatePushIntervalMs(Integer pushIntervalMs) {
-        long value;
-
-        if (pushIntervalMs == null) {
-            // Missing
-            log.warn("Telemetry subscription push interval value from broker was missing, substituting a value of {}", DEFAULT_PUSH_INTERVAL_MS);
-            return DEFAULT_PUSH_INTERVAL_MS;
-        } else if (pushIntervalMs < 0) {
-            // Too small
+    public static int validatePushIntervalMs(int pushIntervalMs) {
+        if (pushIntervalMs < 0) {
             log.warn("Telemetry subscription push interval value from broker was invalid ({}), substituting a value of {}", pushIntervalMs, DEFAULT_PUSH_INTERVAL_MS);
             return DEFAULT_PUSH_INTERVAL_MS;
-        } else if (pushIntervalMs > MAX_PUSH_INTERVAL_MS) {
-            // AToo big
-            log.warn("Telemetry subscription push interval value from broker was too large ({}), substituting a value of {}", pushIntervalMs, MAX_PUSH_INTERVAL_MS);
-            return MAX_PUSH_INTERVAL_MS;
-        } else {
-            // Just right!
-            log.debug("Telemetry subscription push interval value from broker was {}", pushIntervalMs);
-            return pushIntervalMs;
         }
+
+        log.debug("Telemetry subscription push interval value from broker was {}", pushIntervalMs);
+        return pushIntervalMs;
     }
 
     public static CompressionType preferredCompressionType(List<CompressionType> acceptedCompressionTypes) {
@@ -457,26 +443,24 @@ public class TelemetryManagementInterface implements Closeable {
     public List<TelemetryMetric> currentTelemetryMetrics(boolean deltaTemporality) {
         return telemetryMetricsReporter.current().stream().map(kafkaMetric -> {
             String name = kafkaMetric.metricName().name();
-            long value;
+            Object metricValue = kafkaMetric.metricValue();
 
-            {
-                Object metricValue = kafkaMetric.metricValue();
-                double doubleValue = Double.parseDouble(metricValue.toString());
-                value = Double.valueOf(doubleValue).longValue();
-                Measurable measurable = kafkaMetric.measurable();
+            // TODO: TELEMETRY_TODO: not sure if the metric value is always stored as a double,
+            //                       but empirically it seems to be. Not sure if there is a better
+            //                       way to handle this.
+            double doubleValue = Double.parseDouble(metricValue.toString());
+            long value = Double.valueOf(doubleValue).longValue();
+            Measurable measurable = kafkaMetric.measurable();
 
-                if (measurable instanceof CumulativeSum && deltaTemporality) {
-                    Long previousValue = deltaValueStore.getAndSet(kafkaMetric.metricName(), value);
-                    value = previousValue != null ? value - previousValue : value;
-                }
+            if (measurable instanceof CumulativeSum && deltaTemporality) {
+                Long previousValue = deltaValueStore.getAndSet(kafkaMetric.metricName(), value);
+                value = previousValue != null ? value - previousValue : value;
             }
 
             MetricType metricType = metricType(kafkaMetric);
             String description = kafkaMetric.metricName().description();
 
-            TelemetryMetric telemetryMetric = new TelemetryMetric(name, metricType, value, description);
-            log.debug("serialize including telemetry metric: {}", telemetryMetric);
-            return telemetryMetric;
+            return new TelemetryMetric(name, metricType, value, description);
         }).collect(Collectors.toList());
     }
 
@@ -631,24 +615,23 @@ public class TelemetryManagementInterface implements Closeable {
             }
         }
 
-        StringBuilder s = new StringBuilder();
-        s.append("Invalid telemetry state transition from ");
-        s.append(currState);
-        s.append(" to ");
-        s.append(newState);
-        s.append("; ");
+        // We didn't find a match above, so now we're just formatting a nice error message...
+        String validStatesClause;
 
         if (allowableStates != null && allowableStates.length > 0) {
-            s.append("the valid telemetry state transitions from ");
-            s.append(currState);
-            s.append(" are: ");
-            s.append(Utils.join(allowableStates, ", "));
+            validStatesClause = String.format("the valid telemetry state transitions from %s are: %s",
+                currState,
+                Utils.join(allowableStates, ", "));
         } else {
-            s.append("there are no valid telemetry state transitions from ");
-            s.append(currState);
+            validStatesClause = String.format("there are no valid telemetry state transitions from %s", currState);
         }
 
-        throw new IllegalTelemetryStateException(s.toString());
+        String message = String.format("Invalid telemetry state transition from %s to %s; %s",
+            currState,
+            newState,
+            validStatesClause);
+
+        throw new IllegalTelemetryStateException(message);
     }
 
 }
