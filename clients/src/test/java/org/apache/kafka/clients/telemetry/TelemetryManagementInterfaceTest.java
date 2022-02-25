@@ -22,43 +22,97 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.RecordBatch;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.BufferSupplier;
+import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class TelemetryManagementInterfaceTest {
 
-    @Test
-    public void testLZ4CompressedSerialization() throws IOException {
-        testSerialization(CompressionType.LZ4);
+    @ParameterizedTest
+    @EnumSource(CompressionType.class)
+    public void testSerialize(CompressionType compressionType) throws IOException {
+        TelemetryMetric telemetryMetric1 = newTelemetryMetric("test-1", 42);
+        TelemetryMetric telemetryMetric2 = newTelemetryMetric("test-2", 123);
+        StringTelemetrySerializer telemetrySerializer = new StringTelemetrySerializer();
+        List<TelemetryMetric> telemetryMetrics = Arrays.asList(telemetryMetric1, telemetryMetric2);
+        ByteBuffer compressed = TelemetryManagementInterface.serialize(telemetryMetrics,
+            compressionType,
+            telemetrySerializer);
+
+        ByteBuffer decompressed = ByteBuffer.allocate(10000);
+        try (InputStream in = compressionType.wrapForInput(compressed, RecordBatch.CURRENT_MAGIC_VALUE, BufferSupplier.create())) {
+            Utils.readFully(in, decompressed);
+        }
+
+        String s = new String(Utils.readBytes((ByteBuffer) decompressed.flip()));
+        String expected = String.format("%s: %s\n%s: %s\n", telemetryMetric1.name(), telemetryMetric1.value(), telemetryMetric2.name(), telemetryMetric2.value());
+        assertEquals(expected, s);
     }
 
     @Test
-    public void testGzipCompressedSerialization() throws IOException {
-        testSerialization(CompressionType.GZIP);
+    public void testMaybeCreateFailsIfClientIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> TelemetryManagementInterface.maybeCreate(true, new MockTime(), null));
     }
 
-    @Test
-    public void testZstdCompressedSerialization() throws IOException {
-        testSerialization(CompressionType.ZSTD);
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testMaybeCreateFailsIfClientIdIsNull(boolean enableMetricsPush) {
+        Time time = new MockTime();
+        testMaybeCreateFailsIfParametersAreNull(enableMetricsPush, time, null);
     }
 
-    @Test
-    public void testSnappyCompressedSerialization() throws IOException {
-        testSerialization(CompressionType.SNAPPY);
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testMaybeCreateFailsIfParametersAreNull(boolean enableMetricsPush) {
+        String clientId = "test-client";
+        testMaybeCreateFailsIfParametersAreNull(enableMetricsPush, null, clientId);
     }
 
-    @Test
-    public void testNoneCompressedSerialization() throws IOException {
-        testSerialization(CompressionType.NONE);
-    }
+    //
+//    @ParameterizedTest
+//    @ValueSource(booleans = {true, false}, strings = {NULL_CLIENT_ID, "test-client"})
+//    public void testMaybeCreateFailsIfParametersAreNull(boolean enableMetricsPush, String clientId) {
+//        Class<NullPointerException> e = NullPointerException.class;
+//
+//        for (ProducerConfig config : Arrays.asList(null, newConfig(enableMetricsPush))) {
+//            for (Time time : Arrays.asList(null, new MockTime())) {
+//                for (String clientId : Arrays.asList(null, "test-client")) {
+//                    // It ain't gonna throw an exception if they're all valid.
+//                    if (config != null && time != null && clientId != null)
+//                        continue;
+//
+//                    assertThrows(e,
+//                        () -> TelemetryManagementInterface.maybeCreate(config, time, clientId),
+//                        String.format("maybeCreate should have thrown a %s for enableMetricsPush: %s, config: %s, time: %s, clientId: %s",  e.getName(), enableMetricsPush, config, time, clientId));
+//                }
+//            }
+//        }
+//
+//        for (Time time : Arrays.asList(null, new MockTime())) {
+//            for (String clientId : Arrays.asList(null, "test-client")) {
+//                assertThrows(e,
+//                    () -> TelemetryManagementInterface.maybeCreate(enableMetricsPush, time, clientId),
+//                    String.format("maybeCreate should have thrown a %s for enableMetricsPush: %s, time: %s, clientId: %s",  e.getName(), enableMetricsPush, time, clientId));
+//            }
+//        }
+//    }
 
     @Test
     public void testValidateTransitionForInitialized() {
@@ -187,30 +241,44 @@ public class TelemetryManagementInterfaceTest {
         }
     }
 
-    private void testSerialization(CompressionType compressionType) throws IOException {
-        TelemetryMetric telemetryMetric1 = telemetryMetric("test-1", 42);
-        TelemetryMetric telemetryMetric2 = telemetryMetric("test-2", 123);
-        StringTelemetrySerializer telemetrySerializer = new StringTelemetrySerializer();
-        List<TelemetryMetric> telemetryMetrics = Arrays.asList(telemetryMetric1, telemetryMetric2);
-        ByteBuffer compressed = TelemetryManagementInterface.serialize(telemetryMetrics,
-            compressionType,
-            telemetrySerializer);
+    private void testMaybeCreateFailsIfParametersAreNull(boolean enableMetricsPush, Time time, String clientId) {
+        // maybeCreate won't (or at least it shouldn't) fail if these are both non-null
+        if (time != null && clientId != null)
+            return;
 
-        ByteBuffer decompressed = ByteBuffer.allocate(10000);
-        try (InputStream in = compressionType.wrapForInput(compressed, RecordBatch.CURRENT_MAGIC_VALUE, BufferSupplier.create())) {
-            Utils.readFully(in, decompressed);
-        }
+        // maybeCreate won't fail if we don't attempt to construct metrics in the first place
+        if (!enableMetricsPush)
+            return;
 
-        String s = new String(Utils.readBytes((ByteBuffer) decompressed.flip()));
-        String expected = String.format("%s: %s\n%s: %s\n", telemetryMetric1.name(), telemetryMetric1.value(), telemetryMetric2.name(), telemetryMetric2.value());
-        assertEquals(expected, s);
+        Class<IllegalArgumentException> e = IllegalArgumentException.class;
+
+        assertThrows(e,
+            () -> TelemetryManagementInterface.maybeCreate(enableMetricsPush, time, clientId),
+            String.format("maybeCreate should have thrown a %s for enableMetricsPush: %s, time: %s, clientId: %s", e.getName(), enableMetricsPush, time, clientId));
+
+        ProducerConfig config = newConfig(enableMetricsPush);
+        assertThrows(e,
+            () -> TelemetryManagementInterface.maybeCreate(config, time, clientId),
+            String.format("maybeCreate should have thrown a %s for config: %s, time: %s, clientId: %s",  e.getName(), config.getBoolean(ProducerConfig.ENABLE_METRICS_PUSH_CONFIG), time, clientId));
     }
 
-    private TelemetryMetric telemetryMetric(String name, long value) {
+    private TelemetryMetric newTelemetryMetric(String name, long value) {
         return new TelemetryMetric(name,
             MetricType.sum,
             value,
             "Description for " + name);
+    }
+
+    private ProducerConfig newConfig(Boolean enableMetricsPush) {
+        Map<String, Object> map = new HashMap<>();
+        map.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        map.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        map.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+
+        if (enableMetricsPush != null)
+            map.put(ProducerConfig.ENABLE_METRICS_PUSH_CONFIG, enableMetricsPush);
+
+        return new ProducerConfig(map);
     }
 
 }

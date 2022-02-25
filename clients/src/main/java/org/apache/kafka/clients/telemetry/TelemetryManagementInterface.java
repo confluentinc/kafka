@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.kafka.clients.CommonClientConfigs;
@@ -69,8 +70,6 @@ public class TelemetryManagementInterface implements Closeable {
 
     private final Time time;
 
-    private final String clientId;
-
     private final Metrics metrics;
 
     private final DeltaValueStore deltaValueStore;
@@ -88,8 +87,13 @@ public class TelemetryManagementInterface implements Closeable {
     private TelemetryState state = TelemetryState.initialized;
 
     public TelemetryManagementInterface(Time time, String clientId) {
-        this.time = time;
-        this.clientId = clientId;
+        if (time == null)
+            throw new IllegalArgumentException("time for TelemetryManagementInterface cannot be null");
+
+        if (clientId == null)
+            throw new IllegalArgumentException("clientId for TelemetryManagementInterface cannot be null");
+
+        this.time = Objects.requireNonNull(time, "time must be non-null");
         this.telemetrySerializer = new OtlpTelemetrySerializer();
         this.deltaValueStore = new DeltaValueStore();
         this.telemetryMetricsReporter = new TelemetryMetricsReporter(deltaValueStore);
@@ -107,10 +111,6 @@ public class TelemetryManagementInterface implements Closeable {
 
     public Time time() {
         return time;
-    }
-
-    public String clientId() {
-        return clientId;
     }
 
     public Metrics metrics() {
@@ -474,6 +474,9 @@ public class TelemetryManagementInterface implements Closeable {
     }
 
     public static TelemetryManagementInterface maybeCreate(AbstractConfig config, Time time, String clientId) {
+        if (config == null)
+            throw new IllegalArgumentException("config for TelemetryManagementInterface cannot be null");
+
         boolean enableMetricsPush = config.getBoolean(CommonClientConfigs.ENABLE_METRICS_PUSH_CONFIG);
         return maybeCreate(enableMetricsPush, time, clientId);
     }
