@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -37,11 +38,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TelemetryManagementInterfaceTest {
 
@@ -67,6 +68,56 @@ public class TelemetryManagementInterfaceTest {
     }
 
     @Test
+    public void testValidateMetricNames() {
+        // empty metric names
+        assertTrue(TelemetryManagementInterface.validateMetricNames(Collections.emptyList()).isEmpty());
+        assertTrue(TelemetryManagementInterface.validateMetricNames(null).isEmpty());
+    }
+
+    @Test
+    public void testValidateAcceptedCompressionTypes() {
+        // invalid compression types
+        assertEquals(0, TelemetryManagementInterface.validateAcceptedCompressionTypes(null).size());
+        assertEquals(0, TelemetryManagementInterface.validateAcceptedCompressionTypes(Collections.emptyList()).size());
+
+        List<Byte> compressionTypes = new ArrayList<>();
+        compressionTypes.add((byte) CompressionType.GZIP.id);
+        compressionTypes.add((byte) CompressionType.LZ4.id);
+        compressionTypes.add((byte) CompressionType.SNAPPY.id);
+        compressionTypes.add((byte) CompressionType.ZSTD.id);
+        compressionTypes.add((byte) CompressionType.NONE.id);
+        compressionTypes.add((byte) -1);
+
+        // should take the first compression type
+        assertEquals(5, TelemetryManagementInterface.validateAcceptedCompressionTypes(compressionTypes).size());
+    }
+
+    @Test
+    public void testValidateClientInstanceId() {
+        assertThrows(IllegalArgumentException.class, () -> TelemetryManagementInterface.validateClientInstanceId(null));
+        Uuid uuid = Uuid.randomUuid();
+        assertEquals(uuid, TelemetryManagementInterface.validateClientInstanceId(uuid));
+    }
+
+    @Test
+    public void testValidatePushInterval() {
+        // invalid push interval
+        assertEquals(10000, TelemetryManagementInterface.validatePushIntervalMs(-1));
+        assertEquals(10000, TelemetryManagementInterface.validatePushIntervalMs(null));
+
+        // valid push interval
+        assertEquals(100, TelemetryManagementInterface.validatePushIntervalMs(100));
+    }
+
+    @Test
+    public void testPreferredCompressionType() {
+        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(Collections.emptyList()));
+        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(null));
+        assertEquals(CompressionType.GZIP, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.GZIP, CompressionType.LZ4, CompressionType.ZSTD)));
+        assertEquals(CompressionType.LZ4, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.LZ4)));
+    }
+
+    @Test
     public void testMaybeCreateFailsIfClientIdIsNull() {
         assertThrows(IllegalArgumentException.class, () -> TelemetryManagementInterface.maybeCreate(true, new MockTime(), null));
     }
@@ -84,35 +135,6 @@ public class TelemetryManagementInterfaceTest {
         String clientId = "test-client";
         testMaybeCreateFailsIfParametersAreNull(enableMetricsPush, null, clientId);
     }
-
-    //
-//    @ParameterizedTest
-//    @ValueSource(booleans = {true, false}, strings = {NULL_CLIENT_ID, "test-client"})
-//    public void testMaybeCreateFailsIfParametersAreNull(boolean enableMetricsPush, String clientId) {
-//        Class<NullPointerException> e = NullPointerException.class;
-//
-//        for (ProducerConfig config : Arrays.asList(null, newConfig(enableMetricsPush))) {
-//            for (Time time : Arrays.asList(null, new MockTime())) {
-//                for (String clientId : Arrays.asList(null, "test-client")) {
-//                    // It ain't gonna throw an exception if they're all valid.
-//                    if (config != null && time != null && clientId != null)
-//                        continue;
-//
-//                    assertThrows(e,
-//                        () -> TelemetryManagementInterface.maybeCreate(config, time, clientId),
-//                        String.format("maybeCreate should have thrown a %s for enableMetricsPush: %s, config: %s, time: %s, clientId: %s",  e.getName(), enableMetricsPush, config, time, clientId));
-//                }
-//            }
-//        }
-//
-//        for (Time time : Arrays.asList(null, new MockTime())) {
-//            for (String clientId : Arrays.asList(null, "test-client")) {
-//                assertThrows(e,
-//                    () -> TelemetryManagementInterface.maybeCreate(enableMetricsPush, time, clientId),
-//                    String.format("maybeCreate should have thrown a %s for enableMetricsPush: %s, time: %s, clientId: %s",  e.getName(), enableMetricsPush, time, clientId));
-//            }
-//        }
-//    }
 
     @Test
     public void testValidateTransitionForInitialized() {
