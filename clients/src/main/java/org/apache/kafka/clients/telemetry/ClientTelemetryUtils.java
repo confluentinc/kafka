@@ -28,8 +28,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.CommonClientConfigs;
-import org.apache.kafka.clients.producer.internals.ProducerMetricRecorder;
-import org.apache.kafka.clients.producer.internals.ProducerTopicMetricRecorder;
 import org.apache.kafka.clients.telemetry.ClientInstanceMetricRecorder.ConnectionErrorReason;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.MetricName;
@@ -300,15 +298,14 @@ public class ClientTelemetryUtils {
         ProducerMetricRecorder producerMetricRecorder = clientTelemetry.producerMetricRecorder();
         ProducerTopicMetricRecorder producerTopicMetricRecorder = clientTelemetry.producerTopicMetricRecorder();
 
-        producerMetricRecorder.queueBytes().record(size);
-        producerMetricRecorder.queueMessages().record(1);
+        producerMetricRecorder.recordQueueBytes(size);
+        producerMetricRecorder.recordQueueMessages(1);
 
-        producerTopicMetricRecorder.queueBytes(tp, acks).record(size);
-        producerTopicMetricRecorder.queueCount(tp, acks).record(1);
+        producerTopicMetricRecorder.queueBytes(tp, acks, size);
+        producerTopicMetricRecorder.queueCount(tp, acks, 1);
     }
 
     public static void decrementQueueBytesTelemetry(ClientTelemetry clientTelemetry,
-        ApiVersions apiVersions,
         short acks,
         TopicPartition tp,
         int size) {
@@ -321,10 +318,10 @@ public class ClientTelemetryUtils {
         ProducerMetricRecorder producerMetricRecorder = clientTelemetry.producerMetricRecorder();
         ProducerTopicMetricRecorder producerTopicMetricRecorder = clientTelemetry.producerTopicMetricRecorder();
 
-        producerMetricRecorder.queueBytes().record(-size);
-        producerMetricRecorder.queueMessages().record(-recordCount);
-        producerTopicMetricRecorder.queueBytes(tp, acks).record(-size);
-        producerTopicMetricRecorder.queueCount(tp, acks).record(-recordCount);
+        producerMetricRecorder.recordQueueBytes(-size);
+        producerMetricRecorder.recordQueueMessages(-recordCount);
+        producerTopicMetricRecorder.queueBytes(tp, acks, -size);
+        producerTopicMetricRecorder.queueCount(tp, acks, -recordCount);
     }
 
     public static String formatAcks(short acks) {

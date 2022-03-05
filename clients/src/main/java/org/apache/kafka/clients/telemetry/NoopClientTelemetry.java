@@ -18,9 +18,6 @@ package org.apache.kafka.clients.telemetry;
 
 import java.time.Duration;
 import java.util.Optional;
-import org.apache.kafka.clients.consumer.internals.ConsumerMetricRecorder;
-import org.apache.kafka.clients.producer.internals.ProducerMetricRecorder;
-import org.apache.kafka.clients.producer.internals.ProducerTopicMetricRecorder;
 import org.apache.kafka.common.message.GetTelemetrySubscriptionsResponseData;
 import org.apache.kafka.common.requests.AbstractRequest;
 
@@ -77,58 +74,134 @@ public class NoopClientTelemetry implements ClientTelemetry {
 
     @Override
     public ConsumerMetricRecorder consumerMetricRecorder() {
-        throw new UnsupportedOperationException();
+        return new ConsumerMetricRecorder() {
+            @Override
+            public void recordPollInterval(int amount) {
+                
+            }
+
+            @Override
+            public void recordPollLast(int amount) {
+
+            }
+
+            @Override
+            public void recordPollLatency(int amount) {
+
+            }
+
+            @Override
+            public void recordCommitCount(int amount) {
+
+            }
+
+            @Override
+            public void recordGroupAssignmentStrategy(int amount) {
+
+            }
+
+            @Override
+            public void recordGroupAssignmentPartitionCount(int amount) {
+
+            }
+
+            @Override
+            public void recordAssignmentPartitionCount(int amount) {
+
+            }
+
+            @Override
+            public void recordGroupRebalanceCount(int amount) {
+
+            }
+
+            @Override
+            public void recordGroupErrorCount(String error, int amount) {
+
+            }
+
+            @Override
+            public void recordRecordQueueCount(int amount) {
+
+            }
+
+            @Override
+            public void recordRecordQueueBytes(int amount) {
+
+            }
+
+            @Override
+            public void recordRecordApplicationCount(int amount) {
+
+            }
+
+            @Override
+            public void recordRecordApplicationBytes(int amount) {
+
+            }
+
+            @Override
+            public void recordFetchLatency(int amount) {
+
+            }
+
+            @Override
+            public void recordFetchCount(int amount) {
+
+            }
+
+            @Override
+            public void recordFetchFailures(int amount) {
+
+            }
+        };
     }
 
     @Override
     public ClientInstanceMetricRecorder clientInstanceMetricRecorder() {
         return new ClientInstanceMetricRecorder() {
             @Override
-            public void recordConnectionCreations(final String brokerId, final int amount) {
+            public void recordConnectionCreations(String brokerId, int amount) {
 
             }
 
             @Override
-            public void recordConnectionCount(final int amount) {
+            public void recordConnectionCount(int amount) {
 
             }
 
             @Override
-            public void recordConnectionErrors(final ConnectionErrorReason reason,
-                final int amount) {
+            public void recordConnectionErrors(ConnectionErrorReason reason, int amount) {
 
             }
 
             @Override
-            public void recordRequestRtt(final String brokerId, final String requestType,
-                final int amount) {
+            public void recordRequestRtt(String brokerId, String requestType, int amount) {
 
             }
 
             @Override
-            public void recordRequestQueueLatency(final String brokerId, final int amount) {
+            public void recordRequestQueueLatency(String brokerId, int amount) {
 
             }
 
             @Override
-            public void recordRequestQueueCount(final String brokerId, final int amount) {
+            public void recordRequestQueueCount(String brokerId, int amount) {
 
             }
 
             @Override
-            public void recordRequestSuccess(final String brokerId, final String requestType,
-                final int amount) {
+            public void recordRequestSuccess(String brokerId, String requestType, int amount) {
 
             }
 
             @Override
-            public void recordRequestErrors(final String brokerId, final String requestType,
-                final RequestErrorReason reason, final int amount) {
+            public void recordRequestErrors(String brokerId, String requestType, RequestErrorReason reason, int amount) {
 
             }
 
             @Override
-            public void recordIoWaitTime(final int amount) {
+            public void recordIoWaitTime(int amount) {
 
             }
         };
@@ -138,22 +211,22 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public HostProcessMetricRecorder hostProcessMetricRecorder() {
         return new HostProcessMetricRecorder() {
             @Override
-            public void recordMemoryBytes(final long amount) {
+            public void recordMemoryBytes(long amount) {
 
             }
 
             @Override
-            public void recordCpuUserTime(final long amount) {
+            public void recordCpuUserTime(int amount) {
 
             }
 
             @Override
-            public void recordCpuSystemTime(final long amount) {
+            public void recordCpuSystemTime(int amount) {
 
             }
 
             @Override
-            public void recordPid(final long amount) {
+            public void recordPid(short amount) {
 
             }
         };
@@ -161,7 +234,37 @@ public class NoopClientTelemetry implements ClientTelemetry {
 
     @Override
     public ProducerMetricRecorder producerMetricRecorder() {
-        throw new UnsupportedOperationException();
+        return new ProducerMetricRecorder() {
+            @Override
+            public void recordRecordBytes(int amount) {
+                
+            }
+
+            @Override
+            public void recordRecordCount(int amount) {
+
+            }
+
+            @Override
+            public void recordQueueMaxBytes(int amount) {
+
+            }
+
+            @Override
+            public void recordQueueBytes(int amount) {
+
+            }
+
+            @Override
+            public void recordQueueMaxMessages(int amount) {
+
+            }
+
+            @Override
+            public void recordQueueMessages(int amount) {
+
+            }
+        };
     }
 
     @Override

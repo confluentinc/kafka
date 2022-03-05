@@ -59,31 +59,15 @@ public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRec
         Set<String> brokerIdRequestTypeTags = appendTags(brokerIdTags, REQUEST_TYPE_LABEL);
         Set<String> brokerIdRequestTypeReasonTags = appendTags(brokerIdRequestTypeTags, REASON_LABEL);
 
-        this.connectionCreations = createTemplate("connection.creations",
-            "Total number of broker connections made.",
-            brokerIdTags);
-        this.connectionCount = createMetricName("connection.count",
-            "Current number of broker connections.");
-        this.connectionErrors = createTemplate("connection.errors",
-            "Total number of broker connection failures.",
-            reasonTags);
-        this.requestRtt = createTemplate("request.rtt",
-            "Average request latency / round-trip-time to broker and back.",
-            brokerIdRequestTypeTags);
-        this.requestQueueLatency = createTemplate("request.queue.latency",
-            "Average request queue latency waiting for request to be sent to broker.",
-            brokerIdTags);
-        this.requestQueueCount = createTemplate("request.queue.count",
-            "Number of requests in queue waiting to be sent to broker.",
-            brokerIdTags);
-        this.requestSuccess = createTemplate("request.success",
-            "Number of successful requests to broker, that is where a response is received without no request-level error (but there may be per-sub-resource errors, e.g., errors for certain partitions within an OffsetCommitResponse).",
-            brokerIdRequestTypeTags);
-        this.requestErrors = createTemplate("request.errors",
-            "Number of failed requests.",
-            brokerIdRequestTypeReasonTags);
-        this.ioWaitTime = createMetricName("io.wait.time",
-            "Amount of time waiting for socket I/O writability (POLLOUT). A high number indicates socket send buffer congestion.");
+        this.connectionCreations = createMetricNameTemplate(CONNECTION_CREATIONS_NAME, GROUP_NAME, CONNECTION_CREATIONS_DESCRIPTION, brokerIdTags);
+        this.connectionCount = createMetricName(CONNECTION_COUNT_NAME, GROUP_NAME, CONNECTION_COUNT_DESCRIPTION);
+        this.connectionErrors = createMetricNameTemplate(CONNECTION_ERRORS_NAME, GROUP_NAME, CONNECTION_ERRORS_DESCRIPTION, reasonTags);
+        this.requestRtt = createMetricNameTemplate(REQUEST_RTT_NAME, GROUP_NAME, REQUEST_RTT_DESCRIPTION, brokerIdRequestTypeTags);
+        this.requestQueueLatency = createMetricNameTemplate(REQUEST_QUEUE_LATENCY_NAME, GROUP_NAME, REQUEST_QUEUE_LATENCY_DESCRIPTION, brokerIdTags);
+        this.requestQueueCount = createMetricNameTemplate(REQUEST_QUEUE_COUNT_NAME, GROUP_NAME, REQUEST_QUEUE_COUNT_DESCRIPTION, brokerIdTags);
+        this.requestSuccess = createMetricNameTemplate(REQUEST_SUCCESS_NAME, GROUP_NAME, REQUEST_SUCCESS_NAME_DESCRIPTION, brokerIdRequestTypeTags);
+        this.requestErrors = createMetricNameTemplate(REQUEST_ERRORS_NAME, GROUP_NAME, REQUEST_ERRORS_DESCRIPTION, brokerIdRequestTypeReasonTags);
+        this.ioWaitTime = createMetricName(IO_WAIT_TIME_NAME, GROUP_NAME, IO_WAIT_TIME_DESCRIPTION);
     }
 
     @Override
@@ -144,14 +128,4 @@ public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRec
     public void recordIoWaitTime(int increment) {
         histogramSensor(ioWaitTime).record(increment);
     }
-
-    private MetricName createMetricName(String unqualifiedName, String description) {
-        return metrics.metricInstance(createTemplate(unqualifiedName, description, tags));
-    }
-
-    private MetricNameTemplate createTemplate(String unqualifiedName, String description, Set<String> tags) {
-        String qualifiedName = String.format("org.apache.kafka.client.%s", unqualifiedName);
-        return createTemplate(qualifiedName, GROUP_NAME, description, tags);
-    }
-
 }

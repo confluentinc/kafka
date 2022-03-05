@@ -17,7 +17,6 @@
 package org.apache.kafka.clients.telemetry;
 
 import org.apache.kafka.common.MetricName;
-import org.apache.kafka.common.MetricNameTemplate;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 
@@ -25,8 +24,7 @@ import org.apache.kafka.common.metrics.Sensor;
  * A sensor registry that exposes {@link Sensor}s used to record the client host process metrics.
  */
 
-public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecorder implements
-    HostProcessMetricRecorder {
+public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecorder implements HostProcessMetricRecorder {
 
     private final static String GROUP_NAME = "host-process-telemetry";
 
@@ -41,31 +39,29 @@ public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecord
     public DefaultHostProcessMetricRecorder(Metrics metrics) {
         super(metrics);
 
-        this.memoryBytes = createMetricName(MEMORY_BYTES_NAME, MEMORY_BYTES_DESCRIPTION);
-        this.cpuUserTime = createMetricName(CPU_USER_TIME_NAME, CPU_USER_TIME_DESCRIPTION);
-        this.cpuSystemTime = createMetricName(CPU_SYSTEM_TIME_NAME, CPU_SYSTEM_TIME_DESCRIPTION);
-        this.pid = createMetricName(PID_NAME, PID_DESCRIPTION);
+        this.memoryBytes = createMetricName(MEMORY_BYTES_NAME, GROUP_NAME, MEMORY_BYTES_DESCRIPTION);
+        this.cpuUserTime = createMetricName(CPU_USER_TIME_NAME, GROUP_NAME, CPU_USER_TIME_DESCRIPTION);
+        this.cpuSystemTime = createMetricName(CPU_SYSTEM_TIME_NAME, GROUP_NAME, CPU_SYSTEM_TIME_DESCRIPTION);
+        this.pid = createMetricName(PID_NAME, GROUP_NAME, PID_DESCRIPTION);
     }
 
+    @Override
     public void recordMemoryBytes(long amount) {
         gaugeSensor(memoryBytes).record(amount);
     }
 
-    public void recordCpuUserTime(long amount) {
+    @Override
+    public void recordCpuUserTime(int amount) {
         sumSensor(cpuUserTime).record(amount);
     }
 
-    public void recordCpuSystemTime(long amount) {
+    @Override
+    public void recordCpuSystemTime(int amount) {
         sumSensor(cpuSystemTime).record(amount);
     }
 
-    public void recordPid(long amount) {
+    @Override
+    public void recordPid(short amount) {
         sumSensor(pid).record(amount);
     }
-
-    private MetricName createMetricName(String name, String description) {
-        MetricNameTemplate mnt = createTemplate(name, GROUP_NAME, description, tags);
-        return metrics.metricInstance(mnt);
-    }
-
 }

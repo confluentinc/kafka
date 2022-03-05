@@ -23,7 +23,9 @@ import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.NetworkClientUtils;
 import org.apache.kafka.clients.RequestCompletionHandler;
-import org.apache.kafka.clients.telemetry.ClientTelemetryUtils;
+import org.apache.kafka.clients.telemetry.ClientTelemetry;
+import org.apache.kafka.clients.telemetry.ProducerMetricRecorder;
+import org.apache.kafka.clients.telemetry.ProducerTopicMetricRecorder;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.KafkaException;
@@ -131,8 +133,7 @@ public class Sender implements Runnable {
                   short acks,
                   int retries,
                   SenderMetricsRegistry metricsRegistry,
-                  ProducerMetricRecorder producerSensorRegistry,
-                  ProducerTopicMetricRecorder producerTopicSensorRegistry,
+                  ClientTelemetry clientTelemetry,
                   Time time,
                   int requestTimeoutMs,
                   long retryBackoffMs,
@@ -148,8 +149,7 @@ public class Sender implements Runnable {
         this.acks = acks;
         this.retries = retries;
         this.time = time;
-        this.sensors = new SenderMetrics(metricsRegistry, acks, producerSensorRegistry,
-            producerTopicSensorRegistry, metadata, client, time);
+        this.sensors = new SenderMetrics(metricsRegistry, acks, clientTelemetry, metadata, client, time);
         this.requestTimeoutMs = requestTimeoutMs;
         this.retryBackoffMs = retryBackoffMs;
         this.apiVersions = apiVersions;
@@ -875,21 +875,20 @@ public class Sender implements Runnable {
         public final Sensor batchSplitSensor;
         private final SenderMetricsRegistry metrics;
         private final short acks;
-        private final ProducerMetricRecorder producerSensorRegistry;
-        private final ProducerTopicMetricRecorder producerTopicSensorRegistry;
+        private final ProducerMetricRecorder producerMetricRecorder;
+        private final ProducerTopicMetricRecorder producerTopicMetricRecorder;
         private final Time time;
 
         public SenderMetrics(SenderMetricsRegistry metrics,
             short acks,
-            ProducerMetricRecorder producerSensorRegistry,
-            ProducerTopicMetricRecorder producerTopicSensorRegistry,
+            ClientTelemetry clientTelemetry,
             Metadata metadata,
             KafkaClient client,
             Time time) {
             this.metrics = metrics;
             this.acks = acks;
-            this.producerSensorRegistry = producerSensorRegistry;
-            this.producerTopicSensorRegistry = producerTopicSensorRegistry;
+            this.producerMetricRecorder = clientTelemetry.producerMetricRecorder();
+            this.producerTopicMetricRecorder = clientTelemetry.producerTopicMetricRecorder();
             this.time = time;
 
             this.batchSizeSensor = metrics.sensor("batch-size");
@@ -991,13 +990,10 @@ public class Sender implements Runnable {
                     Sensor topicCompressionRate = Objects.requireNonNull(this.metrics.getSensor(topicCompressionRateName));
                     topicCompressionRate.record(batch.compressionRatio());
 
-                    if (producerSensorRegistry != null) {
-                        producerSensorRegistry.recordCount().record(batch.recordCount);
-                        producerSensorRegistry.recordBytes().record(batch.estimatedSizeInBytes());
-                    }
+                    producerMetricRecorder.recordRecordCount(batch.recordCount);
+                    producerMetricRecorder.recordRecordBytes(batch.estimatedSizeInBytes());
 
-                    if (producerTopicSensorRegistry != null)
-                        producerTopicSensorRegistry.recordSuccess(batch.topicPartition, acks).record(batch.recordCount);
+                    producerTopicMetricRecorder.recordSuccess(batch.topicPartition, acks, batch.recordCount);
 
                     // global metrics
                     this.batchSizeSensor.record(batch.estimatedSizeInBytes(), now);
@@ -1018,8 +1014,7 @@ public class Sender implements Runnable {
             if (topicRetrySensor != null)
                 topicRetrySensor.record(count, now);
 
-            if (producerTopicSensorRegistry != null)
-                producerTopicSensorRegistry.recordRetries(topicPartition, acks).record(count);
+            producerTopicMetricRecorder.recordRetries(topicPartition, acks, count);
         }
 
         public void recordErrors(TopicPartition topicPartition, int count, Throwable error) {
@@ -1030,10 +1025,7 @@ public class Sender implements Runnable {
             if (topicErrorSensor != null)
                 topicErrorSensor.record(count, now);
 
-            if (producerTopicSensorRegistry != null) {
-                String reason = ClientTelemetryUtils.convertToReason(error);
-                producerTopicSensorRegistry.recordFailures(topicPartition, acks, reason).record(count);
-            }
+            producerTopicMetricRecorder.recordFailures(topicPartition, acks, error,count);
         }
 
         public void recordLatency(String node, long latency) {

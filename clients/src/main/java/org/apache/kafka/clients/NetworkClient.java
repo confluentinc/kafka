@@ -172,7 +172,7 @@ public class NetworkClient implements KafkaClient {
              discoverBrokerVersions,
              apiVersions,
              null,
-             null,
+             new NoopClientTelemetry(),
              logContext);
     }
 
@@ -245,7 +245,7 @@ public class NetworkClient implements KafkaClient {
              discoverBrokerVersions,
              apiVersions,
              null,
-             null,
+             new NoopClientTelemetry(),
              logContext,
              new DefaultHostResolver());
     }
@@ -298,10 +298,6 @@ public class NetworkClient implements KafkaClient {
         this.throttleTimeSensor = throttleTimeSensor;
         this.log = logContext.logger(NetworkClient.class);
         this.state = new AtomicReference<>(State.ACTIVE);
-
-        if (clientTelemetry == null)
-            clientTelemetry = new NoopClientTelemetry();
-
         this.clientInstanceMetricRecorder = clientTelemetry.clientInstanceMetricRecorder();
         this.telemetryUpdater = new TelemetryUpdater(clientTelemetry);
     }

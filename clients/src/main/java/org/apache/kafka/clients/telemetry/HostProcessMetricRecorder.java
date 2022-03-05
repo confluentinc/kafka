@@ -24,9 +24,9 @@ import org.apache.kafka.common.metrics.Sensor;
 
 public interface HostProcessMetricRecorder extends ClientMetricRecorder {
 
-    String PREFIX = "org.apache.kafka.client.process";
+    String PREFIX = ClientMetricRecorder.PREFIX + "process.";
 
-    String MEMORY_BYTES_NAME = PREFIX + ".memory.bytes";
+    String MEMORY_BYTES_NAME = PREFIX + "memory.bytes";
 
     String MEMORY_BYTES_DESCRIPTION = "Current process/runtime memory usage (RSS, not virtual).";
 
@@ -44,10 +44,10 @@ public interface HostProcessMetricRecorder extends ClientMetricRecorder {
 
     void recordMemoryBytes(long amount);
 
-    void recordCpuUserTime(long amount);
+    void recordCpuUserTime(int amount);
 
-    void recordCpuSystemTime(long amount);
+    void recordCpuSystemTime(int amount);
 
-    void recordPid(long amount);
+    void recordPid(short amount);
 
 }

@@ -26,6 +26,6 @@ package org.apache.kafka.clients.telemetry;
 
 public interface ClientMetricRecorder {
 
-    String PREFIX = "org.apache.kafka.client";
+    String PREFIX = "org.apache.kafka.client.";
 
 }

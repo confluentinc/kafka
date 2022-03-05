@@ -21,6 +21,8 @@ import org.apache.kafka.clients.NodeApiVersions;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.Partitioner;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.clients.telemetry.ProducerMetricRecorder;
+import org.apache.kafka.clients.telemetry.ProducerTopicMetricRecorder;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Node;

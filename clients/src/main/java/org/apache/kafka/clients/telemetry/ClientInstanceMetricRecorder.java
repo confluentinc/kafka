@@ -30,6 +30,44 @@ public interface ClientInstanceMetricRecorder extends ClientMetricRecorder {
         disconnect, error, timeout
     }
 
+    String PREFIX = ClientMetricRecorder.PREFIX;
+
+    String CONNECTION_CREATIONS_NAME = PREFIX + "connection.creations";
+
+    String CONNECTION_CREATIONS_DESCRIPTION = "Total number of broker connections made.";
+
+    String CONNECTION_COUNT_NAME = PREFIX + "connection.count";
+
+    String CONNECTION_COUNT_DESCRIPTION = "Current number of broker connections.";
+
+    String CONNECTION_ERRORS_NAME = PREFIX + "connection.errors";
+
+    String CONNECTION_ERRORS_DESCRIPTION = "Total number of broker connection failures.";
+
+    String REQUEST_RTT_NAME = PREFIX + "request.rtt";
+
+    String REQUEST_RTT_DESCRIPTION = "Average request latency / round-trip-time to broker and back.";
+
+    String REQUEST_QUEUE_LATENCY_NAME = PREFIX + "request.queue.latency";
+
+    String REQUEST_QUEUE_LATENCY_DESCRIPTION = "Average request queue latency waiting for request to be sent to broker.";
+
+    String REQUEST_QUEUE_COUNT_NAME = PREFIX + "request.queue.count";
+
+    String REQUEST_QUEUE_COUNT_DESCRIPTION = "Number of requests in queue waiting to be sent to broker.";
+
+    String REQUEST_SUCCESS_NAME = PREFIX + "request.success";
+
+    String REQUEST_SUCCESS_NAME_DESCRIPTION = "Number of successful requests to broker, that is where a response is received without no request-level error (but there may be per-sub-resource errors, e.g., errors for certain partitions within an OffsetCommitResponse).";
+
+    String REQUEST_ERRORS_NAME = PREFIX + "request.errors";
+
+    String REQUEST_ERRORS_DESCRIPTION = "Number of failed requests.";
+
+    String IO_WAIT_TIME_NAME = PREFIX + "io.wait.time";
+
+    String IO_WAIT_TIME_DESCRIPTION = "Amount of time waiting for socket I/O writability (POLLOUT). A high number indicates socket send buffer congestion.";
+
     String BROKER_ID_LABEL = "broker_id";
 
     String REASON_LABEL = "reason";

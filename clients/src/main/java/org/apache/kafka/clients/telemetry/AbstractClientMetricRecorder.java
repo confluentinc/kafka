@@ -86,7 +86,12 @@ public abstract class AbstractClientMetricRecorder implements ClientMetricRecord
         return sumSensor(mn);
     }
 
-    protected MetricNameTemplate createTemplate(String name, String group, String description, Set<String> tags) {
+    protected MetricName createMetricName(String name, String groupName, String description) {
+        MetricNameTemplate mnt = createMetricNameTemplate(name, groupName, description, tags);
+        return metrics.metricInstance(mnt);
+    }
+
+    protected MetricNameTemplate createMetricNameTemplate(String name, String group, String description, Set<String> tags) {
         MetricNameTemplate template = new MetricNameTemplate(name, group, description, tags);
         allTemplates.add(template);
         return template;

@@ -34,9 +34,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import org.apache.kafka.clients.consumer.internals.ConsumerMetricRecorder;
-import org.apache.kafka.clients.producer.internals.ProducerMetricRecorder;
-import org.apache.kafka.clients.producer.internals.ProducerTopicMetricRecorder;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Uuid;
@@ -115,11 +112,10 @@ public class DefaultClientTelemetry implements ClientTelemetry {
             metricsContext);
 
         this.clientInstanceMetricRecorder = new DefaultClientInstanceMetricRecorder(this.metrics);
-        this.consumerMetricRecorder = new ConsumerMetricRecorder(this.metrics);
+        this.consumerMetricRecorder = new DefaultConsumerMetricRecorder(this.metrics);
         this.hostProcessMetricRecorder = new DefaultHostProcessMetricRecorder(this.metrics);
         this.producerMetricRecorder = new ProducerMetricRecorder(this.metrics);
         this.producerTopicMetricRecorder = new ProducerTopicMetricRecorder(this.metrics);
-
     }
 
     @Override
@@ -339,26 +335,26 @@ public class DefaultClientTelemetry implements ClientTelemetry {
 
     @Override
     public ClientInstanceMetricRecorder clientInstanceMetricRecorder() {
-        return new DefaultClientInstanceMetricRecorder(metrics);
+        return clientInstanceMetricRecorder;
     }
 
     @Override
     public ConsumerMetricRecorder consumerMetricRecorder() {
-        return null;
+        return consumerMetricRecorder;
     }
 
     @Override
     public HostProcessMetricRecorder hostProcessMetricRecorder() {
-        return new DefaultHostProcessMetricRecorder(metrics);
+        return hostProcessMetricRecorder;
     }
 
     @Override
     public ProducerMetricRecorder producerMetricRecorder() {
-        return null;
+        return producerMetricRecorder;
     }
 
     @Override
     public ProducerTopicMetricRecorder producerTopicMetricRecorder() {
-        return null;
+        return producerTopicMetricRecorder;
     }
 }

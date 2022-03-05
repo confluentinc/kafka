@@ -628,7 +628,6 @@ public final class RecordAccumulator {
                     }
                     batch.close();
                     decrementQueueBytesTelemetry(clientTelemetry,
-                        apiVersions,
                         acks,
                         tp,
                         batch.records().sizeInBytes());
