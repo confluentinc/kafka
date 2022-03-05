@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.clients.consumer;
 
+import java.util.Optional;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.PartitionInfo;
@@ -176,7 +177,7 @@ public interface Consumer<K, V> extends Closeable {
     /**
      * See {@link KafkaConsumer#clientInstanceId(Duration)}}
      */
-    String clientInstanceId(Duration timeout);
+    Optional<String> clientInstanceId(Duration timeout);
 
     /**
      * @see KafkaConsumer#metrics()

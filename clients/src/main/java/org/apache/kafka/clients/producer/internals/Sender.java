@@ -23,7 +23,7 @@ import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.NetworkClientUtils;
 import org.apache.kafka.clients.RequestCompletionHandler;
-import org.apache.kafka.clients.telemetry.TelemetryManagementInterface;
+import org.apache.kafka.clients.telemetry.ClientTelemetryUtils;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.KafkaException;
@@ -131,8 +131,8 @@ public class Sender implements Runnable {
                   short acks,
                   int retries,
                   SenderMetricsRegistry metricsRegistry,
-                  ProducerSensorRegistry producerSensorRegistry,
-                  ProducerTopicSensorRegistry producerTopicSensorRegistry,
+                  ProducerMetricRecorder producerSensorRegistry,
+                  ProducerTopicMetricRecorder producerTopicSensorRegistry,
                   Time time,
                   int requestTimeoutMs,
                   long retryBackoffMs,
@@ -875,14 +875,14 @@ public class Sender implements Runnable {
         public final Sensor batchSplitSensor;
         private final SenderMetricsRegistry metrics;
         private final short acks;
-        private final ProducerSensorRegistry producerSensorRegistry;
-        private final ProducerTopicSensorRegistry producerTopicSensorRegistry;
+        private final ProducerMetricRecorder producerSensorRegistry;
+        private final ProducerTopicMetricRecorder producerTopicSensorRegistry;
         private final Time time;
 
         public SenderMetrics(SenderMetricsRegistry metrics,
             short acks,
-            ProducerSensorRegistry producerSensorRegistry,
-            ProducerTopicSensorRegistry producerTopicSensorRegistry,
+            ProducerMetricRecorder producerSensorRegistry,
+            ProducerTopicMetricRecorder producerTopicSensorRegistry,
             Metadata metadata,
             KafkaClient client,
             Time time) {
@@ -1031,7 +1031,7 @@ public class Sender implements Runnable {
                 topicErrorSensor.record(count, now);
 
             if (producerTopicSensorRegistry != null) {
-                String reason = TelemetryManagementInterface.convertErrorToReason(error);
+                String reason = ClientTelemetryUtils.convertToReason(error);
                 producerTopicSensorRegistry.recordFailures(topicPartition, acks, reason).record(count);
             }
         }

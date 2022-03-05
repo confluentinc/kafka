@@ -16,10 +16,12 @@
  */
 package org.apache.kafka.clients.producer.internals;
 
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.formatAcks;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import org.apache.kafka.clients.telemetry.AbstractSensorRegistry;
+import org.apache.kafka.clients.telemetry.AbstractClientMetricRecorder;
 import org.apache.kafka.common.MetricNameTemplate;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
@@ -29,10 +31,10 @@ import org.apache.kafka.common.metrics.Sensor;
  * A sensor registry that exposes {@link Sensor}s used to record the topic-level metrics for the
  * producer.
  *
- * @see ProducerSensorRegistry for details on the producer-level sensors.
+ * @see ProducerMetricRecorder for details on the producer-level sensors.
  */
 
-public class ProducerTopicSensorRegistry extends AbstractSensorRegistry {
+public class ProducerTopicMetricRecorder extends AbstractClientMetricRecorder {
 
     private static final String GROUP_NAME = "producer-topic-telemetry";
 
@@ -58,7 +60,7 @@ public class ProducerTopicSensorRegistry extends AbstractSensorRegistry {
 
     private final MetricNameTemplate recordSuccess;
 
-    public ProducerTopicSensorRegistry(Metrics metrics) {
+    public ProducerTopicMetricRecorder(Metrics metrics) {
         super(metrics);
 
         Set<String> topicPartitionAcksTags = appendTags(tags, "topic", "partition", "acks");
@@ -134,20 +136,6 @@ public class ProducerTopicSensorRegistry extends AbstractSensorRegistry {
     private MetricNameTemplate createTemplate(String unqualifiedName, String description, Set<String> tags) {
         String qualifiedName = String.format("org.apache.kafka.client.producer.partition.%s", unqualifiedName);
         return createTemplate(qualifiedName, GROUP_NAME, description, tags);
-    }
-
-    static String formatAcks(short acks) {
-        // TODO: TELEMETRY_TODO: this mapping needs to be verified
-        switch (acks) {
-            case 0:
-                return "none";
-
-            case 1:
-                return "leader";
-
-            default:
-                return "all";
-        }
     }
 
 }

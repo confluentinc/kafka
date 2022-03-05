@@ -26,26 +26,12 @@ import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 
 /**
- * A sensor registry that exposes {@link Sensor}s used to record the client instance-level metrics.
+ * A recorder that exposes {@link Sensor}s used to record the client instance-level metrics.
  */
 
-public class ClientSensorRegistry extends AbstractSensorRegistry {
-
-    public enum ConnectionErrorReason {
-        auth, close, disconnect, timeout, TLS
-    }
-
-    public enum RequestErrorReason {
-        disconnect, error, timeout
-    }
+public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRecorder implements ClientInstanceMetricRecorder {
 
     private static final String GROUP_NAME = "client-telemetry";
-
-    private static final String BROKER_ID_LABEL = "broker_id";
-
-    private static final String REASON_LABEL = "reason";
-
-    private static final String REQUEST_TYPE_LABEL = "request_type";
 
     private final MetricNameTemplate connectionCreations;
 
@@ -65,7 +51,7 @@ public class ClientSensorRegistry extends AbstractSensorRegistry {
 
     private final MetricName ioWaitTime;
 
-    public ClientSensorRegistry(Metrics metrics) {
+    public DefaultClientInstanceMetricRecorder(Metrics metrics) {
         super(metrics);
 
         Set<String> brokerIdTags = appendTags(tags, BROKER_ID_LABEL);
@@ -100,54 +86,63 @@ public class ClientSensorRegistry extends AbstractSensorRegistry {
             "Amount of time waiting for socket I/O writability (POLLOUT). A high number indicates socket send buffer congestion.");
     }
 
-    public Sensor connectionCreations(String brokerId) {
+    @Override
+    public void recordConnectionCreations(String brokerId, int increment) {
         Map<String, String> metricsTags = Collections.singletonMap(BROKER_ID_LABEL, brokerId);
-        return sumSensor(connectionCreations, metricsTags);
+        sumSensor(connectionCreations, metricsTags).record(increment);
     }
 
-    public Sensor connectionCount() {
-        return gaugeSensor(connectionCount);
+    @Override
+    public void recordConnectionCount(int increment) {
+        gaugeSensor(connectionCount).record(increment);
     }
 
-    public Sensor connectionErrors(ConnectionErrorReason reason) {
+    @Override
+    public void recordConnectionErrors(ConnectionErrorReason reason, int increment) {
         Map<String, String> metricsTags = Collections.singletonMap(REASON_LABEL, reason.toString());
-        return sumSensor(connectionErrors, metricsTags);
+        sumSensor(connectionErrors, metricsTags).record(increment);
     }
 
-    public Sensor requestRtt(String brokerId, String requestType) {
+    @Override
+    public void recordRequestRtt(String brokerId, String requestType, int increment) {
         Map<String, String> metricsTags = new HashMap<>();
         metricsTags.put(BROKER_ID_LABEL, brokerId);
         metricsTags.put(REQUEST_TYPE_LABEL, requestType);
-        return histogramSensor(requestRtt, metricsTags);
+        histogramSensor(requestRtt, metricsTags).record(increment);
     }
 
-    public Sensor requestQueueLatency(String brokerId) {
+    @Override
+    public void recordRequestQueueLatency(String brokerId, int increment) {
         Map<String, String> metricsTags = Collections.singletonMap(BROKER_ID_LABEL, brokerId);
-        return histogramSensor(requestQueueLatency, metricsTags);
+        histogramSensor(requestQueueLatency, metricsTags).record(increment);
     }
 
-    public Sensor requestQueueCount(String brokerId) {
+    @Override
+    public void recordRequestQueueCount(String brokerId, int increment) {
         Map<String, String> metricsTags = Collections.singletonMap(BROKER_ID_LABEL, brokerId);
-        return gaugeSensor(requestQueueCount, metricsTags);
+        gaugeSensor(requestQueueCount, metricsTags).record(increment);
     }
 
-    public Sensor requestSuccess(String brokerId, String requestType) {
+    @Override
+    public void recordRequestSuccess(String brokerId, String requestType, int increment) {
         Map<String, String> metricsTags = new HashMap<>();
         metricsTags.put(BROKER_ID_LABEL, brokerId);
         metricsTags.put(REQUEST_TYPE_LABEL, requestType);
-        return sumSensor(requestSuccess, metricsTags);
+        sumSensor(requestSuccess, metricsTags).record(increment);
     }
 
-    public Sensor requestErrors(String brokerId, String requestType, RequestErrorReason reason) {
+    @Override
+    public void recordRequestErrors(String brokerId, String requestType, RequestErrorReason reason, int increment) {
         Map<String, String> metricsTags = new HashMap<>();
         metricsTags.put(BROKER_ID_LABEL, brokerId);
         metricsTags.put(REQUEST_TYPE_LABEL, requestType);
         metricsTags.put(REASON_LABEL, reason.toString());
-        return sumSensor(requestErrors, metricsTags);
+        sumSensor(requestErrors, metricsTags).record(increment);
     }
 
-    public Sensor ioWaitTime() {
-        return histogramSensor(ioWaitTime);
+    @Override
+    public void recordIoWaitTime(int increment) {
+        histogramSensor(ioWaitTime).record(increment);
     }
 
     private MetricName createMetricName(String unqualifiedName, String description) {

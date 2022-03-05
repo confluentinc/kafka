@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class TelemetryManagementInterfaceTest {
+public class ClientTelemetryImplTest {
 
     @ParameterizedTest
     @EnumSource(CompressionType.class)
@@ -49,7 +49,7 @@ public class TelemetryManagementInterfaceTest {
         TelemetryMetric telemetryMetric2 = newTelemetryMetric("test-2", 123);
         StringTelemetrySerializer telemetrySerializer = new StringTelemetrySerializer();
         List<TelemetryMetric> telemetryMetrics = Arrays.asList(telemetryMetric1, telemetryMetric2);
-        ByteBuffer compressed = TelemetryManagementInterface.serialize(telemetryMetrics,
+        ByteBuffer compressed = ClientTelemetryUtils.serialize(telemetryMetrics,
             compressionType,
             telemetrySerializer);
 
@@ -66,15 +66,15 @@ public class TelemetryManagementInterfaceTest {
     @Test
     public void testValidateMetricNames() {
         // empty metric names
-        assertTrue(TelemetryManagementInterface.validateMetricNames(Collections.emptyList()).isEmpty());
-        assertTrue(TelemetryManagementInterface.validateMetricNames(null).isEmpty());
+        assertTrue(ClientTelemetryUtils.validateMetricNames(Collections.emptyList()).isEmpty());
+        assertTrue(ClientTelemetryUtils.validateMetricNames(null).isEmpty());
     }
 
     @Test
     public void testValidateAcceptedCompressionTypes() {
         // invalid compression types
-        assertEquals(0, TelemetryManagementInterface.validateAcceptedCompressionTypes(null).size());
-        assertEquals(0, TelemetryManagementInterface.validateAcceptedCompressionTypes(Collections.emptyList()).size());
+        assertEquals(0, ClientTelemetryUtils.validateAcceptedCompressionTypes(null).size());
+        assertEquals(0, ClientTelemetryUtils.validateAcceptedCompressionTypes(Collections.emptyList()).size());
 
         List<Byte> compressionTypes = new ArrayList<>();
         compressionTypes.add((byte) CompressionType.GZIP.id);
@@ -85,39 +85,39 @@ public class TelemetryManagementInterfaceTest {
         compressionTypes.add((byte) -1);
 
         // should take the first compression type
-        assertEquals(5, TelemetryManagementInterface.validateAcceptedCompressionTypes(compressionTypes).size());
+        assertEquals(5, ClientTelemetryUtils.validateAcceptedCompressionTypes(compressionTypes).size());
     }
 
     @Test
     public void testValidateClientInstanceId() {
-        assertThrows(IllegalArgumentException.class, () -> TelemetryManagementInterface.validateClientInstanceId(null));
+        assertThrows(IllegalArgumentException.class, () -> ClientTelemetryUtils.validateClientInstanceId(null));
         Uuid uuid = Uuid.randomUuid();
-        assertEquals(uuid, TelemetryManagementInterface.validateClientInstanceId(uuid));
+        assertEquals(uuid, ClientTelemetryUtils.validateClientInstanceId(uuid));
     }
 
     @ParameterizedTest
     @ValueSource(ints = {-1})
     public void testValidatePushIntervalInvalid(int pushIntervalMs) {
-        assertEquals(TelemetryManagementInterface.DEFAULT_PUSH_INTERVAL_MS, TelemetryManagementInterface.validatePushIntervalMs(pushIntervalMs));
+        assertEquals(DefaultClientTelemetry.DEFAULT_PUSH_INTERVAL_MS, ClientTelemetryUtils.validatePushIntervalMs(pushIntervalMs));
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, TelemetryManagementInterface.DEFAULT_PUSH_INTERVAL_MS, Integer.MAX_VALUE - 1, Integer.MAX_VALUE})
+    @ValueSource(ints = {0, DefaultClientTelemetry.DEFAULT_PUSH_INTERVAL_MS, Integer.MAX_VALUE - 1, Integer.MAX_VALUE})
     public void testValidatePushIntervalValid(int pushIntervalMs) {
-        assertEquals(pushIntervalMs, TelemetryManagementInterface.validatePushIntervalMs(pushIntervalMs));
+        assertEquals(pushIntervalMs, ClientTelemetryUtils.validatePushIntervalMs(pushIntervalMs));
     }
 
     @Test
     public void testPreferredCompressionType() {
-        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(Collections.emptyList()));
-        assertEquals(CompressionType.NONE, TelemetryManagementInterface.preferredCompressionType(null));
-        assertEquals(CompressionType.GZIP, TelemetryManagementInterface.preferredCompressionType(Arrays.asList(CompressionType.GZIP, CompressionType.LZ4, CompressionType.ZSTD)));
-        assertEquals(CompressionType.LZ4, TelemetryManagementInterface.preferredCompressionType(Collections.singletonList(CompressionType.LZ4)));
+        assertEquals(CompressionType.NONE, ClientTelemetryUtils.preferredCompressionType(Collections.emptyList()));
+        assertEquals(CompressionType.NONE, ClientTelemetryUtils.preferredCompressionType(null));
+        assertEquals(CompressionType.GZIP, ClientTelemetryUtils.preferredCompressionType(Arrays.asList(CompressionType.GZIP, CompressionType.LZ4, CompressionType.ZSTD)));
+        assertEquals(CompressionType.LZ4, ClientTelemetryUtils.preferredCompressionType(Collections.singletonList(CompressionType.LZ4)));
     }
 
     @Test
     public void testMaybeCreateFailsIfClientIdIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> TelemetryManagementInterface.maybeCreate(true, new MockTime(), null));
+        assertThrows(IllegalArgumentException.class, () -> ClientTelemetryUtils.maybeCreate(true, new MockTime(), null));
     }
 
     @ParameterizedTest
@@ -132,20 +132,6 @@ public class TelemetryManagementInterfaceTest {
     public void testMaybeCreateFailsIfParametersAreNull(boolean enableMetricsPush) {
         String clientId = "test-client";
         testMaybeCreateFailsIfParametersAreNull(enableMetricsPush, null, clientId);
-    }
-
-    @Test
-    public void testValidateTransitionForInitialized() {
-        TelemetryState currState = TelemetryState.initialized;
-
-        List<TelemetryState> validStates = new ArrayList<>();
-        // Happy path...
-        validStates.add(TelemetryState.subscription_needed);
-
-        // 'Start shutdown w/o having done anything' case
-        validStates.add(TelemetryState.terminating);
-
-        testValidateTransition(currState, validStates);
     }
 
     @Test
@@ -246,7 +232,7 @@ public class TelemetryManagementInterfaceTest {
 
     private void testValidateTransition(TelemetryState oldState, List<TelemetryState> validStates) {
         for (TelemetryState newState : validStates)
-            TelemetryManagementInterface.validateTransition(oldState, newState);
+            oldState.validateTransition(newState);
 
         // Have to copy to a new list because asList returns an unmodifiable list
         List<TelemetryState> invalidStates = new ArrayList<>(Arrays.asList(TelemetryState.values()));
@@ -255,7 +241,7 @@ public class TelemetryManagementInterfaceTest {
         invalidStates.removeAll(validStates);
 
         for (TelemetryState newState : invalidStates) {
-            Executable e = () -> TelemetryManagementInterface.validateTransition(oldState, newState);
+            Executable e = () -> oldState.validateTransition(newState);
             String unexpectedSuccessMessage = "Should have thrown an IllegalTelemetryStateException for transitioning from " + oldState + " to " + newState;
             assertThrows(IllegalTelemetryStateException.class, e, unexpectedSuccessMessage);
         }
@@ -273,7 +259,7 @@ public class TelemetryManagementInterfaceTest {
         Class<IllegalArgumentException> e = IllegalArgumentException.class;
 
         assertThrows(e,
-            () -> TelemetryManagementInterface.maybeCreate(true, time, clientId),
+            () -> ClientTelemetryUtils.maybeCreate(true, time, clientId),
             String.format("maybeCreate should have thrown a %s for time: %s and clientId: %s", e.getName(), time, clientId));
     }
 

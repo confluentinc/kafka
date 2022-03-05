@@ -1042,9 +1042,9 @@ public class MockAdminClient extends AdminClient {
     }
 
     @Override
-    public String clientInstanceId(Duration duration) {
+    public Optional<String> clientInstanceId(Duration duration) {
         // TODO: TELEMETRY_TODO: does this need to be anything realistic?
-        return "admin-client-1";
+        return Optional.of("admin-client-1");
     }
 
     @Override

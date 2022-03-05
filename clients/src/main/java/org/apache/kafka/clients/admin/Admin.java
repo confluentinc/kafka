@@ -1587,7 +1587,8 @@ public interface Admin extends AutoCloseable {
      * the unique client instance ID. This method waits up to {@code timeout} for the admin
      * client to complete the request.
      *
-     * If telemetry is disabled, the method will immediately return {@code null}.
+     * If telemetry is disabled, the method will immediately return {@code Optional.empty()} or
+     * equivalent.
      *
      * Client telemetry is controlled by the {@link AdminClientConfig#ENABLE_METRICS_PUSH_CONFIG}
      * configuration option.
@@ -1600,9 +1601,10 @@ public interface Admin extends AutoCloseable {
      *                        instance ID, though this error does not necessarily imply the
      *                        admin client is otherwise unusable.
      * @throws IllegalArgumentException If the {@code timeout} is negative.
-     * @return Human-readable string representation of the client instance ID
+     * @return Human-readable string representation of the client instance ID if telemetry enabled,
+     * <i>empty</i> Optional if not
      */
-    String clientInstanceId(Duration timeout);
+    Optional<String> clientInstanceId(Duration timeout);
 
     /**
      * Get the metrics kept by the adminClient

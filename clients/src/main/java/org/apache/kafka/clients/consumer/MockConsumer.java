@@ -369,9 +369,9 @@ public class MockConsumer<K, V> implements Consumer<K, V> {
     }
 
     @Override
-    public String clientInstanceId(Duration duration) {
+    public Optional<String> clientInstanceId(Duration duration) {
         // TODO: TELEMETRY_TODO: does this need to be anything realistic?
-        return "consumer-client-1";
+        return Optional.of("consumer-client-1");
     }
 
     @Override

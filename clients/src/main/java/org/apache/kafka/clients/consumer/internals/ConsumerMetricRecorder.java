@@ -19,13 +19,13 @@ package org.apache.kafka.clients.consumer.internals;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
-import org.apache.kafka.clients.telemetry.AbstractSensorRegistry;
+import org.apache.kafka.clients.telemetry.AbstractClientMetricRecorder;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.MetricNameTemplate;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 
-public class ConsumerSensorRegistry extends AbstractSensorRegistry {
+public class ConsumerMetricRecorder extends AbstractClientMetricRecorder {
 
     private static final String GROUP_NAME = "consumer-telemetry";
 
@@ -63,7 +63,7 @@ public class ConsumerSensorRegistry extends AbstractSensorRegistry {
 
     private final MetricName fetchFailures;
 
-    public ConsumerSensorRegistry(Metrics metrics) {
+    public ConsumerMetricRecorder(Metrics metrics) {
         super(metrics);
 
         Set<String> errorTags = appendTags(tags, "error");

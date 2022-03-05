@@ -16,13 +16,15 @@
  */
 package org.apache.kafka.clients.producer;
 
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.maybeCreate;
+
+import java.util.Optional;
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.ClientUtils;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.NetworkClient;
-import org.apache.kafka.clients.telemetry.ClientSensorRegistry;
-import org.apache.kafka.clients.telemetry.TelemetryManagementInterface;
+import org.apache.kafka.clients.telemetry.ClientTelemetry;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -32,8 +34,8 @@ import org.apache.kafka.clients.producer.internals.KafkaProducerMetrics;
 import org.apache.kafka.clients.producer.internals.ProducerInterceptors;
 import org.apache.kafka.clients.producer.internals.ProducerMetadata;
 import org.apache.kafka.clients.producer.internals.ProducerMetrics;
-import org.apache.kafka.clients.producer.internals.ProducerSensorRegistry;
-import org.apache.kafka.clients.producer.internals.ProducerTopicSensorRegistry;
+import org.apache.kafka.clients.producer.internals.ProducerMetricRecorder;
+import org.apache.kafka.clients.producer.internals.ProducerTopicMetricRecorder;
 import org.apache.kafka.clients.producer.internals.RecordAccumulator;
 import org.apache.kafka.clients.producer.internals.Sender;
 import org.apache.kafka.clients.producer.internals.TransactionManager;
@@ -262,9 +264,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private final ApiVersions apiVersions;
     private final TransactionManager transactionManager;
 
-    private final TelemetryManagementInterface tmi;
-    private final ProducerSensorRegistry producerSensorRegistry;
-    private final ProducerTopicSensorRegistry producerTopicSensorRegistry;
+    private final ClientTelemetry clientTelemetry;
+    private final ProducerMetricRecorder producerMetricRecorder;
+    private final ProducerTopicMetricRecorder producerTopicMetricRecorder;
 
     /**
      * A producer is instantiated by providing a set of key-value pairs as configuration. Valid configuration strings
@@ -364,16 +366,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     config.originalsWithPrefix(CommonClientConfigs.METRICS_CONTEXT_PREFIX));
             this.metrics = new Metrics(metricConfig, reporters, time, metricsContext);
             this.producerMetrics = new KafkaProducerMetrics(metrics);
-            this.tmi = TelemetryManagementInterface.maybeCreate(config, time, clientId);
-
-            if (this.tmi != null) {
-                this.producerSensorRegistry = new ProducerSensorRegistry(tmi.metrics());
-                this.producerTopicSensorRegistry = new ProducerTopicSensorRegistry(tmi.metrics());
-            } else {
-                this.producerSensorRegistry = null;
-                this.producerTopicSensorRegistry = null;
-            }
-
+            this.clientTelemetry = maybeCreate(config, time, clientId);
+            this.producerMetricRecorder = clientTelemetry.producerMetricRecorder();
+            this.producerTopicMetricRecorder = clientTelemetry.producerTopicMetricRecorder();
             this.partitioner = config.getConfiguredInstance(
                     ProducerConfig.PARTITIONER_CLASS_CONFIG,
                     Partitioner.class,
@@ -428,8 +423,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     transactionManager,
                     new BufferPool(this.totalMemorySize, config.getInt(ProducerConfig.BATCH_SIZE_CONFIG), metrics, time, PRODUCER_METRIC_GROUP_NAME),
                     configureAcks(config, log),
-                producerSensorRegistry,
-                producerTopicSensorRegistry);
+                producerMetricRecorder,
+                producerTopicMetricRecorder);
 
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(
                     config.getList(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG),
@@ -485,8 +480,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 true,
                 apiVersions,
                 throttleTimeSensor,
-                tmi,
-                tmi != null ? new ClientSensorRegistry(tmi.metrics()) : null,
+                clientTelemetry,
                 logContext);
         short acks = configureAcks(producerConfig, log);
         return new Sender(logContext,
@@ -498,8 +492,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 acks,
                 producerConfig.getInt(ProducerConfig.RETRIES_CONFIG),
                 metricsRegistry.senderMetrics,
-            producerSensorRegistry,
-            producerTopicSensorRegistry,
+            producerMetricRecorder,
+            producerTopicMetricRecorder,
                 time,
                 requestTimeoutMs,
                 producerConfig.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG),
@@ -1203,7 +1197,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      * the unique client instance ID. This method waits up to {@code timeout} for the producer
      * to complete the request.
      *
-     * If telemetry is disabled, the method will immediately return {@code null}.
+     * If telemetry is disabled, the method will immediately return {@code Optional.empty()} or
+     * equivalent.
      *
      * Client telemetry is controlled by the {@link ProducerConfig#ENABLE_METRICS_PUSH_CONFIG}
      * configuration option.
@@ -1216,16 +1211,17 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      *                        instance ID, though this error does not necessarily imply the
      *                        producer is otherwise unusable.
      * @throws IllegalArgumentException If the {@code timeout} is negative.
-     * @return Human-readable string representation of the client instance ID
+     * @return Human-readable string representation of the client instance ID if telemetry enabled,
+     * <i>empty</i> Optional if not
      */
     @Override
-    public String clientInstanceId(Duration timeout) {
-        return tmi != null ? tmi.clientInstanceId(timeout) : null;
+    public Optional<String> clientInstanceId(Duration timeout) {
+        return clientTelemetry.clientInstanceId(timeout);
     }
 
     /** For testing **/
-    public TelemetryManagementInterface tmi() {
-        return tmi;
+    public ClientTelemetry clientTelemetry() {
+        return clientTelemetry;
     }
 
     /**
@@ -1325,7 +1321,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         Utils.closeQuietly(producerMetrics, "producer metrics wrapper", firstException);
         // TODO: TELEMETRY_TODO: figure out where/how to properly close telemetry metrics given
         //       that we need to write out our terminal set of metrics when closing...
-        Utils.closeQuietly(tmi, "client telemetry", firstException);
+        Utils.closeQuietly(clientTelemetry, "client telemetry", firstException);
         Utils.closeQuietly(metrics, "producer metrics", firstException);
         Utils.closeQuietly(keySerializer, "producer keySerializer", firstException);
         Utils.closeQuietly(valueSerializer, "producer valueSerializer", firstException);

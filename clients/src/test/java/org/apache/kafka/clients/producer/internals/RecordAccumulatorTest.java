@@ -343,7 +343,7 @@ public class RecordAccumulatorTest {
         final RecordAccumulator accum = new RecordAccumulator(logContext, batchSize,
             CompressionType.NONE, lingerMs, retryBackoffMs, deliveryTimeoutMs, metrics, metricGrpName, time, new ApiVersions(), null,
             new BufferPool(totalSize, batchSize, metrics, time, metricGrpName),
-            (short) -1, new ProducerSensorRegistry(metrics), new ProducerTopicSensorRegistry(metrics));
+            (short) -1, new ProducerMetricRecorder(metrics), new ProducerTopicMetricRecorder(metrics));
 
         long now = time.milliseconds();
         accum.append(tp1, 0L, key, value, Record.EMPTY_HEADERS, null, maxBlockTimeMs, false, time.milliseconds());
@@ -713,7 +713,7 @@ public class RecordAccumulatorTest {
         RecordAccumulator accum = new RecordAccumulator(logContext, batchSize + DefaultRecordBatch.RECORD_BATCH_OVERHEAD,
             CompressionType.NONE, lingerMs, retryBackoffMs, deliveryTimeoutMs, metrics, metricGrpName, time, apiVersions, transactionManager,
             new BufferPool(totalSize, batchSize, metrics, time, metricGrpName),
-            (short) -1, new ProducerSensorRegistry(metrics), new ProducerTopicSensorRegistry(metrics));
+            (short) -1, new ProducerMetricRecorder(metrics), new ProducerTopicMetricRecorder(metrics));
         assertThrows(UnsupportedVersionException.class,
             () -> accum.append(tp1, 0L, key, value, Record.EMPTY_HEADERS, null, 0, false, time.milliseconds()));
     }
@@ -1167,7 +1167,7 @@ public class RecordAccumulatorTest {
             txnManager,
             new BufferPool(totalSize, batchSize, metrics, time, metricGrpName),
             (short) -1,
-            new ProducerSensorRegistry(metrics),
-            new ProducerTopicSensorRegistry(metrics));
+            new ProducerMetricRecorder(metrics),
+            new ProducerTopicMetricRecorder(metrics));
     }
 }

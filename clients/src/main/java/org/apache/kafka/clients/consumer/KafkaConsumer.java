@@ -16,14 +16,15 @@
  */
 package org.apache.kafka.clients.consumer;
 
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.maybeCreate;
+
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.ClientUtils;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.GroupRebalanceConfig;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.NetworkClient;
-import org.apache.kafka.clients.telemetry.ClientSensorRegistry;
-import org.apache.kafka.clients.telemetry.TelemetryManagementInterface;
+import org.apache.kafka.clients.telemetry.ClientTelemetry;
 import org.apache.kafka.clients.consumer.internals.ConsumerCoordinator;
 import org.apache.kafka.clients.consumer.internals.ConsumerInterceptors;
 import org.apache.kafka.clients.consumer.internals.ConsumerMetadata;
@@ -568,7 +569,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
 
     // Visible for testing
     final Metrics metrics;
-    final TelemetryManagementInterface tmi;
+    final ClientTelemetry clientTelemetry;
     final KafkaConsumerMetrics kafkaConsumerMetrics;
 
     private Logger log;
@@ -701,7 +702,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             this.defaultApiTimeoutMs = config.getInt(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG);
             this.time = Time.SYSTEM;
             this.metrics = buildMetrics(config, time, clientId);
-            this.tmi = TelemetryManagementInterface.maybeCreate(config, time, clientId);
+            this.clientTelemetry = maybeCreate(config, time, clientId);
             this.retryBackoffMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
 
             List<ConsumerInterceptor<K, V>> interceptorList = (List) config.getConfiguredInstances(
@@ -761,8 +762,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     true,
                     apiVersions,
                     throttleTimeSensor,
-                    tmi,
-                    tmi != null ? new ClientSensorRegistry(tmi.metrics()) : null,
+                    clientTelemetry,
                     logContext);
             this.client = new ConsumerNetworkClient(
                     logContext,
@@ -860,7 +860,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         this.interceptors = Objects.requireNonNull(interceptors);
         this.time = time;
         this.client = client;
-        this.tmi = TelemetryManagementInterface.maybeCreate(enableMetricsPush, time, clientId);
+        this.clientTelemetry = maybeCreate(enableMetricsPush, time, clientId);
         this.metrics = metrics;
         this.subscriptions = subscriptions;
         this.metadata = metadata;
@@ -1918,7 +1918,8 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * the unique client instance ID. This method waits up to {@code timeout} for the consumer
      * to complete the request.
      *
-     * If telemetry is disabled, the method will immediately return {@code null}.
+     * If telemetry is disabled, the method will immediately return {@code Optional.empty()} or
+     * equivalent.
      *
      * Client telemetry is controlled by the {@link ConsumerConfig#ENABLE_METRICS_PUSH_CONFIG}
      * configuration option.
@@ -1931,11 +1932,12 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      *                        instance ID, though this error does not necessarily imply the
      *                        consumer is otherwise unusable.
      * @throws IllegalArgumentException If the {@code timeout} is negative.
-     * @return Human-readable string representation of the client instance ID
+     * @return Human-readable string representation of the client instance ID if telemetry enabled,
+     * <i>empty</i> Optional if not
      */
     @Override
-    public String clientInstanceId(Duration timeout) {
-        return tmi != null ? tmi.clientInstanceId(timeout) : null;
+    public Optional<String> clientInstanceId(Duration timeout) {
+        return clientTelemetry.clientInstanceId(timeout);
     }
 
     /**
@@ -2443,7 +2445,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         Utils.closeQuietly(kafkaConsumerMetrics, "kafka consumer metrics", firstException);
         // TODO: TELEMETRY_TODO: figure out where/how to properly close telemetry metrics given that
         //       we need to write out our terminal set of metrics when closing...
-        Utils.closeQuietly(tmi, "client telemetry", firstException);
+        Utils.closeQuietly(clientTelemetry, "client telemetry", firstException);
         Utils.closeQuietly(metrics, "consumer metrics", firstException);
         Utils.closeQuietly(client, "consumer network client", firstException);
         Utils.closeQuietly(keyDeserializer, "consumer key deserializer", firstException);

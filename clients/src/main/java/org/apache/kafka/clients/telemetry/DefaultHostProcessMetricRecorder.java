@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.clients.telemetry;
 
-import java.util.Set;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.MetricNameTemplate;
 import org.apache.kafka.common.metrics.Metrics;
@@ -26,7 +25,8 @@ import org.apache.kafka.common.metrics.Sensor;
  * A sensor registry that exposes {@link Sensor}s used to record the client host process metrics.
  */
 
-public class HostProcessSensorRegistry extends AbstractSensorRegistry {
+public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecorder implements
+    HostProcessMetricRecorder {
 
     private final static String GROUP_NAME = "host-process-telemetry";
 
@@ -38,42 +38,34 @@ public class HostProcessSensorRegistry extends AbstractSensorRegistry {
 
     private final MetricName pid;
 
-    public HostProcessSensorRegistry(Metrics metrics) {
+    public DefaultHostProcessMetricRecorder(Metrics metrics) {
         super(metrics);
 
-        this.memoryBytes = createMetricName("memory.bytes",
-            "Current process/runtime memory usage (RSS, not virtual).");
-        this.cpuUserTime = createMetricName("cpu.user.time",
-            "User CPU time used (seconds).");
-        this.cpuSystemTime = createMetricName("cpu.system.time",
-            "System CPU time used (seconds).");
-        this.pid = createMetricName("pid",
-            "The process id. Can be used, in conjunction with the client host name to map multiple client instances to the same process.");
+        this.memoryBytes = createMetricName(MEMORY_BYTES_NAME, MEMORY_BYTES_DESCRIPTION);
+        this.cpuUserTime = createMetricName(CPU_USER_TIME_NAME, CPU_USER_TIME_DESCRIPTION);
+        this.cpuSystemTime = createMetricName(CPU_SYSTEM_TIME_NAME, CPU_SYSTEM_TIME_DESCRIPTION);
+        this.pid = createMetricName(PID_NAME, PID_DESCRIPTION);
     }
 
-    public Sensor memoryBytes() {
-        return gaugeSensor(memoryBytes);
+    public void recordMemoryBytes(long amount) {
+        gaugeSensor(memoryBytes).record(amount);
     }
 
-    public Sensor cpuUserTime() {
-        return sumSensor(cpuUserTime);
+    public void recordCpuUserTime(long amount) {
+        sumSensor(cpuUserTime).record(amount);
     }
 
-    public Sensor cpuSystemTime() {
-        return sumSensor(cpuSystemTime);
+    public void recordCpuSystemTime(long amount) {
+        sumSensor(cpuSystemTime).record(amount);
     }
 
-    public Sensor pid() {
-        return sumSensor(pid);
+    public void recordPid(long amount) {
+        sumSensor(pid).record(amount);
     }
 
-    private MetricName createMetricName(String unqualifiedName, String description) {
-        return metrics.metricInstance(createTemplate(unqualifiedName, description, tags));
-    }
-
-    private MetricNameTemplate createTemplate(String unqualifiedName, String description, Set<String> tags) {
-        String qualifiedName = String.format("org.apache.kafka.client.process.%s", unqualifiedName);
-        return createTemplate(qualifiedName, GROUP_NAME, description, tags);
+    private MetricName createMetricName(String name, String description) {
+        MetricNameTemplate mnt = createTemplate(name, GROUP_NAME, description, tags);
+        return metrics.metricInstance(mnt);
     }
 
 }

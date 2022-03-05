@@ -16,6 +16,9 @@
  */
 package org.apache.kafka.clients.producer.internals;
 
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.decrementQueueBytesTelemetry;
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.incrementQueueBytesTelemetry;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -31,8 +34,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.producer.Callback;
-import org.apache.kafka.common.record.DefaultRecord;
-import org.apache.kafka.common.record.LegacyRecord;
+import org.apache.kafka.clients.telemetry.ClientTelemetry;
 import org.apache.kafka.common.utils.ProducerIdAndEpoch;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.KafkaException;
@@ -87,8 +89,7 @@ public final class RecordAccumulator {
     private final TransactionManager transactionManager;
     private long nextBatchExpiryTimeMs = Long.MAX_VALUE; // the earliest time (absolute) a batch will expire.
     private final short acks;
-    private final ProducerSensorRegistry producerSensorRegistry;
-    private final ProducerTopicSensorRegistry producerTopicSensorRegistry;
+    private final ClientTelemetry clientTelemetry;
 
     /**
      * Create a new record accumulator
@@ -106,6 +107,7 @@ public final class RecordAccumulator {
      * @param apiVersions Request API versions for current connected brokers
      * @param transactionManager The shared transaction state object which tracks producer IDs, epochs, and sequence
      *                           numbers per partition.
+     * @param clientTelemetry {@link ClientTelemetry} used to record metrics
      */
     public RecordAccumulator(LogContext logContext,
                              int batchSize,
@@ -120,8 +122,7 @@ public final class RecordAccumulator {
                              TransactionManager transactionManager,
                              BufferPool bufferPool,
                              short acks,
-                             ProducerSensorRegistry producerSensorRegistry,
-                             ProducerTopicSensorRegistry producerTopicSensorRegistry) {
+                             ClientTelemetry clientTelemetry) {
         this.log = logContext.logger(RecordAccumulator.class);
         this.drainIndex = 0;
         this.closed = false;
@@ -140,8 +141,7 @@ public final class RecordAccumulator {
         this.apiVersions = apiVersions;
         this.transactionManager = transactionManager;
         this.acks = acks;
-        this.producerSensorRegistry = producerSensorRegistry;
-        this.producerTopicSensorRegistry = producerTopicSensorRegistry;
+        this.clientTelemetry = clientTelemetry;
         registerMetrics(metrics, metricGrpName);
     }
 
@@ -280,7 +280,14 @@ public final class RecordAccumulator {
             if (future == null) {
                 last.closeForRecordAppends();
             } else {
-                incrementQueueBytesTelemetry(tp, timestamp, key, value, headers);
+                incrementQueueBytesTelemetry(clientTelemetry,
+                    apiVersions,
+                    acks,
+                    tp,
+                    timestamp,
+                    key,
+                    value,
+                    headers);
                 return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false, false);
             }
         }
@@ -620,7 +627,11 @@ public final class RecordAccumulator {
                         transactionManager.addInFlightBatch(batch);
                     }
                     batch.close();
-                    decrementQueueBytesTelemetry(tp, batch.records().sizeInBytes());
+                    decrementQueueBytesTelemetry(clientTelemetry,
+                        apiVersions,
+                        acks,
+                        tp,
+                        batch.records().sizeInBytes());
                     size += batch.records().sizeInBytes();
                     ready.add(batch);
 
@@ -816,56 +827,6 @@ public final class RecordAccumulator {
 
     public void unmutePartition(TopicPartition tp) {
         muted.remove(tp);
-    }
-
-    private void incrementQueueBytesTelemetry(TopicPartition tp, long timestamp, byte[] key, byte[] value, Header[] headers) {
-        // TODO: TELEMETRY_TODO: need to know the proper place to call this
-        // TODO: TELEMETRY_TODO: need to know the proper means/place to determine the size
-        if (producerSensorRegistry != null || producerTopicSensorRegistry != null) {
-            int offsetDelta = -1;
-            byte magic = apiVersions.maxUsableProduceMagic();
-            int size;
-
-            if (magic > RecordBatch.MAGIC_VALUE_V1) {
-                size = DefaultRecord.sizeInBytes(offsetDelta,
-                    timestamp,
-                    key != null ? key.length : 0,
-                    value != null ? value.length : 0,
-                    headers);
-            } else {
-                size = LegacyRecord.recordSize(magic,
-                    key != null ? key.length : 0,
-                    value != null ? value.length : 0);
-            }
-
-            if (producerSensorRegistry != null) {
-                producerSensorRegistry.queueBytes().record(size);
-                producerSensorRegistry.queueMessages().record(1);
-            }
-
-            if (producerTopicSensorRegistry != null) {
-                producerTopicSensorRegistry.queueBytes(tp, acks).record(size);
-                producerTopicSensorRegistry.queueCount(tp, acks).record(1);
-            }
-        }
-    }
-
-    private void decrementQueueBytesTelemetry(TopicPartition tp, int size) {
-        // TODO: TELEMETRY_TODO: we need an accurate record count passed in. I don't yet know
-        //       how to get it from the RecordBatch or MemoryRecord or ???
-        // TODO: TELEMETRY_TODO: need to know the proper place to call this
-        // TODO: TELEMETRY_TODO: need to know the proper means/place to determine the size
-        int recordCount = 0;
-
-        if (producerSensorRegistry != null) {
-            producerSensorRegistry.queueBytes().record(-size);
-            producerSensorRegistry.queueMessages().record(-recordCount);
-        }
-
-        if (producerTopicSensorRegistry != null) {
-            producerTopicSensorRegistry.queueBytes(tp, acks).record(-size);
-            producerTopicSensorRegistry.queueCount(tp, acks).record(-recordCount);
-        }
     }
 
     /**

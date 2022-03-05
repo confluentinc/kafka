@@ -173,10 +173,10 @@ public class TransactionManagerTest {
         this.accumulator = new RecordAccumulator(logContext, batchSize, CompressionType.NONE, 0, 0L,
                 deliveryTimeoutMs, metrics, metricGrpName, time, apiVersions, transactionManager,
                 new BufferPool(totalSize, batchSize, metrics, time, metricGrpName),
-                (short) -1, new ProducerSensorRegistry(metrics), new ProducerTopicSensorRegistry(metrics));
+                (short) -1, new ProducerMetricRecorder(metrics), new ProducerTopicMetricRecorder(metrics));
 
-        ProducerSensorRegistry producerSensorRegistry = new ProducerSensorRegistry(metrics);
-        ProducerTopicSensorRegistry producerTopicSensorRegistry = new ProducerTopicSensorRegistry(metrics);
+        ProducerMetricRecorder producerSensorRegistry = new ProducerMetricRecorder(metrics);
+        ProducerTopicMetricRecorder producerTopicSensorRegistry = new ProducerTopicMetricRecorder(metrics);
 
         this.sender = new Sender(logContext, this.client, this.metadata, this.accumulator, true,
                 MAX_REQUEST_SIZE, ACKS_ALL, MAX_RETRIES, new SenderMetricsRegistry(metrics),
@@ -3052,8 +3052,8 @@ public class TransactionManagerTest {
         // Use a custom Sender to allow multiple inflight requests
         initializeTransactionManager(Optional.empty());
         Metrics metrics = new Metrics(time);
-        ProducerSensorRegistry producerSensorRegistry = new ProducerSensorRegistry(metrics);
-        ProducerTopicSensorRegistry producerTopicSensorRegistry = new ProducerTopicSensorRegistry(metrics);
+        ProducerMetricRecorder producerSensorRegistry = new ProducerMetricRecorder(metrics);
+        ProducerTopicMetricRecorder producerTopicSensorRegistry = new ProducerTopicMetricRecorder(metrics);
         Sender sender = new Sender(logContext, this.client, this.metadata, this.accumulator, false,
                 MAX_REQUEST_SIZE, ACKS_ALL, MAX_RETRIES, new SenderMetricsRegistry(metrics),
             producerSensorRegistry, producerTopicSensorRegistry, this.time,
@@ -3180,8 +3180,8 @@ public class TransactionManagerTest {
         // Use a custom Sender to allow multiple inflight requests
         initializeTransactionManager(Optional.empty());
         Metrics metrics = new Metrics(time);
-        ProducerSensorRegistry producerSensorRegistry = new ProducerSensorRegistry(metrics);
-        ProducerTopicSensorRegistry producerTopicSensorRegistry = new ProducerTopicSensorRegistry(metrics);
+        ProducerMetricRecorder producerSensorRegistry = new ProducerMetricRecorder(metrics);
+        ProducerTopicMetricRecorder producerTopicSensorRegistry = new ProducerTopicMetricRecorder(metrics);
         Sender sender = new Sender(logContext, this.client, this.metadata, this.accumulator, false,
                 MAX_REQUEST_SIZE, ACKS_ALL, MAX_RETRIES, new SenderMetricsRegistry(metrics),
             producerSensorRegistry, producerTopicSensorRegistry, this.time,

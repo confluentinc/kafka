@@ -15,7 +15,6 @@ package kafka.api
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
 import org.apache.kafka.clients.telemetry.TelemetryState
 import org.apache.kafka.common.serialization.ByteArraySerializer
-import org.apache.kafka.common.utils.Utils
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.Test
 
@@ -36,16 +35,14 @@ class TelemetryMetricsTest extends IntegrationTestHarness {
 
     val clientInstanceId = producer.clientInstanceId(Duration.ofSeconds(1))
     assertNotNull(clientInstanceId)
+    System.out.println(clientInstanceId)
+    val clientTelemetry = producer.asInstanceOf[KafkaProducer[ByteArraySerializer, ByteArraySerializer]].clientTelemetry()
+    assertNotNull(clientTelemetry)
 
-    val tmi = producer.asInstanceOf[KafkaProducer[ByteArraySerializer, ByteArraySerializer]].tmi
-    assertNotNull(tmi)
-
-    val subscription = tmi.subscription
+    val subscription = clientTelemetry.subscription
     assertEquals(subscription.clientInstanceId.toString, clientInstanceId)
 
-    Utils.sleep(10000)
-
-    assertEquals(TelemetryState.push_needed, tmi.state)
+    assertEquals(TelemetryState.subscription_in_progress, clientTelemetry.state)
   }
 
   @Test
@@ -53,7 +50,7 @@ class TelemetryMetricsTest extends IntegrationTestHarness {
     val properties = new Properties()
     properties.put(ProducerConfig.ENABLE_METRICS_PUSH_CONFIG, false)
     val producer = createProducer(configOverrides = properties)
-    assertNull(producer.asInstanceOf[KafkaProducer[ByteArraySerializer, ByteArraySerializer]].tmi())
+    assertNull(producer.asInstanceOf[KafkaProducer[ByteArraySerializer, ByteArraySerializer]].clientTelemetry())
     val record = new ProducerRecord(topicName, "key".getBytes, "value".getBytes)
     producer.send(record)
 
