@@ -74,7 +74,7 @@ public interface ConsumerMetricRecorder extends ClientMetricRecorder {
 
     String FETCH_LATENCY_NAME = PREFIX + "fetch.latency";
 
-    String FETCH_LATENCY_DESCRIPTION ="FetchRequest latency.";
+    String FETCH_LATENCY_DESCRIPTION = "FetchRequest latency.";
 
     String FETCH_COUNT_NAME = PREFIX + "fetch.count";
 

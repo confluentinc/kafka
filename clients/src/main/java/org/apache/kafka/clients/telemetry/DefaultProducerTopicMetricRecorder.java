@@ -34,7 +34,7 @@ import org.apache.kafka.common.metrics.Sensor;
  * @see ProducerMetricRecorder for details on the producer-level sensors.
  */
 
-public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricRecorder implements ProducerTopicMetricRecorder{
+public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricRecorder implements ProducerTopicMetricRecorder {
 
     private static final String GROUP_NAME = "producer-topic-telemetry";
 

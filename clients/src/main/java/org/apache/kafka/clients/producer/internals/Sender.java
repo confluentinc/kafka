@@ -1025,7 +1025,7 @@ public class Sender implements Runnable {
             if (topicErrorSensor != null)
                 topicErrorSensor.record(count, now);
 
-            producerTopicMetricRecorder.recordFailures(topicPartition, acks, error,count);
+            producerTopicMetricRecorder.recordFailures(topicPartition, acks, error, count);
         }
 
         public void recordLatency(String node, long latency) {

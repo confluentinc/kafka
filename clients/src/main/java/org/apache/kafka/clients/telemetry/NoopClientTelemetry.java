@@ -18,6 +18,7 @@ package org.apache.kafka.clients.telemetry;
 
 import java.time.Duration;
 import java.util.Optional;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.GetTelemetrySubscriptionsResponseData;
 import org.apache.kafka.common.requests.AbstractRequest;
 
@@ -269,6 +270,41 @@ public class NoopClientTelemetry implements ClientTelemetry {
 
     @Override
     public ProducerTopicMetricRecorder producerTopicMetricRecorder() {
-        throw new UnsupportedOperationException();
+        return new ProducerTopicMetricRecorder() {
+            @Override
+            public void queueBytes(TopicPartition topicPartition, short acks, int amount) {
+
+            }
+
+            @Override
+            public void queueCount(TopicPartition topicPartition, short acks, int amount) {
+
+            }
+
+            @Override
+            public void latency(TopicPartition topicPartition, short acks, int amount) {
+
+            }
+
+            @Override
+            public void queueLatency(TopicPartition topicPartition, short acks, int amount) {
+
+            }
+
+            @Override
+            public void recordRetries(TopicPartition topicPartition, short acks, int amount) {
+
+            }
+
+            @Override
+            public void recordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount) {
+
+            }
+
+            @Override
+            public void recordSuccess(TopicPartition topicPartition, short acks, int amount) {
+
+            }
+        };
     }
 }

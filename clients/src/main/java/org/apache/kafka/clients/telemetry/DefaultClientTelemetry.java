@@ -114,8 +114,8 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         this.clientInstanceMetricRecorder = new DefaultClientInstanceMetricRecorder(this.metrics);
         this.consumerMetricRecorder = new DefaultConsumerMetricRecorder(this.metrics);
         this.hostProcessMetricRecorder = new DefaultHostProcessMetricRecorder(this.metrics);
-        this.producerMetricRecorder = new ProducerMetricRecorder(this.metrics);
-        this.producerTopicMetricRecorder = new ProducerTopicMetricRecorder(this.metrics);
+        this.producerMetricRecorder = new DefaultProducerMetricRecorder(this.metrics);
+        this.producerTopicMetricRecorder = new DefaultProducerTopicMetricRecorder(this.metrics);
     }
 
     @Override
