@@ -336,7 +336,6 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         MetricSelector metricSelector = validateMetricNames(requestedMetrics);
         List<CompressionType> acceptedCompressionTypes = validateAcceptedCompressionTypes(data.acceptedCompressionTypes());
         Uuid clientInstanceId = validateClientInstanceId(data.clientInstanceId());
-        // TODO: TELEMETRY_TODO: this is temporary until we get real data back from broker...
         final int pushIntervalMs = getPushIntervalMs(data);
 
         TelemetrySubscription telemetrySubscription = new TelemetrySubscription(time.milliseconds(),
@@ -361,12 +360,13 @@ public class DefaultClientTelemetry implements ClientTelemetry {
     }
 
     private int getPushIntervalMs(final GetTelemetrySubscriptionsResponseData data) {
+        // TODO: TELEMETRY_TODO: this is temporary until we get real data back from broker...
         int pushIntervalMs = validatePushIntervalMs(data.pushIntervalMs() > 0 ? data.pushIntervalMs() : 10000);
         if (!subscription().isPresent()) {
             // if this is the first request, subscription() returns null, and we want to
             // equally spread all the request between 0.5 pushInterval and 1.5 pushInterval.
-            final double rand = ThreadLocalRandom.current().doubles(1, 0, 1).findFirst().orElse(1.0);
-            return (int) Math.round((rand * pushIntervalMs) + 0.5);
+            double rand = ThreadLocalRandom.current().nextDouble(0.5, 1.5);
+            return (int) Math.round(rand * pushIntervalMs);
         }
 
         return pushIntervalMs;
