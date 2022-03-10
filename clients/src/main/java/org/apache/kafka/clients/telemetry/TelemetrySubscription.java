@@ -18,9 +18,7 @@ package org.apache.kafka.clients.telemetry;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.StringJoiner;
-import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.record.CompressionType;
 

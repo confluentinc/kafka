@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -336,7 +337,7 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         List<CompressionType> acceptedCompressionTypes = validateAcceptedCompressionTypes(data.acceptedCompressionTypes());
         Uuid clientInstanceId = validateClientInstanceId(data.clientInstanceId());
         // TODO: TELEMETRY_TODO: this is temporary until we get real data back from broker...
-        int pushIntervalMs = validatePushIntervalMs(data.pushIntervalMs() > 0 ? data.pushIntervalMs() : 10000);
+        final int pushIntervalMs = getPushIntervalMs(data);
 
         TelemetrySubscription telemetrySubscription = new TelemetrySubscription(time.milliseconds(),
             data.throttleTimeMs(),
@@ -357,6 +358,18 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         } else {
             setState(TelemetryState.push_needed);
         }
+    }
+
+    private int getPushIntervalMs(final GetTelemetrySubscriptionsResponseData data) {
+        int pushIntervalMs = validatePushIntervalMs(data.pushIntervalMs() > 0 ? data.pushIntervalMs() : 10000);
+        if (!subscription().isPresent()) {
+            // if this is the first request, subscription() returns null, and we want to
+            // equally spread all the request between 0.5 pushInterval and 1.5 pushInterval.
+            final double rand = ThreadLocalRandom.current().doubles(1).findFirst().orElse(1.0);
+            return (int) Math.round(pushIntervalMs * (0.5 + rand));
+        }
+
+        return pushIntervalMs;
     }
 
     @Override
