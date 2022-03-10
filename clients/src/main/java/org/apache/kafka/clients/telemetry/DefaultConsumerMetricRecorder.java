@@ -88,8 +88,8 @@ public class DefaultConsumerMetricRecorder extends AbstractClientMetricRecorder 
     }
 
     @Override
-    public void recordPollLast(int amount) {
-        gaugeSensor(pollLast).record(amount);
+    public void recordPollLast(long seconds) {
+        gaugeSensor(pollLast).record(seconds);
     }
 
     @Override

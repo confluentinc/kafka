@@ -88,7 +88,7 @@ public interface ConsumerMetricRecorder extends ClientMetricRecorder {
 
     void recordPollInterval(int amount);
 
-    void recordPollLast(int amount);
+    void recordPollLast(long seconds);
 
     void recordPollLatency(int amount);
 

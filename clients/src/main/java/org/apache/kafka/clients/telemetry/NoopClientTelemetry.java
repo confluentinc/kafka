@@ -87,7 +87,7 @@ public class NoopClientTelemetry implements ClientTelemetry {
             }
 
             @Override
-            public void recordPollLast(int amount) {
+            public void recordPollLast(long seconds) {
 
             }
 

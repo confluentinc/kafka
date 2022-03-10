@@ -34,6 +34,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
 import org.apache.kafka.clients.consumer.OffsetOutOfRangeException;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.clients.telemetry.NoopClientTelemetry;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.KafkaException;
@@ -3751,7 +3752,8 @@ public class FetcherTest {
                 retryBackoffMs,
                 requestTimeoutMs,
                 IsolationLevel.READ_UNCOMMITTED,
-                apiVersions) {
+                apiVersions,
+                new NoopClientTelemetry().consumerMetricRecorder()) {
             @Override
             protected FetchSessionHandler sessionHandler(int id) {
                 final FetchSessionHandler handler = super.sessionHandler(id);
@@ -5127,7 +5129,8 @@ public class FetcherTest {
                 retryBackoffMs,
                 requestTimeoutMs,
                 isolationLevel,
-                apiVersions);
+                apiVersions,
+                new NoopClientTelemetry().consumerMetricRecorder());
     }
 
     private void buildDependencies(MetricConfig metricConfig,
