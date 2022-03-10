@@ -30,6 +30,9 @@ public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricReco
 
     private static final String GROUP_NAME = "producer-topic-telemetry";
 
+    private static final int LATENCY_HISTOGRAM_NUM_BIN = 10;
+    private static final int LATENCY_HISTOGRAM_MAX_BIN = 2000; // ms
+
     private final MetricNameTemplate recordQueueBytes;
 
     private final MetricNameTemplate recordQueueCount;
@@ -74,13 +77,13 @@ public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricReco
     @Override
     public void recordRecordLatency(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
-        histogramSensor(recordLatency, metricsTags).record(amount);
+        histogramSensor(recordLatency, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
     public void recordRecordQueueLatency(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
-        histogramSensor(queueLatency, metricsTags).record(amount);
+        histogramSensor(queueLatency, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override

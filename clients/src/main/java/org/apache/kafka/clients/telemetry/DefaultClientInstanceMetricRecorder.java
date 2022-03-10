@@ -33,6 +33,9 @@ public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRec
 
     private static final String GROUP_NAME = "client-telemetry";
 
+    private static final int LATENCY_HISTOGRAM_NUM_BIN = 10;
+    private static final int LATENCY_HISTOGRAM_MAX_BIN = 2000; // ms
+
     private final MetricNameTemplate connectionCreations;
 
     private final MetricName connectionCount;
@@ -92,13 +95,13 @@ public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRec
         Map<String, String> metricsTags = new HashMap<>();
         metricsTags.put(BROKER_ID_LABEL, brokerId);
         metricsTags.put(REQUEST_TYPE_LABEL, requestType);
-        histogramSensor(requestRtt, metricsTags).record(increment);
+        histogramSensor(requestRtt, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(increment);
     }
 
     @Override
     public void recordRequestQueueLatency(String brokerId, int increment) {
         Map<String, String> metricsTags = Collections.singletonMap(BROKER_ID_LABEL, brokerId);
-        histogramSensor(requestQueueLatency, metricsTags).record(increment);
+        histogramSensor(requestQueueLatency, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(increment);
     }
 
     @Override
@@ -126,6 +129,6 @@ public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRec
 
     @Override
     public void recordIoWaitTime(int increment) {
-        histogramSensor(ioWaitTime).record(increment);
+        histogramSensor(ioWaitTime, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(increment);
     }
 }

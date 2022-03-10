@@ -29,6 +29,7 @@ import org.apache.kafka.common.metrics.MeasurableStat;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.CumulativeSum;
+import org.apache.kafka.common.metrics.stats.LinearHistogram;
 
 /**
  * This class provides basic utility methods that client telemetry subclasses can leverage
@@ -62,14 +63,15 @@ public abstract class AbstractClientMetricRecorder implements ClientMetricRecord
         return gaugeSensor(mn);
     }
 
-    protected Sensor histogramSensor(MetricName mn) {
-        // TODO: TELEMETRY_TODO: need to implement histogram...
-        return sensor(mn, CumulativeSum::new);
+    protected Sensor histogramSensor(MetricName mn, int maxBin, int numBin) {
+        Sensor sensor = metrics.sensor(mn.name());
+        sensor.add(new LinearHistogram(numBin, maxBin, mn));
+        return sensor;
     }
 
-    protected Sensor histogramSensor(MetricNameTemplate mnt, Map<String, String> tags) {
+    protected Sensor histogramSensor(MetricNameTemplate mnt, Map<String, String> tags, int numBin, int maxBin) {
         MetricName mn = metrics.metricInstance(mnt, tags);
-        return histogramSensor(mn);
+        return histogramSensor(mn, maxBin, numBin);
     }
 
     protected Sensor stringSensor(MetricName mn) {

@@ -27,6 +27,9 @@ public class DefaultConsumerMetricRecorder extends AbstractClientMetricRecorder 
 
     private static final String GROUP_NAME = "consumer-telemetry";
 
+    private static final int LATENCY_HISTOGRAM_NUM_BIN = 10;
+    private static final int LATENCY_HISTOGRAM_MAX_BIN = 2000; // ms
+
     private final MetricName pollInterval;
 
     private final MetricName pollLast;
@@ -84,7 +87,7 @@ public class DefaultConsumerMetricRecorder extends AbstractClientMetricRecorder 
 
     @Override
     public void recordPollInterval(int amount) {
-        histogramSensor(pollInterval).record(amount);
+        histogramSensor(pollInterval, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
@@ -94,7 +97,7 @@ public class DefaultConsumerMetricRecorder extends AbstractClientMetricRecorder 
 
     @Override
     public void recordPollLatency(int amount) {
-        histogramSensor(pollLatency).record(amount);
+        histogramSensor(pollLatency, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
@@ -151,7 +154,7 @@ public class DefaultConsumerMetricRecorder extends AbstractClientMetricRecorder 
 
     @Override
     public void recordFetchLatency(int amount) {
-        histogramSensor(fetchLatency).record(amount);
+        histogramSensor(fetchLatency, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
