@@ -365,8 +365,8 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         if (!subscription().isPresent()) {
             // if this is the first request, subscription() returns null, and we want to
             // equally spread all the request between 0.5 pushInterval and 1.5 pushInterval.
-            final double rand = ThreadLocalRandom.current().doubles(1).findFirst().orElse(1.0);
-            return (int) Math.round(pushIntervalMs * (0.5 + rand));
+            final double rand = ThreadLocalRandom.current().doubles(1, 0, 1).findFirst().orElse(1.0);
+            return (int) Math.round((rand * pushIntervalMs) + 0.5);
         }
 
         return pushIntervalMs;
