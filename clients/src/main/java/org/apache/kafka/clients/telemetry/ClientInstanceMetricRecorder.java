@@ -76,7 +76,7 @@ public interface ClientInstanceMetricRecorder extends ClientMetricRecorder {
 
     void recordConnectionCreations(String brokerId, int amount);
 
-    void recordConnectionCount(int amount);
+    void recordConnectionActive(int amount);
 
     void recordConnectionErrors(ConnectionErrorReason reason, int amount);
 

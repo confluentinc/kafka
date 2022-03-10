@@ -30,57 +30,41 @@ public class DefaultProducerMetricRecorder extends AbstractClientMetricRecorder 
 
     private static final String GROUP_NAME = "producer-telemetry";
 
-    private final MetricName recordBytes;
+    private final MetricName recordQueueBytes;
 
-    private final MetricName recordCount;
+    private final MetricName recordQueueMaxBytes;
 
-    private final MetricName queueMaxBytes;
+    private final MetricName recordQueueCount;
 
-    private final MetricName queueBytes;
-
-    private final MetricName queueMaxMessages;
-
-    private final MetricName queueMessages;
+    private final MetricName recordQeueMaxCount;
 
     public DefaultProducerMetricRecorder(Metrics metrics) {
         super(metrics);
 
-        this.recordBytes = createMetricName(RECORD_BYTES_NAME, GROUP_NAME, RECORD_BYTES_DESCRIPTION);
-        this.recordCount = createMetricName(RECORD_COUNT_NAME, GROUP_NAME, RECORD_COUNT_DESCRIPTION);
-        this.queueMaxBytes = createMetricName(QUEUE_MAX_BYTES_NAME, GROUP_NAME, QUEUE_MAX_BYTES_DESCRIPTION);
-        this.queueBytes = createMetricName(QUEUE_BYTES_NAME, GROUP_NAME, QUEUE_BYTES_DESCRIPTION);
-        this.queueMaxMessages = createMetricName(QUEUE_MAX_MESSAGES_NAME, GROUP_NAME, QUEUE_MAX_MESSAGES_DESCRIPTION);
-        this.queueMessages = createMetricName(QUEUE_MESSAGES_NAME, GROUP_NAME, QUEUE_MESSAGES_DESCRIPTION);
+        this.recordQueueBytes = createMetricName(RECORD_QUEUE_BYTES_NAME, GROUP_NAME, RECORD_QUEUE_BYTES_DESCRIPTION);
+        this.recordQueueMaxBytes = createMetricName(RECORD_QUEUE_MAX_BYTES_NAME, GROUP_NAME, RECORD_QUEUE_MAX_BYTES_DESCRIPTION);
+        this.recordQueueCount = createMetricName(RECORD_QUEUE_COUNT_NAME, GROUP_NAME, RECORD_QUEUE_COUNT_DESCRIPTION);
+        this.recordQeueMaxCount = createMetricName(RECORD_QUEUE_MAX_COUNT_NAME, GROUP_NAME, RECORD_QUEUE_MAX_COUNT_DESCRIPTION);
     }
 
     @Override
-    public void recordRecordBytes(int amount) {
-        gaugeSensor(recordBytes).record(amount);
+    public void recordRecordQueueBytes(int amount) {
+        gaugeSensor(recordQueueBytes).record(amount);
     }
 
     @Override
-    public void recordRecordCount(int amount) {
-        gaugeSensor(recordCount).record(amount);
+    public void recordRecordQueueMaxBytes(int amount) {
+        gaugeSensor(recordQueueMaxBytes).record(amount);
     }
 
     @Override
-    public void recordQueueMaxBytes(int amount) {
-        gaugeSensor(queueMaxBytes).record(amount);
+    public void recordRecordQueueCount(int amount) {
+        gaugeSensor(recordQueueCount).record(amount);
     }
 
     @Override
-    public void recordQueueBytes(int amount) {
-        gaugeSensor(queueBytes).record(amount);
-    }
-
-    @Override
-    public void recordQueueMaxMessages(int amount) {
-        gaugeSensor(queueMaxMessages).record(amount);
-    }
-
-    @Override
-    public void recordQueueMessages(int amount) {
-        gaugeSensor(queueMessages).record(amount);
+    public void recordRecordQueueMaxCount(int amount) {
+        gaugeSensor(recordQeueMaxCount).record(amount);
     }
 
 }

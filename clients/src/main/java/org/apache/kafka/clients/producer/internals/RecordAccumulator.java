@@ -16,8 +16,8 @@
  */
 package org.apache.kafka.clients.producer.internals;
 
-import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.decrementQueueBytesTelemetry;
-import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.incrementQueueBytesTelemetry;
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.decrementProducerQueueMetrics;
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.incrementProducerQueueMetrics;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
@@ -280,7 +280,7 @@ public final class RecordAccumulator {
             if (future == null) {
                 last.closeForRecordAppends();
             } else {
-                incrementQueueBytesTelemetry(clientTelemetry,
+                incrementProducerQueueMetrics(clientTelemetry,
                     apiVersions,
                     acks,
                     tp,
@@ -627,7 +627,7 @@ public final class RecordAccumulator {
                         transactionManager.addInFlightBatch(batch);
                     }
                     batch.close();
-                    decrementQueueBytesTelemetry(clientTelemetry,
+                    decrementProducerQueueMetrics(clientTelemetry,
                         acks,
                         tp,
                         batch.records().sizeInBytes());

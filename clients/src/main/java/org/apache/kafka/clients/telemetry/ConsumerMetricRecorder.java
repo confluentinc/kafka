@@ -94,7 +94,7 @@ public interface ConsumerMetricRecorder extends ClientMetricRecorder {
 
     void recordCommitCount(int amount);
 
-    void recordGroupAssignmentStrategy(int amount);
+    void recordGroupAssignmentStrategy(String strategy);
 
     void recordGroupAssignmentPartitionCount(int amount);
 

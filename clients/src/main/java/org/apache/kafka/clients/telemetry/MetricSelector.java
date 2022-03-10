@@ -16,20 +16,16 @@
  */
 package org.apache.kafka.clients.telemetry;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
 import java.util.StringJoiner;
+import java.util.function.Predicate;
 
-public interface MetricSelector {
-
-    Collection<TelemetryMetric> filter(Collection<TelemetryMetric> metrics);
+public interface MetricSelector extends Predicate<TelemetryMetric> {
 
     MetricSelector NONE = new MetricSelector() {
         @Override
-        public Collection<TelemetryMetric> filter(Collection<TelemetryMetric> metrics) {
-            return Collections.emptyList();
+        public boolean test(TelemetryMetric metric) {
+            return false;
         }
 
         @Override
@@ -42,8 +38,8 @@ public interface MetricSelector {
     MetricSelector ALL = new MetricSelector() {
 
         @Override
-        public Collection<TelemetryMetric> filter(Collection<TelemetryMetric> metrics) {
-            return Collections.unmodifiableCollection(metrics);
+        public boolean test(TelemetryMetric metric) {
+            return true;
         }
 
         @Override
@@ -62,20 +58,8 @@ public interface MetricSelector {
         }
 
         @Override
-        public Collection<TelemetryMetric> filter(Collection<TelemetryMetric> metrics) {
-            // TODO: TELEMETRY_TODO: implement prefix string match more efficiently.
-            List<TelemetryMetric> filtered = new ArrayList<>();
-
-            for (String filter : filters) {
-                for (TelemetryMetric telemetryMetric : metrics) {
-                    if (telemetryMetric.name().startsWith(filter)) {
-                        filtered.add(telemetryMetric);
-                        break;
-                    }
-                }
-            }
-
-            return Collections.unmodifiableCollection(filtered);
+        public boolean test(TelemetryMetric metric) {
+            return filters.stream().anyMatch(f -> metric.name().startsWith(f));
         }
 
         @Override

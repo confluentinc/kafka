@@ -17,13 +17,11 @@
 package org.apache.kafka.clients.telemetry;
 
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.metrics.Sensor;
 
 /**
- * A sensor registry that exposes {@link Sensor}s used to record the topic-level metrics for the
- * producer.
+ * A {@link ClientMetricRecorder} that exposes methods to record the topic-level metrics.
  *
- * @see ProducerMetricRecorder for details on the producer-level sensors.
+ * @see ProducerMetricRecorder for details on the producer-level metrics.
  */
 
 public interface ProducerTopicMetricRecorder extends ClientMetricRecorder {
@@ -38,21 +36,21 @@ public interface ProducerTopicMetricRecorder extends ClientMetricRecorder {
 
     String PREFIX = ProducerMetricRecorder.PREFIX + "partition.";
 
-    String QUEUE_BYTES_NAME = PREFIX + "queue.bytes";
+    String RECORD_QUEUE_BYTES_NAME = PREFIX + "record.queue.bytes";
 
-    String QUEUE_BYTES_DESCRIPTION = "Number of bytes queued on partition queue.";
+    String RECORD_QUEUE_BYTES_DESCRIPTION = "Number of bytes queued on partition queue.";
 
-    String QUEUE_COUNT_NAME = PREFIX + "queue.count";
+    String RECORD_QUEUE_COUNT_NAME = PREFIX + "record.queue.count";
 
-    String QUEUE_COUNT_DESCRIPTION = "Number of records queued on partition queue.";
+    String RECORD_QUEUE_COUNT_DESCRIPTION = "Number of records queued on partition queue.";
 
-    String LATENCY_NAME = PREFIX + "latency";
+    String RECORD_LATENCY_NAME = PREFIX + "record.latency";
 
-    String LATENCY_DESCRIPTION = "Total produce record latency, from application calling send()/produce() to ack received from broker.";
+    String RECORD_LATENCY_DESCRIPTION = "Total produce record latency, from application calling send()/produce() to ack received from broker.";
 
-    String QUEUE_LATENCY_NAME = PREFIX + "queue.latency";
+    String RECORD_QUEUE_LATENCY_NAME = PREFIX + "record.queue.latency";
 
-    String QUEUE_LATENCY_DESCRIPTION = "Time between send()/produce() and record being sent to broker.";
+    String RECORD_QUEUE_LATENCY_DESCRIPTION = "Time between send()/produce() and record being sent to broker.";
 
     String RECORD_RETRIES_NAME = PREFIX + "record.retries";
 
@@ -66,17 +64,17 @@ public interface ProducerTopicMetricRecorder extends ClientMetricRecorder {
 
     String RECORD_SUCCESS_DESCRIPTION = "Number of records that have been successfully produced.";
 
-    void queueBytes(TopicPartition topicPartition, short acks, int amount);
+    void recordRecordQueueBytes(TopicPartition topicPartition, short acks, int amount);
 
-    void queueCount(TopicPartition topicPartition, short acks, int amount);
+    void recordRecordQueueCount(TopicPartition topicPartition, short acks, int amount);
 
-    void latency(TopicPartition topicPartition, short acks, int amount);
+    void recordRecordLatency(TopicPartition topicPartition, short acks, int amount);
 
-    void queueLatency(TopicPartition topicPartition, short acks, int amount);
+    void recordRecordQueueLatency(TopicPartition topicPartition, short acks, int amount);
 
-    void recordRetries(TopicPartition topicPartition, short acks, int amount);
+    void recordRecordRetries(TopicPartition topicPartition, short acks, int amount);
 
-    void recordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount);
+    void recordRecordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount);
 
-    void recordSuccess(TopicPartition topicPartition, short acks, int amount);
+    void recordRecordSuccess(TopicPartition topicPartition, short acks, int amount);
 }

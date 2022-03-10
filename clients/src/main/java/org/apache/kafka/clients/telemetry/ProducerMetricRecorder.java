@@ -16,51 +16,37 @@
  */
 package org.apache.kafka.clients.telemetry;
 
-import org.apache.kafka.common.metrics.Sensor;
-
 /**
- * A sensor registry that exposes {@link Sensor}s used to record the producer-level metrics.
+ * A {@link ClientMetricRecorder} that exposes methods to record the producer-level metrics.
  *
- * @see ProducerTopicMetricRecorder for details on the topic-level sensors.
+ * @see ProducerTopicMetricRecorder for details on the topic-level metrics.
  */
 public interface ProducerMetricRecorder extends ClientMetricRecorder {
 
     String PREFIX = ClientMetricRecorder.PREFIX + "producer.";
 
-    String RECORD_BYTES_NAME = PREFIX + "record.bytes";
+    String RECORD_QUEUE_BYTES_NAME = PREFIX + "record.queue.bytes";
 
-    String RECORD_BYTES_DESCRIPTION = "Total number of record memory currently in use by producer. This includes the record fields (key, value, etc) as well as any implementation specific overhead (objects, etc).";
+    String RECORD_QUEUE_BYTES_DESCRIPTION = "Current amount of memory used in producer record queues.";
 
-    String RECORD_COUNT_NAME = PREFIX + "record.count";
+    String RECORD_QUEUE_MAX_BYTES_NAME = PREFIX + "record.queue.max.bytes";
 
-    String RECORD_COUNT_DESCRIPTION = "Total number of records currently handled by producer.";
+    String RECORD_QUEUE_MAX_BYTES_DESCRIPTION = "Total amount of queue/buffer memory allowed on the producer queue(s).";
 
-    String QUEUE_MAX_BYTES_NAME = PREFIX + "queue.max.bytes";
+    String RECORD_QUEUE_COUNT_NAME = PREFIX + "record.queue.count";
 
-    String QUEUE_MAX_BYTES_DESCRIPTION = "Total amount of queue/buffer memory allowed on the producer queue(s).";
+    String RECORD_QUEUE_COUNT_DESCRIPTION = "Current number of records on the producer queue(s).";
 
-    String QUEUE_BYTES_NAME = PREFIX + "queue.bytes";
+    String RECORD_QUEUE_MAX_COUNT_NAME = PREFIX + "record.queue.max.count";
 
-    String QUEUE_BYTES_DESCRIPTION = "Current amount of memory used in producer queues.";
+    String RECORD_QUEUE_MAX_COUNT_DESCRIPTION = "Maximum amount of records allowed on the producer queue(s).";
 
-    String QUEUE_MAX_MESSAGES_NAME = PREFIX + "queue.max.messages";
+    void recordRecordQueueBytes(int amount);
 
-    String QUEUE_MAX_MESSAGES_DESCRIPTION = "Maximum amount of messages allowed on the producer queue(s).";
+    void recordRecordQueueMaxBytes(int amount);
 
-    String QUEUE_MESSAGES_NAME = PREFIX + "queue.messages";
+    void recordRecordQueueCount(int amount);
 
-    String QUEUE_MESSAGES_DESCRIPTION = "Current number of messages on the producer queue(s).";
-
-    void recordRecordBytes(int amount);
-
-    void recordRecordCount(int amount);
-
-    void recordQueueMaxBytes(int amount);
-
-    void recordQueueBytes(int amount);
-
-    void recordQueueMaxMessages(int amount);
-
-    void recordQueueMessages(int amount);
+    void recordRecordQueueMaxCount(int amount);
 
 }

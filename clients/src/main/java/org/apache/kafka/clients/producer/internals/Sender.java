@@ -24,7 +24,6 @@ import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.NetworkClientUtils;
 import org.apache.kafka.clients.RequestCompletionHandler;
 import org.apache.kafka.clients.telemetry.ClientTelemetry;
-import org.apache.kafka.clients.telemetry.ProducerMetricRecorder;
 import org.apache.kafka.clients.telemetry.ProducerTopicMetricRecorder;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.InvalidRecordException;
@@ -875,7 +874,6 @@ public class Sender implements Runnable {
         public final Sensor batchSplitSensor;
         private final SenderMetricsRegistry metrics;
         private final short acks;
-        private final ProducerMetricRecorder producerMetricRecorder;
         private final ProducerTopicMetricRecorder producerTopicMetricRecorder;
         private final Time time;
 
@@ -887,7 +885,6 @@ public class Sender implements Runnable {
             Time time) {
             this.metrics = metrics;
             this.acks = acks;
-            this.producerMetricRecorder = clientTelemetry.producerMetricRecorder();
             this.producerTopicMetricRecorder = clientTelemetry.producerTopicMetricRecorder();
             this.time = time;
 
@@ -990,10 +987,7 @@ public class Sender implements Runnable {
                     Sensor topicCompressionRate = Objects.requireNonNull(this.metrics.getSensor(topicCompressionRateName));
                     topicCompressionRate.record(batch.compressionRatio());
 
-                    producerMetricRecorder.recordRecordCount(batch.recordCount);
-                    producerMetricRecorder.recordRecordBytes(batch.estimatedSizeInBytes());
-
-                    producerTopicMetricRecorder.recordSuccess(batch.topicPartition, acks, batch.recordCount);
+                    producerTopicMetricRecorder.recordRecordSuccess(batch.topicPartition, acks, batch.recordCount);
 
                     // global metrics
                     this.batchSizeSensor.record(batch.estimatedSizeInBytes(), now);
@@ -1014,7 +1008,7 @@ public class Sender implements Runnable {
             if (topicRetrySensor != null)
                 topicRetrySensor.record(count, now);
 
-            producerTopicMetricRecorder.recordRetries(topicPartition, acks, count);
+            producerTopicMetricRecorder.recordRecordRetries(topicPartition, acks, count);
         }
 
         public void recordErrors(TopicPartition topicPartition, int count, Throwable error) {
@@ -1025,7 +1019,7 @@ public class Sender implements Runnable {
             if (topicErrorSensor != null)
                 topicErrorSensor.record(count, now);
 
-            producerTopicMetricRecorder.recordFailures(topicPartition, acks, error, count);
+            producerTopicMetricRecorder.recordRecordFailures(topicPartition, acks, error, count);
         }
 
         public void recordLatency(String node, long latency) {

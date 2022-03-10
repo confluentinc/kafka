@@ -103,8 +103,9 @@ public class DefaultConsumerMetricRecorder extends AbstractClientMetricRecorder 
     }
 
     @Override
-    public void recordGroupAssignmentStrategy(int amount) {
-        stringSensor(groupAssignmentStrategy).record(amount);
+    public void recordGroupAssignmentStrategy(String strategy) {
+        // TODO: TELEMETRY_TODO: how to handle strings?
+        // stringSensor(groupAssignmentStrategy).record(strategy);
     }
 
     @Override

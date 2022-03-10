@@ -25,24 +25,16 @@ import java.util.Set;
 import org.apache.kafka.common.MetricNameTemplate;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
-import org.apache.kafka.common.metrics.Sensor;
-
-/**
- * A sensor registry that exposes {@link Sensor}s used to record the topic-level metrics for the
- * producer.
- *
- * @see ProducerMetricRecorder for details on the producer-level sensors.
- */
 
 public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricRecorder implements ProducerTopicMetricRecorder {
 
     private static final String GROUP_NAME = "producer-topic-telemetry";
 
-    private final MetricNameTemplate queueBytes;
+    private final MetricNameTemplate recordQueueBytes;
 
-    private final MetricNameTemplate queueCount;
+    private final MetricNameTemplate recordQueueCount;
 
-    private final MetricNameTemplate latency;
+    private final MetricNameTemplate recordLatency;
 
     private final MetricNameTemplate queueLatency;
 
@@ -58,47 +50,47 @@ public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricReco
         Set<String> topicPartitionAcksTags = appendTags(tags, TOPIC_LABEL, PARTITION_LABEL, ACKS_LABEL);
         Set<String> topicPartitionAcksReasonTags = appendTags(topicPartitionAcksTags, REASON_LABEL);
 
-        this.queueBytes = createMetricNameTemplate(QUEUE_BYTES_NAME, GROUP_NAME, QUEUE_BYTES_DESCRIPTION, topicPartitionAcksTags);
-        this.queueCount = createMetricNameTemplate(QUEUE_COUNT_NAME, GROUP_NAME, QUEUE_COUNT_DESCRIPTION, topicPartitionAcksTags);
-        this.latency = createMetricNameTemplate(LATENCY_NAME, GROUP_NAME, LATENCY_DESCRIPTION, topicPartitionAcksTags);
-        this.queueLatency = createMetricNameTemplate(QUEUE_LATENCY_NAME, GROUP_NAME, QUEUE_LATENCY_DESCRIPTION, topicPartitionAcksTags);
+        this.recordQueueBytes = createMetricNameTemplate(RECORD_QUEUE_BYTES_NAME, GROUP_NAME, RECORD_QUEUE_BYTES_DESCRIPTION, topicPartitionAcksTags);
+        this.recordQueueCount = createMetricNameTemplate(RECORD_QUEUE_COUNT_NAME, GROUP_NAME, RECORD_QUEUE_COUNT_DESCRIPTION, topicPartitionAcksTags);
+        this.recordLatency = createMetricNameTemplate(RECORD_LATENCY_NAME, GROUP_NAME, RECORD_LATENCY_DESCRIPTION, topicPartitionAcksTags);
+        this.queueLatency = createMetricNameTemplate(RECORD_QUEUE_LATENCY_NAME, GROUP_NAME, RECORD_QUEUE_LATENCY_DESCRIPTION, topicPartitionAcksTags);
         this.recordRetries = createMetricNameTemplate(RECORD_RETRIES_NAME, GROUP_NAME, RECORD_RETRIES_DESCRIPTION, topicPartitionAcksTags);
         this.recordFailures = createMetricNameTemplate(RECORD_FAILURES_NAME, GROUP_NAME, RECORD_FAILURES_DESCRIPTION, topicPartitionAcksReasonTags);
         this.recordSuccess = createMetricNameTemplate(RECORD_SUCCESS_NAME, GROUP_NAME, RECORD_SUCCESS_DESCRIPTION, topicPartitionAcksTags);
     }
 
     @Override
-    public void queueBytes(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordQueueBytes(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
-        gaugeSensor(queueBytes, metricsTags).record(amount);
+        gaugeSensor(recordQueueBytes, metricsTags).record(amount);
     }
 
     @Override
-    public void queueCount(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordQueueCount(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
-        gaugeSensor(queueCount, metricsTags).record(amount);
+        gaugeSensor(recordQueueCount, metricsTags).record(amount);
     }
 
     @Override
-    public void latency(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordLatency(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
-        histogramSensor(latency, metricsTags).record(amount);
+        histogramSensor(recordLatency, metricsTags).record(amount);
     }
 
     @Override
-    public void queueLatency(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordQueueLatency(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         histogramSensor(queueLatency, metricsTags).record(amount);
     }
 
     @Override
-    public void recordRetries(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordRetries(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         sumSensor(recordRetries, metricsTags).record(amount);
     }
 
     @Override
-    public void recordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount) {
+    public void recordRecordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount) {
         String reason = convertToReason(error);
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         metricsTags.put(REASON_LABEL, reason);
@@ -106,7 +98,7 @@ public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricReco
     }
 
     @Override
-    public void recordSuccess(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordSuccess(TopicPartition topicPartition, short acks, int amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         sumSensor(recordSuccess, metricsTags).record(amount);
     }

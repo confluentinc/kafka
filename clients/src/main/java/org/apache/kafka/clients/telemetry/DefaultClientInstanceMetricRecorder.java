@@ -77,7 +77,7 @@ public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRec
     }
 
     @Override
-    public void recordConnectionCount(int increment) {
+    public void recordConnectionActive(int increment) {
         gaugeSensor(connectionCount).record(increment);
     }
 

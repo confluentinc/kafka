@@ -241,6 +241,15 @@ public class ClientTelemetryUtilsTest {
         testValidateTransition(currState, Collections.emptyList());
     }
 
+    @Test
+    public void testHostProcess() {
+        DefaultClientTelemetry clientTelemetry = new DefaultClientTelemetry(new MockTime(), "test");
+        HostProcessMetricRecorder hostProcessMetricRecorder = clientTelemetry.hostProcessMetricRecorder();
+        HostProcessInfo hostProcessInfo = clientTelemetry.hostProcessInfo();
+
+        ClientTelemetryUtils.recordHostMetrics(hostProcessInfo, hostProcessMetricRecorder);
+    }
+
     private void testValidateTransition(TelemetryState oldState, List<TelemetryState> validStates) {
         for (TelemetryState newState : validStates)
             oldState.validateTransition(newState);

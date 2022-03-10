@@ -16,12 +16,17 @@
  */
 package org.apache.kafka.clients.telemetry;
 
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.createGetTelemetrySubscriptionRequest;
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.createPushTelemetryRequest;
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.currentTelemetryMetrics;
+import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.recordHostMetrics;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.validateAcceptedCompressionTypes;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.validateClientInstanceId;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.validateMetricNames;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.validatePushIntervalMs;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +65,8 @@ public class DefaultClientTelemetry implements ClientTelemetry {
 
     private final DeltaValueStore deltaValueStore;
 
+    private final HostProcessInfo hostProcessInfo;
+
     private final TelemetryMetricsReporter telemetryMetricsReporter;
 
     private final TelemetrySerializer telemetrySerializer;
@@ -96,6 +103,7 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         this.time = Objects.requireNonNull(time, "time must be non-null");
         this.telemetrySerializer = new OtlpTelemetrySerializer();
         this.deltaValueStore = new DeltaValueStore();
+        this.hostProcessInfo = new HostProcessInfo();
         this.telemetryMetricsReporter = new TelemetryMetricsReporter(deltaValueStore);
 
         Map<String, String> metricsTags = Collections.singletonMap(CLIENT_ID_METRIC_TAG, clientId);
@@ -113,6 +121,11 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         this.hostProcessMetricRecorder = new DefaultHostProcessMetricRecorder(this.metrics);
         this.producerMetricRecorder = new DefaultProducerMetricRecorder(this.metrics);
         this.producerTopicMetricRecorder = new DefaultProducerTopicMetricRecorder(this.metrics);
+    }
+
+    // For testing...
+    HostProcessInfo hostProcessInfo() {
+        return hostProcessInfo;
     }
 
     @Override
@@ -384,12 +397,47 @@ public class DefaultClientTelemetry implements ClientTelemetry {
 
     @Override
     public Optional<AbstractRequest.Builder<?>> createRequest() {
-        return ClientTelemetryUtils.createRequest(stateInternal(),
-            subscription().orElse(null),
-            telemetrySerializer,
-            telemetryMetricsReporter.current(),
-            deltaValueStore,
-            this::setState);
+        TelemetryState state = stateInternal();
+        TelemetrySubscription subscription = subscriptionInternal();
+        AbstractRequest.Builder<?> requestBuilder;
+        TelemetryState newState;
+
+        if (state == TelemetryState.subscription_needed) {
+            requestBuilder = createGetTelemetrySubscriptionRequest(subscription);
+            newState = TelemetryState.subscription_in_progress;
+        } else if (state == TelemetryState.push_needed || state == TelemetryState.terminating_push_needed) {
+            if (subscription == null) {
+                log.warn("Telemetry state is {} but subscription is null; not sending telemetry", state);
+                return Optional.empty();
+            }
+
+            // Here we collect the host metrics right before a push since there's no real
+            // event otherwise at which to record these values.
+            recordHostMetrics(hostProcessInfo, hostProcessMetricRecorder);
+
+            boolean terminating = state == TelemetryState.terminating_push_needed;
+
+            Collection<TelemetryMetric> telemetryMetrics = currentTelemetryMetrics(telemetryMetricsReporter.current(),
+                deltaValueStore,
+                subscription.deltaTemporality(),
+                subscription.metricSelector());
+
+            requestBuilder = createPushTelemetryRequest(terminating,
+                subscription,
+                telemetrySerializer,
+                telemetryMetrics);
+
+            if (terminating)
+                newState = TelemetryState.terminating_push_in_progress;
+            else
+                newState = TelemetryState.push_in_progress;
+        } else {
+            throw new IllegalTelemetryStateException(String.format("Cannot make telemetry request as telemetry is in state: %s", state));
+        }
+
+        log.debug("Created new {} and preparing to set state to {}", requestBuilder.getClass().getName(), newState);
+        setState(newState);
+        return Optional.of(requestBuilder);
     }
 
     @Override

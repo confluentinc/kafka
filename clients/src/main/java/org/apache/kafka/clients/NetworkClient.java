@@ -1067,7 +1067,7 @@ public class NetworkClient implements KafkaClient {
                     this.socketReceiveBuffer);
 
             clientInstanceMetricRecorder.recordConnectionCreations(nodeConnectionId, 1);
-            clientInstanceMetricRecorder.recordConnectionCount(1);
+            clientInstanceMetricRecorder.recordConnectionActive(1);
         } catch (IOException e) {
             log.warn("Error connecting to node {}", node, e);
             // Attempt failed, we'll try again after the backoff
@@ -1162,7 +1162,7 @@ public class NetworkClient implements KafkaClient {
             // The disconnect may be the result of stale metadata, so request an update
             metadata.requestUpdate();
 
-            clientInstanceMetricRecorder.recordConnectionCount(-1);
+            clientInstanceMetricRecorder.recordConnectionActive(-1);
         }
 
         @Override

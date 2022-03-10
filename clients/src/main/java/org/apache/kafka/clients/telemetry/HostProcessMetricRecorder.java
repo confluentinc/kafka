@@ -44,10 +44,10 @@ public interface HostProcessMetricRecorder extends ClientMetricRecorder {
 
     void recordMemoryBytes(long amount);
 
-    void recordCpuUserTime(int amount);
+    void recordCpuUserTime(long seconds);
 
-    void recordCpuSystemTime(int amount);
+    void recordCpuSystemTime(long seconds);
 
-    void recordPid(short amount);
+    void recordPid(long amount);
 
 }

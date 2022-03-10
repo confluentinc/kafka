@@ -51,17 +51,17 @@ public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecord
     }
 
     @Override
-    public void recordCpuUserTime(int amount) {
-        sumSensor(cpuUserTime).record(amount);
+    public void recordCpuUserTime(long seconds) {
+        sumSensor(cpuUserTime).record(seconds);
     }
 
     @Override
-    public void recordCpuSystemTime(int amount) {
-        sumSensor(cpuSystemTime).record(amount);
+    public void recordCpuSystemTime(long seconds) {
+        sumSensor(cpuSystemTime).record(seconds);
     }
 
     @Override
-    public void recordPid(short amount) {
+    public void recordPid(long amount) {
         sumSensor(pid).record(amount);
     }
 }

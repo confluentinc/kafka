@@ -102,7 +102,7 @@ public class NoopClientTelemetry implements ClientTelemetry {
             }
 
             @Override
-            public void recordGroupAssignmentStrategy(int amount) {
+            public void recordGroupAssignmentStrategy(String strategy) {
 
             }
 
@@ -172,7 +172,7 @@ public class NoopClientTelemetry implements ClientTelemetry {
             }
 
             @Override
-            public void recordConnectionCount(int amount) {
+            public void recordConnectionActive(int amount) {
 
             }
 
@@ -222,17 +222,17 @@ public class NoopClientTelemetry implements ClientTelemetry {
             }
 
             @Override
-            public void recordCpuUserTime(int amount) {
+            public void recordCpuUserTime(long seconds) {
 
             }
 
             @Override
-            public void recordCpuSystemTime(int amount) {
+            public void recordCpuSystemTime(long seconds) {
 
             }
 
             @Override
-            public void recordPid(short amount) {
+            public void recordPid(long amount) {
 
             }
         };
@@ -242,32 +242,22 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public ProducerMetricRecorder producerMetricRecorder() {
         return new ProducerMetricRecorder() {
             @Override
-            public void recordRecordBytes(int amount) {
-                
-            }
-
-            @Override
-            public void recordRecordCount(int amount) {
+            public void recordRecordQueueBytes(int amount) {
 
             }
 
             @Override
-            public void recordQueueMaxBytes(int amount) {
+            public void recordRecordQueueMaxBytes(int amount) {
 
             }
 
             @Override
-            public void recordQueueBytes(int amount) {
+            public void recordRecordQueueCount(int amount) {
 
             }
 
             @Override
-            public void recordQueueMaxMessages(int amount) {
-
-            }
-
-            @Override
-            public void recordQueueMessages(int amount) {
+            public void recordRecordQueueMaxCount(int amount) {
 
             }
         };
@@ -277,37 +267,37 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public ProducerTopicMetricRecorder producerTopicMetricRecorder() {
         return new ProducerTopicMetricRecorder() {
             @Override
-            public void queueBytes(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordQueueBytes(TopicPartition topicPartition, short acks, int amount) {
 
             }
 
             @Override
-            public void queueCount(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordQueueCount(TopicPartition topicPartition, short acks, int amount) {
 
             }
 
             @Override
-            public void latency(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordLatency(TopicPartition topicPartition, short acks, int amount) {
 
             }
 
             @Override
-            public void queueLatency(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordQueueLatency(TopicPartition topicPartition, short acks, int amount) {
 
             }
 
             @Override
-            public void recordRetries(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordRetries(TopicPartition topicPartition, short acks, int amount) {
 
             }
 
             @Override
-            public void recordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount) {
+            public void recordRecordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount) {
 
             }
 
             @Override
-            public void recordSuccess(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordSuccess(TopicPartition topicPartition, short acks, int amount) {
 
             }
         };
