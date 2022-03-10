@@ -25,7 +25,7 @@ public class StringTelemetrySerializer implements TelemetrySerializer {
     @Override
     public void serialize(Collection<TelemetryMetric> telemetryMetrics, OutputStream out) throws IOException {
         for (TelemetryMetric telemetryMetric : telemetryMetrics) {
-            String s = String.format("%s: %s%s", telemetryMetric.name(), telemetryMetric.value(), System.lineSeparator());
+            String s = String.format("%s: %s%s", telemetryMetric.metricName(), telemetryMetric.value(), System.lineSeparator());
             byte[] bytes = s.getBytes();
             out.write(bytes, 0, bytes.length);
         }

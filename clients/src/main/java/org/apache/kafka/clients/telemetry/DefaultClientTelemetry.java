@@ -19,7 +19,6 @@ package org.apache.kafka.clients.telemetry;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.createGetTelemetrySubscriptionRequest;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.createPushTelemetryRequest;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.currentTelemetryMetrics;
-import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.recordHostMetrics;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.validateAcceptedCompressionTypes;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.validateClientInstanceId;
 import static org.apache.kafka.clients.telemetry.ClientTelemetryUtils.validateMetricNames;
@@ -83,15 +82,15 @@ public class DefaultClientTelemetry implements ClientTelemetry {
 
     private TelemetryState state = TelemetryState.subscription_needed;
 
-    private final ClientInstanceMetricRecorder clientInstanceMetricRecorder;
+    private final DefaultClientInstanceMetricRecorder clientInstanceMetricRecorder;
 
-    private final ConsumerMetricRecorder consumerMetricRecorder;
+    private final DefaultConsumerMetricRecorder consumerMetricRecorder;
 
-    private final HostProcessMetricRecorder hostProcessMetricRecorder;
+    private final DefaultHostProcessMetricRecorder hostProcessMetricRecorder;
 
-    private final ProducerMetricRecorder producerMetricRecorder;
+    private final DefaultProducerMetricRecorder producerMetricRecorder;
 
-    private final ProducerTopicMetricRecorder producerTopicMetricRecorder;
+    private final DefaultProducerTopicMetricRecorder producerTopicMetricRecorder;
 
     public DefaultClientTelemetry(Time time, String clientId) {
         if (time == null)
@@ -413,14 +412,11 @@ public class DefaultClientTelemetry implements ClientTelemetry {
 
             // Here we collect the host metrics right before a push since there's no real
             // event otherwise at which to record these values.
-            recordHostMetrics(hostProcessInfo, hostProcessMetricRecorder);
+            hostProcessInfo.recordHostMetrics(hostProcessMetricRecorder);
 
             boolean terminating = state == TelemetryState.terminating_push_needed;
 
-            Collection<TelemetryMetric> telemetryMetrics = currentTelemetryMetrics(telemetryMetricsReporter.current(),
-                deltaValueStore,
-                subscription.deltaTemporality(),
-                subscription.metricSelector());
+            Collection<TelemetryMetric> telemetryMetrics = getTelemetryMetrics(subscription);
 
             requestBuilder = createPushTelemetryRequest(terminating,
                 subscription,
@@ -440,28 +436,36 @@ public class DefaultClientTelemetry implements ClientTelemetry {
         return Optional.of(requestBuilder);
     }
 
+    // Package visible for testing access.
+    Collection<TelemetryMetric> getTelemetryMetrics(TelemetrySubscription subscription) {
+        return currentTelemetryMetrics(telemetryMetricsReporter.current(),
+            deltaValueStore,
+            subscription.deltaTemporality(),
+            subscription.metricSelector());
+    }
+
     @Override
-    public ClientInstanceMetricRecorder clientInstanceMetricRecorder() {
+    public DefaultClientInstanceMetricRecorder clientInstanceMetricRecorder() {
         return clientInstanceMetricRecorder;
     }
 
     @Override
-    public ConsumerMetricRecorder consumerMetricRecorder() {
+    public DefaultConsumerMetricRecorder consumerMetricRecorder() {
         return consumerMetricRecorder;
     }
 
     @Override
-    public HostProcessMetricRecorder hostProcessMetricRecorder() {
+    public DefaultHostProcessMetricRecorder hostProcessMetricRecorder() {
         return hostProcessMetricRecorder;
     }
 
     @Override
-    public ProducerMetricRecorder producerMetricRecorder() {
+    public DefaultProducerMetricRecorder producerMetricRecorder() {
         return producerMetricRecorder;
     }
 
     @Override
-    public ProducerTopicMetricRecorder producerTopicMetricRecorder() {
+    public DefaultProducerTopicMetricRecorder producerTopicMetricRecorder() {
         return producerTopicMetricRecorder;
     }
 }

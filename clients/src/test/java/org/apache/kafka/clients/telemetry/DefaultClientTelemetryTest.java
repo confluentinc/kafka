@@ -17,11 +17,7 @@
 package org.apache.kafka.clients.telemetry;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.Optional;
-import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.record.CompressionType;
-import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.jupiter.api.Test;
@@ -29,34 +25,32 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class DefaultClientTelemetryTest {
-
-    public static final MockTime MOCK_TIME = new MockTime();
+public class DefaultClientTelemetryTest extends BaseClientTelemetryTest {
 
     @Test
     public void testSingleClose() {
-        DefaultClientTelemetry clientTelemetry = new DefaultClientTelemetry(MOCK_TIME, "test");
+        DefaultClientTelemetry clientTelemetry = newClientTelemetry();
         clientTelemetry.close();
     }
 
     @Test
     public void testDoubleClose() {
-        DefaultClientTelemetry clientTelemetry = new DefaultClientTelemetry(MOCK_TIME, "test");
+        DefaultClientTelemetry clientTelemetry = newClientTelemetry();
         clientTelemetry.close();
         clientTelemetry.close();
     }
 
     @Test
     public void testInitiateCloseWithoutSubscription() {
-        DefaultClientTelemetry clientTelemetry = new DefaultClientTelemetry(MOCK_TIME, "test");
+        DefaultClientTelemetry clientTelemetry = newClientTelemetry();
         clientTelemetry.initiateClose(Duration.ofMillis(50));
         clientTelemetry.close();
     }
 
     @Test
     public void testInitiateCloseWithSubscription() {
-        DefaultClientTelemetry clientTelemetry = new DefaultClientTelemetry(MOCK_TIME, "test");
-        clientTelemetry.setSubscription(newTelemetrySubscription(MOCK_TIME));
+        DefaultClientTelemetry clientTelemetry = newClientTelemetry();
+        clientTelemetry.setSubscription(newTelemetrySubscription());
         clientTelemetry.initiateClose(Duration.ofMillis(50));
         clientTelemetry.close();
     }
@@ -106,17 +100,6 @@ public class DefaultClientTelemetryTest {
             assertNotNull(clientInstanceId);
             assertEquals(shouldBePresent, clientInstanceId.isPresent());
         }
-    }
-
-    private TelemetrySubscription newTelemetrySubscription(Time time) {
-        return new TelemetrySubscription(time.milliseconds(),
-            0,
-            Uuid.randomUuid(),
-            42,
-            Collections.singletonList(CompressionType.NONE),
-            10000,
-            true,
-            MetricSelector.ALL);
     }
 
 }

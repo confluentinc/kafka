@@ -25,13 +25,13 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.telemetry.ClientInstanceMetricRecorder.ConnectionErrorReason;
 import org.apache.kafka.clients.telemetry.MetricSelector.FilteredMetricSelector;
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -194,7 +194,7 @@ public class ClientTelemetryUtils {
         boolean deltaTemporality,
         MetricSelector metricSelector) {
         return metrics.stream().map(kafkaMetric -> {
-            String name = kafkaMetric.metricName().name();
+            MetricName metricName = kafkaMetric.metricName();
             Object metricValue = kafkaMetric.metricValue();
 
             // TODO: TELEMETRY_TODO: not sure if the metric value is always stored as a double,
@@ -210,9 +210,8 @@ public class ClientTelemetryUtils {
             }
 
             MetricType metricType = metricType(kafkaMetric);
-            String description = kafkaMetric.metricName().description();
 
-            return new TelemetryMetric(name, metricType, value, description);
+            return new TelemetryMetric(metricName, metricType, value);
         }).filter(metricSelector).collect(Collectors.toList());
     }
 
@@ -375,12 +374,6 @@ public class ClientTelemetryUtils {
             terminating,
             compressionType,
             metricsData);
-    }
-
-    public static void recordHostMetrics(HostProcessInfo hostProcessInfo, HostProcessMetricRecorder recorder) {
-        hostProcessInfo.cpuUserTimeSec().ifPresent(recorder::recordCpuUserTime);
-        hostProcessInfo.processMemoryBytes().ifPresent(recorder::recordMemoryBytes);
-        hostProcessInfo.pid().ifPresent(recorder::recordPid);
     }
 
 }

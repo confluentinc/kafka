@@ -45,6 +45,26 @@ public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecord
         this.pid = createMetricName(PID_NAME, GROUP_NAME, PID_DESCRIPTION);
     }
 
+    // For testing
+    MetricName memoryBytes() {
+        return memoryBytes;
+    }
+
+    // For testing
+    MetricName cpuUserTime() {
+        return cpuUserTime;
+    }
+
+    // For testing
+    MetricName cpuSystemTime() {
+        return cpuSystemTime;
+    }
+
+    // For testing
+    MetricName pid() {
+        return pid;
+    }
+
     @Override
     public void recordMemoryBytes(long amount) {
         gaugeSensor(memoryBytes).record(amount);

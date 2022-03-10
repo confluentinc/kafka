@@ -40,76 +40,55 @@ public enum TelemetryState {
     private static final Map<TelemetryState, List<TelemetryState>> VALID_NEXT_STATES = new EnumMap<>(TelemetryState.class);
 
     static {
-        for (TelemetryState currState : values()) {
-            switch (currState) {
-                case subscription_needed:
-                    // If we need a subscription, the main thing we can do is request one.
-                    //
-                    // However, it's still possible that we don't get very far before terminating.
-                    VALID_NEXT_STATES.put(currState, Arrays.asList(subscription_in_progress, terminating_push_needed, terminated));
-                    break;
+        // If we need a subscription, the main thing we can do is request one.
+        //
+        // However, it's still possible that we don't get very far before terminating.
+        VALID_NEXT_STATES.put(subscription_needed, Arrays.asList(subscription_in_progress, terminating_push_needed, terminated));
 
-                case subscription_in_progress:
-                    // If we are finished awaiting our subscription, the most likely step is to next
-                    // push the telemetry. But, it's possible for there to be no telemetry requested,
-                    // at which point we would go back to waiting a bit before requesting the next
-                    // subscription.
-                    //
-                    // As before, it's possible that we don't get our response before we have to
-                    // terminate.
-                    VALID_NEXT_STATES.put(currState, Arrays.asList(push_needed, subscription_needed, terminating_push_needed, terminated));
-                    break;
+        // If we are finished awaiting our subscription, the most likely step is to next
+        // push the telemetry. But, it's possible for there to be no telemetry requested,
+        // at which point we would go back to waiting a bit before requesting the next
+        // subscription.
+        //
+        // As before, it's possible that we don't get our response before we have to
+        // terminate.
+        VALID_NEXT_STATES.put(subscription_in_progress, Arrays.asList(push_needed, subscription_needed, terminating_push_needed, terminated));
 
-                case push_needed:
-                    // If we are transitioning out of this state, chances are that we are doing so
-                    // because we want to push the telemetry. Alternatively, it's possible for the
-                    // push to fail (network issues, the subscription might have changed, etc.),
-                    // at which point we would again go back to waiting and requesting the next
-                    // subscription.
-                    //
-                    // But guess what? Yep - it's possible that we don't get to push before we have
-                    // to terminate.
-                    VALID_NEXT_STATES.put(currState, Arrays.asList(push_in_progress, subscription_needed, terminating_push_needed, terminated));
-                    break;
+        // If we are transitioning out of this state, chances are that we are doing so
+        // because we want to push the telemetry. Alternatively, it's possible for the
+        // push to fail (network issues, the subscription might have changed, etc.),
+        // at which point we would again go back to waiting and requesting the next
+        // subscription.
+        //
+        // But guess what? Yep - it's possible that we don't get to push before we have
+        // to terminate.
+        VALID_NEXT_STATES.put(push_needed, Arrays.asList(push_in_progress, subscription_needed, terminating_push_needed, terminated));
 
-                case push_in_progress:
-                    // If we are transitioning out of this state, I'm guessing it's because we
-                    // did a successful push. We're going to want to sit tight before requesting
-                    // our subscription.
-                    //
-                    // But it's also possible that the push failed (again: network issues, the
-                    // subscription might have changed, etc.). We're not going to attempt to
-                    // re-push, but rather, take a breather and wait to request the
-                    // next subscription.
-                    //
-                    // So in either case, noting that we're now waiting for a subscription is OK.
-                    //
-                    // Again, it's possible that we don't get our response before we have to terminate.
-                    VALID_NEXT_STATES.put(currState, Arrays.asList(subscription_needed, terminating_push_needed, terminated));
-                    break;
+        // If we are transitioning out of this state, I'm guessing it's because we
+        // did a successful push. We're going to want to sit tight before requesting
+        // our subscription.
+        //
+        // But it's also possible that the push failed (again: network issues, the
+        // subscription might have changed, etc.). We're not going to attempt to
+        // re-push, but rather, take a breather and wait to request the
+        // next subscription.
+        //
+        // So in either case, noting that we're now waiting for a subscription is OK.
+        //
+        // Again, it's possible that we don't get our response before we have to terminate.
+        VALID_NEXT_STATES.put(push_in_progress, Arrays.asList(subscription_needed, terminating_push_needed, terminated));
 
-                case terminating_push_needed:
-                    // If we are moving out of this state, we are hopefully doing so because we're
-                    // going to try to send our last push. Either that or we want to be fully
-                    // terminated.
-                    VALID_NEXT_STATES.put(currState, Arrays.asList(terminated, terminating_push_in_progress, terminated));
-                    break;
+        // If we are moving out of this state, we are hopefully doing so because we're
+        // going to try to send our last push. Either that or we want to be fully
+        // terminated.
+        VALID_NEXT_STATES.put(terminating_push_needed, Arrays.asList(terminated, terminating_push_in_progress, terminated));
 
-                case terminating_push_in_progress:
-                    // If we are done in this state, we should only be transitioning to fully
-                    // terminated.
-                    VALID_NEXT_STATES.put(currState, Collections.singletonList(terminated));
-                    break;
+        // If we are done in this state, we should only be transitioning to fully
+        // terminated.
+        VALID_NEXT_STATES.put(terminating_push_in_progress, Collections.singletonList(terminated));
 
-                case terminated:
-                    // We should never be able to transition out of this state...
-                    VALID_NEXT_STATES.put(currState, Collections.emptyList());
-                    break;
-
-                default:
-                    throw new IllegalStateException(currState + " is not a valid " + TelemetryState.class.getName());
-            }
-        }
+        // We should never be able to transition out of this state...
+        VALID_NEXT_STATES.put(terminated, Collections.emptyList());
     }
 
     /**

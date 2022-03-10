@@ -1263,7 +1263,7 @@ public class NetworkClient implements KafkaClient {
 
         private final ClientTelemetry clientTelemetry;
 
-        private Node node;
+        private Node stickyNode;
 
         public TelemetryUpdater(ClientTelemetry clientTelemetry) {
             this.clientTelemetry = clientTelemetry;
@@ -1279,15 +1279,15 @@ public class NetworkClient implements KafkaClient {
                 return timeToNextUpdateOpt.get();
 
             // Per KIP-714, let's continue to re-use the same broker for as long as possible.
-            if (node == null) {
-                node = leastLoadedNode(now);
-                if (node == null) {
+            if (stickyNode == null) {
+                stickyNode = leastLoadedNode(now);
+                if (stickyNode == null) {
                     log.debug("Give up sending telemetry request since no node is available");
                     return reconnectBackoffMs;
                 }
             }
 
-            return maybeUpdate(now, node);
+            return maybeUpdate(now, stickyNode);
         }
 
         private long maybeUpdate(long now, Node node) {
@@ -1306,7 +1306,7 @@ public class NetworkClient implements KafkaClient {
             } else {
                 // Per KIP-714, if we can't issue a request to this broker node, let's clear it out
                 // and try another broker on the next loop.
-                node = null;
+                stickyNode = null;
             }
 
             // If there's any connection establishment underway, wait until it completes. This prevents

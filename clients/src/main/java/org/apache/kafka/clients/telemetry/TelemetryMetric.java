@@ -17,26 +17,24 @@
 package org.apache.kafka.clients.telemetry;
 
 import java.util.StringJoiner;
+import org.apache.kafka.common.MetricName;
 
 public class TelemetryMetric {
 
-    private final String name;
+    private final MetricName metricName;
 
     private final MetricType metricType;
 
     private final long value;
 
-    private final String description;
-
-    public TelemetryMetric(String name, MetricType metricType, long value, String description) {
-        this.name = name;
+    public TelemetryMetric(MetricName metricName, MetricType metricType, long value) {
+        this.metricName = metricName;
         this.metricType = metricType;
         this.value = value;
-        this.description = description;
     }
 
-    public String name() {
-        return name;
+    public MetricName metricName() {
+        return metricName;
     }
 
     public MetricType metricType() {
@@ -47,17 +45,12 @@ public class TelemetryMetric {
         return value;
     }
 
-    public String description() {
-        return description;
-    }
-
     @Override
     public String toString() {
         return new StringJoiner(", ", TelemetryMetric.class.getSimpleName() + "[", "]")
-            .add("name='" + name + "'")
+            .add("metricName='" + metricName + "'")
             .add("metricType=" + metricType)
             .add("value=" + value)
-            .add("description='" + description + "'")
             .toString();
     }
 }

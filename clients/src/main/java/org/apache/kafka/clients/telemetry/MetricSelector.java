@@ -59,7 +59,7 @@ public interface MetricSelector extends Predicate<TelemetryMetric> {
 
         @Override
         public boolean test(TelemetryMetric metric) {
-            return filters.stream().anyMatch(f -> metric.name().startsWith(f));
+            return filters.stream().anyMatch(f -> metric.metricName().name().startsWith(f));
         }
 
         @Override

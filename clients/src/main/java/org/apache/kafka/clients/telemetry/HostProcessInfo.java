@@ -55,6 +55,10 @@ public class HostProcessInfo {
         return Optional.empty();
     }
 
+    public Optional<Long> cpuSystemTimeSec() {
+        return Optional.empty();
+    }
+
     public Optional<Long> processMemoryBytes() {
         // TODO: TELEMETRY_TODO: validate.
         MemoryMXBean bean = ManagementFactory.getMemoryMXBean();
@@ -66,6 +70,13 @@ public class HostProcessInfo {
     public Optional<Long> pid() {
         // TODO: TELEMETRY_TODO: to implement.
         return Optional.empty();
+    }
+
+    public void recordHostMetrics(HostProcessMetricRecorder recorder) {
+        cpuSystemTimeSec().ifPresent(recorder::recordCpuSystemTime);
+        cpuUserTimeSec().ifPresent(recorder::recordCpuUserTime);
+        pid().ifPresent(recorder::recordPid);
+        processMemoryBytes().ifPresent(recorder::recordMemoryBytes);
     }
 
 }

@@ -40,8 +40,7 @@ public class OtlpTelemetrySerializer implements TelemetrySerializer {
                 .build();
 
             Metric.Builder builder = Metric.newBuilder()
-                .setName(telemetryMetric.name())
-                .setDescription(telemetryMetric.description());
+                .setName(telemetryMetric.metricName().name());
 
             switch (telemetryMetric.metricType()) {
                 case gauge:
