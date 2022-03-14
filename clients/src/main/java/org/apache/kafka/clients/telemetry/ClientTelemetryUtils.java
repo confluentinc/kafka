@@ -356,7 +356,16 @@ public class ClientTelemetryUtils {
     }
 
     public static GetTelemetrySubscriptionRequest.Builder createGetTelemetrySubscriptionRequest(TelemetrySubscription subscription) {
-        Uuid clientInstanceId = subscription != null ? subscription.clientInstanceId() : ZERO_UUID;
+        Uuid clientInstanceId;
+
+        // If we've previously retrieved a subscription, it will contain the client instance ID
+        // that the broker assigned. Otherwise, per KIP-714, we send a special "null" UUID to
+        // signal to the broker that we need to have a client instance ID assigned.
+        if (subscription != null)
+            clientInstanceId = subscription.clientInstanceId();
+        else
+            clientInstanceId = ZERO_UUID;
+
         return new GetTelemetrySubscriptionRequest.Builder(clientInstanceId);
     }
 
