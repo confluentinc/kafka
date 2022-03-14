@@ -315,11 +315,11 @@ public class ClientTelemetryUtils {
         ProducerMetricRecorder producerMetricRecorder = clientTelemetry.producerMetricRecorder();
         ProducerTopicMetricRecorder producerTopicMetricRecorder = clientTelemetry.producerTopicMetricRecorder();
 
-        producerMetricRecorder.recordRecordQueueBytes(size);
-        producerMetricRecorder.recordRecordQueueCount(1);
+        producerMetricRecorder.incrementRecordQueueBytes(size);
+        producerMetricRecorder.incrementRecordQueueCount(1);
 
-        producerTopicMetricRecorder.recordRecordQueueBytes(tp, acks, size);
-        producerTopicMetricRecorder.recordRecordQueueCount(tp, acks, 1);
+        producerTopicMetricRecorder.incrementRecordQueueBytes(tp, acks, size);
+        producerTopicMetricRecorder.incrementRecordQueueCount(tp, acks, 1);
     }
 
     public static void decrementProducerQueueMetrics(ClientTelemetry clientTelemetry,
@@ -335,10 +335,10 @@ public class ClientTelemetryUtils {
         ProducerMetricRecorder producerMetricRecorder = clientTelemetry.producerMetricRecorder();
         ProducerTopicMetricRecorder producerTopicMetricRecorder = clientTelemetry.producerTopicMetricRecorder();
 
-        producerMetricRecorder.recordRecordQueueBytes(-size);
-        producerMetricRecorder.recordRecordQueueCount(-recordCount);
-        producerTopicMetricRecorder.recordRecordQueueBytes(tp, acks, -size);
-        producerTopicMetricRecorder.recordRecordQueueCount(tp, acks, -recordCount);
+        producerMetricRecorder.decrementRecordQueueBytes(size);
+        producerMetricRecorder.decrementRecordQueueCount(recordCount);
+        producerTopicMetricRecorder.decrementRecordQueueBytes(tp, acks, size);
+        producerTopicMetricRecorder.decrementRecordQueueCount(tp, acks, recordCount);
     }
 
     public static String formatAcks(short acks) {

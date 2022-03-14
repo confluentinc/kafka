@@ -24,7 +24,7 @@ import org.apache.kafka.common.metrics.Sensor;
  * A sensor registry that exposes {@link Sensor}s used to record the client host process metrics.
  */
 
-public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecorder implements HostProcessMetricRecorder {
+public class DefaultHostProcessMetricRecorder extends MetricRecorder implements HostProcessMetricRecorder {
 
     private final static String GROUP_NAME = "host-process-telemetry";
 
@@ -66,22 +66,22 @@ public class DefaultHostProcessMetricRecorder extends AbstractClientMetricRecord
     }
 
     @Override
-    public void recordMemoryBytes(long amount) {
-        gaugeSensor(memoryBytes).record(amount);
+    public void setMemoryBytes(long amount) {
+        gaugeUpdateSensor(memoryBytes).record(amount);
     }
 
     @Override
-    public void recordCpuUserTime(long seconds) {
-        sumSensor(cpuUserTime).record(seconds);
+    public void setCpuUserTime(long seconds) {
+        gaugeUpdateSensor(cpuUserTime).record(seconds);
     }
 
     @Override
-    public void recordCpuSystemTime(long seconds) {
-        sumSensor(cpuSystemTime).record(seconds);
+    public void setCpuSystemTime(long seconds) {
+        gaugeUpdateSensor(cpuSystemTime).record(seconds);
     }
 
     @Override
-    public void recordPid(long amount) {
-        sumSensor(pid).record(amount);
+    public void setPid(long pid) {
+        gaugeUpdateSensor(this.pid).record(pid);
     }
 }

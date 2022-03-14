@@ -36,10 +36,6 @@ public interface ConsumerMetricRecorder extends ClientMetricRecorder {
 
     String COMMIT_COUNT_DESCRIPTION = "Number of commit requests sent.";
 
-    String GROUP_ASSIGNMENT_STRATEGY_NAME = PREFIX + "group.assignment.strategy";
-
-    String GROUP_ASSIGNMENT_STRATEGY_DESCRIPTION = "Current group assignment strategy in use.";
-
     String GROUP_ASSIGNMENT_PARTITION_COUNT_NAME = PREFIX + "group.assignment.partition.count";
 
     String GROUP_ASSIGNMENT_PARTITION_COUNT_DESCRIPTION = "Number of currently assigned partitions to this consumer by the group leader.";
@@ -72,50 +68,30 @@ public interface ConsumerMetricRecorder extends ClientMetricRecorder {
 
     String RECORD_APPLICATION_BYTES_DESCRIPTION = "Memory of records consumed by application.";
 
-    String FETCH_LATENCY_NAME = PREFIX + "fetch.latency";
-
-    String FETCH_LATENCY_DESCRIPTION = "FetchRequest latency.";
-
-    String FETCH_COUNT_NAME = PREFIX + "fetch.count";
-
-    String FETCH_COUNT_DESCRIPTION = "Total number of FetchRequests sent.";
-
-    String FETCH_FAILURES_NAME = PREFIX + "fetch.failures";
-
-    String FETCH_FAILURES_DESCRIPTION = "Total number of FetchRequest failures.";
-
     String ERROR_LABEL = "error";
 
-    void recordPollInterval(int amount);
+    void recordPollInterval(long amount);
 
-    void recordPollLast(long seconds);
+    void setPollLast(long seconds);
 
-    void recordPollLatency(int amount);
+    void recordPollLatency(long amount);
 
-    void recordCommitCount(int amount);
+    void addCommitCount(long amount);
 
-    void recordGroupAssignmentStrategy(String strategy);
+    void setGroupAssignmentPartitionCount(long amount);
 
-    void recordGroupAssignmentPartitionCount(int amount);
+    void setAssignmentPartitionCount(long amount);
 
-    void recordAssignmentPartitionCount(int amount);
+    void addGroupRebalanceCount(long amount);
 
-    void recordGroupRebalanceCount(int amount);
+    void addGroupErrorCount(String error, long amount);
 
-    void recordGroupErrorCount(String error, int amount);
+    void incrementRecordQueueCount(long amount);
 
-    void recordRecordQueueCount(int amount);
+    void incrementRecordQueueBytes(long amount);
 
-    void recordRecordQueueBytes(int amount);
+    void addRecordApplicationCount(long amount);
 
-    void recordRecordApplicationCount(int amount);
-
-    void recordRecordApplicationBytes(int amount);
-
-    void recordFetchLatency(int amount);
-
-    void recordFetchCount(int amount);
-
-    void recordFetchFailures(int amount);
+    void addRecordApplicationBytes(long amount);
 
 }

@@ -26,7 +26,7 @@ import org.apache.kafka.common.MetricNameTemplate;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
 
-public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricRecorder implements ProducerTopicMetricRecorder {
+public class DefaultProducerTopicMetricRecorder extends MetricRecorder implements ProducerTopicMetricRecorder {
 
     private static final String GROUP_NAME = "producer-topic-telemetry";
 
@@ -63,37 +63,37 @@ public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricReco
     }
 
     @Override
-    public void recordRecordQueueBytes(TopicPartition topicPartition, short acks, int amount) {
+    public void incrementRecordQueueBytes(TopicPartition topicPartition, short acks, long amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
-        gaugeSensor(recordQueueBytes, metricsTags).record(amount);
+        gaugeUpdateSensor(recordQueueBytes, metricsTags).record(amount);
     }
 
     @Override
-    public void recordRecordQueueCount(TopicPartition topicPartition, short acks, int amount) {
+    public void incrementRecordQueueCount(TopicPartition topicPartition, short acks, long amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
-        gaugeSensor(recordQueueCount, metricsTags).record(amount);
+        gaugeUpdateSensor(recordQueueCount, metricsTags).record(amount);
     }
 
     @Override
-    public void recordRecordLatency(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordLatency(TopicPartition topicPartition, short acks, long amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         histogramSensor(recordLatency, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
-    public void recordRecordQueueLatency(TopicPartition topicPartition, short acks, int amount) {
+    public void recordRecordQueueLatency(TopicPartition topicPartition, short acks, long amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         histogramSensor(queueLatency, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
-    public void recordRecordRetries(TopicPartition topicPartition, short acks, int amount) {
+    public void addRecordRetries(TopicPartition topicPartition, short acks, long amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         sumSensor(recordRetries, metricsTags).record(amount);
     }
 
     @Override
-    public void recordRecordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount) {
+    public void addRecordFailures(TopicPartition topicPartition, short acks, Throwable error, long amount) {
         String reason = convertToReason(error);
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         metricsTags.put(REASON_LABEL, reason);
@@ -101,7 +101,7 @@ public class DefaultProducerTopicMetricRecorder extends AbstractClientMetricReco
     }
 
     @Override
-    public void recordRecordSuccess(TopicPartition topicPartition, short acks, int amount) {
+    public void addRecordSuccess(TopicPartition topicPartition, short acks, long amount) {
         Map<String, String> metricsTags = getMetricsTags(topicPartition, acks);
         sumSensor(recordSuccess, metricsTags).record(amount);
     }

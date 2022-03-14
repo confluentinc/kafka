@@ -42,12 +42,12 @@ public interface HostProcessMetricRecorder extends ClientMetricRecorder {
 
     String PID_DESCRIPTION = "The process id. Can be used, in conjunction with the client host name to map multiple client instances to the same process.";
 
-    void recordMemoryBytes(long amount);
+    void setMemoryBytes(long amount);
 
-    void recordCpuUserTime(long seconds);
+    void setCpuUserTime(long seconds);
 
-    void recordCpuSystemTime(long seconds);
+    void setCpuSystemTime(long seconds);
 
-    void recordPid(long amount);
+    void setPid(long pid);
 
 }

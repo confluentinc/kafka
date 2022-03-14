@@ -389,7 +389,7 @@ public class NetworkClient implements KafkaClient {
      */
     @Override
     public void close(String nodeId) {
-        clientInstanceMetricRecorder.recordConnectionErrors(ConnectionErrorReason.close, 1);
+        clientInstanceMetricRecorder.addConnectionErrors(ConnectionErrorReason.close, 1);
 
         log.info("Client requested connection close from node {}", nodeId);
         selector.close(nodeId);
@@ -1026,28 +1026,28 @@ public class NetworkClient implements KafkaClient {
 
     private void incrementQueueCountTelemetry(InFlightRequest inFlightRequest) {
         String brokerId = inFlightRequest.destination;
-        clientInstanceMetricRecorder.recordRequestQueueCount(brokerId, 1);
+        clientInstanceMetricRecorder.incrementRequestQueueCount(brokerId, 1);
     }
 
     private void decrementQueueCountTelemetry(InFlightRequest inFlightRequest) {
         String brokerId = inFlightRequest.destination;
-        clientInstanceMetricRecorder.recordRequestQueueCount(brokerId, -1);
+        clientInstanceMetricRecorder.decrementRequestQueueCount(brokerId, -1);
     }
 
     private void incrementRequestSuccessTelemetry(InFlightRequest inFlightRequest) {
         String brokerId = inFlightRequest.destination;
         String requestType = inFlightRequest.request.apiKey().messageType.name;
-        clientInstanceMetricRecorder.recordRequestSuccess(brokerId, requestType, 1);
+        clientInstanceMetricRecorder.addRequestSuccess(brokerId, requestType, 1);
     }
 
     private void incrementRequestErrorsTelemetry(String brokerId, RequestErrorReason reason) {
         // TODO: TELEMETRY_TODO: Need to be able to determine the request type somehow...
         String requestType = "requestType TBA";
-        clientInstanceMetricRecorder.recordRequestErrors(brokerId, requestType, reason, 1);
+        clientInstanceMetricRecorder.addRequestErrors(brokerId, requestType, reason, 1);
     }
 
     private void incrementConnectionErrorsTelemetry(ConnectionErrorReason reason) {
-        clientInstanceMetricRecorder.recordConnectionErrors(reason, 1);
+        clientInstanceMetricRecorder.addConnectionErrors(reason, 1);
     }
 
     /**
@@ -1066,8 +1066,8 @@ public class NetworkClient implements KafkaClient {
                     this.socketSendBuffer,
                     this.socketReceiveBuffer);
 
-            clientInstanceMetricRecorder.recordConnectionCreations(nodeConnectionId, 1);
-            clientInstanceMetricRecorder.recordConnectionActive(1);
+            clientInstanceMetricRecorder.addConnectionCreations(nodeConnectionId, 1);
+            clientInstanceMetricRecorder.incrementConnectionActive(1);
         } catch (IOException e) {
             log.warn("Error connecting to node {}", node, e);
             // Attempt failed, we'll try again after the backoff
@@ -1162,7 +1162,7 @@ public class NetworkClient implements KafkaClient {
             // The disconnect may be the result of stale metadata, so request an update
             metadata.requestUpdate();
 
-            clientInstanceMetricRecorder.recordConnectionActive(-1);
+            clientInstanceMetricRecorder.decrementConnectionActive(1);
         }
 
         @Override

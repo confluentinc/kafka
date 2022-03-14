@@ -82,82 +82,62 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public ConsumerMetricRecorder consumerMetricRecorder() {
         return new ConsumerMetricRecorder() {
             @Override
-            public void recordPollInterval(int amount) {
+            public void recordPollInterval(long amount) {
                 
             }
 
             @Override
-            public void recordPollLast(long seconds) {
+            public void setPollLast(long seconds) {
 
             }
 
             @Override
-            public void recordPollLatency(int amount) {
+            public void recordPollLatency(long amount) {
 
             }
 
             @Override
-            public void recordCommitCount(int amount) {
+            public void addCommitCount(long amount) {
 
             }
 
             @Override
-            public void recordGroupAssignmentStrategy(String strategy) {
+            public void setGroupAssignmentPartitionCount(long amount) {
 
             }
 
             @Override
-            public void recordGroupAssignmentPartitionCount(int amount) {
+            public void setAssignmentPartitionCount(long amount) {
 
             }
 
             @Override
-            public void recordAssignmentPartitionCount(int amount) {
+            public void addGroupRebalanceCount(long amount) {
 
             }
 
             @Override
-            public void recordGroupRebalanceCount(int amount) {
+            public void addGroupErrorCount(String error, long amount) {
 
             }
 
             @Override
-            public void recordGroupErrorCount(String error, int amount) {
+            public void incrementRecordQueueCount(long amount) {
 
             }
 
             @Override
-            public void recordRecordQueueCount(int amount) {
+            public void incrementRecordQueueBytes(long amount) {
 
             }
 
             @Override
-            public void recordRecordQueueBytes(int amount) {
+            public void addRecordApplicationCount(long amount) {
 
             }
 
             @Override
-            public void recordRecordApplicationCount(int amount) {
-
-            }
-
-            @Override
-            public void recordRecordApplicationBytes(int amount) {
-
-            }
-
-            @Override
-            public void recordFetchLatency(int amount) {
-
-            }
-
-            @Override
-            public void recordFetchCount(int amount) {
-
-            }
-
-            @Override
-            public void recordFetchFailures(int amount) {
+            public void addRecordApplicationBytes(long amount) {
 
             }
         };
@@ -167,47 +147,47 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public ClientInstanceMetricRecorder clientInstanceMetricRecorder() {
         return new ClientInstanceMetricRecorder() {
             @Override
-            public void recordConnectionCreations(String brokerId, int amount) {
+            public void addConnectionCreations(String brokerId, long amount) {
 
             }
 
             @Override
-            public void recordConnectionActive(int amount) {
+            public void incrementConnectionActive(long amount) {
 
             }
 
             @Override
-            public void recordConnectionErrors(ConnectionErrorReason reason, int amount) {
+            public void addConnectionErrors(ConnectionErrorReason reason, long amount) {
 
             }
 
             @Override
-            public void recordRequestRtt(String brokerId, String requestType, int amount) {
+            public void recordRequestRtt(String brokerId, String requestType, long amount) {
 
             }
 
             @Override
-            public void recordRequestQueueLatency(String brokerId, int amount) {
+            public void recordRequestQueueLatency(String brokerId, long amount) {
 
             }
 
             @Override
-            public void recordRequestQueueCount(String brokerId, int amount) {
+            public void incrementRequestQueueCount(String brokerId, long amount) {
 
             }
 
             @Override
-            public void recordRequestSuccess(String brokerId, String requestType, int amount) {
+            public void addRequestSuccess(String brokerId, String requestType, long amount) {
 
             }
 
             @Override
-            public void recordRequestErrors(String brokerId, String requestType, RequestErrorReason reason, int amount) {
+            public void addRequestErrors(String brokerId, String requestType, RequestErrorReason reason, long amount) {
 
             }
 
             @Override
-            public void recordIoWaitTime(int amount) {
+            public void recordIoWaitTime(long amount) {
 
             }
         };
@@ -217,22 +197,22 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public HostProcessMetricRecorder hostProcessMetricRecorder() {
         return new HostProcessMetricRecorder() {
             @Override
-            public void recordMemoryBytes(long amount) {
+            public void setMemoryBytes(long amount) {
 
             }
 
             @Override
-            public void recordCpuUserTime(long seconds) {
+            public void setCpuUserTime(long seconds) {
 
             }
 
             @Override
-            public void recordCpuSystemTime(long seconds) {
+            public void setCpuSystemTime(long seconds) {
 
             }
 
             @Override
-            public void recordPid(long amount) {
+            public void setPid(long pid) {
 
             }
         };
@@ -242,22 +222,22 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public ProducerMetricRecorder producerMetricRecorder() {
         return new ProducerMetricRecorder() {
             @Override
-            public void recordRecordQueueBytes(int amount) {
+            public void incrementRecordQueueBytes(long amount) {
 
             }
 
             @Override
-            public void recordRecordQueueMaxBytes(int amount) {
+            public void incrementRecordQueueMaxBytes(long amount) {
 
             }
 
             @Override
-            public void recordRecordQueueCount(int amount) {
+            public void incrementRecordQueueCount(long amount) {
 
             }
 
             @Override
-            public void recordRecordQueueMaxCount(int amount) {
+            public void incrementRecordQueueMaxCount(long amount) {
 
             }
         };
@@ -267,37 +247,37 @@ public class NoopClientTelemetry implements ClientTelemetry {
     public ProducerTopicMetricRecorder producerTopicMetricRecorder() {
         return new ProducerTopicMetricRecorder() {
             @Override
-            public void recordRecordQueueBytes(TopicPartition topicPartition, short acks, int amount) {
+            public void incrementRecordQueueBytes(TopicPartition topicPartition, short acks, long amount) {
 
             }
 
             @Override
-            public void recordRecordQueueCount(TopicPartition topicPartition, short acks, int amount) {
+            public void incrementRecordQueueCount(TopicPartition topicPartition, short acks, long amount) {
 
             }
 
             @Override
-            public void recordRecordLatency(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordLatency(TopicPartition topicPartition, short acks, long amount) {
 
             }
 
             @Override
-            public void recordRecordQueueLatency(TopicPartition topicPartition, short acks, int amount) {
+            public void recordRecordQueueLatency(TopicPartition topicPartition, short acks, long amount) {
 
             }
 
             @Override
-            public void recordRecordRetries(TopicPartition topicPartition, short acks, int amount) {
+            public void addRecordRetries(TopicPartition topicPartition, short acks, long amount) {
 
             }
 
             @Override
-            public void recordRecordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount) {
+            public void addRecordFailures(TopicPartition topicPartition, short acks, Throwable error, long amount) {
 
             }
 
             @Override
-            public void recordRecordSuccess(TopicPartition topicPartition, short acks, int amount) {
+            public void addRecordSuccess(TopicPartition topicPartition, short acks, long amount) {
 
             }
         };

@@ -1772,8 +1772,8 @@ public class Fetcher<K, V> implements Closeable {
                     this.sensors.recordTopicFetchMetrics(entry.getKey(), metric.fetchBytes, metric.fetchRecords);
                 }
 
-                consumerMetricRecorder.recordRecordApplicationBytes(this.fetchMetrics.fetchBytes);
-                consumerMetricRecorder.recordRecordApplicationCount(this.fetchMetrics.fetchRecords);
+                consumerMetricRecorder.addRecordApplicationBytes(this.fetchMetrics.fetchBytes);
+                consumerMetricRecorder.addRecordApplicationCount(this.fetchMetrics.fetchRecords);
             }
         }
 

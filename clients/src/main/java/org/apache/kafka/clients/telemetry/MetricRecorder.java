@@ -22,10 +22,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.MetricNameTemplate;
+import org.apache.kafka.common.metrics.CompoundStat;
 import org.apache.kafka.common.metrics.MeasurableStat;
+import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.CumulativeSum;
@@ -39,7 +40,7 @@ import org.apache.kafka.common.metrics.stats.LinearHistogram;
  * manages for use by the rest of the client layer to access those sensors for manipulation.
  */
 
-public abstract class AbstractClientMetricRecorder implements ClientMetricRecorder {
+public abstract class MetricRecorder implements ClientMetricRecorder {
 
     protected final Metrics metrics;
 
@@ -47,26 +48,32 @@ public abstract class AbstractClientMetricRecorder implements ClientMetricRecord
 
     protected final List<MetricNameTemplate> allTemplates;
 
-    protected AbstractClientMetricRecorder(Metrics metrics) {
+    protected MetricRecorder(Metrics metrics) {
         this.metrics = metrics;
         this.tags = this.metrics.config().tags().keySet();
         this.allTemplates = new ArrayList<>();
     }
 
-    protected Sensor gaugeSensor(MetricName mn) {
-        // TODO: TELEMETRY_TODO: need to implement gauges...
-        return sensor(mn, CumulativeSum::new);
+    protected Sensor gaugeUpdateSensor(MetricName mn) {
+        return sensor(mn, new CumulativeSum());
     }
 
-    protected Sensor gaugeSensor(MetricNameTemplate mnt, Map<String, String> tags) {
+    protected Sensor gaugeUpdateSensor(MetricNameTemplate mnt, Map<String, String> tags) {
         MetricName mn = metrics.metricInstance(mnt, tags);
-        return gaugeSensor(mn);
+        return gaugeUpdateSensor(mn);
+    }
+
+    protected Sensor gaugeReplaceSensor(MetricName mn) {
+        return sensor(mn, new SimpleGauge());
+    }
+
+    protected Sensor gaugeReplaceSensor(MetricNameTemplate mnt, Map<String, String> tags) {
+        MetricName mn = metrics.metricInstance(mnt, tags);
+        return gaugeReplaceSensor(mn);
     }
 
     protected Sensor histogramSensor(MetricName mn, int maxBin, int numBin) {
-        Sensor sensor = metrics.sensor(mn.name());
-        sensor.add(new LinearHistogram(numBin, maxBin, mn));
-        return sensor;
+        return sensor(mn, new LinearHistogram(numBin, maxBin, mn));
     }
 
     protected Sensor histogramSensor(MetricNameTemplate mnt, Map<String, String> tags, int numBin, int maxBin) {
@@ -74,13 +81,8 @@ public abstract class AbstractClientMetricRecorder implements ClientMetricRecord
         return histogramSensor(mn, maxBin, numBin);
     }
 
-    protected Sensor stringSensor(MetricName mn) {
-        // TODO: TELEMETRY_TODO: how to send a string as a metric?
-        return sensor(mn, CumulativeSum::new);
-    }
-
     protected Sensor sumSensor(MetricName mn) {
-        return sensor(mn, CumulativeSum::new);
+        return sensor(mn, new CumulativeSum());
     }
 
     protected Sensor sumSensor(MetricNameTemplate mnt, Map<String, String> tags) {
@@ -99,7 +101,7 @@ public abstract class AbstractClientMetricRecorder implements ClientMetricRecord
         return template;
     }
 
-    protected Set<String> appendTags(Set<String> existingTags, String... newTags) {
+    protected static Set<String> appendTags(Set<String> existingTags, String... newTags) {
         // When creating a tag set in the Metrics class, they are kept in order of addition, hence
         // the use of the LinkedHashSet here...
         Set<String> set = new LinkedHashSet<>();
@@ -113,10 +115,36 @@ public abstract class AbstractClientMetricRecorder implements ClientMetricRecord
         return set;
     }
 
-    private Sensor sensor(MetricName mn, Supplier<MeasurableStat> measurableStatSupplier) {
+    private Sensor sensor(MetricName mn, MeasurableStat measurableStat) {
         Sensor sensor = metrics.sensor(mn.name());
-        sensor.add(mn, measurableStatSupplier.get());
+        sensor.add(mn, measurableStat);
         return sensor;
+    }
+
+    private Sensor sensor(MetricName mn, CompoundStat compoundStat) {
+        Sensor sensor = metrics.sensor(mn.name());
+        sensor.add(compoundStat);
+        return sensor;
+    }
+
+    static class SimpleGauge implements MeasurableStat {
+
+        private double value;
+
+        @Override
+        public void record(MetricConfig config, double value, long now) {
+            value = value;
+        }
+
+        @Override
+        public double measure(MetricConfig config, long now) {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return "SimpleGauge(total=" + value + ")";
+        }
     }
 
 }

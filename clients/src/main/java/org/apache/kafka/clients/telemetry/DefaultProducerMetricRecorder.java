@@ -26,7 +26,7 @@ import org.apache.kafka.common.metrics.Sensor;
  * @see ProducerTopicMetricRecorder for details on recording topic-level metrics.
  */
 
-public class DefaultProducerMetricRecorder extends AbstractClientMetricRecorder implements ProducerMetricRecorder {
+public class DefaultProducerMetricRecorder extends MetricRecorder implements ProducerMetricRecorder {
 
     private static final String GROUP_NAME = "producer-telemetry";
 
@@ -48,23 +48,23 @@ public class DefaultProducerMetricRecorder extends AbstractClientMetricRecorder 
     }
 
     @Override
-    public void recordRecordQueueBytes(int amount) {
-        gaugeSensor(recordQueueBytes).record(amount);
+    public void incrementRecordQueueBytes(long amount) {
+        gaugeUpdateSensor(recordQueueBytes).record(amount);
     }
 
     @Override
-    public void recordRecordQueueMaxBytes(int amount) {
-        gaugeSensor(recordQueueMaxBytes).record(amount);
+    public void incrementRecordQueueMaxBytes(long amount) {
+        gaugeUpdateSensor(recordQueueMaxBytes).record(amount);
     }
 
     @Override
-    public void recordRecordQueueCount(int amount) {
-        gaugeSensor(recordQueueCount).record(amount);
+    public void incrementRecordQueueCount(long amount) {
+        gaugeUpdateSensor(recordQueueCount).record(amount);
     }
 
     @Override
-    public void recordRecordQueueMaxCount(int amount) {
-        gaugeSensor(recordQeueMaxCount).record(amount);
+    public void incrementRecordQueueMaxCount(long amount) {
+        gaugeUpdateSensor(recordQeueMaxCount).record(amount);
     }
 
 }

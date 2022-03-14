@@ -29,7 +29,7 @@ import org.apache.kafka.common.metrics.Sensor;
  * A recorder that exposes {@link Sensor}s used to record the client instance-level metrics.
  */
 
-public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRecorder implements ClientInstanceMetricRecorder {
+public class DefaultClientInstanceMetricRecorder extends MetricRecorder implements ClientInstanceMetricRecorder {
 
     private static final String GROUP_NAME = "client-telemetry";
 
@@ -74,61 +74,61 @@ public class DefaultClientInstanceMetricRecorder extends AbstractClientMetricRec
     }
 
     @Override
-    public void recordConnectionCreations(String brokerId, int increment) {
+    public void addConnectionCreations(String brokerId, long amount) {
         Map<String, String> metricsTags = Collections.singletonMap(BROKER_ID_LABEL, brokerId);
-        sumSensor(connectionCreations, metricsTags).record(increment);
+        sumSensor(connectionCreations, metricsTags).record(amount);
     }
 
     @Override
-    public void recordConnectionActive(int increment) {
-        gaugeSensor(connectionCount).record(increment);
+    public void incrementConnectionActive(long amount) {
+        gaugeUpdateSensor(connectionCount).record(amount);
     }
 
     @Override
-    public void recordConnectionErrors(ConnectionErrorReason reason, int increment) {
+    public void addConnectionErrors(ConnectionErrorReason reason, long amount) {
         Map<String, String> metricsTags = Collections.singletonMap(REASON_LABEL, reason.toString());
-        sumSensor(connectionErrors, metricsTags).record(increment);
+        sumSensor(connectionErrors, metricsTags).record(amount);
     }
 
     @Override
-    public void recordRequestRtt(String brokerId, String requestType, int increment) {
+    public void recordRequestRtt(String brokerId, String requestType, long amount) {
         Map<String, String> metricsTags = new HashMap<>();
         metricsTags.put(BROKER_ID_LABEL, brokerId);
         metricsTags.put(REQUEST_TYPE_LABEL, requestType);
-        histogramSensor(requestRtt, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(increment);
+        histogramSensor(requestRtt, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
-    public void recordRequestQueueLatency(String brokerId, int increment) {
+    public void recordRequestQueueLatency(String brokerId, long amount) {
         Map<String, String> metricsTags = Collections.singletonMap(BROKER_ID_LABEL, brokerId);
-        histogramSensor(requestQueueLatency, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(increment);
+        histogramSensor(requestQueueLatency, metricsTags, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 
     @Override
-    public void recordRequestQueueCount(String brokerId, int increment) {
+    public void incrementRequestQueueCount(String brokerId, long amount) {
         Map<String, String> metricsTags = Collections.singletonMap(BROKER_ID_LABEL, brokerId);
-        gaugeSensor(requestQueueCount, metricsTags).record(increment);
+        gaugeUpdateSensor(requestQueueCount, metricsTags).record(amount);
     }
 
     @Override
-    public void recordRequestSuccess(String brokerId, String requestType, int increment) {
+    public void addRequestSuccess(String brokerId, String requestType, long amount) {
         Map<String, String> metricsTags = new HashMap<>();
         metricsTags.put(BROKER_ID_LABEL, brokerId);
         metricsTags.put(REQUEST_TYPE_LABEL, requestType);
-        sumSensor(requestSuccess, metricsTags).record(increment);
+        sumSensor(requestSuccess, metricsTags).record(amount);
     }
 
     @Override
-    public void recordRequestErrors(String brokerId, String requestType, RequestErrorReason reason, int increment) {
+    public void addRequestErrors(String brokerId, String requestType, RequestErrorReason reason, long amount) {
         Map<String, String> metricsTags = new HashMap<>();
         metricsTags.put(BROKER_ID_LABEL, brokerId);
         metricsTags.put(REQUEST_TYPE_LABEL, requestType);
         metricsTags.put(REASON_LABEL, reason.toString());
-        sumSensor(requestErrors, metricsTags).record(increment);
+        sumSensor(requestErrors, metricsTags).record(amount);
     }
 
     @Override
-    public void recordIoWaitTime(int increment) {
-        histogramSensor(ioWaitTime, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(increment);
+    public void recordIoWaitTime(long amount) {
+        histogramSensor(ioWaitTime, LATENCY_HISTOGRAM_NUM_BIN, LATENCY_HISTOGRAM_MAX_BIN).record(amount);
     }
 }

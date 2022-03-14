@@ -41,12 +41,28 @@ public interface ProducerMetricRecorder extends ClientMetricRecorder {
 
     String RECORD_QUEUE_MAX_COUNT_DESCRIPTION = "Maximum amount of records allowed on the producer queue(s).";
 
-    void recordRecordQueueBytes(int amount);
+    void incrementRecordQueueBytes(long amount);
 
-    void recordRecordQueueMaxBytes(int amount);
+    default void decrementRecordQueueBytes(long amount) {
+        incrementRecordQueueBytes(-amount);
+    }
 
-    void recordRecordQueueCount(int amount);
+    void incrementRecordQueueMaxBytes(long amount);
 
-    void recordRecordQueueMaxCount(int amount);
+    default void decrementRecordQueueMaxBytes(long amount) {
+        incrementRecordQueueMaxBytes(-amount);
+    }
+
+    void incrementRecordQueueCount(long amount);
+
+    default void decrementRecordQueueCount(long amount) {
+        incrementRecordQueueCount(-amount);
+    }
+
+    void incrementRecordQueueMaxCount(long amount);
+
+    default void decrementRecordQueueMaxCount(long amount) {
+        incrementRecordQueueMaxCount(-amount);
+    }
 
 }

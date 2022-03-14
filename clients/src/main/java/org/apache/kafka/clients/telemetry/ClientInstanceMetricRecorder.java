@@ -74,22 +74,30 @@ public interface ClientInstanceMetricRecorder extends ClientMetricRecorder {
 
     String REQUEST_TYPE_LABEL = "request_type";
 
-    void recordConnectionCreations(String brokerId, int amount);
+    void addConnectionCreations(String brokerId, long amount);
 
-    void recordConnectionActive(int amount);
+    void incrementConnectionActive(long amount);
 
-    void recordConnectionErrors(ConnectionErrorReason reason, int amount);
+    default void decrementConnectionActive(long amount) {
+        incrementConnectionActive(-amount);
+    }
 
-    void recordRequestRtt(String brokerId, String requestType, int amount);
+    void addConnectionErrors(ConnectionErrorReason reason, long amount);
 
-    void recordRequestQueueLatency(String brokerId, int amount);
+    void recordRequestRtt(String brokerId, String requestType, long amount);
 
-    void recordRequestQueueCount(String brokerId, int amount);
+    void recordRequestQueueLatency(String brokerId, long amount);
 
-    void recordRequestSuccess(String brokerId, String requestType, int amount);
+    void incrementRequestQueueCount(String brokerId, long amount);
 
-    void recordRequestErrors(String brokerId, String requestType, RequestErrorReason reason, int amount);
+    default void decrementRequestQueueCount(String brokerId, long amount) {
+        incrementRequestQueueCount(brokerId, -amount);
+    }
 
-    void recordIoWaitTime(int amount);
+    void addRequestSuccess(String brokerId, String requestType, long amount);
+
+    void addRequestErrors(String brokerId, String requestType, RequestErrorReason reason, long amount);
+
+    void recordIoWaitTime(long amount);
 
 }

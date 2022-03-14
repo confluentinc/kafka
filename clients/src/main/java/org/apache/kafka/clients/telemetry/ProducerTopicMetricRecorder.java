@@ -64,17 +64,25 @@ public interface ProducerTopicMetricRecorder extends ClientMetricRecorder {
 
     String RECORD_SUCCESS_DESCRIPTION = "Number of records that have been successfully produced.";
 
-    void recordRecordQueueBytes(TopicPartition topicPartition, short acks, int amount);
+    void incrementRecordQueueBytes(TopicPartition topicPartition, short acks, long amount);
 
-    void recordRecordQueueCount(TopicPartition topicPartition, short acks, int amount);
+    default void decrementRecordQueueBytes(TopicPartition topicPartition, short acks, long amount) {
+        incrementRecordQueueBytes(topicPartition, acks, -amount);
+    }
 
-    void recordRecordLatency(TopicPartition topicPartition, short acks, int amount);
+    void incrementRecordQueueCount(TopicPartition topicPartition, short acks, long amount);
 
-    void recordRecordQueueLatency(TopicPartition topicPartition, short acks, int amount);
+    default void decrementRecordQueueCount(TopicPartition topicPartition, short acks, long amount) {
+        incrementRecordQueueCount(topicPartition, acks, -amount);
+    }
 
-    void recordRecordRetries(TopicPartition topicPartition, short acks, int amount);
+    void recordRecordLatency(TopicPartition topicPartition, short acks, long amount);
 
-    void recordRecordFailures(TopicPartition topicPartition, short acks, Throwable error, int amount);
+    void recordRecordQueueLatency(TopicPartition topicPartition, short acks, long amount);
 
-    void recordRecordSuccess(TopicPartition topicPartition, short acks, int amount);
+    void addRecordRetries(TopicPartition topicPartition, short acks, long amount);
+
+    void addRecordFailures(TopicPartition topicPartition, short acks, Throwable error, long amount);
+
+    void addRecordSuccess(TopicPartition topicPartition, short acks, long amount);
 }

@@ -987,7 +987,7 @@ public class Sender implements Runnable {
                     Sensor topicCompressionRate = Objects.requireNonNull(this.metrics.getSensor(topicCompressionRateName));
                     topicCompressionRate.record(batch.compressionRatio());
 
-                    producerTopicMetricRecorder.recordRecordSuccess(batch.topicPartition, acks, batch.recordCount);
+                    producerTopicMetricRecorder.addRecordSuccess(batch.topicPartition, acks, batch.recordCount);
 
                     // global metrics
                     this.batchSizeSensor.record(batch.estimatedSizeInBytes(), now);
@@ -1008,7 +1008,7 @@ public class Sender implements Runnable {
             if (topicRetrySensor != null)
                 topicRetrySensor.record(count, now);
 
-            producerTopicMetricRecorder.recordRecordRetries(topicPartition, acks, count);
+            producerTopicMetricRecorder.addRecordRetries(topicPartition, acks, count);
         }
 
         public void recordErrors(TopicPartition topicPartition, int count, Throwable error) {
@@ -1019,7 +1019,7 @@ public class Sender implements Runnable {
             if (topicErrorSensor != null)
                 topicErrorSensor.record(count, now);
 
-            producerTopicMetricRecorder.recordRecordFailures(topicPartition, acks, error, count);
+            producerTopicMetricRecorder.addRecordFailures(topicPartition, acks, error, count);
         }
 
         public void recordLatency(String node, long latency) {

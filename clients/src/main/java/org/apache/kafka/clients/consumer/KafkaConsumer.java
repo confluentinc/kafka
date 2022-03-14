@@ -1140,7 +1140,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     metadata.requestUpdateForNewTopics();
             }
 
-            consumerMetricRecorder.recordAssignmentPartitionCount(partitions.size());
+            consumerMetricRecorder.setAssignmentPartitionCount(partitions.size());
         } finally {
             release();
         }
@@ -1240,7 +1240,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         try {
             this.kafkaConsumerMetrics.recordPollStart(timer.currentTimeMs());
             Duration timeSinceLastPollMs = Duration.ofMillis(this.kafkaConsumerMetrics.timeSinceLastPollMs());
-            this.consumerMetricRecorder.recordPollLast(timeSinceLastPollMs.getSeconds());
+            this.consumerMetricRecorder.setPollLast(timeSinceLastPollMs.getSeconds());
 
             if (this.subscriptions.hasNoSubscriptionOrUserAssignment()) {
                 throw new IllegalStateException("Consumer is not subscribed to any topics or assigned any partitions");
@@ -1523,7 +1523,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             }
         } finally {
             kafkaConsumerMetrics.recordCommitSync(time.nanoseconds() - commitStart);
-            consumerMetricRecorder.recordCommitCount(offsets.size());
+            consumerMetricRecorder.addCommitCount(offsets.size());
             release();
         }
     }

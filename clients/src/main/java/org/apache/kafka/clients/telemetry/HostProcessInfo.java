@@ -27,8 +27,6 @@ public class HostProcessInfo {
 
     private final com.sun.management.OperatingSystemMXBean osMxBean;
 
-    private long lastCpuUserTimeSec;
-
     public HostProcessInfo() {
         OperatingSystemMXBean bean = ManagementFactory.getOperatingSystemMXBean();
 
@@ -44,12 +42,8 @@ public class HostProcessInfo {
             long nanos = osMxBean.getProcessCpuTime();
 
             // If not supported, value returned is -1.
-            if (nanos != -1) {
-                long currCpuUserTimeSec = Duration.ofNanos(nanos).getSeconds();
-                long diff = currCpuUserTimeSec - lastCpuUserTimeSec;
-                lastCpuUserTimeSec = currCpuUserTimeSec;
-                return Optional.of(diff);
-            }
+            if (nanos != -1)
+                return Optional.of(Duration.ofNanos(nanos).getSeconds());
         }
 
         return Optional.empty();
@@ -73,10 +67,10 @@ public class HostProcessInfo {
     }
 
     public void recordHostMetrics(HostProcessMetricRecorder recorder) {
-        cpuSystemTimeSec().ifPresent(recorder::recordCpuSystemTime);
-        cpuUserTimeSec().ifPresent(recorder::recordCpuUserTime);
-        pid().ifPresent(recorder::recordPid);
-        processMemoryBytes().ifPresent(recorder::recordMemoryBytes);
+        cpuSystemTimeSec().ifPresent(recorder::setCpuSystemTime);
+        cpuUserTimeSec().ifPresent(recorder::setCpuUserTime);
+        pid().ifPresent(recorder::setPid);
+        processMemoryBytes().ifPresent(recorder::setMemoryBytes);
     }
 
 }

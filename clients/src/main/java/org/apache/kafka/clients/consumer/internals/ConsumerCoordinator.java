@@ -294,9 +294,9 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     private Exception invokePartitionsAssigned(final Set<TopicPartition> assignedPartitions) {
         log.info("Adding newly assigned partitions: {}", Utils.join(assignedPartitions, ", "));
 
-        consumerMetricRecorder.recordGroupRebalanceCount(1);
-        consumerMetricRecorder.recordAssignmentPartitionCount(assignedPartitions.size());
-        consumerMetricRecorder.recordGroupAssignmentPartitionCount(assignedPartitions.size());
+        consumerMetricRecorder.addGroupRebalanceCount(1);
+        consumerMetricRecorder.setAssignmentPartitionCount(assignedPartitions.size());
+        consumerMetricRecorder.setGroupAssignmentPartitionCount(assignedPartitions.size());
 
         ConsumerRebalanceListener listener = subscriptions.rebalanceListener();
         try {
