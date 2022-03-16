@@ -82,6 +82,10 @@ public class CommonClientConfigs {
     public static final String RETRY_BACKOFF_MS_CONFIG = "retry.backoff.ms";
     public static final String RETRY_BACKOFF_MS_DOC = "The amount of time to wait before attempting to retry a failed request to a given topic partition. This avoids repeatedly sending requests in a tight loop under some failure scenarios.";
 
+    public static final String ENABLE_METRICS_PUSH_CONFIG = "enable.metrics.push";
+    public static final String ENABLE_METRICS_PUSH_DOC = "Kafka client telemetry provides Kafka operators improved visibility over the behavior and internals of the clients that use the cluster." +
+        " Setting this to false will disable Kafka client telemetry.";
+
     public static final String METRICS_SAMPLE_WINDOW_MS_CONFIG = "metrics.sample.window.ms";
     public static final String METRICS_SAMPLE_WINDOW_MS_DOC = "The window of time a metrics sample is computed over.";
 
@@ -194,8 +198,9 @@ public class CommonClientConfigs {
     public static Map<String, Object> postProcessReconnectBackoffConfigs(AbstractConfig config,
                                                     Map<String, Object> parsedValues) {
         HashMap<String, Object> rval = new HashMap<>();
-        if ((!config.originals().containsKey(RECONNECT_BACKOFF_MAX_MS_CONFIG)) &&
-                config.originals().containsKey(RECONNECT_BACKOFF_MS_CONFIG)) {
+        Map<String, Object> originalConfig = config.originals();
+        if ((!originalConfig.containsKey(RECONNECT_BACKOFF_MAX_MS_CONFIG)) &&
+            originalConfig.containsKey(RECONNECT_BACKOFF_MS_CONFIG)) {
             log.debug("Disabling exponential reconnect backoff because {} is set, but {} is not.",
                     RECONNECT_BACKOFF_MS_CONFIG, RECONNECT_BACKOFF_MAX_MS_CONFIG);
             rval.put(RECONNECT_BACKOFF_MAX_MS_CONFIG, parsedValues.get(RECONNECT_BACKOFF_MS_CONFIG));

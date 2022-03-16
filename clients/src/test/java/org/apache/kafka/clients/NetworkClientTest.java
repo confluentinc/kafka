@@ -945,7 +945,7 @@ public class NetworkClientTest {
         NetworkClient client = new NetworkClient(metadataUpdater, null, selector, "mock", Integer.MAX_VALUE,
                 reconnectBackoffMsTest, reconnectBackoffMaxMsTest, 64 * 1024, 64 * 1024,
                 defaultRequestTimeoutMs, connectionSetupTimeoutMsTest, connectionSetupTimeoutMaxMsTest,
-                time, false, new ApiVersions(), null, new LogContext(), mockHostResolver);
+                time, false, new ApiVersions(), null, null, new LogContext(), mockHostResolver);
 
         // Connect to one the initial addresses, then change the addresses and disconnect
         client.ready(node, time.milliseconds());
@@ -989,7 +989,7 @@ public class NetworkClientTest {
         NetworkClient client = new NetworkClient(metadataUpdater, null, selector, "mock", Integer.MAX_VALUE,
                 reconnectBackoffMsTest, reconnectBackoffMaxMsTest, 64 * 1024, 64 * 1024,
                 defaultRequestTimeoutMs, connectionSetupTimeoutMsTest, connectionSetupTimeoutMaxMsTest,
-                time, false, new ApiVersions(), null, new LogContext(), mockHostResolver);
+                time, false, new ApiVersions(), null, null, new LogContext(), mockHostResolver);
 
         // First connection attempt should fail
         client.ready(node, time.milliseconds());
@@ -1030,7 +1030,7 @@ public class NetworkClientTest {
         NetworkClient client = new NetworkClient(metadataUpdater, null, selector, "mock", Integer.MAX_VALUE,
                 reconnectBackoffMsTest, reconnectBackoffMaxMsTest, 64 * 1024, 64 * 1024,
                 defaultRequestTimeoutMs, connectionSetupTimeoutMsTest, connectionSetupTimeoutMaxMsTest,
-                time, false, new ApiVersions(), null, new LogContext(), mockHostResolver);
+                time, false, new ApiVersions(), null, null, new LogContext(), mockHostResolver);
 
         // Connect to one the initial addresses, then change the addresses and disconnect
         client.ready(node, time.milliseconds());
@@ -1095,6 +1095,27 @@ public class NetworkClientTest {
         while (!client.ready(node0, time.milliseconds()))
             client.poll(1, time.milliseconds());
         assertTrue(client.isReady(node0, time.milliseconds()));
+    }
+
+    @Test
+    public void testConnectionDoesNotRemainStuckInCheckingApiVersionsStateIfChannelNeverBecomesReady() {
+        final Cluster cluster = TestUtils.clusterWith(1);
+        final Node node = cluster.nodeById(0);
+
+        // Channel is ready by default so we mark it as not ready.
+        client.ready(node, time.milliseconds());
+        selector.channelNotReady(node.idString());
+
+        // Channel should not be ready.
+        client.poll(0, time.milliseconds());
+        assertFalse(NetworkClientUtils.isReady(client, node, time.milliseconds()));
+
+        // Connection should time out if the channel does not become ready within
+        // the connection setup timeout. This ensures that the client does not remain
+        // stuck in the CHECKING_API_VERSIONS state.
+        time.sleep((long) (connectionSetupTimeoutMsTest * 1.2) + 1);
+        client.poll(0, time.milliseconds());
+        assertTrue(client.connectionFailed(node));
     }
 
     private RequestHeader parseHeader(ByteBuffer buffer) {

@@ -16,11 +16,15 @@
  */
 package org.apache.kafka.clients.producer;
 
+import static org.apache.kafka.clients.telemetry.ClientTelemetry.MAX_TERMINAL_PUSH_WAIT_MS;
+
+import java.util.Optional;
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.ClientUtils;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.NetworkClient;
+import org.apache.kafka.clients.telemetry.ClientTelemetry;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -30,6 +34,7 @@ import org.apache.kafka.clients.producer.internals.KafkaProducerMetrics;
 import org.apache.kafka.clients.producer.internals.ProducerInterceptors;
 import org.apache.kafka.clients.producer.internals.ProducerMetadata;
 import org.apache.kafka.clients.producer.internals.ProducerMetrics;
+import org.apache.kafka.clients.telemetry.ClientTelemetryUtils;
 import org.apache.kafka.clients.producer.internals.RecordAccumulator;
 import org.apache.kafka.clients.producer.internals.Sender;
 import org.apache.kafka.clients.producer.internals.TransactionManager;
@@ -258,6 +263,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private final ApiVersions apiVersions;
     private final TransactionManager transactionManager;
 
+    private final ClientTelemetry clientTelemetry;
+
     /**
      * A producer is instantiated by providing a set of key-value pairs as configuration. Valid configuration strings
      * are documented <a href="http://kafka.apache.org/documentation.html#producerconfigs">here</a>. Values can be
@@ -356,6 +363,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     config.originalsWithPrefix(CommonClientConfigs.METRICS_CONTEXT_PREFIX));
             this.metrics = new Metrics(metricConfig, reporters, time, metricsContext);
             this.producerMetrics = new KafkaProducerMetrics(metrics);
+            this.clientTelemetry = ClientTelemetryUtils.create(config, time, clientId);
             this.partitioner = config.getConfiguredInstance(
                     ProducerConfig.PARTITIONER_CLASS_CONFIG,
                     Partitioner.class,
@@ -397,6 +405,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
             this.apiVersions = new ApiVersions();
             this.transactionManager = configureTransactionState(config, logContext);
+            //TODO: configureAcks method is removed in the recent versions, so following is the temp code to get the acks.
+            // make sure this is the right method to get the acks.
+            short acks = Short.parseShort(config.getString(ProducerConfig.ACKS_CONFIG));
             this.accumulator = new RecordAccumulator(logContext,
                     config.getInt(ProducerConfig.BATCH_SIZE_CONFIG),
                     this.compressionType,
@@ -408,7 +419,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     time,
                     apiVersions,
                     transactionManager,
-                    new BufferPool(this.totalMemorySize, config.getInt(ProducerConfig.BATCH_SIZE_CONFIG), metrics, time, PRODUCER_METRIC_GROUP_NAME));
+                    new BufferPool(this.totalMemorySize, config.getInt(ProducerConfig.BATCH_SIZE_CONFIG), metrics, time, PRODUCER_METRIC_GROUP_NAME),
+                    acks,
+                    clientTelemetry);
 
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(
                     config.getList(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG),
@@ -442,7 +455,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
     // visible for testing
     Sender newSender(LogContext logContext, KafkaClient kafkaClient, ProducerMetadata metadata) {
-        int maxInflightRequests = configureInflightRequests(producerConfig);
+        int maxInflightRequests = producerConfig.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION);
         int requestTimeoutMs = producerConfig.getInt(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG);
         ChannelBuilder channelBuilder = ClientUtils.createChannelBuilder(producerConfig, time, logContext);
         ProducerMetrics metricsRegistry = new ProducerMetrics(this.metrics);
@@ -464,8 +477,10 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 true,
                 apiVersions,
                 throttleTimeSensor,
+                clientTelemetry,
                 logContext);
-        short acks = configureAcks(producerConfig, log);
+
+        short acks = Short.parseShort(producerConfig.getString(ProducerConfig.ACKS_CONFIG));
         return new Sender(logContext,
                 client,
                 metadata,
@@ -475,6 +490,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 acks,
                 producerConfig.getInt(ProducerConfig.RETRIES_CONFIG),
                 metricsRegistry.senderMetrics,
+                clientTelemetry,
                 time,
                 requestTimeoutMs,
                 producerConfig.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG),
@@ -511,16 +527,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
     private TransactionManager configureTransactionState(ProducerConfig config,
                                                          LogContext logContext) {
-
         TransactionManager transactionManager = null;
 
-        final boolean userConfiguredIdempotence = config.originals().containsKey(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG);
-        final boolean userConfiguredTransactions = config.originals().containsKey(ProducerConfig.TRANSACTIONAL_ID_CONFIG);
-        if (userConfiguredTransactions && !userConfiguredIdempotence)
-            log.info("Overriding the default {} to true since {} is specified.", ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG,
-                    ProducerConfig.TRANSACTIONAL_ID_CONFIG);
-
-        if (config.idempotenceEnabled()) {
+        if (config.getBoolean(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG)) {
             final String transactionalId = config.getString(ProducerConfig.TRANSACTIONAL_ID_CONFIG);
             final int transactionTimeoutMs = config.getInt(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG);
             final long retryBackoffMs = config.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG);
@@ -538,28 +547,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 log.info("Instantiated an idempotent producer.");
         }
         return transactionManager;
-    }
-
-    private static int configureInflightRequests(ProducerConfig config) {
-        if (config.idempotenceEnabled() && 5 < config.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION)) {
-            throw new ConfigException("Must set " + ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION + " to at most 5" +
-                    " to use the idempotent producer.");
-        }
-        return config.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION);
-    }
-
-    private static short configureAcks(ProducerConfig config, Logger log) {
-        boolean userConfiguredAcks = config.originals().containsKey(ProducerConfig.ACKS_CONFIG);
-        short acks = Short.parseShort(config.getString(ProducerConfig.ACKS_CONFIG));
-
-        if (config.idempotenceEnabled()) {
-            if (!userConfiguredAcks)
-                log.info("Overriding the default {} to all since idempotence is enabled.", ProducerConfig.ACKS_CONFIG);
-            else if (acks != -1)
-                throw new ConfigException("Must set " + ProducerConfig.ACKS_CONFIG + " to all in order to use the idempotent " +
-                        "producer. Otherwise we cannot guarantee idempotence.");
-        }
-        return acks;
     }
 
     /**
@@ -961,9 +948,10 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             // producer callback will make sure to call both 'callback' and interceptor callback
             Callback interceptCallback = new InterceptorCallback<>(callback, this.interceptors, tp);
 
-            if (transactionManager != null && transactionManager.isTransactional()) {
-                transactionManager.failIfNotReadyForSend();
+            if (transactionManager != null) {
+                transactionManager.maybeAddPartition(tp);
             }
+
             RecordAccumulator.RecordAppendResult result = accumulator.append(tp, timestamp, serializedKey,
                     serializedValue, headers, interceptCallback, remainingWaitMs, true, nowMs);
 
@@ -982,9 +970,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     serializedValue, headers, interceptCallback, remainingWaitMs, false, nowMs);
             }
 
-            if (transactionManager != null && transactionManager.isTransactional())
-                transactionManager.maybeAddPartitionToTransaction(tp);
-
             if (result.batchIsFull || result.newBatchCreated) {
                 log.trace("Waking up the sender since topic {} partition {} is either full or getting a new batch", record.topic(), partition);
                 this.sender.wakeup();
@@ -995,10 +980,22 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             // for other exceptions throw directly
         } catch (ApiException e) {
             log.debug("Exception occurred during message send:", e);
-            if (callback != null)
-                callback.onCompletion(null, e);
+            // producer callback will make sure to call both 'callback' and interceptor callback
+            if (tp == null) {
+                // set topicPartition to -1 when null
+                tp = ProducerInterceptors.extractTopicPartition(record);
+            }
+
+            Callback interceptCallback = new InterceptorCallback<>(callback, this.interceptors, tp);
+
+            // The onCompletion callback does expect a non-null metadata, but one will be created inside
+            // the interceptor's onCompletion implementation before the user's callback is invoked.
+            interceptCallback.onCompletion(null, e);
             this.errors.record();
             this.interceptors.onSendError(record, tp, e);
+            if (transactionManager != null) {
+                transactionManager.maybeTransitionToErrorState(e);
+            }
             return new FutureFailure(e);
         } catch (InterruptedException e) {
             this.errors.record();
@@ -1169,6 +1166,43 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     }
 
     /**
+     * Determines the client's unique client instance ID used for telemetry. This ID is unique to
+     * this specific client instance and will not change after it is initially generated.
+     * The ID is useful for correlating client operations with telemetry sent to the broker and
+     * to its eventual monitoring destination(s).
+     *
+     * If telemetry is enabled, this will first require a connection to the cluster to generate
+     * the unique client instance ID. This method waits up to {@code timeout} for the producer
+     * to complete the request.
+     *
+     * If telemetry is disabled, the method will immediately return {@code Optional.empty()} or
+     * equivalent.
+     *
+     * Client telemetry is controlled by the {@link ProducerConfig#ENABLE_METRICS_PUSH_CONFIG}
+     * configuration option.
+     *
+     * @param timeout The maximum time to wait for producer to determine its client instance ID.
+     *                The value should be non-negative. Specifying a timeout of zero means do not
+     *                wait for the initial request to complete if it hasn't already.
+     * @throws InterruptException If the thread is interrupted while blocked.
+     * @throws KafkaException If an unexpected error occurs while trying to determine the client
+     *                        instance ID, though this error does not necessarily imply the
+     *                        producer is otherwise unusable.
+     * @throws IllegalArgumentException If the {@code timeout} is negative.
+     * @return Human-readable string representation of the client instance ID if telemetry enabled,
+     * <i>empty</i> Optional if not
+     */
+    @Override
+    public Optional<String> clientInstanceId(Duration timeout) {
+        return clientTelemetry.clientInstanceId(timeout);
+    }
+
+    /** For testing **/
+    public ClientTelemetry clientTelemetry() {
+        return clientTelemetry;
+    }
+
+    /**
      * Get the full set of internal metrics maintained by the producer.
      */
     @Override
@@ -1224,6 +1258,13 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             throw new IllegalArgumentException("The timeout cannot be negative.");
         log.info("Closing the Kafka producer with timeoutMillis = {} ms.", timeoutMs);
 
+        // This starts the client telemetry termination process which will attempt to send a
+        // terminal telemetry push, if possible.
+        //
+        // This is a separate step from actually closing the instance, which we do further down.
+        if (clientTelemetry != null)
+            clientTelemetry.initiateClose(Duration.ofMillis(Math.min(MAX_TERMINAL_PUSH_WAIT_MS, timeoutMs)));
+
         // this will keep track of the first encountered exception
         AtomicReference<Throwable> firstException = new AtomicReference<>();
         boolean invokedFromCallback = Thread.currentThread() == this.ioThread;
@@ -1263,6 +1304,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
         Utils.closeQuietly(interceptors, "producer interceptors", firstException);
         Utils.closeQuietly(producerMetrics, "producer metrics wrapper", firstException);
+        Utils.closeQuietly(clientTelemetry, "client telemetry", firstException);
         Utils.closeQuietly(metrics, "producer metrics", firstException);
         Utils.closeQuietly(keySerializer, "producer keySerializer", firstException);
         Utils.closeQuietly(valueSerializer, "producer valueSerializer", firstException);
@@ -1295,10 +1337,17 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     private int partition(ProducerRecord<K, V> record, byte[] serializedKey, byte[] serializedValue, Cluster cluster) {
         Integer partition = record.partition();
-        return partition != null ?
-                partition :
-                partitioner.partition(
-                        record.topic(), record.key(), serializedKey, record.value(), serializedValue, cluster);
+        if (partition != null) {
+            return partition;
+        }
+
+        int customPartition = partitioner.partition(
+                record.topic(), record.key(), serializedKey, record.value(), serializedValue, cluster);
+        if (customPartition < 0) {
+            throw new IllegalArgumentException(String.format(
+                    "The partitioner generated an invalid partition number: %d. Partition number should always be non-negative.", customPartition));
+        }
+        return customPartition;
     }
 
     private void throwIfInvalidGroupMetadata(ConsumerGroupMetadata groupMetadata) {

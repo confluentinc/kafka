@@ -67,6 +67,7 @@ import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.metadata.BrokerHeartbeatReply;
 import org.apache.kafka.metadata.BrokerRegistration;
+import org.apache.kafka.metadata.KafkaConfigSchema;
 import org.apache.kafka.metadata.PartitionRegistration;
 import org.apache.kafka.metadata.RecordTestUtils;
 import org.apache.kafka.metadata.Replicas;
@@ -133,11 +134,16 @@ public class ReplicationControlManagerTest {
         final MockTime time = new MockTime();
         final MockRandom random = new MockRandom();
         final ControllerMetrics metrics = new MockControllerMetrics();
-        final ClusterControlManager clusterControl = new ClusterControlManager(
-            logContext, time, snapshotRegistry, TimeUnit.MILLISECONDS.convert(BROKER_SESSION_TIMEOUT_MS, TimeUnit.NANOSECONDS),
-            new StripedReplicaPlacer(random), metrics);
+        final String clusterId = Uuid.randomUuid().toString();
+        final ClusterControlManager clusterControl = new ClusterControlManager(logContext,
+            clusterId,
+            time,
+            snapshotRegistry,
+            TimeUnit.MILLISECONDS.convert(BROKER_SESSION_TIMEOUT_MS, TimeUnit.NANOSECONDS),
+            new StripedReplicaPlacer(random),
+            metrics);
         final ConfigurationControlManager configurationControl = new ConfigurationControlManager(
-            new LogContext(), snapshotRegistry, Collections.emptyMap(), Optional.empty(),
+            new LogContext(), snapshotRegistry, KafkaConfigSchema.EMPTY, Optional.empty(),
                 (__, ___) -> { });
         final ReplicationControlManager replicationControl;
 

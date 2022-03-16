@@ -27,6 +27,7 @@ import org.apache.kafka.clients.HostResolver;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.NetworkClient;
 import org.apache.kafka.clients.StaleMetadataException;
+import org.apache.kafka.clients.telemetry.ClientTelemetry;
 import org.apache.kafka.clients.admin.CreateTopicsResult.TopicMetadataAndConfig;
 import org.apache.kafka.clients.admin.DeleteAclsResult.FilterResult;
 import org.apache.kafka.clients.admin.DeleteAclsResult.FilterResults;
@@ -47,12 +48,14 @@ import org.apache.kafka.clients.admin.internals.DeleteConsumerGroupsHandler;
 import org.apache.kafka.clients.admin.internals.DescribeConsumerGroupsHandler;
 import org.apache.kafka.clients.admin.internals.DescribeProducersHandler;
 import org.apache.kafka.clients.admin.internals.DescribeTransactionsHandler;
+import org.apache.kafka.clients.admin.internals.FenceProducersHandler;
 import org.apache.kafka.clients.admin.internals.ListConsumerGroupOffsetsHandler;
 import org.apache.kafka.clients.admin.internals.ListTransactionsHandler;
 import org.apache.kafka.clients.admin.internals.MetadataOperationContext;
 import org.apache.kafka.clients.admin.internals.RemoveMembersFromConsumerGroupHandler;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.consumer.internals.ConsumerProtocol;
+import org.apache.kafka.clients.telemetry.ClientTelemetryUtils;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.ConsumerGroupState;
 import org.apache.kafka.common.ElectionType;
@@ -234,6 +237,7 @@ import org.apache.kafka.common.security.token.delegation.TokenInformation;
 import org.apache.kafka.common.utils.AppInfoParser;
 import org.apache.kafka.common.utils.KafkaThread;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.ProducerIdAndEpoch;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
@@ -266,6 +270,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.kafka.clients.telemetry.ClientTelemetry.MAX_TERMINAL_PUSH_WAIT_MS;
 import static org.apache.kafka.common.message.AlterPartitionReassignmentsRequestData.ReassignablePartition;
 import static org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData.ReassignablePartitionResponse;
 import static org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData.ReassignableTopicResponse;
@@ -304,6 +309,11 @@ public class KafkaAdminClient extends AdminClient {
     private static final long INVALID_SHUTDOWN_TIME = -1;
 
     /**
+     * The base reason for a LeaveGroupRequest
+     */
+    static final String LEAVE_GROUP_REASON = "member was removed by an admin";
+
+    /**
      * Thread name prefix for admin client network thread
      */
     static final String NETWORK_THREAD_PREFIX = "kafka-admin-client-thread";
@@ -335,6 +345,8 @@ public class KafkaAdminClient extends AdminClient {
      * The cluster metadata manager used by the KafkaClient.
      */
     private final AdminMetadataManager metadataManager;
+
+    private final ClientTelemetry clientTelemetry;
 
     /**
      * The metrics for this KafkaAdminClient.
@@ -509,6 +521,7 @@ public class KafkaAdminClient extends AdminClient {
             channelBuilder = ClientUtils.createChannelBuilder(config, time, logContext);
             selector = new Selector(config.getLong(AdminClientConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG),
                     metrics, time, metricGrpPrefix, channelBuilder, logContext);
+            ClientTelemetry clientTelemetry = ClientTelemetryUtils.create(config, time, clientId);
             networkClient = new NetworkClient(
                 metadataManager.updater(),
                 null,
@@ -526,10 +539,11 @@ public class KafkaAdminClient extends AdminClient {
                 true,
                 apiVersions,
                 null,
+                clientTelemetry,
                 logContext,
                 (hostResolver == null) ? new DefaultHostResolver() : hostResolver);
             return new KafkaAdminClient(config, clientId, time, metadataManager, metrics, networkClient,
-                timeoutProcessorFactory, logContext);
+                timeoutProcessorFactory, logContext, clientTelemetry);
         } catch (Throwable exc) {
             closeQuietly(metrics, "Metrics");
             closeQuietly(networkClient, "NetworkClient");
@@ -549,8 +563,9 @@ public class KafkaAdminClient extends AdminClient {
         try {
             metrics = new Metrics(new MetricConfig(), new LinkedList<>(), time);
             LogContext logContext = createLogContext(clientId);
+            ClientTelemetry clientTelemetry = ClientTelemetryUtils.create(config, time, clientId);
             return new KafkaAdminClient(config, clientId, time, metadataManager, metrics,
-                client, null, logContext);
+                client, null, logContext, clientTelemetry);
         } catch (Throwable exc) {
             closeQuietly(metrics, "Metrics");
             throw new KafkaException("Failed to create new KafkaAdminClient", exc);
@@ -568,7 +583,8 @@ public class KafkaAdminClient extends AdminClient {
                              Metrics metrics,
                              KafkaClient client,
                              TimeoutProcessorFactory timeoutProcessorFactory,
-                             LogContext logContext) {
+                             LogContext logContext,
+                             ClientTelemetry clientTelemetry) {
         this.clientId = clientId;
         this.log = logContext.logger(KafkaAdminClient.class);
         this.logContext = logContext;
@@ -576,6 +592,7 @@ public class KafkaAdminClient extends AdminClient {
         this.defaultApiTimeoutMs = configureDefaultApiTimeoutMs(config);
         this.time = time;
         this.metadataManager = metadataManager;
+        this.clientTelemetry = clientTelemetry;
         this.metrics = metrics;
         this.client = client;
         this.runnable = new AdminClientRunnable();
@@ -622,6 +639,15 @@ public class KafkaAdminClient extends AdminClient {
         if (waitTimeMs < 0)
             throw new IllegalArgumentException("The timeout cannot be negative.");
         waitTimeMs = Math.min(TimeUnit.DAYS.toMillis(365), waitTimeMs); // Limit the timeout to a year.
+
+        // This starts the client telemetry termination process which will attempt to send a
+        // terminal telemetry push, if possible.
+        //
+        // This is a separate step from actually closing the instance, which we do in the
+        // AdminClientRunnable.run method's finally section.
+        if (clientTelemetry != null)
+            clientTelemetry.initiateClose(Duration.ofMillis(Math.min(MAX_TERMINAL_PUSH_WAIT_MS, waitTimeMs)));
+
         long now = time.milliseconds();
         long newHardShutdownTimeMs = now + waitTimeMs;
         long prev = INVALID_SHUTDOWN_TIME;
@@ -1346,6 +1372,7 @@ public class KafkaAdminClient extends AdminClient {
                     log.info("Timed out {} remaining operation(s) during close.", numTimedOut);
                 }
                 closeQuietly(client, "KafkaClient");
+                closeQuietly(clientTelemetry, "client metrics");
                 closeQuietly(metrics, "Metrics");
                 log.debug("Exiting AdminClientRunnable thread.");
             }
@@ -2681,8 +2708,11 @@ public class KafkaAdminClient extends AdminClient {
                     if (descriptions.size() > 0) {
                         future.complete(descriptions);
                     } else {
-                        // descriptions will be empty if and only if the user is not authorized to describe cluster resource.
-                        future.completeExceptionally(Errors.CLUSTER_AUTHORIZATION_FAILED.exception());
+                        // Up to v3 DescribeLogDirsResponse did not have an error code field, hence it defaults to None
+                        Errors error = response.data().errorCode() == Errors.NONE.code()
+                                ? Errors.CLUSTER_AUTHORIZATION_FAILED
+                                : Errors.forCode(response.data().errorCode());
+                        future.completeExceptionally(error.exception());
                     }
                 }
                 @Override
@@ -3406,6 +3436,11 @@ public class KafkaAdminClient extends AdminClient {
     }
 
     @Override
+    public Optional<String> clientInstanceId(Duration timeout) {
+        return clientTelemetry.clientInstanceId(timeout);
+    }
+
+    @Override
     public Map<MetricName, ? extends Metric> metrics() {
         return Collections.unmodifiableMap(this.metrics.metrics());
     }
@@ -3731,6 +3766,10 @@ public class KafkaAdminClient extends AdminClient {
         } else {
             members = options.members().stream().map(MemberToRemove::toMemberIdentity).collect(Collectors.toList());
         }
+        
+        String reason = options.reason() == null ? LEAVE_GROUP_REASON : LEAVE_GROUP_REASON + ": " + options.reason();
+        members.forEach(member -> member.setReason(reason));
+
         SimpleAdminApiFuture<CoordinatorKey, Map<MemberIdentity, Errors>> future =
                 RemoveMembersFromConsumerGroupHandler.newFuture(groupId);
         RemoveMembersFromConsumerGroupHandler handler = new RemoveMembersFromConsumerGroupHandler(groupId, members, logContext);
@@ -4376,6 +4415,15 @@ public class KafkaAdminClient extends AdminClient {
         ListTransactionsHandler handler = new ListTransactionsHandler(options, logContext);
         invokeDriver(handler, future, options.timeoutMs);
         return new ListTransactionsResult(future.all());
+    }
+
+    @Override
+    public FenceProducersResult fenceProducers(Collection<String> transactionalIds, FenceProducersOptions options) {
+        AdminApiFuture.SimpleAdminApiFuture<CoordinatorKey, ProducerIdAndEpoch> future =
+            FenceProducersHandler.newFuture(transactionalIds);
+        FenceProducersHandler handler = new FenceProducersHandler(logContext);
+        invokeDriver(handler, future, options.timeoutMs);
+        return new FenceProducersResult(future.all());
     }
 
     private <K, V> void invokeDriver(

@@ -42,7 +42,7 @@ import scala.collection.Seq
 import scala.util.Try
 
 /**
-  * The ConfigHandler is used to process config change notifications received by the DynamicConfigManager
+  * The ConfigHandler is used to process broker configuration change notifications.
   */
 trait ConfigHandler {
   def processConfigChanges(entityName: String, value: Properties): Unit
@@ -223,6 +223,15 @@ class BrokerConfigHandler(private val brokerConfig: KafkaConfig,
       quotaManagers.follower.updateQuota(upperBound(getOrDefault(FollowerReplicationThrottledRateProp).toDouble))
       quotaManagers.alterLogDirs.updateQuota(upperBound(getOrDefault(ReplicaAlterLogDirsIoMaxBytesPerSecondProp).toDouble))
     }
+  }
+}
+
+/**
+ * The ClientMetricsConfigHandler will process individual client metrics subscription changes.
+ */
+class ClientMetricsConfigHandler() extends ConfigHandler with Logging {
+  def processConfigChanges(subscriptionGroupId: String, properties: Properties): Unit = {
+    ClientMetricsManager.getInstance.updateSubscription(subscriptionGroupId, properties)
   }
 }
 

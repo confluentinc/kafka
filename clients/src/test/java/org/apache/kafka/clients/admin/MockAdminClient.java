@@ -187,7 +187,9 @@ public class MockAdminClient extends AdminClient {
         this.brokerLogDirs = brokerLogDirs;
         this.brokerConfigs = new ArrayList<>();
         for (int i = 0; i < brokers.size(); i++) {
-            this.brokerConfigs.add(new HashMap<>());
+            final Map<String, String> config = new HashMap<>();
+            config.put("default.replication.factor", String.valueOf(defaultReplicationFactor));
+            this.brokerConfigs.add(config);
         }
         this.beginningOffsets = new HashMap<>();
         this.endOffsets = new HashMap<>();
@@ -1002,6 +1004,11 @@ public class MockAdminClient extends AdminClient {
     }
 
     @Override
+    public FenceProducersResult fenceProducers(Collection<String> transactionalIds, FenceProducersOptions options) {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+
+    @Override
     synchronized public void close(Duration timeout) {}
 
     public synchronized void updateBeginningOffsets(Map<TopicPartition, Long> newOffsets) {
@@ -1039,6 +1046,11 @@ public class MockAdminClient extends AdminClient {
 
     synchronized public void setMockMetrics(MetricName name, Metric metric) {
         mockMetrics.put(name, metric);
+    }
+
+    @Override
+    public Optional<String> clientInstanceId(Duration timeout) {
+        return Optional.empty();
     }
 
     @Override

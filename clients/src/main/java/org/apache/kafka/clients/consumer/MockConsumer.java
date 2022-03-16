@@ -369,6 +369,11 @@ public class MockConsumer<K, V> implements Consumer<K, V> {
     }
 
     @Override
+    public Optional<String> clientInstanceId(Duration timeout) {
+        return Optional.empty();
+    }
+
+    @Override
     public synchronized Map<MetricName, ? extends Metric> metrics() {
         ensureNotClosed();
         return Collections.emptyMap();
@@ -560,6 +565,11 @@ public class MockConsumer<K, V> implements Consumer<K, V> {
 
     @Override
     public void enforceRebalance() {
+        enforceRebalance(null);
+    }
+
+    @Override
+    public void enforceRebalance(final String reason) {
         shouldRebalance = true;
     }
 
