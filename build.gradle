@@ -1226,7 +1226,13 @@ project(':generator') {
 }
 
 project(':clients') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+
   archivesBaseName = "kafka-clients"
+
+  shadowJar {
+    zip64 = true
+  }
 
   dependencies {
     implementation libs.zstd
@@ -1234,6 +1240,10 @@ project(':clients') {
     implementation libs.opentelemetryProto
     implementation libs.snappy
     implementation libs.slf4jApi
+
+    // kip-714 jar shadowing
+    implementation  'io.opentelemetry.proto:opentelemetry-proto:0.13.0-alpha'
+    implementation  'com.google.protobuf:protobuf-java:3.19.4'
 
     compileOnly libs.jacksonDatabind // for SASL/OAUTHBEARER bearer token parsing
     compileOnly libs.jacksonJDK8Datatypes
@@ -1268,6 +1278,7 @@ project(':clients') {
 
   jar {
     dependsOn createVersionFile
+    dependsOn 'shadowJar'
     from("$buildDir") {
         include "kafka/$buildVersionFileName"
     }
