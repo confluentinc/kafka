@@ -1232,8 +1232,8 @@ project(':clients') {
 
   shadowJar {
     zip64 = true
-    relocate('io.opentelemetry', 'io.confluent.shaded.io.opentelemetry')
-    relocate('com.google.protobuf', 'io.confluent.shaded.com.google.protobuf')
+    relocate('io.opentelemetry', 'shadow.io.opentelemetry')
+    relocate('com.google.protobuf', 'shadow.com.google.protobuf')
   }
 
   dependencies {
