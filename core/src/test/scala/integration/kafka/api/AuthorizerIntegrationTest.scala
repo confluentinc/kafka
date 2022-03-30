@@ -143,7 +143,6 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
   val adminClients = Buffer[Admin]()
 
   producerConfig.setProperty(ProducerConfig.ACKS_CONFIG, "1")
-  producerConfig.setProperty(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "false")
   producerConfig.setProperty(ProducerConfig.MAX_BLOCK_MS_CONFIG, "50000")
   consumerConfig.setProperty(ConsumerConfig.GROUP_ID_CONFIG, group)
 
@@ -2377,7 +2376,6 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
 
   private def buildTransactionalProducer(): KafkaProducer[Array[Byte], Array[Byte]] = {
     producerConfig.setProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId)
-    producerConfig.setProperty(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true")
     producerConfig.setProperty(ProducerConfig.ACKS_CONFIG, "all")
     createProducer()
   }
