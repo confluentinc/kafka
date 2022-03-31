@@ -366,6 +366,13 @@ public class DefaultClientTelemetry implements ClientTelemetry {
 
     @Override
     public void telemetrySubscriptionReceived(GetTelemetrySubscriptionsResponseData data) {
+        // TODO: What exception to throw if data == null?
+        if(data.errorCode() != Errors.NONE.code()) {
+            handleResponseErrorCode(data.errorCode());
+        } else {
+            log.debug("Successfully get telemetry subscription; response: {}", data);
+        }
+
         List<String> requestedMetrics = data.requestedMetrics();
 
         // TODO: TELEMETRY_TODO: this is temporary until we get real data back from broker...
@@ -413,8 +420,9 @@ public class DefaultClientTelemetry implements ClientTelemetry {
     @Override
     public void pushTelemetryReceived(PushTelemetryResponseData data) {
         // TODO: validate the state as push in prog or teminating pushn prog
+        // TODO: What exception to throw if data == null?
         if (data.errorCode() != Errors.NONE.code()) {
-            handlePushTelemetryResponseDataErrors(data);
+            handleResponseErrorCode(data.errorCode());
         } else {
             log.debug("Successfully pushed telemetry; response: {}", data);
         }
@@ -436,26 +444,26 @@ public class DefaultClientTelemetry implements ClientTelemetry {
      *  - UnknownSubscription or Unsupported Compression: Retry
      *  After a new subscription is created, the current state is transitioned to push_needed to wait for another push.
      *
-     * @param data pushTelemetryResponseData
-     * @throws IllegalTelemetryStateException when subscription is mull
+     * @param errorCode response body error code.
+     * @throws IllegalTelemetryStateException when subscription is null.
      */
-    private void handlePushTelemetryResponseDataErrors(final PushTelemetryResponseData data) {
+    private void handleResponseErrorCode(short errorCode) {
         TelemetrySubscription currentSubscription = subscription().orElseThrow(
         () -> new IllegalTelemetryStateException(String.format("Subscription cannot be null.  Aborting.")));
 
         final long retryMs;
         // We might want to wait and retry or retry after some failures are received
-        if (isAuthorizationFailedError(data.errorCode())) {
+        if (isAuthorizationFailedError(errorCode)) {
             retryMs = 30 * 60 * 1000;
-            log.warn("Error code: {}. Reason: Client is permitted to send metrics.  Retry automatically in {}ms.", data.errorCode(), retryMs);
+            log.warn("Error code: {}. Reason: Client is permitted to send metrics.  Retry automatically in {}ms.", errorCode, retryMs);
             setSubscription(currentSubscription.alterPushIntervalMs(retryMs, time));
-        } else if (data.errorCode() == Errors.INVALID_RECORD.code()) {
+        } else if (errorCode == Errors.INVALID_RECORD.code()) {
             retryMs = 5 * 60 * 1000;
-            log.warn("Error code: {}.  Reason: Broker failed to decode or validate the client’s encoded metrics.  Retry automatically in {}ms", data.errorCode(), retryMs);
+            log.warn("Error code: {}.  Reason: Broker failed to decode or validate the client’s encoded metrics.  Retry automatically in {}ms", errorCode, retryMs);
             setSubscription(currentSubscription.alterPushIntervalMs(retryMs, time));
-        } else if (data.errorCode() == -1 ||
-                data.errorCode() == Errors.UNSUPPORTED_COMPRESSION_TYPE.code()) {
-            log.warn("Error code: {}.  Reason: {}.  Retrying automatically.", data.errorCode(), Errors.forCode(data.errorCode()).message());
+        } else if (errorCode == Errors.UNKNOWN_CLIENT_METRICS_SUBSCRIPTION_ID.code() ||
+                errorCode == Errors.UNSUPPORTED_COMPRESSION_TYPE.code()) {
+            log.warn("Error code: {}.  Reason: {}.  Retrying automatically.", errorCode, Errors.forCode(errorCode).message());
             setSubscription(currentSubscription.alterPushIntervalMs(0, time));
         }
     }
