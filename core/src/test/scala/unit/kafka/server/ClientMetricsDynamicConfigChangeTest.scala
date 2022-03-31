@@ -49,13 +49,14 @@ class ClientMetricsDynamicConfigChangeTest extends KafkaServerTestHarness {
   }
 
   private def updateClientSubscription(subscriptionId :String,
-                                       properties: Properties, waitingCondition: () => Boolean): Unit = {
+                                       properties: Properties,
+                                       waitingCondition: () => Boolean): Unit = {
     val admin = createAdminClient()
     try {
       val resource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, subscriptionId)
       val entries = new ListBuffer[AlterConfigOp]
       properties.forEach((k, v) => {
-        entries.addOne(new AlterConfigOp(new ConfigEntry(k.toString, v.toString), AlterConfigOp.OpType.SET))
+        entries.append(new AlterConfigOp(new ConfigEntry(k.toString, v.toString), AlterConfigOp.OpType.SET))
       })
       admin.incrementalAlterConfigs(Map(resource -> entries.asJavaCollection).asJava).all.get
     } finally {
@@ -68,7 +69,6 @@ class ClientMetricsDynamicConfigChangeTest extends KafkaServerTestHarness {
   }
 
   @ParameterizedTest
-  //@ValueSource(strings = Array("kraft"))
   @ValueSource(strings = Array("zk", "kraft"))
   def testClientMetricsConfigChange(quorum: String): Unit = {
     val configEntityName: String = "subscription-2"
