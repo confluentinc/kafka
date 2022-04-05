@@ -245,6 +245,7 @@ class Partition(val topicPartition: TopicPartition,
   // start offset for 'leaderEpoch' above (leader epoch of the current leader for this partition),
   // defined when this broker is leader for partition
   @volatile private var leaderEpochStartOffsetOpt: Option[Long] = None
+  // Replica ID of the leader, defined when this broker is leader or follower for the partition.
   @volatile var leaderReplicaIdOpt: Option[Int] = None
   @volatile private[cluster] var isrState: IsrState = CommittedIsr(Set.empty)
   @volatile var assignmentState: AssignmentState = SimpleAssignmentState(Seq.empty)
@@ -419,6 +420,10 @@ class Partition(val topicPartition: TopicPartition,
    * Returns true if this node is currently leader for the Partition.
    */
   def isLeader: Boolean = leaderReplicaIdOpt.contains(localBrokerId)
+
+  def leaderIdIfLocal: Option[Int] = {
+    leaderReplicaIdOpt.filter(_ == localBrokerId)
+  }
 
   private def localLogWithEpochOrException(currentLeaderEpoch: Optional[Integer],
                                            requireLeader: Boolean): UnifiedLog = {
