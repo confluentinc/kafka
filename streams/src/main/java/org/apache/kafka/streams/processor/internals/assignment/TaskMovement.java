@@ -101,7 +101,8 @@ final class TaskMovement {
 
         final int movementsNeeded = taskMovements.size();
 
-        for (final TaskMovement movement : taskMovements) {
+        while (!taskMovements.isEmpty()) {
+            final TaskMovement movement = taskMovements.poll();
             final UUID standbySourceClient = caughtUpClientsByTaskLoad.poll(
                 movement.task,
                 c -> clientStates.get(c).hasStandbyTask(movement.task)
