@@ -89,7 +89,7 @@ object ClientMetricsTestUtils {
 
   def setupClientMetricsPlugin(): TestClientMetricsPlugin = {
     val plugin = new TestClientMetricsPlugin
-    ClientMetricsReceiverPlugin.init(plugin)
+    ClientMetricsReceiverPlugin.add(plugin)
     plugin
   }
 

@@ -50,7 +50,7 @@ object ClientMetricsManager {
   // to the client.
   @Evolving
   def checkCmReceiverPluginConfigured()  = {
-    if (ClientMetricsReceiverPlugin.getCmReceiver().isEmpty) {
+    if (ClientMetricsReceiverPlugin.isEmpty) {
       throw new ClientMetricsReceiverPluginNotFoundException("Broker does not have any configured client metrics receiver plugin")
     }
   }
@@ -205,9 +205,8 @@ class ClientMetricsManager {
 
       // Push the metrics to the external client receiver plugin.
       val metrics = Option(pushTelemetryRequest.data().metrics())
-      if (!metrics.isEmpty && !metrics.get.isEmpty) {
-        val payload = ClientMetricsReceiverPlugin.createPayload(pushTelemetryRequest)
-        ClientMetricsReceiverPlugin.getCmReceiver().get.exportMetrics(requestContext, payload)
+      if (!metrics.get.isEmpty) {
+        ClientMetricsReceiverPlugin.exportMetrics(requestContext, pushTelemetryRequest)
       }
     } catch {
       case e: ClientMetricsException => {
