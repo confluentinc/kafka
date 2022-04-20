@@ -458,6 +458,11 @@ public class DefaultClientTelemetry implements ClientTelemetry {
      * @throws IllegalTelemetryStateException when subscription is null.
      */
     void handleResponseErrorCode(short errorCode) {
+        if (errorCode == Errors.CLIENT_METRICS_PLUGIN_NOT_FOUND.code()) {
+            log.warn("Error code: {}. Reason: Broker does not have any client metrics plugin configured.", errorCode);
+            return;
+        }
+
         TelemetrySubscription currentSubscription = subscription().orElseThrow(
         () -> new IllegalTelemetryStateException(String.format("Subscription cannot be null.  Aborting.")));
 

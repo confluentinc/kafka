@@ -800,9 +800,8 @@ class DynamicMetricsReporters(brokerId: Int, server: KafkaBroker) extends Reconf
     reporters.forEach { reporter =>
       metrics.addReporter(reporter)
       currentReporters += reporter.getClass.getName -> reporter
-      Option(reporter.clientReceiver()) match {
-        case Some(v) => ClientMetricsReceiverPlugin.add(v)
-        case _ => //do nothing
+      if (reporter.clientReceiver() != null) {
+        ClientMetricsReceiverPlugin.add(reporter.clientReceiver())
       }
     }
     KafkaBroker.notifyClusterListeners(server.clusterId, reporters.asScala)

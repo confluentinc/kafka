@@ -33,7 +33,9 @@ import kafka.api.{KafkaSasl, SaslSetup}
 import kafka.controller.{ControllerBrokerStateInfo, ControllerChannelManager}
 import kafka.log.{CleanerConfig, LogConfig}
 import kafka.message.ProducerCompressionCodec
+import kafka.metrics.ClientMetricsTestUtils.TestClientMetricsReceiver
 import kafka.metrics.KafkaYammerMetrics
+import kafka.metrics.clientmetrics.ClientMetricsReceiverPlugin
 import kafka.network.{Processor, RequestChannel}
 import kafka.server.QuorumTestHarness
 import kafka.utils._
@@ -858,6 +860,40 @@ class DynamicBrokerReconfigurationTest extends QuorumTestHarness with SaslSetup 
         assertEquals(Some(truncationOffset), thread.fetchState(tp).map(_.fetchOffset))
         assertEquals(Some(Truncating), thread.fetchState(tp).map(_.state))
       }
+    }
+  }
+
+  @Test
+  def testClientMetricsEmptyReporter(): Unit = {
+    // Add a default test metrics reporter that doesn't implement the clientReceiver method
+    val newProps = new Properties
+    newProps.put(TestMetricsReporter.PollingIntervalProp, "100")
+    configureMetricsReporters(Seq(classOf[TestMetricsReporter]), newProps)
+
+    val reporters = TestMetricsReporter.waitForReporters(servers.size)
+    reporters.foreach { reporter =>
+      reporter.verifyState(reconfigureCount = 0, deleteCount = 0, pollingInterval = 100)
+
+      // There should not be any clientReceiver in the default implementation.
+      assertNull(reporter.clientReceiver)
+    }
+  }
+
+  @Test
+  def testClientMetricsReporter(): Unit = {
+    // Add a new metrics reporter that has implemented the clientReceiver interface method.
+    val newProps = new Properties
+    newProps.put(TestMetricsReporter.PollingIntervalProp, "100")
+    configureMetricsReporters(Seq(classOf[TestClientMetricsReporter]), newProps)
+
+    val reporters = TestMetricsReporter.waitForReporters(servers.size)
+    assertTrue(!ClientMetricsReceiverPlugin.isEmpty)
+
+    reporters.foreach { reporter =>
+      reporter.verifyState(reconfigureCount = 0, deleteCount = 0, pollingInterval = 100)
+
+      // we should have a valid clientReceiver here.
+      assertNotNull(reporter.clientReceiver)
     }
   }
 
@@ -1815,8 +1851,6 @@ class TestMetricsReporter extends MetricsReporter with Reconfigurable with Close
   @volatile var pollingInterval: Int = -1
   testReporters.add(this)
 
-  override def clientReceiver: ClientTelemetryReceiver = null
-
   override def init(metrics: util.List[KafkaMetric]): Unit = {
     kafkaMetrics ++= metrics.asScala
     initializeCount += 1
@@ -1876,6 +1910,12 @@ class TestMetricsReporter extends MetricsReporter with Reconfigurable with Close
   }
 }
 
+class TestClientMetricsReporter extends TestMetricsReporter {
+  var cmReceiver: Option[TestClientMetricsReceiver] =  Option(new TestClientMetricsReceiver)
+  override def clientReceiver: ClientTelemetryReceiver =  {
+    if (cmReceiver.isEmpty)  super.clientReceiver else cmReceiver.get
+  }
+}
 
 class MockFileConfigProvider extends FileConfigProvider {
   @throws(classOf[IOException])

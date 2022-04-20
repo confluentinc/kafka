@@ -72,7 +72,7 @@ object ClientMetricsTestUtils {
     ClientMetricsConfig.getClientSubscriptionInfo(subscriptionId)
   }
 
-  class TestClientMetricsPlugin extends ClientTelemetryReceiver {
+  class TestClientMetricsReceiver extends ClientTelemetryReceiver {
     var exportMetricsInvoked = 0
     var metricsData: ByteBuffer = null
     def exportMetrics(context: AuthorizableRequestContext, payload: ClientTelemetryPayload) = {
@@ -87,8 +87,8 @@ object ClientMetricsTestUtils {
     }
   }
 
-  def setupClientMetricsPlugin(): TestClientMetricsPlugin = {
-    val plugin = new TestClientMetricsPlugin
+  def setupClientMetricsPlugin(): TestClientMetricsReceiver = {
+    val plugin = new TestClientMetricsReceiver
     ClientMetricsReceiverPlugin.add(plugin)
     plugin
   }
