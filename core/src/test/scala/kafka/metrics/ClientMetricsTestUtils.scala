@@ -16,7 +16,6 @@
  */
 package kafka.metrics
 
-import kafka.Kafka.info
 import kafka.metrics.clientmetrics.ClientMetricsConfig.ClientMatchingParams.{CLIENT_SOFTWARE_NAME, CLIENT_SOFTWARE_VERSION}
 import kafka.metrics.clientmetrics.ClientMetricsConfig.SubscriptionInfo
 import kafka.metrics.clientmetrics.{ClientMetricsConfig, ClientMetricsReceiverPlugin, CmClientInformation, CmClientInstanceState}
@@ -75,15 +74,18 @@ object ClientMetricsTestUtils {
   class TestClientMetricsReceiver extends ClientTelemetryReceiver {
     var exportMetricsInvoked = 0
     var metricsData: ByteBuffer = null
+
+    def getMetricsDataAsCopy() : ByteBuffer = {
+      import java.nio.ByteBuffer
+      val data = ByteBuffer.allocate(metricsData.capacity)
+      metricsData.flip()
+      data.put(metricsData)
+      data
+    }
+
     def exportMetrics(context: AuthorizableRequestContext, payload: ClientTelemetryPayload) = {
       exportMetricsInvoked += 1
       metricsData = payload.data()
-      val metricsDataStr = metricsData.array()
-      info(metricsDataStr.toString)
-    }
-    def reset() =  {
-      exportMetricsInvoked = 0
-      metricsData = null
     }
   }
 

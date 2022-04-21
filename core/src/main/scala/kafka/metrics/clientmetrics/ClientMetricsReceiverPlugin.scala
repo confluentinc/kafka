@@ -36,7 +36,8 @@ object ClientMetricsReceiverPlugin {
   }
 
   def exportMetrics(context: RequestContext, request: PushTelemetryRequest): Unit = {
-    cmReceivers.foreach(x => x.exportMetrics(context, getPayLoad(request)))
+    val payload = getPayLoad(request)
+    cmReceivers.foreach(x => x.exportMetrics(context, payload))
   }
 
 }
