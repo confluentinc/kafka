@@ -25,18 +25,18 @@ import scala.collection.mutable.ListBuffer
 object ClientMetricsReceiverPlugin {
   val cmReceivers  = new ListBuffer[ClientTelemetryReceiver]()
   def isEmpty = cmReceivers.isEmpty
-  def reset = cmReceivers.empty
 
   def add(receiver: ClientTelemetryReceiver) = {
     cmReceivers.append(receiver)
   }
 
+  def getPayLoad(request: PushTelemetryRequest) : ClientMetricsPayload = {
+     new ClientMetricsPayload(request.getClientInstanceId, request.isClientTerminating,
+       request.getMetricsContentType, request.getMetricsData)
+  }
+
   def exportMetrics(context: RequestContext, request: PushTelemetryRequest): Unit = {
-    val payload = new ClientMetricsPayload(request.getClientInstanceId,
-                                           request.isClientTerminating,
-                                           request.getMetricsContentType,
-                                           request.getMetricsData)
-    cmReceivers.foreach(x => x.exportMetrics(context, payload))
+    cmReceivers.foreach(x => x.exportMetrics(context, getPayLoad(request)))
   }
 
 }

@@ -887,7 +887,7 @@ class DynamicBrokerReconfigurationTest extends QuorumTestHarness with SaslSetup 
     configureMetricsReporters(Seq(classOf[TestClientMetricsReporter]), newProps)
 
     val reporters = TestMetricsReporter.waitForReporters(servers.size)
-    assertTrue(!ClientMetricsReceiverPlugin.isEmpty)
+    assertFalse(ClientMetricsReceiverPlugin.isEmpty)
 
     reporters.foreach { reporter =>
       reporter.verifyState(reconfigureCount = 0, deleteCount = 0, pollingInterval = 100)
