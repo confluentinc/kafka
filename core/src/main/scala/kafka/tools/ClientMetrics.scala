@@ -24,16 +24,18 @@ import kafka.utils.{CommandDefaultOptions, CommandLineUtils, Exit, Logging}
 import net.sourceforge.argparse4j.ArgumentParsers
 import net.sourceforge.argparse4j.impl.Arguments.store
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.Admin
+import org.apache.kafka.clients.admin.{Admin, AlterConfigOp, AlterConfigsOptions, ConfigEntry, DescribeConfigsOptions}
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.errors.InvalidConfigurationException
 import org.apache.kafka.common.utils.Utils
 
 import java.util
 import java.util.Properties
+import java.util.concurrent.TimeUnit
+import scala.compat.java8.FunctionConverters.enrichAsJavaFunction
+import scala.jdk.CollectionConverters.{IterableHasAsJava, MapHasAsJava}
 
 object ClientMetrics extends Logging {
-  val CLIENT_METRIC_ENTITY_NAME = "client_metrics"
   def main(args: Array[String]): Unit = {
     try {
       val opts = new ConfigCommandParser(args)
@@ -88,6 +90,7 @@ object ClientMetrics extends Logging {
 
     val matchId = parser.accepts("match", "matching the given client instance")
       .withRequiredArg
+      .describedAs("matching a specific client ID")
       .ofType(classOf[String])
     val metric = parser.accepts("metric", "metric prefixes")
       .withRequiredArg
@@ -146,17 +149,46 @@ object ClientMetrics extends Logging {
 
     case class ClientMetricService private (adminClient: Admin) extends AutoCloseable {
       def listMetrics(listMetricsOpts: ListMetricsOptions): Unit = {
-        val configResource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, CLIENT_METRIC_ENTITY_NAME)
-        if (listMetricsOpts.name.isEmpty) {
-          adminClient.describeConfigs(List(ConfigResource))
-        }
+        val configResource = if(listMetricsOpts.name.isEmpty)
+          new ConfigResource(ConfigResource.Type.CLIENT_METRICS, "")
+        else
+          new ConfigResource(ConfigResource.Type.CLIENT_METRICS, listMetricsOpts.name.get)
+
+        adminClient.describeConfigs(util.Collections.singleton(ConfigResource))
+      }
+
+      def deleteMetrics(deleteMetricsOpts: DeleteMetricsOptions): Unit = {
+        if(deleteMetricsOpts.name.isEmpty)
+          throw new IllegalArgumentException(s"The delete metrics operation requires a name")
+
+        val configResource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, deleteMetricsOpts.name.get)
+        val alterOptions = new AlterConfigsOptions().timeoutMs(30000).validateOnly(false)
+        val alterEntries = List(new AlterConfigOp(new ConfigEntry("name", deleteMetricsOpts.name.get), AlterConfigOp.OpType.DELETE))
+        adminClient.incrementalAlterConfigs(
+          Map(configResource -> alterEntries.asJavaCollection).asJava,
+          alterOptions).all().get(60, TimeUnit.SECONDS)
       }
       override def close(): Unit = adminClient.close()
     }
+
+    def addMetrics(addMetricsOpts: AddMetricsOptions): Unit = {
+    }
   }
 
-  class ListMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args: ConfigCommandParser) {
+  class ListMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args.options: OptionSet) {
     def name: Option[String] = valueAsOption(args.name)
+  }
+
+  class DeleteMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args.options: OptionSet) {
+    def name: Option[String] = valueAsOption(args.name)
+  }
+
+  class AddMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args.options: OptionSet) {
+    def name: Option[String] = valueAsOption(args.name)
+    def matchClientId: Option[String] = valueAsOption(args.matchId)
+    def metrics: Option[util.List[String]] = valuesAsOption(args.metric)
+    def intervalMs: Option[Long] = valueAsOption(args.interval)
+    def isBlocked: Boolean = has(args.block)
   }
 
   case class MetricsOptions(options: OptionSet) {
