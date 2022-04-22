@@ -18,13 +18,9 @@
 package kafka.tools
 
 import joptsimple.{OptionException, OptionSet, OptionSpec}
-import kafka.admin.ConfigCommand
-import kafka.tools.ClientMetrics.ConfigCommandParser
 import kafka.utils.{CommandDefaultOptions, CommandLineUtils, Exit, Logging}
-import net.sourceforge.argparse4j.ArgumentParsers
-import net.sourceforge.argparse4j.impl.Arguments.store
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.{Admin, AlterConfigOp, AlterConfigsOptions, ConfigEntry, DescribeConfigsOptions}
+import org.apache.kafka.clients.admin.{Admin, AlterConfigOp, AlterConfigsOptions, ConfigEntry}
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.errors.InvalidConfigurationException
 import org.apache.kafka.common.utils.Utils
@@ -32,10 +28,27 @@ import org.apache.kafka.common.utils.Utils
 import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
-import scala.compat.java8.FunctionConverters.enrichAsJavaFunction
 import scala.jdk.CollectionConverters.{IterableHasAsJava, MapHasAsJava}
 
+/**
+ * This utility class is used to interact with client metrics.  It permits following 3 actions
+ * <ul>
+ *   <li> add: --add
+ *     <ul>[optional] --name human-readable name of the metric subscription. If one is not provided by the user, the admin client will first auto-generate a type-4 UUID to be used as the name before sending the request to the broker.</ul>
+ *     <ul> --metric a comma-separated list of metric name prefixes, e.g., "client.producer.partition., client.io.wait". Whitespaces are ignored.</ul>
+ *     <ul>[optional] --interval metrics push interval in milliseconds. Defaults to 5 minutes if not specified.</ul>
+ *   <li> list: --list
+ *     <ul>[optional] --name metric_name.</ul>
+ *   <li> delete: --delete
+ *     <ul>--name metric_name.</ul>
+ * </ul>
+ * Essentially, this is a wrapper around {@link org.apache.kafka.clients.admin.AdminClient}.  {@code --list} performs
+ * the {@code describeConfigs} operation, {@code --add} and {@code --delete} performs the {@code alterConfigs} operation.
+ *
+ */
+// TODO: verify if --match selector works on broker side
 object ClientMetrics extends Logging {
+  val ADMIN_CLIENT_TIMEOUT = 10000
   def main(args: Array[String]): Unit = {
     try {
       val opts = new ConfigCommandParser(args)
@@ -63,38 +76,48 @@ object ClientMetrics extends Logging {
     else
       new Properties()
     props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, opts.options.valueOf(opts.bootstrapServerOpt))
-    val adminClient = Admin.create(props)
+    val clientMetricService = ClientMetricService(props, opts.bootstrapServer)
 
+    var exitCode = 0
     try {
-      if (opts.options.has(opts.addOp) || opts.options.has(opts.deleteOp))
-        alterConfig(adminClient, opts)
-      else if (opts.options.has(opts.listOp))
-        describeConfig(adminClient, opts)
+      if (opts.options.has(opts.addOp))
+        clientMetricService.addMetrics(new AddMetricsOptions(opts))
+      else if (opts.options.has(opts.listOp)) {
+        clientMetricService.listMetrics(new ListMetricsOptions(opts))
+      } else if (opts.options.has(opts.deleteOp))
+        clientMetricService.deleteMetrics(new DeleteMetricsOptions(opts))
+      else
+        throw new IllegalArgumentException("Must be one of the action: add, list, delete")
+    } catch {
+      case e: Throwable =>
+        error(Utils.stackTrace(e))
+        exitCode = 1
     } finally {
-      adminClient.close()
+      clientMetricService.close()
+      Exit.exit(exitCode)
     }
   }
 
-  def alterConfig(adminClient: Admin, opts: ConfigCommandParser): Unit = {
-
-  }
-
-  def describeConfig(adminClient: Admin, opts: ConfigCommandParser) = {
-
-  }
 
   class ConfigCommandParser(args: Array[String]) extends CommandDefaultOptions(args) {
+    def has(builder: OptionSpec[_]): Boolean = options.has(builder)
+    def valueAsOption[A](option: OptionSpec[A], defaultValue: Option[A] = None): Option[A] = if (has(option)) Some(options.valueOf(option)) else defaultValue
+    def valuesAsOption[A](option: OptionSpec[A], defaultValue: Option[util.List[A]] = None): Option[util.List[A]] = if (has(option)) Some(options.valuesOf(option)) else defaultValue
+
     val addOp = parser.accepts("add", "Adding telemetry metrics")
     val deleteOp = parser.accepts("delete", "Delete metrics")
     val listOp = parser.accepts("list", "List metrics")
 
-    val matchId = parser.accepts("match", "matching the given client instance")
+    // TODO: verify if it is working on broker
+    val matchSelector = parser.accepts("match", "client matching selector")
       .withRequiredArg
       .describedAs("matching a specific client ID")
       .ofType(classOf[String])
     val metric = parser.accepts("metric", "metric prefixes")
       .withRequiredArg
       .ofType(classOf[String])
+      .withValuesSeparatedBy(",")
+
     val interval = parser.accepts("interval", "push interval ms")
       .withRequiredArg
       .ofType(classOf[Long])
@@ -118,9 +141,11 @@ object ClientMetrics extends Logging {
 
     options = parser.parse(args : _*)
 
+    def bootstrapServer = valueAsOption(bootstrapServerOpt)
+
     def checkArgs(): Unit = {
       // only perform 1 action at a time
-      val actions = Seq(addOp, deleteOp).count(options.has _)
+      val actions = Seq(addOp, deleteOp, listOp).count(options.has _)
       if (actions != 1)
         CommandLineUtils.printUsageAndDie(parser, "Command must include exactly one action: --add, --delete, --list")
 
@@ -128,10 +153,10 @@ object ClientMetrics extends Logging {
       CommandLineUtils.checkInvalidArgs(parser, options, addOp, Set(deleteOp, listOp))
 
       // check delete args
-      CommandLineUtils.checkInvalidArgs(parser, options, deleteOp, Set(addOp, listOp, matchId, metric, interval))
+      CommandLineUtils.checkInvalidArgs(parser, options, deleteOp, Set(addOp, listOp, matchSelector, metric, interval))
 
       // check list args
-      CommandLineUtils.checkInvalidArgs(parser, options, listOp, Set(addOp, listOp, matchId, metric, interval, block))
+      CommandLineUtils.checkInvalidArgs(parser, options, listOp, Set(addOp, deleteOp, matchSelector, metric, interval, block))
 
       if (!options.has(bootstrapServerOpt))
         throw new IllegalArgumentException("--bootstrap-server must be specified")
@@ -139,7 +164,7 @@ object ClientMetrics extends Logging {
   }
 
   object ClientMetricService {
-    def ClientMetricService(commandConfig: Properties, bootstrapServer: Option[String]): Admin = {
+    def createAdminClient(commandConfig: Properties, bootstrapServer: Option[String]): Admin = {
       bootstrapServer match {
         case Some(serverList) => commandConfig.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, serverList)
         case None =>
@@ -147,14 +172,19 @@ object ClientMetrics extends Logging {
       Admin.create(commandConfig)
     }
 
+
+    def apply(commandConfig: Properties, bootstrapServer: Option[String]): ClientMetricService =
+      ClientMetricService(createAdminClient(commandConfig, bootstrapServer))
+
     case class ClientMetricService private (adminClient: Admin) extends AutoCloseable {
       def listMetrics(listMetricsOpts: ListMetricsOptions): Unit = {
-        val configResource = if(listMetricsOpts.name.isEmpty)
-          new ConfigResource(ConfigResource.Type.CLIENT_METRICS, "")
-        else
+        val configResource = if(listMetricsOpts.name.isEmpty) {
+          // TODO: How do we get all metrics? Not sure if this is legal
+          new ConfigResource(ConfigResource.Type.CLIENT_METRICS, null)
+        } else
           new ConfigResource(ConfigResource.Type.CLIENT_METRICS, listMetricsOpts.name.get)
 
-        adminClient.describeConfigs(util.Collections.singleton(ConfigResource))
+        adminClient.describeConfigs(util.Collections.singleton(configResource))
       }
 
       def deleteMetrics(deleteMetricsOpts: DeleteMetricsOptions): Unit = {
@@ -162,16 +192,24 @@ object ClientMetrics extends Logging {
           throw new IllegalArgumentException(s"The delete metrics operation requires a name")
 
         val configResource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, deleteMetricsOpts.name.get)
-        val alterOptions = new AlterConfigsOptions().timeoutMs(30000).validateOnly(false)
+        val alterOptions = new AlterConfigsOptions().timeoutMs(ADMIN_CLIENT_TIMEOUT).validateOnly(false)
         val alterEntries = List(new AlterConfigOp(new ConfigEntry("name", deleteMetricsOpts.name.get), AlterConfigOp.OpType.DELETE))
         adminClient.incrementalAlterConfigs(
           Map(configResource -> alterEntries.asJavaCollection).asJava,
           alterOptions).all().get(60, TimeUnit.SECONDS)
       }
-      override def close(): Unit = adminClient.close()
-    }
 
-    def addMetrics(addMetricsOpts: AddMetricsOptions): Unit = {
+      def addMetrics(addMetricsOpts: AddMetricsOptions): Unit = {
+        val configResource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, addMetricsOpts.name.get)
+        val alterOptions = new AlterConfigsOptions().timeoutMs(ADMIN_CLIENT_TIMEOUT).validateOnly(false)
+        val configsToBeAdded = addMetricsOpts.getAddedConfig
+        val alterEntries = (configsToBeAdded.map( e => new AlterConfigOp(new ConfigEntry(e._1, e._2), AlterConfigOp.OpType.SET))).asJavaCollection
+        adminClient.incrementalAlterConfigs(
+          Map(configResource -> alterEntries).asJava,
+          alterOptions).all().get(60, TimeUnit.SECONDS)
+      }
+
+      override def close(): Unit = adminClient.close()
     }
   }
 
@@ -185,10 +223,19 @@ object ClientMetrics extends Logging {
 
   class AddMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args.options: OptionSet) {
     def name: Option[String] = valueAsOption(args.name)
-    def matchClientId: Option[String] = valueAsOption(args.matchId)
     def metrics: Option[util.List[String]] = valuesAsOption(args.metric)
     def intervalMs: Option[Long] = valueAsOption(args.interval)
     def isBlocked: Boolean = has(args.block)
+
+    def getAddedConfig: Map[String, String] = {
+     var props: Map[String, String] = Map()
+
+      if(name.isDefined) props += ("name" -> name.get)
+      if(!metrics.isEmpty) props += ("metrics" -> metrics.get.toString)
+      if(intervalMs.isDefined) props += ("interval" -> intervalMs.get.toString)
+      if(isBlocked) props += ("block" -> isBlocked.toString)
+      props
+    }
   }
 
   case class MetricsOptions(options: OptionSet) {
