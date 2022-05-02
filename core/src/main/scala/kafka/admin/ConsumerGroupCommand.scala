@@ -19,10 +19,8 @@ package kafka.admin
 
 import java.time.{Duration, Instant}
 import java.util.Properties
-
 import com.fasterxml.jackson.dataformat.csv.CsvMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import kafka.utils._
 import kafka.utils.Implicits._
 import org.apache.kafka.clients.admin._
@@ -149,7 +147,7 @@ object ConsumerGroupCommand extends Logging {
   }
   // Example: CsvUtils().readerFor[CsvRecordWithoutGroup]
   private[admin] case class CsvUtils() {
-    val mapper = new CsvMapper with ScalaObjectMapper
+    val mapper = new CsvMapper with ClassTagExtensions
     mapper.registerModule(DefaultScalaModule)
     def readerFor[T <: CsvRecord: ClassTag] = {
       val schema = getSchema[T]
