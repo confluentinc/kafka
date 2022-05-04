@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG jdk_version=openjdk:8
+ARG jdk_version=openjdk:8-buster
 FROM $jdk_version
 
 MAINTAINER Apache Kafka dev@kafka.apache.org
@@ -32,7 +32,11 @@ ARG ducker_creator=default
 LABEL ducker.creator=$ducker_creator
 
 # Update Linux and install necessary utilities.
-RUN apt update && apt install -y sudo netcat iptables rsync unzip wget curl jq coreutils openssh-server net-tools vim python-pip python-dev libffi-dev libssl-dev cmake pkg-config libfuse-dev iperf traceroute && apt-get -y clean
+RUN apt update
+RUN apt install -y sudo netcat iptables rsync unzip wget curl jq coreutils openssh-server net-tools vim libffi-dev libssl-dev cmake pkg-config libfuse-dev iperf traceroute
+
+# Install python 2 and pip
+RUN apt install -y python2.7-dev python-pip
 RUN python -m pip install -U pip==9.0.3;
 RUN pip install --upgrade cffi virtualenv pyasn1 boto3 pycrypto pywinrm ipaddress enum34 && pip install --upgrade "ducktape>0.7,<0.8"
 
@@ -83,6 +87,9 @@ ARG KIBOSH_VERSION="8841dd392e6fbf02986e2fb1f1ebf04df344b65a"
 # Install Kibosh
 RUN apt-get install fuse
 RUN cd /opt && git clone -q  https://github.com/confluentinc/kibosh.git && cd "/opt/kibosh" && git reset --hard $KIBOSH_VERSION && mkdir "/opt/kibosh/build" && cd "/opt/kibosh/build" && ../configure && make -j 2
+
+# clean apt cache
+RUN apt-get -y clean
 
 # Set up the ducker user.
 RUN useradd -ms /bin/bash ducker && mkdir -p /home/ducker/ && rsync -aiq /root/.ssh/ /home/ducker/.ssh && chown -R ducker /home/ducker/ /mnt/ /var/log/ && echo "PATH=$(runuser -l ducker -c 'echo $PATH'):$JAVA_HOME/bin" >> /home/ducker/.ssh/environment && echo 'PATH=$PATH:'"$JAVA_HOME/bin" >> /home/ducker/.profile && echo 'ducker ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers

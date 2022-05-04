@@ -42,7 +42,8 @@ docker_run_memory_limit="2000m"
 default_num_nodes=14
 
 # The default OpenJDK base image.
-default_jdk="openjdk:8"
+# set to debian buster as it's the last one to support python 2 (sigh)
+default_jdk="openjdk:8-buster"
 
 # The default ducker-ak image name.
 default_image_name="ducker-ak"
