@@ -18,6 +18,6 @@ package org.apache.kafka.common.telemetry.metrics;
 
 public enum MetricType {
 
-    gauge, histogram, sum
+    gauge, sum
 
 }
