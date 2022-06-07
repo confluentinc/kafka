@@ -54,6 +54,7 @@ import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.processor.TaskId;
 import org.apache.kafka.streams.processor.internals.metrics.StreamsMetricsImpl;
 import org.apache.kafka.streams.processor.internals.testutil.LogCaptureAppender;
+import org.apache.kafka.test.InternalMockProcessorContext;
 import org.apache.kafka.test.MockClientSupplier;
 
 import java.util.UUID;
@@ -70,6 +71,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
+import static org.apache.kafka.streams.processor.internals.ClientUtils.producerRecordSizeInBytes;
+import static org.apache.kafka.streams.processor.internals.metrics.StreamsMetricsImpl.TOPIC_LEVEL_GROUP;
+
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
 import static org.easymock.EasyMock.mock;
@@ -82,6 +86,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.emptySet;
+import static java.util.Collections.singletonMap;
 
 public class RecordCollectorTest {
 
@@ -100,6 +108,7 @@ public class RecordCollectorTest {
     ));
 
     private final String topic = "topic";
+    private final String sinkNodeName = "output-node";
     private final Cluster cluster = new Cluster(
         "cluster",
         Collections.singletonList(Node.noNode()),
@@ -121,6 +130,8 @@ public class RecordCollectorTest {
 
     private MockProducer<byte[], byte[]> mockProducer;
     private StreamsProducer streamsProducer;
+    private ProcessorTopology topology;
+    private final InternalProcessorContext<Void, Void> context = new InternalMockProcessorContext<>();
 
     private RecordCollectorImpl collector;
 
@@ -138,12 +149,29 @@ public class RecordCollectorTest {
             Time.SYSTEM
         );
         mockProducer = clientSupplier.producers.get(0);
+        final SinkNode<?, ?> sinkNode = new SinkNode<>(
+            sinkNodeName,
+            new StaticTopicNameExtractor<>(topic),
+            stringSerializer,
+            byteArraySerializer,
+            streamPartitioner);
+        topology = new ProcessorTopology(
+            emptyList(),
+            emptyMap(),
+            singletonMap(topic, sinkNode),
+            emptyList(),
+            emptyList(),
+            emptyMap(),
+            emptySet()
+        );
         collector = new RecordCollectorImpl(
             logContext,
             taskId,
             streamsProducer,
             productionExceptionHandler,
-            streamsMetrics);
+            streamsMetrics,
+            topology
+        );
     }
 
     @After
@@ -152,15 +180,72 @@ public class RecordCollectorTest {
     }
 
     @Test
+    public void shouldRecordRecordsAndBytesProduced() {
+        final Headers headers = new RecordHeaders(new Header[]{new RecordHeader("key", "value".getBytes())});
+
+        final String threadId = Thread.currentThread().getName();
+        final String processorNodeId = sinkNodeName;
+        final String topic = "topic";
+        final Metric recordsProduced = streamsMetrics.metrics().get(
+            new MetricName("records-produced-total",
+                           TOPIC_LEVEL_GROUP,
+                           "The total number of records produced from this topic",
+                           streamsMetrics.topicLevelTagMap(threadId, taskId.toString(), processorNodeId, topic))
+        );
+        final Metric bytesProduced = streamsMetrics.metrics().get(
+            new MetricName("bytes-produced-total",
+                           TOPIC_LEVEL_GROUP,
+                           "The total number of bytes produced from this topic",
+                           streamsMetrics.topicLevelTagMap(threadId, taskId.toString(), processorNodeId, topic))
+        );
+
+        double totalRecords = 0D;
+        double totalBytes = 0D;
+
+        assertThat(recordsProduced.metricValue(), equalTo(totalRecords));
+        assertThat(bytesProduced.metricValue(), equalTo(totalBytes));
+
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, sinkNodeName, context);
+        ++totalRecords;
+        totalBytes += producerRecordSizeInBytes(mockProducer.history().get(0));
+        assertThat(recordsProduced.metricValue(), equalTo(totalRecords));
+        assertThat(bytesProduced.metricValue(), equalTo(totalBytes));
+
+        collector.send(topic, "999", "0", headers, 1, null, stringSerializer, stringSerializer, sinkNodeName, context);
+        ++totalRecords;
+        totalBytes += producerRecordSizeInBytes(mockProducer.history().get(1));
+        assertThat(recordsProduced.metricValue(), equalTo(totalRecords));
+        assertThat(bytesProduced.metricValue(), equalTo(totalBytes));
+
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, sinkNodeName, context);
+        ++totalRecords;
+        totalBytes += producerRecordSizeInBytes(mockProducer.history().get(2));
+        assertThat(recordsProduced.metricValue(), equalTo(totalRecords));
+        assertThat(bytesProduced.metricValue(), equalTo(totalBytes));
+
+        collector.send(topic, "999", "0", headers, 1, null, stringSerializer, stringSerializer, sinkNodeName, context);
+        ++totalRecords;
+        totalBytes += producerRecordSizeInBytes(mockProducer.history().get(3));
+        assertThat(recordsProduced.metricValue(), equalTo(totalRecords));
+        assertThat(bytesProduced.metricValue(), equalTo(totalBytes));
+
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, sinkNodeName, context);
+        ++totalRecords;
+        totalBytes += producerRecordSizeInBytes(mockProducer.history().get(4));
+        assertThat(recordsProduced.metricValue(), equalTo(totalRecords));
+        assertThat(bytesProduced.metricValue(), equalTo(totalBytes));
+    }
+
+    @Test
     public void shouldSendToSpecificPartition() {
         final Headers headers = new RecordHeaders(new Header[] {new RecordHeader("key", "value".getBytes())});
 
-        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", headers, 1, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", headers, 1, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", headers, 2, null, stringSerializer, stringSerializer);
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", headers, 1, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", headers, 1, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", headers, 2, null, stringSerializer, stringSerializer, null, null);
 
         Map<TopicPartition, Long> offsets = collector.offsets();
 
@@ -169,9 +254,9 @@ public class RecordCollectorTest {
         assertEquals(0L, (long) offsets.get(new TopicPartition(topic, 2)));
         assertEquals(6, mockProducer.history().size());
 
-        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", null, 1, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", headers, 2, null, stringSerializer, stringSerializer);
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", null, 1, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", headers, 2, null, stringSerializer, stringSerializer, null, null);
 
         offsets = collector.offsets();
 
@@ -185,15 +270,15 @@ public class RecordCollectorTest {
     public void shouldSendWithPartitioner() {
         final Headers headers = new RecordHeaders(new Header[] {new RecordHeader("key", "value".getBytes())});
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "9", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "27", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "81", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "243", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "28", "0", headers, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "82", "0", headers, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "244", "0", headers, null, stringSerializer, stringSerializer, streamPartitioner);
-        collector.send(topic, "245", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "9", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "27", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "81", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "243", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "28", "0", headers, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "82", "0", headers, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "244", "0", headers, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
+        collector.send(topic, "245", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final Map<TopicPartition, Long> offsets = collector.offsets();
 
@@ -211,15 +296,15 @@ public class RecordCollectorTest {
     public void shouldSendWithNoPartition() {
         final Headers headers = new RecordHeaders(new Header[] {new RecordHeader("key", "value".getBytes())});
 
-        collector.send(topic, "3", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "9", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "27", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "81", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "243", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "28", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "82", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "244", "0", headers, null, null, stringSerializer, stringSerializer);
-        collector.send(topic, "245", "0", headers, null, null, stringSerializer, stringSerializer);
+        collector.send(topic, "3", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "9", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "27", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "81", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "243", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "28", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "82", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "244", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "245", "0", headers, null, null, stringSerializer, stringSerializer, null, null);
 
         final Map<TopicPartition, Long> offsets = collector.offsets();
 
@@ -234,9 +319,9 @@ public class RecordCollectorTest {
     public void shouldUpdateOffsetsUponCompletion() {
         Map<TopicPartition, Long> offsets = collector.offsets();
 
-        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", null, 1, null, stringSerializer, stringSerializer);
-        collector.send(topic, "999", "0", null, 2, null, stringSerializer, stringSerializer);
+        collector.send(topic, "999", "0", null, 0, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", null, 1, null, stringSerializer, stringSerializer, null, null);
+        collector.send(topic, "999", "0", null, 2, null, stringSerializer, stringSerializer, null, null);
 
         assertEquals(Collections.<TopicPartition, Long>emptyMap(), offsets);
 
@@ -254,7 +339,7 @@ public class RecordCollectorTest {
         final CustomStringSerializer valueSerializer = new CustomStringSerializer();
         keySerializer.configure(Collections.emptyMap(), true);
 
-        collector.send(topic, "3", "0", new RecordHeaders(), null, keySerializer, valueSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", new RecordHeaders(), null, keySerializer, valueSerializer, null, null, streamPartitioner);
 
         final List<ProducerRecord<byte[], byte[]>> recordHistory = mockProducer.history();
         for (final ProducerRecord<byte[], byte[]> sentRecord : recordHistory) {
@@ -271,14 +356,19 @@ public class RecordCollectorTest {
         expect(streamsProducer.eosEnabled()).andReturn(false);
         streamsProducer.flush();
         expectLastCall();
-        replay(streamsProducer);
+
+        final ProcessorTopology topology = mock(ProcessorTopology.class);
+        expect(topology.sinkTopics()).andStubReturn(Collections.emptySet());
+        replay(streamsProducer, topology);
 
         final RecordCollector collector = new RecordCollectorImpl(
             logContext,
             taskId,
             streamsProducer,
             productionExceptionHandler,
-            streamsMetrics);
+            streamsMetrics, 
+            topology
+        );
 
         collector.flush();
 
@@ -291,14 +381,18 @@ public class RecordCollectorTest {
         expect(streamsProducer.eosEnabled()).andReturn(true);
         streamsProducer.flush();
         expectLastCall();
-        replay(streamsProducer);
-
+        final ProcessorTopology topology = mock(ProcessorTopology.class);
+        expect(topology.sinkTopics()).andStubReturn(Collections.emptySet());
+        replay(streamsProducer, topology);
+        
         final RecordCollector collector = new RecordCollectorImpl(
             logContext,
             taskId,
             streamsProducer,
             productionExceptionHandler,
-            streamsMetrics);
+            streamsMetrics,
+            topology
+        );
 
         collector.flush();
 
@@ -309,15 +403,20 @@ public class RecordCollectorTest {
     public void shouldNotAbortTxOnCloseCleanIfEosEnabled() {
         final StreamsProducer streamsProducer = mock(StreamsProducer.class);
         expect(streamsProducer.eosEnabled()).andReturn(true);
-        replay(streamsProducer);
-
+        
+        final ProcessorTopology topology = mock(ProcessorTopology.class);
+        expect(topology.sinkTopics()).andStubReturn(Collections.emptySet());
+        replay(streamsProducer, topology);
+        
         final RecordCollector collector = new RecordCollectorImpl(
             logContext,
             taskId,
             streamsProducer,
             productionExceptionHandler,
-            streamsMetrics);
-
+            streamsMetrics,
+            topology
+        );
+       
         collector.closeClean();
 
         verify(streamsProducer);
@@ -328,14 +427,19 @@ public class RecordCollectorTest {
         final StreamsProducer streamsProducer = mock(StreamsProducer.class);
         expect(streamsProducer.eosEnabled()).andReturn(true);
         streamsProducer.abortTransaction();
-        replay(streamsProducer);
-
+        
+        final ProcessorTopology topology = mock(ProcessorTopology.class);
+        expect(topology.sinkTopics()).andStubReturn(Collections.emptySet());
+        replay(streamsProducer, topology);
+        
         final RecordCollector collector = new RecordCollectorImpl(
             logContext,
             taskId,
             streamsProducer,
             productionExceptionHandler,
-            streamsMetrics);
+            streamsMetrics,
+            topology
+        );
 
         collector.closeDirty();
 
@@ -355,7 +459,7 @@ public class RecordCollectorTest {
                 0,
                 0L,
                 (Serializer) new LongSerializer(), // need to add cast to trigger `ClassCastException`
-                new StringSerializer())
+                new StringSerializer(), null, null)
         );
 
         assertThat(expected.getCause(), instanceOf(ClassCastException.class));
@@ -383,7 +487,7 @@ public class RecordCollectorTest {
                 0,
                 0L,
                 (Serializer) new LongSerializer(), // need to add cast to trigger `ClassCastException`
-                new StringSerializer())
+                new StringSerializer(), null, null)
         );
 
         assertThat(expected.getCause(), instanceOf(ClassCastException.class));
@@ -411,7 +515,7 @@ public class RecordCollectorTest {
                 0,
                 0L,
                 new StringSerializer(),
-                (Serializer) new LongSerializer()) // need to add cast to trigger `ClassCastException`
+                (Serializer) new LongSerializer(), null, null) // need to add cast to trigger `ClassCastException`
         );
 
         assertThat(expected.getCause(), instanceOf(ClassCastException.class));
@@ -439,7 +543,7 @@ public class RecordCollectorTest {
                 0,
                 0L,
                 new StringSerializer(),
-                (Serializer) new LongSerializer()) // need to add cast to trigger `ClassCastException`
+                (Serializer) new LongSerializer(), null, null) // need to add cast to trigger `ClassCastException`
         );
 
         assertThat(expected.getCause(), instanceOf(ClassCastException.class));
@@ -461,13 +565,14 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamProducerOnPartitionsFor(new KafkaException("Kaboom!")),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
         collector.initialize();
 
         final StreamsException exception = assertThrows(
             StreamsException.class,
-            () -> collector.send(topic, "0", "0", null, null, stringSerializer, stringSerializer, streamPartitioner)
+            () -> collector.send(topic, "0", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner)
         );
         assertThat(
             exception.getMessage(),
@@ -492,13 +597,14 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamProducerOnPartitionsFor(runtimeException),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
         collector.initialize();
 
         final RuntimeException exception = assertThrows(
             runtimeException.getClass(),
-            () -> collector.send(topic, "0", "0", null, null, stringSerializer, stringSerializer, streamPartitioner)
+            () -> collector.send(topic, "0", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner)
         );
         assertThat(exception.getMessage(), equalTo("Kaboom!"));
     }
@@ -519,15 +625,16 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
         collector.initialize();
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final TaskMigratedException thrown = assertThrows(
             TaskMigratedException.class,
-            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner)
+            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner)
         );
         assertEquals(exception, thrown.getCause());
     }
@@ -548,11 +655,12 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
         collector.initialize();
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final TaskMigratedException thrown = assertThrows(TaskMigratedException.class, collector::flush);
         assertEquals(exception, thrown.getCause());
@@ -574,11 +682,12 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
         collector.initialize();
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final TaskMigratedException thrown = assertThrows(TaskMigratedException.class, collector::closeClean);
         assertEquals(exception, thrown.getCause());
@@ -592,14 +701,15 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final StreamsException thrown = assertThrows(
             StreamsException.class,
-            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner)
+            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner)
         );
         assertEquals(exception, thrown.getCause());
         assertThat(
@@ -618,10 +728,11 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final StreamsException thrown = assertThrows(StreamsException.class, collector::flush);
         assertEquals(exception, thrown.getCause());
@@ -641,10 +752,11 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final StreamsException thrown = assertThrows(StreamsException.class, collector::closeClean);
         assertEquals(exception, thrown.getCause());
@@ -664,14 +776,15 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             new AlwaysContinueProductionExceptionHandler(),
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final StreamsException thrown = assertThrows(
             StreamsException.class,
-            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner)
+            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner)
         );
         assertEquals(exception, thrown.getCause());
         assertThat(
@@ -690,10 +803,11 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             new AlwaysContinueProductionExceptionHandler(),
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final StreamsException thrown = assertThrows(StreamsException.class, collector::flush);
         assertEquals(exception, thrown.getCause());
@@ -713,10 +827,11 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(exception),
             new AlwaysContinueProductionExceptionHandler(),
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
 
         final StreamsException thrown = assertThrows(StreamsException.class, collector::closeClean);
         assertEquals(exception, thrown.getCause());
@@ -735,13 +850,14 @@ public class RecordCollectorTest {
             taskId,
             getExceptionalStreamsProducerOnSend(new Exception()),
             new AlwaysContinueProductionExceptionHandler(),
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
         try (final LogCaptureAppender logCaptureAppender =
                  LogCaptureAppender.createAndRegister(RecordCollectorImpl.class)) {
 
-            collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+            collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
             collector.flush();
 
             final List<String> messages = logCaptureAppender.getMessages();
@@ -767,7 +883,7 @@ public class RecordCollectorTest {
         ));
         assertEquals(1.0, metric.metricValue());
 
-        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner);
+        collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner);
         collector.flush();
         collector.closeClean();
     }
@@ -798,7 +914,8 @@ public class RecordCollectorTest {
                 Time.SYSTEM
             ),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
         collector.closeDirty();
@@ -830,13 +947,14 @@ public class RecordCollectorTest {
                 Time.SYSTEM
             ),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
         collector.initialize();
 
         final StreamsException thrown = assertThrows(
             StreamsException.class,
-            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, streamPartitioner)
+            () -> collector.send(topic, "3", "0", null, null, stringSerializer, stringSerializer, null, null, streamPartitioner)
         );
         assertThat(
             thrown.getMessage(),
@@ -865,7 +983,8 @@ public class RecordCollectorTest {
                 Time.SYSTEM
             ),
             productionExceptionHandler,
-            streamsMetrics
+            streamsMetrics,
+            topology
         );
 
         collector.closeClean();

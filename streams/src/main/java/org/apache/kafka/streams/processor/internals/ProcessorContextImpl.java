@@ -146,8 +146,9 @@ public class ProcessorContextImpl extends AbstractProcessorContext<Object, Objec
             changelogPartition.partition(),
             timestamp,
             BYTES_KEY_SERIALIZER,
-            BYTEARRAY_VALUE_SERIALIZER
-        );
+            BYTEARRAY_VALUE_SERIALIZER,
+            null,
+            null);
     }
 
     /**
