@@ -172,7 +172,7 @@ class ClientMetricsDynamicConfigChangeTest extends KafkaServerTestHarness {
 
     val props = new Properties()
     props.put(ClientMetricsConfig.ClientMetrics.AllMetricsFlag, "true")
-    props.put(ClientMetricsConfig.ClientMetrics.PushIntervalMs, pushInterval)
+    props.put(ClientMetricsConfig.ClientMetrics.PushIntervalMs, pushInterval.toString)
 
     // ********  Test Create the new client subscription with all metrics *********
     updateClientSubscription(configEntityName, props,
