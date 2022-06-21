@@ -125,7 +125,9 @@ object ClientMetricsConfig {
       // If the command is to delete the subscription then we do not expect any other parameters to be in the list.
       // Otherwise validate the rest of the parameters.
       if (!properties.containsKey(DeleteSubscription)) {
-        require(Integer.parseInt(properties.getOrDefault(PushIntervalMs, DEFAULT_PUSH_INTERVAL).toString) >= 0, s"Invalid parameter ${PushIntervalMs}")
+        val pushIntervalMsStr = properties.getOrDefault(PushIntervalMs, DEFAULT_PUSH_INTERVAL).toString
+        val pushIntervalMs = Integer.parseInt(pushIntervalMsStr)
+        require(pushIntervalMs >= 0, s"Invalid parameter ${PushIntervalMs}")
 
         // If all metrics flag is specified then there is no need for having the metrics parameter
         if (!properties.containsKey(AllMetricsFlag)) {
