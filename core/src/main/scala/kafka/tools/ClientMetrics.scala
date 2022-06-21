@@ -28,7 +28,7 @@ import org.apache.kafka.common.utils.Utils
 import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters.{IterableHasAsJava, MapHasAsJava}
+import scala.jdk.CollectionConverters._
 
 /**
  * This utility class is used to interact with client metrics.  It permits following 3 actions
