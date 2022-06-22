@@ -98,7 +98,6 @@ object ClientMetrics extends Logging {
     }
   }
 
-
   class ConfigCommandParser(args: Array[String]) extends CommandDefaultOptions(args) {
     def has(builder: OptionSpec[_]): Boolean = options.has(builder)
     def valueAsOption[A](option: OptionSpec[A], defaultValue: Option[A] = None): Option[A] = if (has(option)) Some(options.valueOf(option)) else defaultValue
