@@ -26,7 +26,7 @@ import org.apache.kafka.common.errors.InvalidConfigurationException
 import org.apache.kafka.common.utils.Utils
 
 import java.util
-import java.util.Properties
+import java.util.{Objects, Properties}
 import java.util.concurrent.TimeUnit
 import scala.jdk.CollectionConverters._
 
@@ -214,10 +214,36 @@ object ClientMetrics extends Logging {
 
   class ListMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args.options: OptionSet) {
     def name: Option[String] = valueAsOption(args.name)
+
+    override def hashCode(): Int = Objects.hash(options, args)
+
+    override def equals(obj: Any): Boolean = {
+      if (obj == null)
+        return false
+
+      if (this.getClass != obj.getClass)
+        return false
+
+      val that = obj.asInstanceOf[ListMetricsOptions]
+      options.equals(that.options)
+    }
   }
 
   class DeleteMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args.options: OptionSet) {
     def name: Option[String] = valueAsOption(args.name)
+
+    override def hashCode(): Int = Objects.hash(options, args)
+
+    override def equals(obj: Any): Boolean = {
+      if (obj == null)
+        return false
+
+      if (this.getClass != obj.getClass)
+        return false
+
+      val that = obj.asInstanceOf[DeleteMetricsOptions]
+      options.equals(that.options)
+    }
   }
 
   class AddMetricsOptions(args: ConfigCommandParser) extends MetricsOptions(args.options: OptionSet) {
@@ -230,10 +256,23 @@ object ClientMetrics extends Logging {
      var props: Map[String, String] = Map()
 
       if(name.isDefined) props += ("name" -> name.get)
-      if(!metrics.isEmpty) props += ("metrics" -> metrics.get.toString)
+      if(metrics.isDefined) props += ("metrics" -> metrics.get.toString)
       if(intervalMs.isDefined) props += ("interval" -> intervalMs.get.toString)
       if(isBlocked) props += ("block" -> isBlocked.toString)
       props
+    }
+
+    override def hashCode(): Int = Objects.hash(options, args)
+
+    override def equals(obj: Any): Boolean = {
+      if (obj == null)
+        return false
+
+      if (this.getClass != obj.getClass)
+        return false
+
+      val that = obj.asInstanceOf[AddMetricsOptions]
+      options.equals(that.options)
     }
   }
 

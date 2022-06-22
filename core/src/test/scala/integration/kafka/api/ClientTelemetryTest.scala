@@ -33,7 +33,7 @@ import java.util.Properties
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable.ListBuffer
 
-class TelemetryMetricsTest extends IntegrationTestHarness {
+class ClientTelemetryTest extends IntegrationTestHarness {
 
   val topicName = "telemetry-integration-test"
 
