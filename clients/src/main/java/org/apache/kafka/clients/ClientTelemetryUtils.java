@@ -30,6 +30,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
+
+import io.opentelemetry.proto.metrics.v1.MetricsData;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -356,6 +358,27 @@ public class ClientTelemetryUtils {
                 key != null ? key.length : 0,
                 value != null ? value.length : 0);
         }
+    }
+
+
+    public static List<io.opentelemetry.proto.metrics.v1.Metric> deserializeMetrics(byte[] serializeMetrics) {
+        List<io.opentelemetry.proto.metrics.v1.ResourceMetrics> resourceMetrics;
+        List<io.opentelemetry.proto.metrics.v1.Metric> deserializedMetrics = new ArrayList<>();
+
+        try {
+            MetricsData md = MetricsData.parseFrom(serializeMetrics);
+            resourceMetrics = md.getResourceMetricsList();
+
+            resourceMetrics.forEach(rm ->
+                    rm.getInstrumentationLibraryMetricsList().forEach(instLib ->
+                            deserializedMetrics.addAll(instLib.getMetricsList()))
+            );
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return deserializedMetrics;
     }
 
 }
