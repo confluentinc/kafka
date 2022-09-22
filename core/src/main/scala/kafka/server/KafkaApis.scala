@@ -1067,7 +1067,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             // NOTE: These exceptions are special cases since these error messages are typically transient or the client
             // would have received a clear exception and there is no value in logging the entire stack trace for the same
             case e @ (_ : UnknownTopicOrPartitionException |
-                      _ : NotLeaderForPartitionException |
+                      _ : NotLeaderOrFollowerException |
                       _ : UnknownLeaderEpochException |
                       _ : FencedLeaderEpochException |
                       _ : KafkaStorageException |

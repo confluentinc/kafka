@@ -534,6 +534,9 @@ subprojects {
       "-Xlint:unused"
     ]
 
+    if (versions.baseScala == '2.13')
+      scalaCompileOptions.additionalParameters += ["-Wconf:msg=@nowarn annotation does not suppress any warnings:s"] // See https://github.com/scala/scala/pull/9960
+
     // Inline more aggressively when compiling the `core` jar since it's not meant to be used as a library.
     // More specifically, inline classes from the Scala library so that we can inline methods like `Option.exists`
     // and avoid lambda allocations. This is only safe if the Scala library version is the same at compile time
