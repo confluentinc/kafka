@@ -191,7 +191,7 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
 
   @Test
   def testConfigChangeOnNonExistingTopic(): Unit = {
-    val topic = TestUtils.tempTopic
+    val topic = TestUtils.tempTopic()
     try {
       val logProps = new Properties()
       logProps.put(FlushMessagesProp, 10000: java.lang.Integer)

@@ -188,7 +188,7 @@ class AdminZkClientTest extends ZooKeeperTestHarness with Logging with RackAware
       assertEquals(props, savedProps)
     }
 
-    TestUtils.assertConcurrent("Concurrent topic creation failed", Seq(() => createTopic, () => createTopic),
+    TestUtils.assertConcurrent("Concurrent topic creation failed", Seq(() => createTopic(), () => createTopic()),
       JTestUtils.DEFAULT_MAX_WAIT_MS.toInt)
   }
 
@@ -277,8 +277,8 @@ class AdminZkClientTest extends ZooKeeperTestHarness with Logging with RackAware
     def checkConfig(limit: Long): Unit = {
       retry(10000) {
         for (server <- servers) {
-          assertEquals("Leader Quota Manager was not updated", limit, server.quotaManagers.leader.upperBound)
-          assertEquals("Follower Quota Manager was not updated", limit, server.quotaManagers.follower.upperBound)
+          assertEquals("Leader Quota Manager was not updated", limit, server.quotaManagers.leader.upperBound())
+          assertEquals("Follower Quota Manager was not updated", limit, server.quotaManagers.follower.upperBound())
         }
       }
     }

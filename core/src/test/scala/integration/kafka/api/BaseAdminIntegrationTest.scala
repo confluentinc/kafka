@@ -163,7 +163,7 @@ abstract class BaseAdminIntegrationTest extends IntegrationTestHarness with Logg
 
     //with includeAuthorizedOperations flag
     result = client.describeCluster(new DescribeClusterOptions().includeAuthorizedOperations(true))
-    var expectedOperations = configuredClusterPermissions.asJava
+    var expectedOperations = configuredClusterPermissions().asJava
     assertEquals(expectedOperations, result.authorizedOperations().get())
 
     val topic = "mytopic"

@@ -118,12 +118,12 @@ private[timer] class TimerTaskList(taskCounter: AtomicInteger) extends Delayed {
   }
 
   def getDelay(unit: TimeUnit): Long = {
-    unit.convert(max(getExpiration - Time.SYSTEM.hiResClockMs, 0), TimeUnit.MILLISECONDS)
+    unit.convert(max(getExpiration() - Time.SYSTEM.hiResClockMs, 0), TimeUnit.MILLISECONDS)
   }
 
   def compareTo(d: Delayed): Int = {
     val other = d.asInstanceOf[TimerTaskList]
-    java.lang.Long.compare(getExpiration, other.getExpiration)
+    java.lang.Long.compare(getExpiration(), other.getExpiration())
   }
 
 }
@@ -140,7 +140,7 @@ private[timer] class TimerTaskEntry(val timerTask: TimerTask, val expirationMs: 
   if (timerTask != null) timerTask.setTimerTaskEntry(this)
 
   def cancelled: Boolean = {
-    timerTask.getTimerTaskEntry != this
+    timerTask.getTimerTaskEntry() != this
   }
 
   def remove(): Unit = {

@@ -290,8 +290,8 @@ class ConfigCommandTest extends ZooKeeperTestHarness with Logging {
     def testExpectedEntityTypeNames(expectedTypes: List[String], expectedNames: List[String], args: String*): Unit = {
       val createOpts = new ConfigCommandOptions(Array(connectOpts._1, connectOpts._2, "--describe") ++ args)
       createOpts.checkArgs()
-      assertEquals(createOpts.entityTypes, expectedTypes)
-      assertEquals(createOpts.entityNames, expectedNames)
+      assertEquals(createOpts.entityTypes(), expectedTypes)
+      assertEquals(createOpts.entityNames(), expectedNames)
     }
 
     testExpectedEntityTypeNames(List(ConfigType.Topic), List("A"), "--entity-type", "topics", "--entity-name", "A")

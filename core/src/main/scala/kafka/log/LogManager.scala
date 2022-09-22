@@ -324,7 +324,7 @@ class LogManager(logDirs: Seq[File],
 
         var recoveryPoints = Map[TopicPartition, Long]()
         try {
-          recoveryPoints = this.recoveryPointCheckpoints(dir).read
+          recoveryPoints = this.recoveryPointCheckpoints(dir).read()
         } catch {
           case e: Exception =>
             warn(s"Error occurred while reading recovery-point-offset-checkpoint file of directory " +
@@ -333,7 +333,7 @@ class LogManager(logDirs: Seq[File],
 
         var logStartOffsets = Map[TopicPartition, Long]()
         try {
-          logStartOffsets = this.logStartOffsetCheckpoints(dir).read
+          logStartOffsets = this.logStartOffsetCheckpoints(dir).read()
         } catch {
           case e: Exception =>
             warn(s"Error occurred while reading log-start-offset-checkpoint file of directory " +
@@ -1056,7 +1056,7 @@ class LogManager(logDirs: Seq[File],
         debug(s"Checking if flush is needed on ${topicPartition.topic} flush interval ${log.config.flushMs}" +
               s" last flushed ${log.lastFlushTime} time since last flush: $timeSinceLastFlush")
         if(timeSinceLastFlush >= log.config.flushMs)
-          log.flush
+          log.flush()
       } catch {
         case e: Throwable =>
           error(s"Error flushing topic ${topicPartition.topic}", e)

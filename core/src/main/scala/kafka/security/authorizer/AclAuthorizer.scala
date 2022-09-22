@@ -68,7 +68,7 @@ object AclAuthorizer {
     def find(p: AclEntry => Boolean): Option[AclEntry] = {
       // Lazily iterate through the inner `Seq` elements and stop as soon as we find a match
       val it = seqs.iterator.flatMap(_.find(p))
-      if (it.hasNext) Some(it.next)
+      if (it.hasNext) Some(it.next())
       else None
     }
 
@@ -367,7 +367,7 @@ class AclAuthorizer extends Authorizer with Logging {
     } else false
   }
 
-  @nowarn("cat=deprecation&cat=optimizer")
+  @nowarn("cat=deprecation")
   private def matchingAcls(resourceType: ResourceType, resourceName: String): AclSeqs = {
     // this code is performance sensitive, make sure to run AclAuthorizerBenchmark after any changes
 

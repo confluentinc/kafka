@@ -471,7 +471,7 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
   def testSetGetAndDeletePartitionReassignment(): Unit = {
     zkClient.createRecursive(AdminZNode.path)
 
-    assertEquals(Map.empty, zkClient.getPartitionReassignment)
+    assertEquals(Map.empty, zkClient.getPartitionReassignment())
 
     val reassignment = Map(
       new TopicPartition("topic_a", 0) -> Seq(0, 1, 3),
@@ -484,17 +484,17 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
     intercept[ControllerMovedException](zkClient.setOrCreatePartitionReassignment(reassignment, controllerEpochZkVersion + 1))
 
     zkClient.setOrCreatePartitionReassignment(reassignment, controllerEpochZkVersion)
-    assertEquals(reassignment, zkClient.getPartitionReassignment)
+    assertEquals(reassignment, zkClient.getPartitionReassignment())
 
     val updatedReassignment = reassignment - new TopicPartition("topic_b", 0)
     zkClient.setOrCreatePartitionReassignment(updatedReassignment, controllerEpochZkVersion)
-    assertEquals(updatedReassignment, zkClient.getPartitionReassignment)
+    assertEquals(updatedReassignment, zkClient.getPartitionReassignment())
 
     zkClient.deletePartitionReassignment(controllerEpochZkVersion)
-    assertEquals(Map.empty, zkClient.getPartitionReassignment)
+    assertEquals(Map.empty, zkClient.getPartitionReassignment())
 
     zkClient.createPartitionReassignment(reassignment)
-    assertEquals(reassignment, zkClient.getPartitionReassignment)
+    assertEquals(reassignment, zkClient.getPartitionReassignment())
   }
 
   @Test
@@ -548,7 +548,7 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
     })
 
     // create acl paths
-    zkClient.createAclPaths
+    zkClient.createAclPaths()
 
     ZkAclStore.stores.foreach(store => {
       assertTrue(zkClient.pathExists(store.aclPath))
@@ -977,16 +977,16 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
   @Test
   def testGetTopicsAndPartitions(): Unit = {
     assertTrue(zkClient.getAllTopicsInCluster().isEmpty)
-    assertTrue(zkClient.getAllPartitions.isEmpty)
+    assertTrue(zkClient.getAllPartitions().isEmpty)
 
     zkClient.createRecursive(TopicZNode.path(topic1))
     zkClient.createRecursive(TopicZNode.path(topic2))
     assertEquals(Set(topic1, topic2), zkClient.getAllTopicsInCluster())
 
-    assertTrue(zkClient.getAllPartitions.isEmpty)
+    assertTrue(zkClient.getAllPartitions().isEmpty)
 
     zkClient.createTopicPartitionStatesRaw(initialLeaderIsrAndControllerEpochs, controllerEpochZkVersion)
-    assertEquals(Set(topicPartition10, topicPartition11), zkClient.getAllPartitions)
+    assertEquals(Set(topicPartition10, topicPartition11), zkClient.getAllPartitions())
   }
 
   @Test
@@ -1057,9 +1057,9 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
 
   @Test
   def testReassignPartitionsInProgress(): Unit = {
-    assertFalse(zkClient.reassignPartitionsInProgress)
+    assertFalse(zkClient.reassignPartitionsInProgress())
     zkClient.createRecursive(ReassignPartitionsZNode.path)
-    assertTrue(zkClient.reassignPartitionsInProgress)
+    assertTrue(zkClient.reassignPartitionsInProgress())
   }
 
   @Test
@@ -1159,7 +1159,7 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
 
   @Test
   def testClusterIdMethods(): Unit = {
-    val clusterId = CoreUtils.generateUuidAsBase64
+    val clusterId = CoreUtils.generateUuidAsBase64()
 
     zkClient.createOrGetClusterId(clusterId)
     assertEquals(clusterId, zkClient.getClusterId.getOrElse(fail("No cluster id found")))
@@ -1168,7 +1168,7 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
   @Test
   def testBrokerSequenceIdMethods(): Unit = {
     val sequenceId = zkClient.generateBrokerSequenceId()
-    assertEquals(sequenceId + 1, zkClient.generateBrokerSequenceId)
+    assertEquals(sequenceId + 1, zkClient.generateBrokerSequenceId())
   }
 
   @Test
@@ -1210,7 +1210,7 @@ class KafkaZkClientTest extends ZooKeeperTestHarness {
     assertFalse(zkClient.pathExists(DelegationTokensZNode.path))
     assertFalse(zkClient.pathExists(DelegationTokenChangeNotificationZNode.path))
 
-    zkClient.createDelegationTokenPaths
+    zkClient.createDelegationTokenPaths()
     assertTrue(zkClient.pathExists(DelegationTokensZNode.path))
     assertTrue(zkClient.pathExists(DelegationTokenChangeNotificationZNode.path))
 

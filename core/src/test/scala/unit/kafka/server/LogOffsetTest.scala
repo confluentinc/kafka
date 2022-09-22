@@ -100,7 +100,7 @@ class LogOffsetTest extends BaseRequestTest {
 
     createTopic(topic, 1, 1)
 
-    val logManager = server.getLogManager
+    val logManager = server.getLogManager()
     TestUtils.waitUntilTrue(() => logManager.getLog(topicPartition).isDefined,
       s"Log for partition $topicPartition should be created")
     val log = logManager.getLog(topicPartition).get

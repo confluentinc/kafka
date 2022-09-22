@@ -24,6 +24,10 @@ For a detailed description of spotbugs bug categories, see https://spotbugs.read
 -->
 <FindBugsFilter>
 
+    <Match>
+        <Bug pattern="EC_UNRELATED_TYPES_USING_POINTER_EQUALITY"/>
+    </Match>
+
     <!-- false positive in Java 11, see https://github.com/spotbugs/spotbugs/issues/756 -->
     <Match>
         <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>

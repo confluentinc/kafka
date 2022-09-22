@@ -362,7 +362,7 @@ class AclAuthorizerTest extends ZooKeeperTestHarness {
     val acls1 = Set(acl2)
     addAcls(aclAuthorizer, acls1, resource1)
 
-    zkClient.deleteAclChangeNotifications
+    zkClient.deleteAclChangeNotifications()
     val authorizer = new AclAuthorizer
     try {
       authorizer.configure(config.originals)
@@ -790,7 +790,7 @@ class AclAuthorizerTest extends ZooKeeperTestHarness {
 
   @Test
   def testAuthorizerNoZkConfig(): Unit = {
-    val noTlsProps = Kafka.getPropsFromArgs(Array(prepareDefaultConfig))
+    val noTlsProps = Kafka.getPropsFromArgs(Array(prepareDefaultConfig()))
     assertEquals(None, AclAuthorizer.zkClientConfigFromKafkaConfigAndMap(
       KafkaConfig.fromProps(noTlsProps),
       mutable.Map(noTlsProps.asInstanceOf[java.util.Map[String, Any]].asScala.toSeq: _*)))

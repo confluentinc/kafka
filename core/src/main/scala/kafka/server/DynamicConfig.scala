@@ -60,7 +60,7 @@ object DynamicConfig {
       .define(FollowerReplicationThrottledRateProp, LONG, DefaultReplicationThrottledRate, atLeast(0), MEDIUM, FollowerReplicationThrottledRateDoc)
       .define(ReplicaAlterLogDirsIoMaxBytesPerSecondProp, LONG, DefaultReplicationThrottledRate, atLeast(0), MEDIUM, ReplicaAlterLogDirsIoMaxBytesPerSecondDoc)
     DynamicBrokerConfig.addDynamicConfigs(brokerConfigDef)
-    val nonDynamicProps = KafkaConfig.configNames.toSet -- brokerConfigDef.names.asScala
+    val nonDynamicProps = KafkaConfig.configNames().toSet -- brokerConfigDef.names.asScala
 
     def names = brokerConfigDef.names
 

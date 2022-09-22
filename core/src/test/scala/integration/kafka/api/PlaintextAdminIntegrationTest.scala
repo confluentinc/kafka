@@ -302,7 +302,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testDescribeAndAlterConfigs(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     // Create topics
     val topic1 = "describe-alter-configs-topic-1"
@@ -373,7 +373,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testCreatePartitions(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     // Create topics
     val topic1 = "create-partitions-topic-1"
@@ -638,7 +638,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   def testSeekAfterDeleteRecords(): Unit = {
     createTopic(topic, numPartitions = 2, replicationFactor = brokerCount)
 
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val consumer = createConsumer()
     subscribeAndWaitForAssignment(topic, consumer)
@@ -667,7 +667,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   def testLogStartOffsetCheckpoint(): Unit = {
     createTopic(topic, numPartitions = 2, replicationFactor = brokerCount)
 
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val consumer = createConsumer()
     subscribeAndWaitForAssignment(topic, consumer)
@@ -685,7 +685,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
     client.close()
     brokerList = TestUtils.bootstrapServers(servers, listenerName)
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     TestUtils.waitUntilTrue(() => {
       // Need to retry if leader is not available for the partition
@@ -707,7 +707,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   def testLogStartOffsetAfterDeleteRecords(): Unit = {
     createTopic(topic, numPartitions = 2, replicationFactor = brokerCount)
 
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val consumer = createConsumer()
     subscribeAndWaitForAssignment(topic, consumer)
@@ -745,7 +745,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
     // we will produce to topic and delete records while one follower is down
     killBroker(followerIndex)
 
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
     val producer = createProducer()
     sendRecords(producer, 100, topicPartition)
 
@@ -772,7 +772,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testAlterLogDirsAfterDeleteRecords(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
     createTopic(topic, numPartitions = 1, replicationFactor = brokerCount)
     val expectedLEO = 100
     val producer = createProducer()
@@ -806,7 +806,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   def testOffsetsForTimesAfterDeleteRecords(): Unit = {
     createTopic(topic, numPartitions = 2, replicationFactor = brokerCount)
 
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val consumer = createConsumer()
     subscribeAndWaitForAssignment(topic, consumer)
@@ -829,7 +829,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
     val consumer = createConsumer()
     subscribeAndWaitForAssignment(topic, consumer)
 
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val producer = createProducer()
     sendRecords(producer, 10, topicPartition)
@@ -852,7 +852,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
     val consumer = createConsumer()
     subscribeAndWaitForAssignment(topic, consumer)
 
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val producer = createProducer()
     sendRecords(producer, 10, topicPartition)
@@ -877,7 +877,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testDescribeConfigsForTopic(): Unit = {
     createTopic(topic, numPartitions = 2, replicationFactor = brokerCount)
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val existingTopic = new ConfigResource(ConfigResource.Type.TOPIC, topic)
     client.describeConfigs(Collections.singletonList(existingTopic)).values.get(existingTopic).get()
@@ -912,7 +912,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testInvalidAlterConfigs(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
     checkInvalidAlterConfigs(zkClient, servers, client)
   }
 
@@ -1296,7 +1296,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testElectPreferredLeaders(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val prefer0 = Seq(0, 1, 2)
     val prefer1 = Seq(1, 2, 0)
@@ -1436,7 +1436,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testElectUncleanLeadersForOnePartition(): Unit = {
     // Case: unclean leader election with one topic partition
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val broker1 = 1
     val broker2 = 2
@@ -1461,7 +1461,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testElectUncleanLeadersForManyPartitions(): Unit = {
     // Case: unclean leader election with many topic partitions
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val broker1 = 1
     val broker2 = 2
@@ -1499,7 +1499,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testElectUncleanLeadersForAllPartitions(): Unit = {
     // Case: noop unclean leader election and valid unclean leader election for all partitions
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val broker1 = 1
     val broker2 = 2
@@ -1538,7 +1538,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testElectUncleanLeadersForUnknownPartitions(): Unit = {
     // Case: unclean leader election for unknown topic
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val broker1 = 1
     val broker2 = 2
@@ -1565,7 +1565,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testElectUncleanLeadersWhenNoLiveBrokers(): Unit = {
     // Case: unclean leader election with no live brokers
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val broker1 = 1
     val broker2 = 2
@@ -1595,7 +1595,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testElectUncleanLeadersNoop(): Unit = {
     // Case: noop unclean leader election with explicit topic partitions
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val broker1 = 1
     val broker2 = 2
@@ -1624,7 +1624,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
   @Test
   def testElectUncleanLeadersAndNoop(): Unit = {
     // Case: one noop unclean leader election and one valid unclean leader election
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     val broker1 = 1
     val broker2 = 2
@@ -1692,7 +1692,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testValidIncrementalAlterConfigs(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     // Create topics
     val topic1 = "incremental-alter-configs-topic-1"
@@ -1879,7 +1879,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testInvalidIncrementalAlterConfigs(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
 
     // Create topics
     val topic1 = "incremental-alter-configs-topic-1"
@@ -1962,7 +1962,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testInvalidAlterPartitionReassignments(): Unit = {
-    client = Admin.create(createConfig)
+    client = Admin.create(createConfig())
     val topic = "alter-reassignments-topic-1"
     val tp1 = new TopicPartition(topic, 0)
     val tp2 = new TopicPartition(topic, 1)
@@ -2001,7 +2001,7 @@ class PlaintextAdminIntegrationTest extends BaseAdminIntegrationTest {
 
   @Test
   def testLongTopicNames(): Unit = {
-    val client = Admin.create(createConfig)
+    val client = Admin.create(createConfig())
     val longTopicName = String.join("", Collections.nCopies(249, "x"));
     val invalidTopicName = String.join("", Collections.nCopies(250, "x"));
     val newTopics2 = Seq(new NewTopic(invalidTopicName, 3, 3.toShort),

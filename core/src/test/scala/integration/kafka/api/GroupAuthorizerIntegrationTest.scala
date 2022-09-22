@@ -33,6 +33,7 @@ import org.junit.Assert._
 import org.junit.{Before, Test}
 import org.scalatest.Assertions.intercept
 
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 
 object GroupAuthorizerIntegrationTest {
@@ -64,6 +65,7 @@ class GroupAuthorizerIntegrationTest extends BaseRequestTest {
   def brokerPrincipal: KafkaPrincipal = BrokerPrincipal
   def clientPrincipal: KafkaPrincipal = ClientPrincipal
 
+  @nowarn("cat=deprecation")
   override def brokerPropertyOverrides(properties: Properties): Unit = {
     properties.put(KafkaConfig.AuthorizerClassNameProp, classOf[SimpleAclAuthorizer].getName)
     properties.put(KafkaConfig.BrokerIdProp, brokerId.toString)

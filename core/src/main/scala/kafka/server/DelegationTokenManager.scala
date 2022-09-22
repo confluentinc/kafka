@@ -185,10 +185,10 @@ class DelegationTokenManager(val config: KafkaConfig,
 
   def startup() = {
     if (config.tokenAuthEnabled) {
-      zkClient.createDelegationTokenPaths
-      loadCache
+      zkClient.createDelegationTokenPaths()
+      loadCache()
       tokenChangeListener = new ZkNodeChangeNotificationListener(zkClient, DelegationTokenChangeNotificationZNode.path, DelegationTokenChangeNotificationSequenceZNode.SequenceNumberPrefix, TokenChangedNotificationHandler)
-      tokenChangeListener.init
+      tokenChangeListener.init()
     }
   }
 
@@ -267,7 +267,7 @@ class DelegationTokenManager(val config: KafkaConfig,
       responseCallback(CreateTokenResult(-1, -1, -1, "", Array[Byte](), Errors.DELEGATION_TOKEN_AUTH_DISABLED))
     } else {
       lock.synchronized {
-        val tokenId = CoreUtils.generateUuidAsBase64
+        val tokenId = CoreUtils.generateUuidAsBase64()
 
         val issueTimeStamp = time.milliseconds
         val maxLifeTime = if (maxLifeTimeMs <= 0) tokenMaxLifetime else Math.min(maxLifeTimeMs, tokenMaxLifetime)
@@ -454,7 +454,7 @@ class DelegationTokenManager(val config: KafkaConfig,
    */
   def expireTokens(): Unit = {
     lock.synchronized {
-      for (tokenInfo <- getAllTokenInformation) {
+      for (tokenInfo <- getAllTokenInformation()) {
         val now = time.milliseconds
         if (tokenInfo.maxTimestamp < now || tokenInfo.expiryTimestamp < now) {
           info(s"Delegation token expired for token: ${tokenInfo.tokenId} for owner: ${tokenInfo.owner}")

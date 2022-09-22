@@ -291,7 +291,7 @@ object ConfigCommand extends Config {
     props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, opts.options.valueOf(opts.bootstrapServerOpt))
     val adminClient = Admin.create(props)
 
-    if (opts.options.has(opts.alterOpt) && opts.entityTypes.size != opts.entityNames.size)
+    if (opts.options.has(opts.alterOpt) && opts.entityTypes().size != opts.entityNames().size)
       throw new IllegalArgumentException(s"An entity name must be specified for every entity type")
 
     try {
@@ -306,8 +306,8 @@ object ConfigCommand extends Config {
 
   @nowarn("cat=deprecation")
   private[admin] def alterConfig(adminClient: Admin, opts: ConfigCommandOptions): Unit = {
-    val entityTypes = opts.entityTypes
-    val entityNames = opts.entityNames
+    val entityTypes = opts.entityTypes()
+    val entityNames = opts.entityNames()
     val entityTypeHead = entityTypes.head
     val entityNameHead = entityNames.head
     val configsToBeAddedMap = parseConfigsToBeAdded(opts).asScala
@@ -415,8 +415,8 @@ object ConfigCommand extends Config {
   }
 
   private[admin] def describeConfig(adminClient: Admin, opts: ConfigCommandOptions): Unit = {
-    val entityTypes = opts.entityTypes
-    val entityNames = opts.entityNames
+    val entityTypes = opts.entityTypes()
+    val entityNames = opts.entityNames()
     val describeAll = opts.options.has(opts.allOpt)
 
     entityTypes.head match {
@@ -603,8 +603,8 @@ object ConfigCommand extends Config {
   }
 
   private[admin] def parseEntity(opts: ConfigCommandOptions): ConfigEntity = {
-    val entityTypes = opts.entityTypes
-    val entityNames = opts.entityNames
+    val entityTypes = opts.entityTypes()
+    val entityNames = opts.entityNames()
     if (entityTypes.head == ConfigType.User || entityTypes.head == ConfigType.Client)
       parseClientQuotaEntity(opts, entityTypes, entityNames)
     else {
@@ -636,7 +636,7 @@ object ConfigCommand extends Config {
       }
     }
 
-    val entities = entityTypes.map(t => Entity(t, if (sortedNames.hasNext) Some(sanitizeName(t, sortedNames.next)) else None))
+    val entities = entityTypes.map(t => Entity(t, if (sortedNames.hasNext) Some(sanitizeName(t, sortedNames.next())) else None))
     ConfigEntity(entities.head, if (entities.size > 1) Some(entities(1)) else None)
   }
 
@@ -747,7 +747,7 @@ object ConfigCommand extends Config {
       CommandLineUtils.checkInvalidArgs(parser, options, alterOpt, Set(describeOpt))
       CommandLineUtils.checkInvalidArgs(parser, options, describeOpt, Set(alterOpt, addConfig, deleteConfig))
 
-      val entityTypeVals = entityTypes
+      val entityTypeVals = entityTypes()
       if (entityTypeVals.size != entityTypeVals.distinct.size)
         throw new IllegalArgumentException(s"Duplicate entity type(s) specified: ${entityTypeVals.diff(entityTypeVals.distinct).mkString(",")}")
 
@@ -769,8 +769,8 @@ object ConfigCommand extends Config {
         (entityFlags ++ entityDefaultsFlags).exists(entity => options.has(entity._1)))
         throw new IllegalArgumentException("--entity-{type,name,default} should not be used in conjunction with specific entity flags")
 
-      val hasEntityName = entityNames.exists(!_.isEmpty)
-      val hasEntityDefault = entityNames.exists(_.isEmpty)
+      val hasEntityName = entityNames().exists(!_.isEmpty)
+      val hasEntityDefault = entityNames().exists(_.isEmpty)
 
       if (!options.has(bootstrapServerOpt) && !options.has(zkConnectOpt))
         throw new IllegalArgumentException("One of the required --bootstrap-server or --zookeeper arguments must be specified")

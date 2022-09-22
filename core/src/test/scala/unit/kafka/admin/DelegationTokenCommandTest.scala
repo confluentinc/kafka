@@ -67,7 +67,7 @@ class DelegationTokenCommandTest extends BaseRequestTest with SaslSetup {
 
   @Test
   def testDelegationTokenRequests(): Unit = {
-    adminClient = Admin.create(createAdminConfig)
+    adminClient = Admin.create(createAdminConfig())
     val renewer1 = "User:renewer1"
     val renewer2 = "User:renewer2"
 

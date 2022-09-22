@@ -47,7 +47,7 @@ class DelegationTokenRequestsOnPlainTextTest extends BaseRequestTest {
 
   @Test
   def testDelegationTokenRequests(): Unit = {
-    adminClient = Admin.create(createAdminConfig)
+    adminClient = Admin.create(createAdminConfig())
 
     val createResult = adminClient.createDelegationToken()
     intercept[ExecutionException](createResult.delegationToken().get()).getCause.isInstanceOf[UnsupportedByAuthenticationException]

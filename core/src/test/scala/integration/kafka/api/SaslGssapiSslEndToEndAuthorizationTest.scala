@@ -21,10 +21,12 @@ import kafka.server.KafkaConfig
 import kafka.utils.JaasTestUtils
 import org.apache.kafka.common.security.auth.KafkaPrincipal
 
+import scala.annotation.nowarn
 import scala.collection.immutable.List
 
 // Note: this test currently uses the deprecated SimpleAclAuthorizer to ensure we have test coverage
 // It must be replaced with the new AclAuthorizer when SimpleAclAuthorizer is removed
+@nowarn("cat=deprecation")
 class SaslGssapiSslEndToEndAuthorizationTest extends SaslEndToEndAuthorizationTest {
   override val clientPrincipal = new KafkaPrincipal(KafkaPrincipal.USER_TYPE,
     JaasTestUtils.KafkaClientPrincipalUnqualifiedName)

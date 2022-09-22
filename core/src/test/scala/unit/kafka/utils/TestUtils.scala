@@ -467,14 +467,14 @@ object TestUtils extends Logging {
     var length = 0
     while(expected.hasNext && actual.hasNext) {
       length += 1
-      assertEquals(expected.next, actual.next)
+      assertEquals(expected.next(), actual.next())
     }
 
     // check if the expected iterator is longer
     if (expected.hasNext) {
       var length1 = length
       while (expected.hasNext) {
-        expected.next
+        expected.next()
         length1 += 1
       }
       assertFalse("Iterators have uneven length-- first has more: "+length1 + " > " + length, true)
@@ -484,7 +484,7 @@ object TestUtils extends Logging {
     if (actual.hasNext) {
       var length2 = length
       while (actual.hasNext) {
-        actual.next
+        actual.next()
         length2 += 1
       }
       assertFalse("Iterators have uneven length-- second has more: "+length2 + " > " + length, true)
@@ -499,7 +499,7 @@ object TestUtils extends Logging {
     var n = 0
     while (s1.hasNext) {
       n+=1
-      s1.next
+      s1.next()
     }
     assertEquals(expectedLength, n)
   }
@@ -524,7 +524,7 @@ object TestUtils extends Logging {
         while (true) {
           if (cur == null) {
             if (topIterator.hasNext)
-              cur = topIterator.next
+              cur = topIterator.next()
             else
               return false
           }
@@ -536,7 +536,7 @@ object TestUtils extends Logging {
         throw new RuntimeException("should not reach here")
       }
 
-      def next() : T = cur.next
+      def next() : T = cur.next()
     }
   }
 
@@ -1111,10 +1111,10 @@ object TestUtils extends Logging {
       "Replica manager's should have deleted all of this topic's partitions")
     // ensure that logs from all replicas are deleted if delete topic is marked successful in ZooKeeper
     assertTrue("Replica logs not deleted after delete topic is complete",
-      servers.forall(server => topicPartitions.forall(tp => server.getLogManager.getLog(tp).isEmpty)))
+      servers.forall(server => topicPartitions.forall(tp => server.getLogManager().getLog(tp).isEmpty)))
     // ensure that topic is removed from all cleaner offsets
     waitUntilTrue(() => servers.forall(server => topicPartitions.forall { tp =>
-      val checkpoints = server.getLogManager.liveLogDirs.map { logDir =>
+      val checkpoints = server.getLogManager().liveLogDirs.map { logDir =>
         new OffsetCheckpointFile(new File(logDir, "cleaner-offset-checkpoint")).read()
       }
       checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))

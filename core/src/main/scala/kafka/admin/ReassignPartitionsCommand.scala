@@ -510,7 +510,7 @@ object ReassignPartitionsCommand extends Logging {
   def findPartitionReassignmentStates(zkClient: KafkaZkClient,
                                       targetReassignments: Map[TopicPartition, Seq[Int]])
                                       : (Map[TopicPartition, PartitionReassignmentState], Boolean) = {
-    val partitionsBeingReassigned = zkClient.getPartitionReassignment
+    val partitionsBeingReassigned = zkClient.getPartitionReassignment()
     val results = new mutable.HashMap[TopicPartition, PartitionReassignmentState]()
     targetReassignments.groupBy(_._1.topic).foreach {
       case (topic, partitions) =>
