@@ -45,6 +45,7 @@ import org.apache.kafka.streams.{KeyValue, StreamsConfig, TopologyDescription, S
 import org.junit.Assert._
 import org.junit._
 
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 
 /**
@@ -75,6 +76,7 @@ class TopologyTest {
     }
 
     // build the Java topology
+    @nowarn("cat=deprecation")
     def getTopologyJava: TopologyDescription = {
       val streamBuilder = new StreamsBuilderJ
       val textLines = streamBuilder.stream[String, String](inputTopic)
@@ -106,6 +108,7 @@ class TopologyTest {
     }
 
     // build the Java topology
+    @nowarn("cat=deprecation")
     def getTopologyJava: TopologyDescription = {
 
       val streamBuilder = new StreamsBuilderJ
@@ -125,6 +128,7 @@ class TopologyTest {
     assertEquals(getTopologyScala, getTopologyJava)
   }
 
+  @nowarn("cat=deprecation")
   @Test def shouldBuildIdenticalTopologyInJavaNScalaCogroupSimple(): Unit = {
 
     // build the Scala topology

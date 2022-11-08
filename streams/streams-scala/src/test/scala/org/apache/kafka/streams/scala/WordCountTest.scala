@@ -32,6 +32,7 @@ import org.apache.kafka.test.{IntegrationTest, TestUtils}
 import ImplicitConversions._
 import org.apache.kafka.common.serialization.{LongDeserializer, StringDeserializer, StringSerializer}
 import org.junit.experimental.categories.Category
+import scala.annotation.nowarn
 
 /**
  * Test suite that does a classic word count example.
@@ -148,6 +149,7 @@ class WordCountTest extends WordCountTestData {
 
     val pattern = Pattern.compile("\\W+", Pattern.UNICODE_CHARACTER_CLASS)
 
+    @nowarn("cat=deprecation")
     val splits: KStreamJ[String, String] = textLines.flatMapValues { line =>
       pattern.split(line.toLowerCase).toIterable.asJava
     }
