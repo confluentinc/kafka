@@ -16,13 +16,16 @@
   */
 package kafka.api
 
-import kafka.security.authorizer.AclAuthorizer
+import kafka.security.auth.SimpleAclAuthorizer
 import kafka.server.KafkaConfig
 import kafka.utils.JaasTestUtils
 import org.apache.kafka.common.security.auth.KafkaPrincipal
 
+import scala.annotation.nowarn
 import scala.collection.immutable.List
 
+// Note: this test currently uses the deprecated SimpleAclAuthorizer to ensure we have test coverage
+// It must be replaced with the new AclAuthorizer when SimpleAclAuthorizer is removed
 class SaslGssapiSslEndToEndAuthorizationTest extends SaslEndToEndAuthorizationTest {
   override val clientPrincipal = new KafkaPrincipal(KafkaPrincipal.USER_TYPE,
     JaasTestUtils.KafkaClientPrincipalUnqualifiedName)
@@ -31,7 +34,9 @@ class SaslGssapiSslEndToEndAuthorizationTest extends SaslEndToEndAuthorizationTe
 
   override protected def kafkaClientSaslMechanism = "GSSAPI"
   override protected def kafkaServerSaslMechanisms = List("GSSAPI")
-  override protected def authorizerClass = classOf[AclAuthorizer]
+
+  @nowarn("cat=deprecation")
+  override protected def authorizerClass = classOf[SimpleAclAuthorizer]
 
   // Configure brokers to require SSL client authentication in order to verify that SASL_SSL works correctly even if the
   // client doesn't have a keystore. We want to cover the scenario where a broker requires either SSL client
