@@ -15,7 +15,7 @@ package kafka.api
 import java.util.Properties
 import java.util.concurrent.ExecutionException
 import kafka.api.GroupAuthorizerIntegrationTest._
-import kafka.security.authorizer.AclAuthorizer
+import kafka.security.auth.SimpleAclAuthorizer
 import kafka.security.authorizer.AclEntry.WildcardHost
 import kafka.server.{BaseRequestTest, KafkaConfig}
 import kafka.utils.TestUtils
@@ -31,6 +31,7 @@ import org.apache.kafka.common.security.auth.{AuthenticationContext, KafkaPrinci
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{BeforeEach, Test}
 
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 
 object GroupAuthorizerIntegrationTest {
@@ -62,8 +63,9 @@ class GroupAuthorizerIntegrationTest extends BaseRequestTest {
   def brokerPrincipal: KafkaPrincipal = BrokerPrincipal
   def clientPrincipal: KafkaPrincipal = ClientPrincipal
 
+  @nowarn("cat=deprecation")
   override def brokerPropertyOverrides(properties: Properties): Unit = {
-    properties.put(KafkaConfig.AuthorizerClassNameProp, classOf[AclAuthorizer].getName)
+    properties.put(KafkaConfig.AuthorizerClassNameProp, classOf[SimpleAclAuthorizer].getName)
     properties.put(KafkaConfig.BrokerIdProp, brokerId.toString)
     properties.put(KafkaConfig.OffsetsTopicPartitionsProp, "1")
     properties.put(KafkaConfig.OffsetsTopicReplicationFactorProp, "1")
