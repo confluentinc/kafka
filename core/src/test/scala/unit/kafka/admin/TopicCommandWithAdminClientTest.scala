@@ -16,7 +16,7 @@
   */
 package kafka.admin
 
-import java.util.{Collections, Optional, Properties}
+import java.util.{Collections, Optional, Properties, Collection}
 
 import kafka.admin.TopicCommand.{AdminClientTopicService, TopicCommandOptions}
 import kafka.common.AdminCommandFailedException
@@ -887,7 +887,7 @@ class TopicCommandWithAdminClientTest extends KafkaServerTestHarness with Loggin
     assertTrue(exception.getCause.isInstanceOf[ThrottlingQuotaExceededException])
 
     verify(adminClient, times(1)).deleteTopics(
-      eqThat(Seq(testTopicName).asJavaCollection),
+      argThat((_.contains(testTopicName)): ArgumentMatcher[Collection[String]]),
       argThat((_.shouldRetryOnQuotaViolation() == false): ArgumentMatcher[DeleteTopicsOptions])
     )
   }
