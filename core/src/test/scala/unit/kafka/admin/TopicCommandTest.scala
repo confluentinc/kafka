@@ -17,9 +17,12 @@
 package kafka.admin
 
 import kafka.admin.TopicCommand.{TopicCommandOptions, ZookeeperTopicService}
+import kafka.common.AddPartitionNotAllowedDueToTopicIDMismatchException
+
 import kafka.server.ConfigType
-import kafka.utils.{Logging, TestUtils}
-import kafka.zk.{ConfigEntityChangeNotificationZNode, DeleteTopicsTopicZNode, ZooKeeperTestHarness}
+import kafka.utils.{Json, Logging, TestUtils}
+import kafka.zk.{ConfigEntityChangeNotificationZNode, DeleteTopicsTopicZNode, TopicZNode, ZkVersion, ZooKeeperTestHarness}
+import kafka.zookeeper.{GetDataRequest, SetDataRequest}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.{ConfigException, ConfigResource}
 import org.apache.kafka.common.errors.{InvalidPartitionsException, InvalidReplicationFactorException, TopicExistsException}
@@ -29,7 +32,11 @@ import org.junit.rules.TestName
 import org.junit.{After, Before, Rule, Test}
 import org.scalatest.Assertions.intercept
 
+import scala.collection.{Map, mutable, Seq}
 import scala.util.Random
+import scala.jdk.CollectionConverters._
+import java.util
+import java.util.UUID
 
 class TopicCommandTest extends ZooKeeperTestHarness with Logging with RackAwareTest {
 
@@ -597,4 +604,64 @@ class TopicCommandTest extends ZooKeeperTestHarness with Logging with RackAwareT
     expectAlterInternalTopicPartitionCountFailed(Topic.GROUP_METADATA_TOPIC_NAME)
     expectAlterInternalTopicPartitionCountFailed(Topic.TRANSACTION_STATE_TOPIC_NAME)
   }
+
+  // Test to check if Alter Topic is blocked when topic_id exists in order to avoid topic ID mismatch issues
+  // If topic_id is present in the TopicZNode due to a newer controller version setting it in processTopicIDs, we want to prevent
+  // rewriting of the TopicZNode without a topic ID in the current older client by blocking the Alter Topic command when used with the Zookeeper flag.
+  // Note:- topic_id is different from confluent_topic_id, existence of confluent_topic_id doesn't cause any problems
+  @Test
+  def testAlterTopicWithTopicIDPresent(): Unit = {
+    def topicZNodeEncodeForTest(topicId: Option[UUID]) : Array[Byte] = {
+      val replicaAssignmentJson = mutable.Map[String, util.List[Int]]()
+      val addingReplicasAssignmentJson = mutable.Map[String, util.List[Int]]()
+      val removingReplicasAssignmentJson = mutable.Map[String, util.List[Int]]()
+      val observersAssignment = mutable.Map.empty[String, util.List[Int]]
+      val targetObserversAssignment = mutable.Map.empty[String, util.List[Int]]
+      val topicAssignment = mutable.Map(
+        "version" -> 3,
+        "partitions" -> replicaAssignmentJson.asJava,
+        "adding_replicas" -> addingReplicasAssignmentJson.asJava,
+        "removing_replicas" -> removingReplicasAssignmentJson.asJava,
+        "observers" -> observersAssignment.asJava,
+        "target_observers" -> targetObserversAssignment.asJava,
+        "topic_id" -> topicId.get.toString
+      ).asJava
+      Json.encodeAsBytes(topicAssignment)
+    }
+    val brokers = List(0)
+    TestUtils.createBrokersInZk(zkClient, brokers)
+
+    adminZkClient.createTopic(testTopicName, 1, 1)
+
+    val encodedData = topicZNodeEncodeForTest(Some(UUID.randomUUID))
+    val setDataRequest = SetDataRequest(TopicZNode.path(testTopicName), encodedData, ZkVersion.MatchAnyVersion)
+    zkClient.retryRequestUntilConnected(setDataRequest)
+
+    def expectAlterTopicFailedIfTopicIDPresent(topic: String): Unit = {
+      try {
+        topicService.alterTopic(new TopicCommandOptions(
+          Array("--topic", topic, "--partitions", "2")))
+        fail("Should have thrown an AddPartitionNotAllowedDueToTopicIDMismatchException")
+      } catch {
+        case _: AddPartitionNotAllowedDueToTopicIDMismatchException => // expected
+      }
+    }
+
+    // We want to make sure that the topic_id is still present after the request fails and no other overwriting occurred
+    def checkIfTopicIDIsStillPresent(topic: String): Seq[Boolean] = {
+      val getDataRequests = GetDataRequest(TopicZNode.path(topic), ctx = Some(topic))
+      val getDataResponses = zkClient.retryRequestsUntilConnected(Seq(getDataRequests))
+      getDataResponses.flatMap { getDataResponse =>
+        if (TopicZNode.checkForTopicIDInJSON(getDataResponse.data) == Some(true)) {
+          return Seq(true)
+        }
+        else Seq(false)
+      }
+    }
+
+    expectAlterTopicFailedIfTopicIDPresent(testTopicName)
+    assertEquals(checkIfTopicIDIsStillPresent(testTopicName),Seq(true))
+  }
 }
+
+

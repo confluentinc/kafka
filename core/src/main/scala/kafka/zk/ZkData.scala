@@ -260,6 +260,19 @@ object TopicZNode {
       "removing_replicas" -> removingReplicasAssignmentJson.asJava
     ).asJava)
   }
+
+  def checkForTopicIDInJSON(bytes: Array[Byte]): Option[Boolean] = {
+      Json.parseBytes(bytes).map { js =>
+      val assignmentJson = js.asJsonObject
+      val topicId = assignmentJson.get("topic_id").map(_.to[String])
+
+        if (topicId != None) {
+          return Option(true)
+        }
+        else false
+      }
+  }
+
   def decode(topic: String, bytes: Array[Byte]): Map[TopicPartition, ReplicaAssignment] = {
     def getReplicas(replicasJsonOpt: Option[JsonObject], partition: String): Seq[Int] = {
       replicasJsonOpt match {
