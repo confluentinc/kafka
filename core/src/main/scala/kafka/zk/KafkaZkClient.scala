@@ -602,7 +602,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
         throw new AddPartitionNotAllowedDueToTopicIDMismatchException("The TopicZNode already contains a TopicID. The AlterTopic operation will result in metadata inconsistencies.")
       }
       getDataResponse.resultCode match {
-        case Code.OK => TopicZNode.decode(topic, getDataResponse.data).assignment
+        case Code.OK => TopicZNode.decode(topic, getDataResponse.data)
         case Code.NONODE => Map.empty[TopicPartition, ReplicaAssignment]
         case _ => throw getDataResponse.resultException.get
       }
