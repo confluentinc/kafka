@@ -800,6 +800,16 @@ gradle.taskGraph.whenReady { taskGraph ->
   }
 }
 
+//Skipping the publish tasks for projects that do not have a separate artifact per scala version when the given scala version is not the default
+println("Skipping the publish for projects that don't have a separate artifact per Scala version when the default Scala version is not used.")
+gradle.taskGraph.whenReady { taskGraph ->
+  taskGraph.getAllTasks().each { task ->
+    if (task.name.equals("publishMavenJavaPublicationToMavenRepository") && versions.baseScala.equals("2.12") && task.project.hasProperty("archivesBaseName")  && !task.project.archivesBaseName.endsWith("_2.12")) {
+          task.enabled = false
+        }
+  }
+}
+
 def fineTuneEclipseClasspathFile(eclipse, project) {
   eclipse.classpath.file {
     beforeMerged { cp ->
