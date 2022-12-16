@@ -663,5 +663,3 @@ class TopicCommandTest extends ZooKeeperTestHarness with Logging with RackAwareT
     assertEquals(checkIfTopicIDIsStillPresent(testTopicName),Seq(true))
   }
 }
-
-
