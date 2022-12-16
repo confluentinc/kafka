@@ -21,7 +21,7 @@ import java.util
 import java.util.{Collections, Properties}
 
 import joptsimple._
-import kafka.common.AdminCommandFailedException
+import kafka.common.{AddPartitionNotAllowedDueToTopicIDMismatchException, AdminCommandFailedException}
 import kafka.log.LogConfig
 import kafka.server.ConfigType
 import kafka.utils.Implicits._
@@ -385,22 +385,31 @@ object TopicCommand extends Logging {
           println(s"Updated config for topic $topic.")
         }
 
-        if(tp.hasPartitions) {
-          if (Topic.isInternal(topic)) {
-            throw new IllegalArgumentException(s"The number of partitions for the internal topic $topic cannot be changed.")
+        try {
+          if (tp.hasPartitions) {
+            if (Topic.isInternal(topic)) {
+              throw new IllegalArgumentException(s"The number of partitions for the internal topic $topic cannot be changed.")
+            }
+            println("WARNING: If partitions are increased for a topic that has a key, the partition " +
+              "logic or ordering of the messages will be affected")
+
+            val existingAssignment = zkClient.getFullReplicaAssignmentForTopicsInAlterTopic(immutable.Set(topic)).map {
+              case (topicPartition, assignment) => topicPartition.partition -> assignment
+            }
+            if (existingAssignment.isEmpty)
+              throw new InvalidTopicException(s"The topic $topic does not exist")
+
+            val newAssignment = tp.replicaAssignment.getOrElse(Map()).drop(existingAssignment.size)
+
+            val allBrokers = adminZkClient.getBrokerMetadatas()
+            val partitions: Integer = tp.partitions.getOrElse(1)
+            adminZkClient.addPartitions(topic, existingAssignment, allBrokers, partitions, Option(newAssignment).filter(_.nonEmpty))
+            println("Adding partitions succeeded!")
           }
-          println("WARNING: If partitions are increased for a topic that has a key, the partition " +
-            "logic or ordering of the messages will be affected")
-          val existingAssignment = zkClient.getFullReplicaAssignmentForTopics(immutable.Set(topic)).map {
-            case (topicPartition, assignment) => topicPartition.partition -> assignment
-          }
-          if (existingAssignment.isEmpty)
-            throw new InvalidTopicException(s"The topic $topic does not exist")
-          val newAssignment = tp.replicaAssignment.getOrElse(Map()).drop(existingAssignment.size)
-          val allBrokers = adminZkClient.getBrokerMetadatas()
-          val partitions: Integer = tp.partitions.getOrElse(1)
-          adminZkClient.addPartitions(topic, existingAssignment, allBrokers, partitions, Option(newAssignment).filter(_.nonEmpty))
-          println("Adding partitions succeeded!")
+        } catch {
+          case _: AddPartitionNotAllowedDueToTopicIDMismatchException =>
+            println("WARNING:- Operation not allowed in this version")
+            throw new AddPartitionNotAllowedDueToTopicIDMismatchException("The TopicZNode already contains a TopicID. The AlterTopic operation will result in metadata inconsistencies.")
         }
       }
     }
