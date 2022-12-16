@@ -21,6 +21,7 @@ import java.util.Properties
 import com.yammer.metrics.core.MetricName
 import kafka.api.LeaderAndIsr
 import kafka.cluster.Broker
+import kafka.common.AddPartitionNotAllowedDueToTopicIDMismatchException
 import kafka.controller.{KafkaController, LeaderIsrAndControllerEpoch, ReplicaAssignment}
 import kafka.log.LogConfig
 import kafka.metrics.KafkaMetricsGroup
@@ -585,6 +586,31 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
    */
   def getReplicaAssignmentForTopics(topics: Set[String]): Map[TopicPartition, Seq[Int]] = {
     getFullReplicaAssignmentForTopics(topics).map { case (k, v) => k -> v.replicas }
+  }
+
+  /**
+   * Gets the replica assignments for the given topics, is only called within AlterTopic
+   * because this is the only method where topic ID can be rewritten in the assignments
+   * If a topicID(topic_id) exists, it will be rewritten without one on doing the AlterTopic operation
+   * Exception is thrown in order to stop the operation from happening altogether
+   *
+   * @param topics the topics whose partitions we wish to get the assignments for.
+   * @return the full replica assignment for each partition from the given topics.
+   */
+  def getFullReplicaAssignmentForTopicsInAlterTopic(topics: Set[String]): Map[TopicPartition, ReplicaAssignment] = {
+    val getDataRequests = topics.map(topic => GetDataRequest(TopicZNode.path(topic), ctx = Some(topic)))
+    val getDataResponses = retryRequestsUntilConnected(getDataRequests.toSeq)
+    getDataResponses.flatMap { getDataResponse =>
+      val topic = getDataResponse.ctx.get.asInstanceOf[String]
+      if (TopicZNode.checkForTopicIDInJSON(getDataResponse.data) == Some(true)) {
+        throw new AddPartitionNotAllowedDueToTopicIDMismatchException("The TopicZNode already contains a TopicID. The AlterTopic operation will result in metadata inconsistencies.")
+      }
+      getDataResponse.resultCode match {
+        case Code.OK => TopicZNode.decode(topic, getDataResponse.data)
+        case Code.NONODE => Map.empty[TopicPartition, ReplicaAssignment]
+        case _ => throw getDataResponse.resultException.get
+      }
+    }.toMap
   }
 
   /**
@@ -1675,7 +1701,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
 
   def secure: Boolean = isSecure
 
-  private[zk] def retryRequestUntilConnected[Req <: AsyncRequest](request: Req, expectedControllerZkVersion: Int = ZkVersion.MatchAnyVersion): Req#Response = {
+  private[kafka] def retryRequestUntilConnected[Req <: AsyncRequest](request: Req, expectedControllerZkVersion: Int = ZkVersion.MatchAnyVersion): Req#Response = {
     retryRequestsUntilConnected(Seq(request), expectedControllerZkVersion).head
   }
 
@@ -1690,7 +1716,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
     }
   }
 
-  private def retryRequestsUntilConnected[Req <: AsyncRequest](requests: Seq[Req]): Seq[Req#Response] = {
+  private[kafka] def retryRequestsUntilConnected[Req <: AsyncRequest](requests: Seq[Req]): Seq[Req#Response] = {
     val remainingRequests = new mutable.ArrayBuffer(requests.size) ++= requests
     val responses = new mutable.ArrayBuffer[Req#Response]
     while (remainingRequests.nonEmpty) {
