@@ -278,7 +278,7 @@ class SocketServer(val config: KafkaConfig,
     val recvBufferSize = config.socketReceiveBufferBytes
     val brokerId = config.brokerId
     val listenBacklogSize = config.socketListenBacklogSize
-    new Acceptor(endPoint, sendBufferSize, recvBufferSize, listenBacklogSize, brokerId, connectionQuotas, metricPrefix, time)
+    new Acceptor(endPoint, sendBufferSize, recvBufferSize, listenBacklogSize, brokerId, connectionQuotas, metricPrefix)
   }
 
   private def addDataPlaneProcessors(acceptor: Acceptor, endpoint: EndPoint, newProcessorsPerListener: Int): Unit = {
