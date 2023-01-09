@@ -923,6 +923,7 @@ public class KafkaProducerTest {
     }
 
     private void sendOffsetsWithGroupMetadata(final short maxVersion) {
+        // adding random comment
         Map<String, Object> configs = new HashMap<>();
         configs.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "some.id");
         configs.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 10000);
