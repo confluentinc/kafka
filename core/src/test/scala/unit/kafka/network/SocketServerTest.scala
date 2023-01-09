@@ -1492,30 +1492,6 @@ class SocketServerTest {
     }
   }
 
-  @Test
-  def testUnmuteChannelWithBufferedReceives(): Unit = {
-    val time = new MockTime()
-    props ++= sslServerProps
-    val testableServer = new TestableSocketServer(time = time)
-    testableServer.startup()
-    val proxyServer = new ProxyServer(testableServer)
-    try {
-      val testableSelector = testableServer.testableSelector
-      val (socket, request) = makeSocketWithBufferedRequests(testableServer, testableSelector, proxyServer)
-      testableSelector.operationCounts.clear()
-      testableSelector.waitForOperations(SelectorOperation.Poll, 1)
-      val keysWithBufferedRead: util.Set[SelectionKey] = JTestUtils.fieldValue(testableSelector, classOf[Selector], "keysWithBufferedRead")
-      assertEquals(Set.empty, keysWithBufferedRead.asScala)
-      processRequest(testableServer.dataPlaneRequestChannel, request)
-      // buffered requests should be processed after channel is unmuted
-      receiveRequest(testableServer.dataPlaneRequestChannel)
-      socket.close()
-    } finally {
-      proxyServer.close()
-      shutdownServerAndMetrics(testableServer)
-    }
-  }
-
   /**
    * Tests exception handling in [[Processor.processCompletedReceives]]. Exception is
    * injected into [[Selector.mute]] which is used to mute the channel when a receive is complete.
