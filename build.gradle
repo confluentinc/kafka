@@ -205,11 +205,6 @@ subprojects {
   // eg: ./gradlew allDepInsight --configuration runtime --dependency com.fasterxml.jackson.core:jackson-databind
   task allDepInsight(type: DependencyInsightReportTask) doLast {}
 
-  apply plugin: 'java-library'
-  apply plugin: 'checkstyle'
-  apply plugin: "com.github.spotbugs"
-  apply plugin: 'org.gradle.test-retry'
-
   // We use the shadow plugin for the jmh-benchmarks module and the `-all` jar can get pretty large, so
   // don't publish it
   // We also don't publish artifacts for kafka-streams-upgrade-system-tests since they are not necessary,
