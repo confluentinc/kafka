@@ -214,11 +214,14 @@ subprojects {
   // don't publish it
   // We also don't publish artifacts for kafka-streams-upgrade-system-tests since they are not necessary,
   // and were resulting in conflicts due to duplicate artifacts
-  def shouldPublish = !project.name.equals('jmh-benchmarks') && !(project.path.startsWith(':streams') && project.name.startsWith("upgrade-system-tests"))
+  def shouldPublish = !(project.path.startsWith(':streams') && project.name.startsWith("upgrade-system-tests"))
 
   if (shouldPublish) {
     apply plugin: 'maven-publish'
     apply plugin: 'signing'
+    apply plugin: 'checkstyle'
+    apply plugin: "com.github.spotbugs"
+    apply plugin: 'org.gradle.test-retry'
 
     // Add aliases for the task names used by the maven plugin for backwards compatibility
     // The maven plugin was replaced by the maven-publish plugin in Gradle 7.0
@@ -231,11 +234,6 @@ subprojects {
     apply plugin: 'eclipse'
     fineTuneEclipseClasspathFile(eclipse, project)
   }
-  apply plugin: 'maven'
-  apply plugin: 'signing'
-  apply plugin: 'checkstyle'
-  apply plugin: "com.github.spotbugs"
-  apply plugin: 'org.gradle.test-retry'
 
   sourceCompatibility = minJavaVersion
   targetCompatibility = minJavaVersion
