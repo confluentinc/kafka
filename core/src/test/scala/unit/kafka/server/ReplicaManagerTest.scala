@@ -54,10 +54,9 @@ import org.apache.kafka.common.requests._
 import org.apache.kafka.common.security.auth.KafkaPrincipal
 import org.apache.kafka.common.utils.{LogContext, Time, Utils}
 import org.apache.kafka.common.{IsolationLevel, Node, TopicIdPartition, TopicPartition, Uuid}
-import org.apache.kafka.image.{AclsImage, ClientQuotasImage, ClusterImageTest, ConfigurationsImage, FeaturesImage, MetadataImage, ProducerIdsImage, TopicsDelta, TopicsImage}
+import org.apache.kafka.image.{AclsImage, ClientQuotasImage, ClusterImageTest, ConfigurationsImage, FeaturesImage, MetadataImage, MetadataProvenance, ProducerIdsImage, TopicsDelta, TopicsImage}
 import org.apache.kafka.metadata.LeaderConstants.NO_LEADER
 import org.apache.kafka.metadata.LeaderRecoveryState
-import org.apache.kafka.raft.{OffsetAndEpoch => RaftOffsetAndEpoch}
 import org.apache.kafka.server.common.MetadataVersion.IBP_2_6_IV0
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
@@ -1324,6 +1323,17 @@ class ReplicaManagerTest {
 
       replicaManager.becomeLeaderOrFollower(2, leaderAndIsrRequest, (_, _) => ())
 
+      appendRecords(replicaManager, tp0, TestUtils.singletonRecords(s"message".getBytes)).onFire { response =>
+        assertEquals(Errors.NONE, response.error)
+      }
+      // Fetch as follower to initialise the log end offset of the replica
+      fetchPartitionAsFollower(
+        replicaManager,
+        new TopicIdPartition(topicId, new TopicPartition(topic, 0)),
+        new PartitionData(Uuid.ZERO_UUID, 0, 0, 100000, Optional.empty()),
+        replicaId = 1
+      )
+
       val metadata = new DefaultClientMetadata("rack-b", "client-id",
         InetAddress.getByName("localhost"), KafkaPrincipal.ANONYMOUS, "default")
 
@@ -1338,7 +1348,7 @@ class ReplicaManagerTest {
       assertTrue(consumerResult.hasFired)
 
       // PartitionView passed to ReplicaSelector should not contain the follower as it's not in the ISR
-      val expectedReplicaViews = Set(new DefaultReplicaView(leaderNode, 0, 0))
+      val expectedReplicaViews = Set(new DefaultReplicaView(leaderNode, 1, 0))
       val partitionView = replicaManager.replicaSelectorOpt.get
         .asInstanceOf[MockReplicaSelector].getPartitionViewArgument
 
@@ -4111,7 +4121,7 @@ class ReplicaManagerTest {
 
   private def imageFromTopics(topicsImage: TopicsImage): MetadataImage = {
     new MetadataImage(
-      new RaftOffsetAndEpoch(100, 10),
+      new MetadataProvenance(100L, 10, 1000L),
       FeaturesImage.EMPTY,
       ClusterImageTest.IMAGE1,
       topicsImage,

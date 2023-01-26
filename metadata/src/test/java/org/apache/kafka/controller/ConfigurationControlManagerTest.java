@@ -17,6 +17,7 @@
 
 package org.apache.kafka.controller;
 
+import org.apache.kafka.clients.admin.AlterConfigOp;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
@@ -135,14 +136,6 @@ public class ConfigurationControlManagerTest {
             setName("def").setValue("blah"));
         assertEquals(toMap(entry("abc", "x,y,z"), entry("def", "blah")),
             manager.getConfigs(MYTOPIC));
-        RecordTestUtils.assertBatchIteratorContains(asList(
-            asList(new ApiMessageAndVersion(new ConfigRecord().
-                    setResourceType(TOPIC.id()).setResourceName("mytopic").
-                    setName("abc").setValue("x,y,z"), CONFIG_RECORD.highestSupportedVersion()),
-                new ApiMessageAndVersion(new ConfigRecord().
-                    setResourceType(TOPIC.id()).setResourceName("mytopic").
-                    setName("def").setValue("blah"), CONFIG_RECORD.highestSupportedVersion()))),
-            manager.iterator(Long.MAX_VALUE));
     }
 
     @Test
@@ -174,6 +167,30 @@ public class ConfigurationControlManagerTest {
             manager.incrementalAlterConfigs(toMap(entry(MYTOPIC, toMap(
                 entry("abc", entry(DELETE, "xyz"))))),
                 true));
+    }
+
+    @Test
+    public void testIncrementalAlterConfig() {
+        ConfigurationControlManager manager = new ConfigurationControlManager.Builder().
+            setKafkaConfigSchema(SCHEMA).
+            build();
+        Map<String, Entry<AlterConfigOp.OpType, String>> keyToOps = toMap(entry("abc", entry(APPEND, "123")));
+
+        ControllerResult<ApiError> result = manager.
+            incrementalAlterConfig(MYTOPIC, keyToOps, true);
+
+        assertEquals(ControllerResult.atomicOf(Collections.singletonList(new ApiMessageAndVersion(
+                new ConfigRecord().setResourceType(TOPIC.id()).setResourceName("mytopic").
+                    setName("abc").setValue("123"), CONFIG_RECORD.highestSupportedVersion())),
+            ApiError.NONE), result);
+
+        RecordTestUtils.replayAll(manager, result.records());
+
+        assertEquals(ControllerResult.atomicOf(Collections.singletonList(new ApiMessageAndVersion(
+                    new ConfigRecord().setResourceType(TOPIC.id()).setResourceName("mytopic").
+                        setName("abc").setValue(null), CONFIG_RECORD.highestSupportedVersion())),
+                ApiError.NONE),
+            manager.incrementalAlterConfig(MYTOPIC, toMap(entry("abc", entry(DELETE, "xyz"))), true));
     }
 
     @Test
