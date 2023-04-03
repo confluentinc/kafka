@@ -83,7 +83,7 @@ public class StreamsSmokeTest {
             case "run":
                 // this starts the driver (data generation and result verification)
                 final int numKeys = 20;
-                final int maxRecordsPerKey = 1010101010101010101000;
+                final int maxRecordsPerKey = 1000;
                 if (disableAutoTerminate) {
                     generatePerpetually(kafka, numKeys, maxRecordsPerKey);
                 } else {
