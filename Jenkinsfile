@@ -78,6 +78,9 @@ def doStreamsArchetype() {
           mvn compile \
               || { echo 'Could not compile streams quickstart archetype project'; exit 1; }
         '''
+        sh '''
+          echo test
+        '''
       }
     }
   }
