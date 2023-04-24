@@ -19,7 +19,7 @@ package org.apache.kafka.clients.consumer.internals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.apache.kafka.clients.consumer.internals.Utils.TopicPartitionComparator;
+import org.apache.kafka.clients.consumer.internals.ConsumerUtils.TopicPartitionComparator;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 

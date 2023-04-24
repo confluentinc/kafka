@@ -62,13 +62,12 @@ public class CommitRequestManager implements RequestManager {
     private final boolean throwOnFetchStableOffsetUnsupported;
     final PendingRequests pendingRequests;
 
-    public CommitRequestManager(
-            final Time time,
-            final LogContext logContext,
-            final SubscriptionState subscriptionState,
-            final ConsumerConfig config,
-            final CoordinatorRequestManager coordinatorRequestManager,
-            final GroupState groupState) {
+    public CommitRequestManager(final Time time,
+                                final LogContext logContext,
+                                final SubscriptionState subscriptionState,
+                                final ConsumerConfig config,
+                                final CoordinatorRequestManager coordinatorRequestManager,
+                                final GroupState groupState) {
         Objects.requireNonNull(coordinatorRequestManager, "Coordinator is needed upon committing offsets");
         this.log = logContext.logger(getClass());
         this.pendingRequests = new PendingRequests();
