@@ -365,8 +365,7 @@ public class ClientTelemetryUtils {
             ByteBuffer metricsBuffer = (ByteBuffer) serializedMetricsData.flip();
             return MetricsData.parseFrom(metricsBuffer);
         } catch (IOException e) {
-            log.warn("Unable to parse MetricsData payload: {} ", e.getMessage());
-            return null;
+            throw new KafkaException("Unable to parse MetricsData payload", e);
         }
     }
 }
