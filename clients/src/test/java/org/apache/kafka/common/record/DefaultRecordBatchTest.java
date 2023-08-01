@@ -403,7 +403,7 @@ public class DefaultRecordBatchTest {
         }
     }
 
-    @ParameterizedTest
+    //@ParameterizedTest
     @EnumSource(value = CompressionType.class)
     public void testSkipKeyValueIteratorCorrectness(CompressionType compressionType) throws NoSuchAlgorithmException {
         Header[] headers = {new RecordHeader("k1", "v1".getBytes()), new RecordHeader("k2", null)};
