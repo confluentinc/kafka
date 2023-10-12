@@ -38,7 +38,8 @@ import java.util.concurrent.Future
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
-class ProducerCompressionTest extends ZooKeeperTestHarness {
+@RunWith(value = classOf[Parameterized])
+class ProducerCompressionTest(compression: String) extends ZooKeeperTestHarness {
 
   private val brokerId = 0
   private val topic = "topic"
