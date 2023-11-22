@@ -127,6 +127,7 @@ ext {
     throw new GradleException("Unexpected value for scalaOptimizerMode property. Expected one of $scalaOptimizerValues, but received: $userScalaOptimizerMode")
 
   generatedDocsDir = new File("${project.rootDir}/docs/generated")
+  repo = file("$rootDir/.git").isDirectory() ? Grgit.open(currentDir: project.getRootDir()) : null
 
   commitId = determineCommitId()
 }
@@ -182,16 +183,8 @@ def determineCommitId() {
   def takeFromHash = 16
   if (project.hasProperty('commitId')) {
     commitId.take(takeFromHash)
-  } else if (file("$rootDir/.git/HEAD").exists()) {
-    def headRef = file("$rootDir/.git/HEAD").text
-    if (headRef.contains('ref: ')) {
-      headRef = headRef.replaceAll('ref: ', '').trim()
-      if (file("$rootDir/.git/$headRef").exists()) {
-        file("$rootDir/.git/$headRef").text.trim().take(takeFromHash)
-      }
-    } else {
-      headRef.trim().take(takeFromHash)
-    }
+  } else if (repo != null) {
+    repo.head().id.take(takeFromHash)
   } else {
     "unknown"
   }
@@ -209,7 +202,7 @@ def propertyOrElse(project, propertyName, defaultValue) {
 
 apply from: file('wrapper.gradle')
 
-if (file('.git').exists()) {
+if (repo != null) {
   rat {
     dependsOn subprojects.collect {
       it.tasks.matching {
@@ -223,7 +216,6 @@ if (file('.git').exists()) {
 
     // Exclude everything under the directory that git should be ignoring via .gitignore or that isn't checked in. These
     // restrict us only to files that are checked in or are staged.
-    def repo = Grgit.open(currentDir: project.getRootDir())
     excludes = new ArrayList<String>(repo.clean(ignore: false, directories: true, dryRun: true))
     // And some of the files that we have checked in should also be excluded from this check
     excludes.addAll([
@@ -1132,7 +1124,8 @@ project(':core') {
                                ':streams:genStreamsConfigDocs', 'genConsumerMetricsDocs', 'genProducerMetricsDocs',
                                ':connect:runtime:genConnectMetricsDocs', ':connect:runtime:genConnectOpenAPIDocs',
                                ':connect:mirror:genMirrorSourceConfigDocs', ':connect:mirror:genMirrorCheckpointConfigDocs',
-                               ':connect:mirror:genMirrorHeartbeatConfigDocs', ':connect:mirror:genMirrorConnectorConfigDocs'], type: Tar) {
+                               ':connect:mirror:genMirrorHeartbeatConfigDocs', ':connect:mirror:genMirrorConnectorConfigDocs',
+                               ':storage:genRemoteLogManagerConfigDoc', ':storage:genRemoteLogMetadataManagerConfigDoc'], type: Tar) {
     archiveClassifier = 'site-docs'
     compression = Compression.GZIP
     from project.file("$rootDir/docs")
@@ -1824,6 +1817,20 @@ project(':storage') {
     outputs.dir("src/generated/java/org/apache/kafka/server/log/remote/metadata/storage/generated")
   }
 
+  task genRemoteLogManagerConfigDoc(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.apache.kafka.server.log.remote.storage.RemoteLogManagerConfig'
+    if( !generatedDocsDir.exists() ) { generatedDocsDir.mkdirs() }
+    standardOutput = new File(generatedDocsDir, "remote_log_manager_config.html").newOutputStream()
+  }
+
+  task genRemoteLogMetadataManagerConfigDoc(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig'
+    if( !generatedDocsDir.exists() ) { generatedDocsDir.mkdirs() }
+    standardOutput = new File(generatedDocsDir, "remote_log_metadata_manager_config.html").newOutputStream()
+  }
+
   sourceSets {
     main {
       java {
@@ -2220,6 +2227,8 @@ project(':streams') {
             ':streams:upgrade-system-tests-31:test',
             ':streams:upgrade-system-tests-32:test',
             ':streams:upgrade-system-tests-33:test',
+            ':streams:upgrade-system-tests-34:test',
+            ':streams:upgrade-system-tests-35:test',
             ':streams:examples:test'
     ]
   )
@@ -2597,6 +2606,32 @@ project(':streams:upgrade-system-tests-33') {
 
   dependencies {
     testImplementation libs.kafkaStreams_33
+    testRuntimeOnly libs.junitJupiter
+  }
+
+  systemTestLibs {
+    dependsOn testJar
+  }
+}
+
+project(':streams:upgrade-system-tests-34') {
+  archivesBaseName = "kafka-streams-upgrade-system-tests-34"
+
+  dependencies {
+    testImplementation libs.kafkaStreams_34
+    testRuntimeOnly libs.junitJupiter
+  }
+
+  systemTestLibs {
+    dependsOn testJar
+  }
+}
+
+project(':streams:upgrade-system-tests-35') {
+  archivesBaseName = "kafka-streams-upgrade-system-tests-35"
+
+  dependencies {
+    testImplementation libs.kafkaStreams_35
     testRuntimeOnly libs.junitJupiter
   }
 

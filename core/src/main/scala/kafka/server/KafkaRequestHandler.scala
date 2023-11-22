@@ -35,6 +35,7 @@ import scala.jdk.CollectionConverters._
 
 trait ApiRequestHandler {
   def handle(request: RequestChannel.Request, requestLocal: RequestLocal): Unit
+  def tryCompleteActions(): Unit = {}
 }
 
 object KafkaRequestHandler {
@@ -53,23 +54,27 @@ object KafkaRequestHandler {
   }
 
   /**
-   * Wrap callback to schedule it on a request thread.
-   * NOTE: this function must be called on a request thread.
-   * @param fun Callback function to execute
-   * @return Wrapped callback that would execute `fun` on a request thread
+   * Creates a wrapped callback to be executed asynchronously on an arbitrary request thread.
+   * NOTE: this function must be originally called from a request thread.
+   * @param asyncCompletionCallback A callback method that we intend to call from another thread after an asynchronous
+   *                                action completes. The RequestLocal passed in must belong to the request handler
+   *                                thread that is executing the callback.
+   * @param requestLocal The RequestLocal for the current request handler thread in case we need to execute the callback
+   *                     function synchronously from the calling thread (used for testing)
+   * @return Wrapped callback will schedule `asyncCompletionCallback` on an arbitrary request thread
    */
-  def wrap[T](fun: T => Unit): T => Unit = {
+  def wrapAsyncCallback[T](asyncCompletionCallback: (RequestLocal, T) => Unit, requestLocal: RequestLocal): T => Unit = {
     val requestChannel = threadRequestChannel.get()
     val currentRequest = threadCurrentRequest.get()
     if (requestChannel == null || currentRequest == null) {
       if (!bypassThreadCheck)
         throw new IllegalStateException("Attempted to reschedule to request handler thread from non-request handler thread.")
-      T => fun(T)
+      T => asyncCompletionCallback(requestLocal, T)
     } else {
       T => {
         // The requestChannel and request are captured in this lambda, so when it's executed on the callback thread
         // we can re-schedule the original callback on a request thread and update the metrics accordingly.
-        requestChannel.sendCallbackRequest(RequestChannel.CallbackRequest(() => fun(T), currentRequest))
+        requestChannel.sendCallbackRequest(RequestChannel.CallbackRequest(newRequestLocal => asyncCompletionCallback(newRequestLocal, T), currentRequest))
       }
     }
   }
@@ -111,9 +116,9 @@ class KafkaRequestHandler(id: Int,
           return
 
         case callback: RequestChannel.CallbackRequest =>
+          val originalRequest = callback.originalRequest
           try {
-            val originalRequest = callback.originalRequest
-            
+
             // If we've already executed a callback for this request, reset the times and subtract the callback time from the 
             // new dequeue time. This will allow calculation of multiple callback times.
             // Otherwise, set dequeue time to now.
@@ -126,15 +131,17 @@ class KafkaRequestHandler(id: Int,
             }
             
             threadCurrentRequest.set(originalRequest)
-            callback.fun()
-            if (originalRequest.callbackRequestCompleteTimeNanos.isEmpty)
-              originalRequest.callbackRequestCompleteTimeNanos = Some(time.nanoseconds())
+            callback.fun(requestLocal)
           } catch {
             case e: FatalExitError =>
               completeShutdown()
               Exit.exit(e.statusCode)
             case e: Throwable => error("Exception when handling request", e)
           } finally {
+            // When handling requests, we try to complete actions after, so we should try to do so here as well.
+            apis.tryCompleteActions()
+            if (originalRequest.callbackRequestCompleteTimeNanos.isEmpty)
+              originalRequest.callbackRequestCompleteTimeNanos = Some(time.nanoseconds())
             threadCurrentRequest.remove()
           }
 
@@ -166,6 +173,7 @@ class KafkaRequestHandler(id: Int,
 
   private def completeShutdown(): Unit = {
     requestLocal.close()
+    threadRequestChannel.remove()
     shutdownComplete.countDown()
   }
 

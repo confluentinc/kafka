@@ -293,7 +293,8 @@ class KafkaServer(
           config.brokerId,
           config.interBrokerProtocolVersion,
           brokerFeatures,
-          kraftControllerNodes)
+          kraftControllerNodes,
+          config.migrationEnabled)
         val controllerNodeProvider = new MetadataCacheControllerNodeProvider(metadataCache, config)
 
         /* initialize feature change listener */
@@ -506,17 +507,18 @@ class KafkaServer(
             KafkaServer.MIN_INCREMENTAL_FETCH_SESSION_EVICTION_MS))
 
         // Start RemoteLogManager before broker start serving the requests.
-        remoteLogManagerOpt.foreach(rlm => {
+        remoteLogManagerOpt.foreach { rlm =>
           val listenerName = config.remoteLogManagerConfig.remoteLogMetadataManagerListenerName()
           if (listenerName != null) {
             brokerInfo.broker.endPoints
               .find(e => e.listenerName.equals(ListenerName.normalised(listenerName)))
-              .orElse(throw new ConfigException(RemoteLogManagerConfig.REMOTE_LOG_METADATA_MANAGER_LISTENER_NAME_PROP +
-                " should be set as a listener name within valid broker listener name list."))
+              .orElse(throw new ConfigException(RemoteLogManagerConfig.REMOTE_LOG_METADATA_MANAGER_LISTENER_NAME_PROP,
+                listenerName, "Should be set as a listener name within valid broker listener name list: "
+                  + brokerInfo.broker.endPoints.map(_.listenerName).mkString(",")))
               .foreach(e => rlm.onEndPointCreated(e))
           }
           rlm.startup()
-        })
+        }
 
         /* start processing requests */
         val zkSupport = ZkSupport(adminManager, kafkaController, zkClient, forwardingManager, metadataCache, brokerEpochManager)
@@ -560,7 +562,7 @@ class KafkaServer(
         Option(logManager.cleaner).foreach(config.dynamicConfig.addBrokerReconfigurable)
 
         /* start dynamic config manager */
-        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config, quotaManagers, Some(kafkaController)),
+        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(replicaManager, config, quotaManagers, Some(kafkaController)),
                                                            ConfigType.Client -> new ClientIdConfigHandler(quotaManagers),
                                                            ConfigType.User -> new UserConfigHandler(quotaManagers, credentialProvider),
                                                            ConfigType.Broker -> new BrokerConfigHandler(config, quotaManagers),
@@ -614,7 +616,13 @@ class KafkaServer(
       }
 
       Some(new RemoteLogManager(config.remoteLogManagerConfig, config.brokerId, config.logDirs.head, clusterId, time,
-        (tp: TopicPartition) => logManager.getLog(tp).asJava, brokerTopicStats));
+        (tp: TopicPartition) => logManager.getLog(tp).asJava,
+        (tp: TopicPartition, remoteLogStartOffset: java.lang.Long) => {
+          logManager.getLog(tp).foreach { log =>
+            log.updateLogStartOffsetFromRemoteTier(remoteLogStartOffset)
+          }
+      },
+        brokerTopicStats));
     } else {
       None
     }

@@ -899,8 +899,8 @@ public class StreamThread extends Thread {
             log.debug("State is {}; initializing tasks if necessary", stateSnapshot);
 
             if (taskManager.tryToCompleteRestoration(now, offsetResetter)) {
-                log.info("Restoration took {} ms for all tasks {}", time.milliseconds() - lastPartitionAssignedMs,
-                    taskManager.allTasks().keySet());
+                log.info("Restoration took {} ms for all active tasks {}", time.milliseconds() - lastPartitionAssignedMs,
+                    taskManager.activeTaskIds());
                 setState(State.RUNNING);
             }
 
@@ -1196,8 +1196,12 @@ public class StreamThread extends Thread {
         } catch (final Throwable e) {
             log.error("Failed to close changelog reader due to the following error:", e);
         }
-        if (leaveGroupRequested.get()) {
-            mainConsumer.unsubscribe();
+        try {
+            if (leaveGroupRequested.get()) {
+                mainConsumer.unsubscribe();
+            }
+        } catch (final Throwable e) {
+            log.error("Failed to unsubscribe due to the following error: ", e);
         }
         try {
             mainConsumer.close();
