@@ -20,6 +20,7 @@ import org.apache.kafka.clients.consumer.internals.ShareConsumerDelegateCreator;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
+import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.AuthenticationException;
 import org.apache.kafka.common.errors.AuthorizationException;
@@ -31,6 +32,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
@@ -246,12 +248,15 @@ public class KafkaShareConsumer<K, V> implements ShareConsumer<K, V> {
      * This is a synchronous commit and will block until either the commit succeeds, an unrecoverable error is
      * encountered (in which case it is thrown to the caller), or the timeout expires.
      *
+     * @return A map of the results for each topic-partition for which delivery was acknowledged.
+     *         If the acknowledgement failed for a topic-partition, an exception is present.
+     *
      * @throws InterruptException If the thread is interrupted while blocked.
      * @throws KafkaException for any other unrecoverable errors
      */
     @Override
-    public void commitSync() {
-        delegate.commitSync();
+    public Map<TopicIdPartition, Optional<KafkaException>> commitSync() {
+        return delegate.commitSync();
     }
 
     /**
@@ -265,13 +270,16 @@ public class KafkaShareConsumer<K, V> implements ShareConsumer<K, V> {
      *
      * @param timeout The maximum amount of time to await completion of the acknowledgement
      *
+     * @return A map of the results for each topic-partition for which delivery was acknowledged.
+     *         If the acknowledgement failed for a topic-partition, an exception is present.
+     *
      * @throws IllegalArgumentException If the {@code timeout} is negative.
      * @throws InterruptException If the thread is interrupted while blocked.
      * @throws KafkaException for any other unrecoverable errors
      */
     @Override
-    public void commitSync(Duration timeout) {
-        delegate.commitSync(timeout);
+    public Map<TopicIdPartition, Optional<KafkaException>> commitSync(Duration timeout) {
+        return delegate.commitSync(timeout);
     }
 
     /**
@@ -285,6 +293,16 @@ public class KafkaShareConsumer<K, V> implements ShareConsumer<K, V> {
     @Override
     public void commitAsync() {
         delegate.commitAsync();
+    }
+
+    /**
+     * Sets the acknowledge commit callback which can be used to handle acknowledgement completion.
+     *
+     * @param callback The acknowledge commit callback
+     */
+    @Override
+    public void setAcknowledgeCommitCallback(AcknowledgeCommitCallback callback) {
+        delegate.setAcknowledgeCommitCallback(callback);
     }
 
     /**

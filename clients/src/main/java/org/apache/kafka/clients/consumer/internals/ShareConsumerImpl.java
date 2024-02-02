@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.clients.consumer.internals;
 
+import org.apache.kafka.clients.consumer.AcknowledgeCommitCallback;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -23,15 +24,19 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.ShareConsumer;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventHandler;
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
+import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.serialization.Deserializer;
 
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -41,7 +46,7 @@ import java.util.Set;
  */
 public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
-    private final Deserializers<K,V> deserializers;
+    private final Deserializers<K, V> deserializers;
 
     ShareConsumerImpl(final ConsumerConfig config,
                       final Deserializer<K> keyDeserializer,
@@ -77,15 +82,21 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
     }
 
     @Override
-    public void commitSync() {
+    public Map<TopicIdPartition, Optional<KafkaException>> commitSync() {
+        return new HashMap<>();
     }
 
     @Override
-    public void commitSync(Duration timeout) {
+    public Map<TopicIdPartition, Optional<KafkaException>> commitSync(Duration timeout) {
+        return new HashMap<>();
     }
 
     @Override
     public void commitAsync() {
+    }
+
+    @Override
+    public void setAcknowledgeCommitCallback(AcknowledgeCommitCallback callback) {
     }
 
     @Override

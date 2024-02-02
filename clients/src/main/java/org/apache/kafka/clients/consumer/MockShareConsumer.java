@@ -17,15 +17,21 @@
 package org.apache.kafka.clients.consumer;
 
 import org.apache.kafka.clients.consumer.internals.SubscriptionState;
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
+import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.utils.LogContext;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -41,34 +47,51 @@ public class MockShareConsumer<K, V> implements ShareConsumer<K, V> {
 
     private final SubscriptionState subscriptions;
     private final AtomicBoolean wakeup;
+
+    private final Map<TopicPartition, List<ConsumerRecord<K, V>>> records;
+
     private boolean closed;
     private Uuid clientInstanceId;
 
     public MockShareConsumer() {
         this.subscriptions = new SubscriptionState(new LogContext(), OffsetResetStrategy.NONE);
+        this.records = new HashMap<>();
         this.closed = false;
         this.wakeup = new AtomicBoolean(false);
     }
 
     @Override
     public synchronized Set<String> subscription() {
+        ensureNotClosed();
         return subscriptions.subscription();
     }
 
     @Override
     public synchronized void subscribe(Collection<String> topics) {
+        ensureNotClosed();
         subscriptions.subscribe(new HashSet<>(topics), Optional.empty());
     }
 
     @Override
     public synchronized void unsubscribe() {
+        ensureNotClosed();
         subscriptions.unsubscribe();
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public synchronized ConsumerRecords<K, V> poll(Duration timeout) {
-        return new ConsumerRecords<K, V>(Collections.EMPTY_MAP);
+        ensureNotClosed();
+
+        final Map<TopicPartition, List<ConsumerRecord<K, V>>> results = new HashMap<>();
+        for (Map.Entry<TopicPartition, List<ConsumerRecord<K, V>>> entry : records.entrySet()) {
+            final List<ConsumerRecord<K, V>> recs = entry.getValue();
+            for (final ConsumerRecord<K, V> rec : recs) {
+                results.computeIfAbsent(entry.getKey(), partition -> new ArrayList<>()).add(rec);
+            }
+        }
+
+        records.clear();
+        return new ConsumerRecords<>(results);
     }
 
     @Override
@@ -80,18 +103,24 @@ public class MockShareConsumer<K, V> implements ShareConsumer<K, V> {
     }
 
     @Override
-    public synchronized void commitSync() {
+    public synchronized Map<TopicIdPartition, Optional<KafkaException>> commitSync() {
+        return new HashMap<>();
     }
 
     @Override
-    public synchronized void commitSync(Duration timeout) {
+    public synchronized Map<TopicIdPartition, Optional<KafkaException>> commitSync(Duration timeout) {
+        return new HashMap<>();
     }
 
     @Override
     public synchronized void commitAsync() {
     }
 
-    public void setClientInstanceId(final Uuid clientInstanceId) {
+    @Override
+    public void setAcknowledgeCommitCallback(AcknowledgeCommitCallback callback) {
+    }
+
+    public synchronized void setClientInstanceId(final Uuid clientInstanceId) {
         this.clientInstanceId = clientInstanceId;
     }
 
@@ -117,7 +146,7 @@ public class MockShareConsumer<K, V> implements ShareConsumer<K, V> {
 
     @Override
     public synchronized void close(Duration timeout) {
-        this.closed = true;
+        closed = true;
     }
 
     @Override
@@ -125,8 +154,17 @@ public class MockShareConsumer<K, V> implements ShareConsumer<K, V> {
         wakeup.set(true);
     }
 
+    public synchronized void addRecord(ConsumerRecord<K, V> record) {
+        ensureNotClosed();
+        TopicPartition tp = new TopicPartition(record.topic(), record.partition());
+        if (!subscriptions.subscription().contains(record.topic()))
+            throw new IllegalStateException("Cannot add records for a topics that is not subscribed by the consumer");
+        List<ConsumerRecord<K, V>> recs = records.computeIfAbsent(tp, k -> new ArrayList<>());
+        recs.add(record);
+    }
+
     private void ensureNotClosed() {
-        if (this.closed)
+        if (closed)
             throw new IllegalStateException("This consumer has already been closed.");
     }
 }

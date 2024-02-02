@@ -16,8 +16,10 @@
  */
 package org.apache.kafka.clients.consumer;
 
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
+import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.annotation.InterfaceStability;
 
@@ -25,6 +27,7 @@ import java.io.Closeable;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -67,17 +70,22 @@ public interface ShareConsumer<K, V> extends Closeable {
     /**
      * @see KafkaShareConsumer#commitSync()
      */
-    void commitSync();
+    Map<TopicIdPartition, Optional<KafkaException>> commitSync();
 
     /**
      * @see KafkaShareConsumer#commitSync(Duration)
      */
-    void commitSync(Duration timeout);
+    Map<TopicIdPartition, Optional<KafkaException>> commitSync(Duration timeout);
 
     /**
      * @see KafkaShareConsumer#commitAsync()
      */
     void commitAsync();
+
+    /**
+     * @see KafkaShareConsumer#setAcknowledgeCommitCallback(AcknowledgeCommitCallback)
+     */
+    void setAcknowledgeCommitCallback(AcknowledgeCommitCallback callback);
 
     /**
      * See {@link KafkaShareConsumer#clientInstanceId(Duration)}}
