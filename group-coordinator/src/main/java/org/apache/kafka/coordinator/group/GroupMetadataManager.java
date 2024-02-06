@@ -52,6 +52,7 @@ import org.apache.kafka.common.message.SyncGroupResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.common.requests.RequestContext;
+import org.apache.kafka.common.requests.ShareGroupHeartbeatRequest;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.assignor.PartitionAssignor;
@@ -839,8 +840,7 @@ public class GroupMetadataManager {
         throwIfEmptyString(request.groupId(), "GroupId can't be empty.");
         throwIfEmptyString(request.rackId(), "RackId can't be empty.");
 
-        // TODO: Change LEAVE_GROUP_MEMBER_EPOCH from share group once dependent code is merged.
-        if (request.memberEpoch() > 0 || request.memberEpoch() == LEAVE_GROUP_MEMBER_EPOCH) {
+        if (request.memberEpoch() > 0 || request.memberEpoch() == ShareGroupHeartbeatRequest.LEAVE_GROUP_MEMBER_EPOCH) {
             throwIfEmptyString(request.memberId(), "MemberId can't be empty.");
         } else if (request.memberEpoch() == 0) {
             if (request.rebalanceTimeoutMs() == -1) {
@@ -1588,8 +1588,7 @@ public class GroupMetadataManager {
             ShareGroupHeartbeatRequestData request
     ) throws ApiException {
         throwIfShareGroupHeartbeatRequestIsInvalid(request);
-        // TODO: Change with one defined in ShareGroupHeartbeatRequest
-        if (request.memberEpoch() == LEAVE_GROUP_MEMBER_EPOCH) {
+        if (request.memberEpoch() == ShareGroupHeartbeatRequest.LEAVE_GROUP_MEMBER_EPOCH) {
             // -1 means that the member wants to leave the group.
             return shareGroupLeave(
                     request.groupId(),
