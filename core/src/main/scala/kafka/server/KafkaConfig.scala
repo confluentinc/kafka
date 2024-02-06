@@ -298,7 +298,7 @@ object KafkaConfig {
   val ConsumerGroupMaxSizeProp = "group.consumer.max.size"
   val ConsumerGroupAssignorsProp = "group.consumer.assignors"
 
-  /** Share Group Configurations * */
+  /** Share Group Configurations **/
   val ShareGroupEnableProp = "group.share.enable"
 
   /** ********* Offset management configuration ***********/
@@ -791,7 +791,7 @@ object KafkaConfig {
   val ConsumerGroupMaxSizeDoc = "The maximum number of consumers that a single consumer group can accommodate."
   val ConsumerGroupAssignorsDoc = "The server side assignors as a list of full class names. The first one in the list is considered as the default assignor to be used in the case where the consumer does not specify an assignor."
 
-  /** Share Group Configs */
+  /** Share Group Configurations */
   val ShareGroupEnableDoc = "Enable share groups on the broker."
 
   /** ********* Offset management configuration ***********/
@@ -1162,7 +1162,7 @@ object KafkaConfig {
       .define(ConsumerGroupAssignorsProp, LIST, Defaults.CONSUMER_GROUP_ASSIGNORS, null, MEDIUM, ConsumerGroupAssignorsDoc)
 
       /** Share Group Configurations **/
-      .defineInternal(ShareGroupEnableProp, BOOLEAN, Defaults.SHARE_GROUP_ENABLE, null, MEDIUM, ShareGroupEnableDoc)
+      .define(ShareGroupEnableProp, BOOLEAN, Defaults.SHARE_GROUP_ENABLE, null, MEDIUM, ShareGroupEnableDoc)
 
       /** ********* Offset management configuration ***********/
       .define(OffsetMetadataMaxSizeProp, INT, Defaults.OFFSET_METADATA_MAX_SIZE, HIGH, OffsetMetadataMaxSizeDoc)
@@ -1817,6 +1817,7 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val consumerGroupMaxSize = getInt(KafkaConfig.ConsumerGroupMaxSizeProp)
   val consumerGroupAssignors = getConfiguredInstances(KafkaConfig.ConsumerGroupAssignorsProp, classOf[PartitionAssignor])
 
+  /** Share Group Configurations **/
   // Share groups are enabled only when it is explicitly set via configuration
   val isShareGroupEnabled = getBoolean(KafkaConfig.ShareGroupEnableProp)
 

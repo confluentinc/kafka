@@ -3809,7 +3809,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     val shareGroupHeartbeatRequest = request.body[ShareGroupHeartbeatRequest]
 
     if (!config.isShareGroupEnabled) {
-      // The API is not supported when the configuration has not been set explicitly
+      // The API is not supported when the configuration `group.share.enable` has not been set explicitly
       requestHelper.sendMaybeThrottle(request, shareGroupHeartbeatRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
     } else if (!authHelper.authorize(request.context, READ, GROUP, shareGroupHeartbeatRequest.data.groupId)) {
