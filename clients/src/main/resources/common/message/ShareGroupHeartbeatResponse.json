@@ -45,15 +45,13 @@
       { "name": "Error", "type": "int8", "versions": "0+",
         "about": "The assigned error." },
       { "name": "AssignedTopicPartitions", "type": "[]TopicPartitions", "versions": "0+",
-        "about": "The partitions assigned to the member." }
-    ]}
-  ],
-  "commonStructs": [
-    { "name": "TopicPartitions", "versions": "0+", "fields": [
-      { "name": "TopicId", "type": "uuid", "versions": "0+",
-        "about": "The topic ID." },
-      { "name": "Partitions", "type": "[]int32", "versions": "0+",
-        "about": "The partitions." }
+        "about": "The partitions assigned to the member.", "fields": [
+        { "name": "TopicId", "type": "uuid", "versions": "0+",
+          "about": "The topic ID." },
+        { "name": "Partitions", "type": "[]int32", "versions": "0+",
+          "about": "The partitions." }
+        ]
+      }
     ]}
   ]
 }

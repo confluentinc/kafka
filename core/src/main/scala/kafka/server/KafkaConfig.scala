@@ -1818,7 +1818,6 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val consumerGroupAssignors = getConfiguredInstances(KafkaConfig.ConsumerGroupAssignorsProp, classOf[PartitionAssignor])
 
   /** Share Group Configurations **/
-  // Share groups are enabled only when it is explicitly set via configuration
   val isShareGroupEnabled = getBoolean(KafkaConfig.ShareGroupEnableProp)
 
   /** ********* Offset management configuration ***********/

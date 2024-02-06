@@ -7320,7 +7320,7 @@ class KafkaApisTest extends Logging {
       raftSupport = true
     )
     kafkaApis.handle(requestChannelRequest, RequestLocal.NoCaching)
-    val expectedHeartbeatResponse = new ShareGroupHeartbeatResponseData().setErrorCode(Errors.INVALID_CONFIG.code)
+    val expectedHeartbeatResponse = new ShareGroupHeartbeatResponseData().setErrorCode(Errors.UNSUPPORTED_VERSION.code)
     val response = verifyNoThrottling[ShareGroupHeartbeatResponse](requestChannelRequest)
     assertEquals(expectedHeartbeatResponse, response.data)
   }

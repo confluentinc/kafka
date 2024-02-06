@@ -3832,7 +3832,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         }
       }
        */
-      requestHelper.sendMaybeThrottle(request, shareGroupHeartbeatRequest.getErrorResponse(Errors.INVALID_CONFIG.exception))
+      requestHelper.sendMaybeThrottle(request, shareGroupHeartbeatRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
     }
   }
