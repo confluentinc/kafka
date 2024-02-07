@@ -3437,6 +3437,12 @@ public class KafkaAdminClient extends AdminClient {
     }
 
     @Override
+    public ListShareGroupsResult listShareGroups(ListShareGroupsOptions options) {
+        // Implementation will be done as part of future PRs in KIP-932
+        return new ListShareGroupsResult();
+    }
+
+    @Override
     public ListConsumerGroupOffsetsResult listConsumerGroupOffsets(Map<String, ListConsumerGroupOffsetsSpec> groupSpecs,
                                                                    ListConsumerGroupOffsetsOptions options) {
         SimpleAdminApiFuture<CoordinatorKey, Map<TopicPartition, OffsetAndMetadata>> future =
