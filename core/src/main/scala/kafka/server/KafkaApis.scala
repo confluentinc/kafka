@@ -3821,8 +3821,6 @@ class KafkaApis(val requestChannel: RequestChannel,
         shareGroupHeartbeatRequest.data,
       ).handle[Unit] { (response, exception) =>
 
-        info(s"*** SHARE GROUP HEARTBEAT RESPONSE *** + ${response}")
-
         if (exception != null) {
           requestHelper.sendMaybeThrottle(request, shareGroupHeartbeatRequest.getErrorResponse(exception))
         } else {
