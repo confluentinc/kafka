@@ -18,7 +18,11 @@ package org.apache.kafka.tools;
 
 import joptsimple.OptionException;
 import org.apache.kafka.clients.CommonClientConfigs;
-import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.admin.AbstractOptions;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.ListShareGroupsOptions;
+import org.apache.kafka.clients.admin.ListShareGroupsResult;
+import org.apache.kafka.clients.admin.ShareGroupListing;
 import org.apache.kafka.common.ShareGroupState;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.server.util.CommandLineUtils;
