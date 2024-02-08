@@ -46,6 +46,6 @@ public class ShareGroupListing {
      */
     public Optional<ShareGroupState> state() {
         // Implementation will be done as part of future PRs in KIP-932
-        return null;
+        return Optional.empty();
     }
 }

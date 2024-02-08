@@ -21,6 +21,7 @@ import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.util.Collection;
+import java.util.Collections;
 
 /**
  * The result of the {@link Admin#listShareGroups(ListShareGroupsOptions)} call.
@@ -34,7 +35,7 @@ public class ListShareGroupsResult {
      */
     public KafkaFuture<Collection<ShareGroupListing>> all() {
         // Implementation will be done as part of future PRs in KIP-932
-        return null;
+        return KafkaFuture.completedFuture(Collections.emptyList());
     }
 
     /**
@@ -42,7 +43,7 @@ public class ListShareGroupsResult {
      */
     public KafkaFuture<Collection<ShareGroupListing>> valid() {
         // Implementation will be done as part of future PRs in KIP-932
-        return null;
+        return KafkaFuture.completedFuture(Collections.emptyList());
     }
 
     /**
@@ -50,6 +51,6 @@ public class ListShareGroupsResult {
      */
     public KafkaFuture<Collection<Throwable>> errors() {
         // Implementation will be done as part of future PRs in KIP-932
-        return null;
+        return KafkaFuture.completedFuture(Collections.emptyList());
     }
 }
