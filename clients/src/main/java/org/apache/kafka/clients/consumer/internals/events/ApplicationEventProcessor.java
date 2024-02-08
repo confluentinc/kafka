@@ -321,8 +321,9 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
             return;
         }
         ShareMembershipManager membershipManager = requestManagers.shareHeartbeatRequestManager.get().membershipManager();
-        membershipManager.leaveGroup();
-        event.future().complete(null);
+        CompletableFuture<Void> future = membershipManager.leaveGroup();
+        // The future will be completed on heartbeat sent
+        event.chain(future);
     }
 
     private void process(final ShareLeaveOnCloseApplicationEvent event) {
@@ -331,13 +332,14 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
             return;
         }
 
-        ShareMembershipManager shareMembershipManager =
+        ShareMembershipManager membershipManager =
                 Objects.requireNonNull(requestManagers.shareHeartbeatRequestManager.get().membershipManager(),
                         "Expecting membership manager to be non-null");
 
         log.debug("Leaving group before closing");
-        shareMembershipManager.leaveGroup();
-        event.future().complete(null);
+        CompletableFuture<Void> future = membershipManager.leaveGroup();
+        // The future will be completed on heartbeat sent
+        event.chain(future);
     }
 
     /**

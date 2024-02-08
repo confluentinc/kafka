@@ -148,14 +148,10 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
         @Override
         public void process(final BackgroundEvent event) {
-            switch (event.type()) {
-                case ERROR:
-                    process((ErrorBackgroundEvent) event);
-                    break;
-
-                default:
-                    throw new IllegalArgumentException("Background event type " + event.type() + " was not expected");
-
+            if (event.type() == BackgroundEvent.Type.ERROR) {
+                process((ErrorBackgroundEvent) event);
+            } else {
+                throw new IllegalArgumentException("Background event type " + event.type() + " was not expected");
             }
         }
 

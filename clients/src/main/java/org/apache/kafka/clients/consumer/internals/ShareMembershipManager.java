@@ -34,7 +34,6 @@ import org.apache.kafka.common.requests.ShareGroupHeartbeatRequest;
 import org.apache.kafka.common.telemetry.internals.ClientTelemetryProvider;
 import org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter;
 import org.apache.kafka.common.utils.LogContext;
-import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 
@@ -49,26 +48,24 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
  * Group manager for a single consumer that has a group id defined in the config
  * {@link ConsumerConfig#GROUP_ID_CONFIG} and the share group protocol to get automatically
  * assigned partitions when calling the subscribe API.
- *
  * <p/>
  *
  * While the subscribe API hasn't been called (or if the consumer called unsubscribe), this manager
  * will only be responsible for keeping the member in the {@link MemberState#UNSUBSCRIBED} state,
  * without joining the group.
- *
  * <p/>
  *
  * If the consumer subscribe API is called, this manager will use the {@link #groupId()} to join the
  * share group, and based on the share group protocol heartbeats, will handle the full
  * lifecycle of the member as it joins the group, reconciles assignments, handles fatal errors,
  * and leaves the group.
- *
  * <p/>
  *
  * Reconciliation process:<p/>
@@ -78,7 +75,6 @@ import java.util.stream.Collectors;
  * sequentially and acknowledged to the server as they complete. The reconciliation process
  * involves multiple async operations, so the member will continue to heartbeat while these
  * operations complete, to make sure that the member stays in the group while reconciling.
- *
  * <p/>
  *
  * Reconciliation steps:
@@ -114,13 +110,6 @@ public class ShareMembershipManager implements ClusterResourceListener {
     private final String groupId;
 
     /**
-     * Rebalance timeout. To be used as time limit for the commit request issued
-     * when a new assignment is received, that is retried until it succeeds, fails with a
-     * non-retriable error, it the time limit expires.
-     */
-    private final int rebalanceTimeoutMs;
-
-    /**
      * Member ID assigned by the server to the member, received in a heartbeat response when
      * joining the group specified in {@link #groupId}
      */
@@ -137,7 +126,7 @@ public class ShareMembershipManager implements ClusterResourceListener {
     /**
      * Rack ID of the member, if specified.
      */
-    private String rackId;
+    private final String rackId;
 
     /**
      * Current state of this member as part of the consumer group, as defined in {@link MemberState}
@@ -198,6 +187,13 @@ public class ShareMembershipManager implements ClusterResourceListener {
     private int memberEpochOnReconciliationStart;
 
     /**
+     * If the member is currently leaving the group after a call to {@link #leaveGroup()}}, this
+     * will have a future that will complete when the ongoing leave operation completes
+     * (heartbeat request to leave is sent out). This will be empty if the member is not leaving.
+     */
+    private Optional<CompletableFuture<Void>> leaveGroupInProgress = Optional.empty();
+
+    /**
      * True if the member has registered to be notified when the cluster metadata is updated.
      * This is initially false, as the member that is not part of a consumer group does not
      * require metadata updated. This becomes true the first time the member joins on the
@@ -225,17 +221,13 @@ public class ShareMembershipManager implements ClusterResourceListener {
      */
     private final BackgroundEventHandler backgroundEventHandler;
 
-    private final Time time;
-
     public ShareMembershipManager(String groupId,
                                   String rackId,
-                                  int rebalanceTimeoutMs,
                                   SubscriptionState subscriptions,
                                   ConsumerMetadata metadata,
                                   LogContext logContext,
                                   Optional<ClientTelemetryReporter> clientTelemetryReporter,
-                                  BackgroundEventHandler backgroundEventHandler,
-                                  Time time) {
+                                  BackgroundEventHandler backgroundEventHandler) {
         this.groupId = groupId;
         this.rackId = rackId;
         this.state = MemberState.UNSUBSCRIBED;
@@ -247,9 +239,7 @@ public class ShareMembershipManager implements ClusterResourceListener {
         this.log = logContext.logger(MembershipManagerImpl.class);
         this.stateUpdatesListeners = new ArrayList<>();
         this.clientTelemetryReporter = clientTelemetryReporter;
-        this.rebalanceTimeoutMs = rebalanceTimeoutMs;
         this.backgroundEventHandler = backgroundEventHandler;
-        this.time = time;
     }
 
     /**
@@ -516,20 +506,22 @@ public class ShareMembershipManager implements ClusterResourceListener {
      * request is sent indicating the broker that the member wants to leave the group. This is
      * expected to be invoked when the user calls the unsubscribe API.
      */
-    public void leaveGroup() {
+    public CompletableFuture<Void> leaveGroup() {
         if (state == MemberState.UNSUBSCRIBED || state == MemberState.FATAL) {
             // Member is not part of the group. No-op and return completed future to avoid
             // unnecessary transitions.
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         if (state == MemberState.PREPARE_LEAVING || state == MemberState.LEAVING) {
             // Member already leaving. No-op and return existing leave group future that will
             // complete when the ongoing leave operation completes.
-            return;
+            return leaveGroupInProgress.get();
         }
 
         transitionTo(MemberState.PREPARE_LEAVING);
+        CompletableFuture<Void> leaveResult = new CompletableFuture<>();
+        leaveGroupInProgress = Optional.of(leaveResult);
 
         releaseAssignment();
 
@@ -540,6 +532,10 @@ public class ShareMembershipManager implements ClusterResourceListener {
         // group (even in the case where the member had no assignment to release or when the
         // callback execution failed.)
         transitionToSendingLeaveGroup();
+
+        // Return future to indicate that the leave group is done when the callbacks
+        // complete, and the transition to send the heartbeat has been made.
+        return leaveResult;
     }
 
     /**
@@ -624,8 +620,8 @@ public class ShareMembershipManager implements ClusterResourceListener {
 
     /**
      * Transition out of the {@link MemberState#LEAVING} state even if the heartbeat was not sent.
-     * This will ensure that the member is not blocked on {@link MemberState#LEAVING} (best
-     * effort to send the request, without any response handling or retry logic)
+     * This will ensure that the member is not blocked in {@link MemberState#LEAVING} (it's the best
+     * effort to send the request, without any response handling or retry logic).
      */
     public void onHeartbeatRequestSkipped() {
         if (state == MemberState.LEAVING) {
@@ -637,6 +633,8 @@ public class ShareMembershipManager implements ClusterResourceListener {
 
     private void transitionToUnsubscribed() {
         transitionTo(MemberState.UNSUBSCRIBED);
+        leaveGroupInProgress.get().complete(null);
+        leaveGroupInProgress = Optional.empty();
     }
 
     /**
@@ -738,14 +736,6 @@ public class ShareMembershipManager implements ClusterResourceListener {
         revokeAndAssign(assignedTopicIdPartitions, revokedPartitions, addedPartitions);
     }
 
-    long getExpirationTimeForTimeout(final long timeoutMs) {
-        long expiration = time.milliseconds() + timeoutMs;
-        if (expiration < 0) {
-            return Long.MAX_VALUE;
-        }
-        return expiration;
-    }
-
     /**
      * Complete the reconciliation by updating the assignment and making the appropriate state
      * transition.
@@ -760,15 +750,14 @@ public class ShareMembershipManager implements ClusterResourceListener {
         boolean memberHasRejoined = memberEpochOnReconciliationStart != memberEpoch;
         if (state == MemberState.RECONCILING && !memberHasRejoined) {
             // Apply assignment
-            assignPartitions(assignedTopicIdPartitions, addedPartitions);
+            assignPartitions(assignedTopicIdPartitions);
+
+            markReconciliationCompleted();
 
             // Make assignment effective on the broker by transitioning to send acknowledge.
             transitionTo(MemberState.ACKNOWLEDGING);
-
-            markReconciliationCompleted();
         } else {
-            log.debug("Revocation callback completed but the member already " +
-                    "transitioned out of the reconciling state for epoch {} into " +
+            log.debug("The member already transitioned out of the reconciling state for epoch {} into " +
                     "{} state with epoch {}. Interrupting reconciliation as it's " +
                     "not relevant anymore,", memberEpochOnReconciliationStart, state, memberEpoch);
             String reason = interruptedReconciliationErrorMessage();
@@ -925,14 +914,8 @@ public class ShareMembershipManager implements ClusterResourceListener {
      *
      * @param assignedPartitions Full assignment that will be updated in the member subscription
      *                           state. This includes previously owned and newly added partitions.
-     * @param addedPartitions    Partitions contained in the new assignment that were not owned by
-     *                           the member before. These will be provided to the
-     *                           onPartitionsAssigned callback.
      */
-    private void assignPartitions(
-            SortedSet<TopicIdPartition> assignedPartitions,
-            SortedSet<TopicPartition> addedPartitions) {
-
+    private void assignPartitions(SortedSet<TopicIdPartition> assignedPartitions) {
         // Update assignment in the subscription state, and ensure that no fetching or positions
         // initialization happens for the newly added partitions while the callback runs.
         updateSubscription(assignedPartitions, false);
@@ -1002,7 +985,7 @@ public class ShareMembershipManager implements ClusterResourceListener {
     }
 
     /**
-     * @return Current state of this member in relationship to a group group, as defined in
+     * @return Current state of this member in relationship to a group, as defined in
      * {@link MemberState}.
      */
     public MemberState state() {

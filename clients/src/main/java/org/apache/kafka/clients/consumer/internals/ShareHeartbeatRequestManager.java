@@ -22,7 +22,6 @@ import org.apache.kafka.clients.consumer.internals.NetworkClientDelegate.PollRes
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventProcessor;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.ErrorBackgroundEvent;
-import org.apache.kafka.clients.consumer.internals.events.GroupMetadataUpdateEvent;
 import org.apache.kafka.clients.consumer.internals.metrics.HeartbeatMetricsManager;
 import org.apache.kafka.common.errors.GroupAuthorizationException;
 import org.apache.kafka.common.errors.RetriableException;
@@ -50,9 +49,11 @@ import java.util.TreeSet;
  * {@link MemberState#JOINING}, or {@link MemberState#RECONCILING}. Which mean the member is either in a stable
  * group, is trying to join a group, or is in the process of reconciling the assignment changes.</p>
  *
- * <p>If the member does not have groupId configured or encountering fatal exceptions, a heartbeat will not be sent.</p>
+ * <p>If the member got kick out of a group, it will give up the current assignment and join again with a zero epoch.</p>
  *
- * <p>If the coordinator not is not found, we will skip sending the heartbeat and try to find a coordinator first.</p>
+ * <p>If the member does not have groupId configured or encounters fatal exceptions, a heartbeat will not be sent.</p>
+ *
+ * <p>If the coordinator is not found, we will skip sending the heartbeat and try to find a coordinator first.</p>
  *
  * <p>If the heartbeat failed due to retriable errors, such as, TimeoutException, the subsequent attempt will be
  * backoff exponentially.</p>
@@ -102,7 +103,6 @@ public class ShareHeartbeatRequestManager implements RequestManager {
      * sending heartbeat until the next poll.
      */
     private final Timer pollTimer;
-    private GroupMetadataUpdateEvent previousGroupMetadataUpdateEvent = null;
 
     /**
      * Holding the heartbeat sensor to measure heartbeat timing and response latency
@@ -305,25 +305,9 @@ public class ShareHeartbeatRequestManager implements RequestManager {
             heartbeatRequestState.onSuccessfulAttempt(currentTimeMs);
             heartbeatRequestState.resetTimer();
             shareMembershipManager.onHeartbeatResponseReceived(response.data());
-            maybeSendGroupMetadataUpdateEvent();
             return;
         }
         onErrorResponse(response, currentTimeMs);
-    }
-
-    private void maybeSendGroupMetadataUpdateEvent() {
-        if (previousGroupMetadataUpdateEvent == null ||
-                !previousGroupMetadataUpdateEvent.memberId().equals(shareMembershipManager.memberId()) ||
-                previousGroupMetadataUpdateEvent.memberEpoch() != shareMembershipManager.memberEpoch()) {
-
-            final GroupMetadataUpdateEvent currentGroupMetadataUpdateEvent = new GroupMetadataUpdateEvent(
-                    shareMembershipManager.memberEpoch(),
-                    previousGroupMetadataUpdateEvent != null && shareMembershipManager.memberId() == null ?
-                            previousGroupMetadataUpdateEvent.memberId() : shareMembershipManager.memberId()
-            );
-            this.backgroundEventHandler.add(currentGroupMetadataUpdateEvent);
-            previousGroupMetadataUpdateEvent = currentGroupMetadataUpdateEvent;
-        }
     }
 
     private void onErrorResponse(final ShareGroupHeartbeatResponse response,
@@ -506,13 +490,13 @@ public class ShareHeartbeatRequestManager implements RequestManager {
                 sentFields.rackId = shareMembershipManager.rackId();
             }
 
-            // RebalanceTimeoutMs - only sent if has changed since the last heartbeat
+            // RebalanceTimeoutMs - only sent if changed since the last heartbeat
             if (sentFields.rebalanceTimeoutMs != rebalanceTimeoutMs) {
                 data.setRebalanceTimeoutMs(rebalanceTimeoutMs);
                 sentFields.rebalanceTimeoutMs = rebalanceTimeoutMs;
             }
 
-            // SubscribedTopicNames - only sent if has changed since the last heartbeat
+            // SubscribedTopicNames - only sent if changed since the last heartbeat
             TreeSet<String> subscribedTopicNames = new TreeSet<>(this.subscriptions.subscription());
             if (!subscribedTopicNames.equals(sentFields.subscribedTopicNames)) {
                 data.setSubscribedTopicNames(new ArrayList<>(this.subscriptions.subscription()));
