@@ -20,6 +20,8 @@ package org.apache.kafka.clients.admin;
 import org.apache.kafka.common.annotation.InterfaceStability;
 import org.apache.kafka.common.ShareGroupState;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -29,19 +31,21 @@ import java.util.Set;
  */
 @InterfaceStability.Evolving
 public class ListShareGroupsOptions extends AbstractOptions<ListShareGroupsOptions> {
+
+    private Set<ShareGroupState> states = Collections.emptySet();
+
     /**
      * If states is set, only groups in these states will be returned. Otherwise, all groups are returned.
      */
     public ListShareGroupsOptions inStates(Set<ShareGroupState> states) {
-        // Implementation will be done as part of future PRs in KIP-932
-        return null;
+        this.states = (states == null) ? Collections.emptySet() : new HashSet<>(states);
+        return this;
     }
 
     /**
      * Return the list of States that are requested or empty if no states have been specified.
      */
     public Set<ShareGroupState> states() {
-        // Implementation will be done as part of future PRs in KIP-932
-        return null;
+        return states;
     }
 }

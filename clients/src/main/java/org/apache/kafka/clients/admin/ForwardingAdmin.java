@@ -169,12 +169,6 @@ public class ForwardingAdmin implements Admin {
     }
 
     @Override
-    public ListShareGroupsResult listShareGroups(ListShareGroupsOptions options) {
-        // Implementation will be done as part of future PRs in KIP-932
-        return new ListShareGroupsResult();
-    }
-
-    @Override
     public ListConsumerGroupOffsetsResult listConsumerGroupOffsets(Map<String, ListConsumerGroupOffsetsSpec> groupSpecs, ListConsumerGroupOffsetsOptions options) {
         return delegate.listConsumerGroupOffsets(groupSpecs, options);
     }
@@ -212,6 +206,11 @@ public class ForwardingAdmin implements Admin {
     @Override
     public AlterConsumerGroupOffsetsResult alterConsumerGroupOffsets(String groupId, Map<TopicPartition, OffsetAndMetadata> offsets, AlterConsumerGroupOffsetsOptions options) {
         return delegate.alterConsumerGroupOffsets(groupId, offsets, options);
+    }
+
+    @Override
+    public ListShareGroupsResult listShareGroups(ListShareGroupsOptions options) {
+        return delegate.listShareGroups(options);
     }
 
     @Override

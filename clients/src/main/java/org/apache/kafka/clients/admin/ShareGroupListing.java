@@ -20,6 +20,7 @@ package org.apache.kafka.clients.admin;
 import org.apache.kafka.common.annotation.InterfaceStability;
 import org.apache.kafka.common.ShareGroupState;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -29,23 +30,76 @@ import java.util.Optional;
  */
 @InterfaceStability.Evolving
 public class ShareGroupListing {
-    public ShareGroupListing(String groupId) {}
+    private final String groupId;
+    private final Optional<ShareGroupState> state;
 
-    public ShareGroupListing(String groupId, Optional<ShareGroupState> state) {}
+    /**
+     * Create an instance with the specified parameters.
+     *
+     * @param groupId Group Id
+     */
+    public ShareGroupListing(String groupId) {
+        this(groupId, Optional.empty());
+    }
+
+    /**
+     * Create an instance with the specified parameters.
+     *
+     * @param groupId Group Id
+     * @param state The state of the share group
+     */
+    public ShareGroupListing(String groupId, Optional<ShareGroupState> state) {
+        this.groupId = groupId;
+        this.state = Objects.requireNonNull(state);
+    }
 
     /**
      * The id of the share group.
      */
     public String groupId() {
-        // Implementation will be done as part of future PRs in KIP-932
-        return null;
+        return groupId;
     }
 
     /**
      * The share group state.
      */
     public Optional<ShareGroupState> state() {
-        // Implementation will be done as part of future PRs in KIP-932
-        return Optional.empty();
+        return state;
     }
+
+    @Override
+    public String toString() {
+        return "(" +
+                "groupId='" + groupId + '\'' +
+                ", state=" + state +
+                ')';
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(groupId, state);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        ShareGroupListing other = (ShareGroupListing) obj;
+        if (groupId == null) {
+            if (other.groupId != null)
+                return false;
+        } else if (!groupId.equals(other.groupId))
+            return false;
+        if (state == null) {
+            if (other.state != null)
+                return false;
+        } else if (!state.equals(other.state))
+            return false;
+        return true;
+    }
+
 }

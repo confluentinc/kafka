@@ -17,6 +17,7 @@
 package org.apache.kafka.tools;
 
 import joptsimple.OptionException;
+
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AbstractOptions;
 import org.apache.kafka.clients.admin.Admin;
@@ -26,7 +27,6 @@ import org.apache.kafka.clients.admin.ShareGroupListing;
 import org.apache.kafka.common.ShareGroupState;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.server.util.CommandLineUtils;
-import org.apache.kafka.tools.consumer.group.ConsumerGroupCommandOptions;
 import org.apache.kafka.tools.reassign.Tuple2;
 
 import java.io.IOException;
@@ -46,7 +46,7 @@ import java.util.stream.Stream;
 public class ShareGroupsCommand {
 
     public static void main(String[] args) {
-        ConsumerGroupCommandOptions opts = new ConsumerGroupCommandOptions(args);
+        ShareGroupCommandOptions opts = new ShareGroupCommandOptions(args);
         try {
             opts.checkArgs();
             CommandLineUtils.maybePrintHelpOrVersion(opts, "This tool helps to list all share groups, describe a share group, delete share group info, or reset share group offsets.");
@@ -62,11 +62,16 @@ public class ShareGroupsCommand {
         }
     }
 
-    public static void run(ConsumerGroupCommandOptions opts) {
-        try (ShareGroupService shareGroupService = new ShareGroupService(opts, Collections.emptyMap())) {
+    public static void run(ShareGroupCommandOptions opts) {
+        try {
+            Admin adminClient = createAdminClient(Collections.emptyMap(), opts);
+            ShareGroupService shareGroupService = new ShareGroupService(opts, Collections.emptyMap(), adminClient);
             // Currently the tool only supports listing of share groups
             if (opts.options.has(opts.listOpt))
                 shareGroupService.listGroups();
+            shareGroupService.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         } catch (IllegalArgumentException e) {
             CommandLineUtils.printUsageAndExit(opts.parser, e.getMessage());
         } catch (Throwable e) {
@@ -88,19 +93,23 @@ public class ShareGroupsCommand {
         e.ifPresent(Throwable::printStackTrace);
     }
 
-    static class ShareGroupService implements AutoCloseable {
-        final ConsumerGroupCommandOptions opts;
+    // Visibility for testing
+    public static Admin createAdminClient(Map<String, String> configOverrides, ShareGroupCommandOptions opts) throws IOException {
+        Properties props = opts.options.has(opts.commandConfigOpt) ? Utils.loadProps(opts.options.valueOf(opts.commandConfigOpt)) : new Properties();
+        props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, opts.options.valueOf(opts.bootstrapServerOpt));
+        props.putAll(configOverrides);
+        return Admin.create(props);
+    }
+
+    static class ShareGroupService {
+        final ShareGroupCommandOptions opts;
         final Map<String, String> configOverrides;
         private final Admin adminClient;
 
-        public ShareGroupService(ConsumerGroupCommandOptions opts, Map<String, String> configOverrides) {
+        public ShareGroupService(ShareGroupCommandOptions opts, Map<String, String> configOverrides, Admin adminClient) {
             this.opts = opts;
             this.configOverrides = configOverrides;
-            try {
-                this.adminClient = createAdminClient(configOverrides);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            this.adminClient = adminClient;
         }
 
         public void listGroups() throws ExecutionException, InterruptedException {
@@ -147,17 +156,8 @@ public class ShareGroupsCommand {
             }
         }
 
-        @Override
         public void close() {
             adminClient.close();
-        }
-
-        // Visibility for testing
-        protected Admin createAdminClient(Map<String, String> configOverrides) throws IOException {
-            Properties props = opts.options.has(opts.commandConfigOpt) ? Utils.loadProps(opts.options.valueOf(opts.commandConfigOpt)) : new Properties();
-            props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, opts.options.valueOf(opts.bootstrapServerOpt));
-            props.putAll(configOverrides);
-            return Admin.create(props);
         }
 
         private <T extends AbstractOptions<T>> T withTimeoutMs(T options) {

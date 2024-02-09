@@ -720,12 +720,6 @@ public class MockAdminClient extends AdminClient {
     }
 
     @Override
-    public ListShareGroupsResult listShareGroups(ListShareGroupsOptions options) {
-        // Implementation will be done as part of future PRs in KIP-932
-        return new ListShareGroupsResult();
-    }
-
-    @Override
     synchronized public ListConsumerGroupOffsetsResult listConsumerGroupOffsets(Map<String, ListConsumerGroupOffsetsSpec> groupSpecs, ListConsumerGroupOffsetsOptions options) {
         // ignoring the groups and assume one test would only work on one group only
         if (groupSpecs.size() != 1)
@@ -1343,6 +1337,11 @@ public class MockAdminClient extends AdminClient {
 
     public synchronized void throwOnListConsumerGroupOffsets(final KafkaException exception) {
         listConsumerGroupOffsetsException = exception;
+    }
+
+    @Override
+    public ListShareGroupsResult listShareGroups(ListShareGroupsOptions options) {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     private final static class TopicMetadata {

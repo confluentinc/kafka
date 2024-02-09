@@ -3437,12 +3437,6 @@ public class KafkaAdminClient extends AdminClient {
     }
 
     @Override
-    public ListShareGroupsResult listShareGroups(ListShareGroupsOptions options) {
-        // Implementation will be done as part of future PRs in KIP-932
-        return new ListShareGroupsResult();
-    }
-
-    @Override
     public ListConsumerGroupOffsetsResult listConsumerGroupOffsets(Map<String, ListConsumerGroupOffsetsSpec> groupSpecs,
                                                                    ListConsumerGroupOffsetsOptions options) {
         SimpleAdminApiFuture<CoordinatorKey, Map<TopicPartition, OffsetAndMetadata>> future =
@@ -3829,6 +3823,12 @@ public class KafkaAdminClient extends AdminClient {
         AlterConsumerGroupOffsetsHandler handler = new AlterConsumerGroupOffsetsHandler(groupId, offsets, logContext);
         invokeDriver(handler, future, options.timeoutMs);
         return new AlterConsumerGroupOffsetsResult(future.get(CoordinatorKey.byGroupId(groupId)));
+    }
+
+    @Override
+    public ListShareGroupsResult listShareGroups(ListShareGroupsOptions options) {
+        // Implementation will be done as part of future PRs in KIP-932
+        throw new UnsupportedOperationException();
     }
 
     @Override

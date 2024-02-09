@@ -19,9 +19,10 @@ package org.apache.kafka.clients.admin;
 
 import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.annotation.InterfaceStability;
+import org.apache.kafka.common.internals.KafkaFutureImpl;
 
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 
 /**
  * The result of the {@link Admin#listShareGroups(ListShareGroupsOptions)} call.
@@ -30,27 +31,57 @@ import java.util.Collections;
  */
 @InterfaceStability.Evolving
 public class ListShareGroupsResult {
+
+    private final KafkaFutureImpl<Collection<ShareGroupListing>> all;
+    private final KafkaFutureImpl<Collection<ShareGroupListing>> valid;
+    private final KafkaFutureImpl<Collection<Throwable>> errors;
+
+    ListShareGroupsResult(KafkaFuture<Collection<Object>> future) {
+        this.all = new KafkaFutureImpl<>();
+        this.valid = new KafkaFutureImpl<>();
+        this.errors = new KafkaFutureImpl<>();
+        future.thenApply(new KafkaFuture.BaseFunction<Collection<Object>, Void>() {
+            @Override
+            public Void apply(Collection<Object> results) {
+                ArrayList<Throwable> curErrors = new ArrayList<>();
+                ArrayList<ShareGroupListing> curValid = new ArrayList<>();
+                for (Object resultObject : results) {
+                    if (resultObject instanceof Throwable) {
+                        curErrors.add((Throwable) resultObject);
+                    } else {
+                        curValid.add((ShareGroupListing) resultObject);
+                    }
+                }
+                if (!curErrors.isEmpty()) {
+                    all.completeExceptionally(curErrors.get(0));
+                } else {
+                    all.complete(curValid);
+                }
+                valid.complete(curValid);
+                errors.complete(curErrors);
+                return null;
+            }
+        });
+    }
+
     /**
      * Returns a future that yields either an exception, or the full set of share group listings.
      */
     public KafkaFuture<Collection<ShareGroupListing>> all() {
-        // Implementation will be done as part of future PRs in KIP-932
-        return KafkaFuture.completedFuture(Collections.emptyList());
+        return all;
     }
 
     /**
      * Returns a future which yields just the valid listings.
      */
     public KafkaFuture<Collection<ShareGroupListing>> valid() {
-        // Implementation will be done as part of future PRs in KIP-932
-        return KafkaFuture.completedFuture(Collections.emptyList());
+        return valid;
     }
 
     /**
      * Returns a future which yields just the errors which occurred.
      */
     public KafkaFuture<Collection<Throwable>> errors() {
-        // Implementation will be done as part of future PRs in KIP-932
-        return KafkaFuture.completedFuture(Collections.emptyList());
+        return errors;
     }
 }

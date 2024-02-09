@@ -18,12 +18,12 @@ package org.apache.kafka.tools;
 
 import kafka.server.KafkaConfig;
 import kafka.utils.TestUtils;
+import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.KafkaShareConsumer;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.tools.ShareGroupsCommand.ShareGroupService;
-import org.apache.kafka.tools.consumer.group.ConsumerGroupCommandOptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInfo;
@@ -98,11 +98,12 @@ public class ShareGroupsCommandTest extends kafka.integration.KafkaServerTestHar
         super.tearDown();
     }
 
-    ShareGroupService getShareGroupService(String[] args) {
-        ConsumerGroupCommandOptions opts = new ConsumerGroupCommandOptions(args);
+    ShareGroupService getShareGroupService(String[] args, Admin adminClient) {
+        ShareGroupCommandOptions opts = new ShareGroupCommandOptions(args);
         ShareGroupService service = new ShareGroupService(
                 opts,
-                Collections.singletonMap(AdminClientConfig.RETRIES_CONFIG, Integer.toString(Integer.MAX_VALUE))
+                Collections.singletonMap(AdminClientConfig.RETRIES_CONFIG, Integer.toString(Integer.MAX_VALUE)),
+                adminClient
         );
 
         shareGroupService.add(0, service);

@@ -918,26 +918,6 @@ public interface Admin extends AutoCloseable {
     }
 
     /**
-     * List the share groups available in the cluster with the default options.
-     *
-     * <p>This is a convenience method for {@link #listShareGroups(ListShareGroupsOptions)} with default options.
-     * See the overload for more details.
-     *
-     * @return The ListShareGroupsResult.
-     */
-    default ListShareGroupsResult listShareGroups() {
-        return listShareGroups(new ListShareGroupsOptions());
-    }
-
-    /**
-     * List the share groups available in the cluster.
-     *
-     * @param options The options to use when listing the share groups.
-     * @return The ListShareGroupsResult.
-     */
-    ListShareGroupsResult listShareGroups(ListShareGroupsOptions options);
-
-    /**
      * List the consumer group offsets available in the cluster.
      *
      * @param options The options to use when listing the consumer group offsets.
@@ -1233,6 +1213,26 @@ public interface Admin extends AutoCloseable {
      * @return The AlterOffsetsResult.
      */
     AlterConsumerGroupOffsetsResult alterConsumerGroupOffsets(String groupId, Map<TopicPartition, OffsetAndMetadata> offsets, AlterConsumerGroupOffsetsOptions options);
+
+    /**
+     * List the share groups available in the cluster with the default options.
+     *
+     * <p>This is a convenience method for {@link #listShareGroups(ListShareGroupsOptions)} with default options.
+     * See the overload for more details.
+     *
+     * @return The ListShareGroupsResult.
+     */
+    default ListShareGroupsResult listShareGroups() {
+        return listShareGroups(new ListShareGroupsOptions());
+    }
+
+    /**
+     * List the share groups available in the cluster.
+     *
+     * @param options The options to use when listing the share groups.
+     * @return The ListShareGroupsResult.
+     */
+    ListShareGroupsResult listShareGroups(ListShareGroupsOptions options);
 
     /**
      * <p>List offset for the specified partitions and OffsetSpec. This operation enables to find
