@@ -1570,7 +1570,7 @@ public class GroupMetadataManager {
         ShareGroup group = getOrMaybeCreateShareGroup(groupId, false);
         ShareGroupMember member = group.getOrMaybeCreateMember(memberId, false);
         List<Record> records = shareGroupFenceMember(group, member);
-        log.info("[GroupId {}] Member {} left the consumer group.", groupId, memberId);
+        log.info("[GroupId {}] Member {} left the share group.", groupId, memberId);
         return new CoordinatorResult<>(records, new ShareGroupHeartbeatResponseData()
                 .setMemberId(memberId)
                 .setMemberEpoch(memberEpoch));
