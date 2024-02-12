@@ -3901,7 +3901,8 @@ public class KafkaAdminClient extends AdminClient {
                                     .stream()
                                     .map(ShareGroupState::toString)
                                     .collect(Collectors.toList());
-                            return new ListGroupsRequest.Builder(new ListGroupsRequestData().setStatesFilter(states).setTypesFilter(Arrays.asList(GroupType.SHARE.toString())));
+                            List<String> types = Collections.singletonList(GroupType.SHARE.toString());
+                            return new ListGroupsRequest.Builder(new ListGroupsRequestData().setStatesFilter(states).setTypesFilter(types));
                         }
 
                         private void addShareGroup(ListGroupsResponseData.ListedGroup group) {
