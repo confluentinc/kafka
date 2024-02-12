@@ -69,11 +69,11 @@ public class ConsoleShareConsumerOptionsTest {
     }
 
     @Test
-    public void shouldParseValidConsumerConfigWithAutoOffsetResetLatest() throws IOException {
+    public void shouldParseValidConsumerConfigWithSessionTimeout() throws IOException {
         String[] args = new String[]{
                 "--bootstrap-server", "localhost:9092",
                 "--topic", "test",
-                "--consumer-property", "auto.offset.reset=latest"
+                "--consumer-property", "session.timeout.ms=10000"
         };
 
         ConsoleShareConsumerOptions config = new ConsoleShareConsumerOptions(args);
@@ -81,23 +81,7 @@ public class ConsoleShareConsumerOptionsTest {
 
         assertEquals("localhost:9092", config.bootstrapServer());
         assertEquals("test", config.topicArg());
-        assertEquals("latest", consumerProperties.getProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG));
-    }
-
-    @Test
-    public void shouldParseValidConsumerConfigWithAutoOffsetResetEarliest() throws IOException {
-        String[] args = new String[]{
-                "--bootstrap-server", "localhost:9092",
-                "--topic", "test",
-                "--consumer-property", "auto.offset.reset=earliest"
-        };
-
-        ConsoleShareConsumerOptions config = new ConsoleShareConsumerOptions(args);
-        Properties consumerProperties = config.consumerProps();
-
-        assertEquals("localhost:9092", config.bootstrapServer());
-        assertEquals("test", config.topicArg());
-        assertEquals("earliest", consumerProperties.getProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG));
+        assertEquals("10000", consumerProperties.getProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG));
     }
 
     @Test
@@ -236,7 +220,7 @@ public class ConsoleShareConsumerOptionsTest {
         ConsoleShareConsumerOptions config = new ConsoleShareConsumerOptions(args);
         Properties consumerProperties = config.consumerProps();
 
-        assertEquals("console-consumer", consumerProperties.getProperty(ConsumerConfig.CLIENT_ID_CONFIG));
+        assertEquals("console-share-consumer", consumerProperties.getProperty(ConsumerConfig.CLIENT_ID_CONFIG));
     }
 
     /**

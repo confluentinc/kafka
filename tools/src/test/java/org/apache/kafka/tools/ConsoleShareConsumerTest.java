@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.tools;
 
-import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.ShareConsumer;
@@ -39,72 +38,72 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-    public class ConsoleShareConsumerTest {
+public class ConsoleShareConsumerTest {
 
-        @BeforeEach
-        public void setup() {
-            ConsoleShareConsumer.messageCount = 0;
-        }
+    @BeforeEach
+    public void setup() {
+        ConsoleShareConsumer.messageCount = 0;
+    }
 
-        @Test
-        public void shouldThrowTimeoutExceptionWhenTimeoutIsReached() {
-            String topic = "test";
-            final Time time = new MockTime();
-            final int timeoutMs = 1000;
+    @Test
+    public void shouldThrowTimeoutExceptionWhenTimeoutIsReached() {
+        String topic = "test";
+        final Time time = new MockTime();
+        final int timeoutMs = 1000;
 
-            @SuppressWarnings("unchecked")
-            ShareConsumer<byte[], byte[]> mockConsumer = mock(ShareConsumer.class);
+        @SuppressWarnings("unchecked")
+        ShareConsumer<byte[], byte[]> mockConsumer = mock(ShareConsumer.class);
 
-            when(mockConsumer.poll(Duration.ofMillis(timeoutMs))).thenAnswer(invocation -> {
-                time.sleep(timeoutMs / 2 + 1);
-                return ConsumerRecords.EMPTY;
-            });
+        when(mockConsumer.poll(Duration.ofMillis(timeoutMs))).thenAnswer(invocation -> {
+            time.sleep(timeoutMs / 2 + 1);
+            return ConsumerRecords.EMPTY;
+        });
 
-            ConsoleShareConsumer.ConsumerWrapper consumer = new ConsoleShareConsumer.ConsumerWrapper(
-                    Optional.of(topic),
-                    mockConsumer,
-                    timeoutMs
-            );
+        ConsoleShareConsumer.ConsumerWrapper consumer = new ConsoleShareConsumer.ConsumerWrapper(
+                Optional.of(topic),
+                mockConsumer,
+                timeoutMs
+        );
 
-            assertThrows(TimeoutException.class, consumer::receive);
-        }
+        assertThrows(TimeoutException.class, consumer::receive);
+    }
 
-        @Test
-        public void shouldLimitReadsToMaxMessageLimit() {
-            ConsoleShareConsumer.ConsumerWrapper consumer = mock(ConsoleShareConsumer.ConsumerWrapper.class);
-            MessageFormatter formatter = mock(MessageFormatter.class);
-            ConsumerRecord<byte[], byte[]> record = new ConsumerRecord<>("foo", 1, 1, new byte[0], new byte[0]);
+    @Test
+    public void shouldLimitReadsToMaxMessageLimit() {
+        ConsoleShareConsumer.ConsumerWrapper consumer = mock(ConsoleShareConsumer.ConsumerWrapper.class);
+        MessageFormatter formatter = mock(MessageFormatter.class);
+        ConsumerRecord<byte[], byte[]> record = new ConsumerRecord<>("foo", 1, 1, new byte[0], new byte[0]);
 
-            int messageLimit = 10;
-            when(consumer.receive()).thenReturn(record);
+        int messageLimit = 10;
+        when(consumer.receive()).thenReturn(record);
 
-            ConsoleShareConsumer.process(messageLimit, formatter, consumer, System.out, true, AcknowledgeType.ACCEPT);
+        ConsoleShareConsumer.process(messageLimit, formatter, consumer, System.out, true);
 
-            verify(consumer, times(messageLimit)).receive();
-            verify(formatter, times(messageLimit)).writeTo(any(), any());
+        verify(consumer, times(messageLimit)).receive();
+        verify(formatter, times(messageLimit)).writeTo(any(), any());
 
-            consumer.cleanup();
-        }
+        consumer.cleanup();
+    }
 
-        @Test
-        public void shouldStopWhenOutputCheckErrorFails() {
-            ConsoleShareConsumer.ConsumerWrapper consumer = mock(ConsoleShareConsumer.ConsumerWrapper.class);
-            MessageFormatter formatter = mock(MessageFormatter.class);
-            PrintStream printStream = mock(PrintStream.class);
+    @Test
+    public void shouldStopWhenOutputCheckErrorFails() {
+        ConsoleShareConsumer.ConsumerWrapper consumer = mock(ConsoleShareConsumer.ConsumerWrapper.class);
+        MessageFormatter formatter = mock(MessageFormatter.class);
+        PrintStream printStream = mock(PrintStream.class);
 
-            ConsumerRecord<byte[], byte[]> record = new ConsumerRecord<>("foo", 1, 1, new byte[0], new byte[0]);
+        ConsumerRecord<byte[], byte[]> record = new ConsumerRecord<>("foo", 1, 1, new byte[0], new byte[0]);
 
-            when(consumer.receive()).thenReturn(record);
-            //Simulate an error on System.out after the first record has been printed
-            when(printStream.checkError()).thenReturn(true);
+        when(consumer.receive()).thenReturn(record);
+        //Simulate an error on System.out after the first record has been printed
+        when(printStream.checkError()).thenReturn(true);
 
-            ConsoleShareConsumer.process(-1, formatter, consumer, printStream, true, AcknowledgeType.ACCEPT);
+        ConsoleShareConsumer.process(-1, formatter, consumer, printStream, true);
 
-            verify(formatter).writeTo(any(), eq(printStream));
-            verify(consumer).receive();
-            verify(printStream).checkError();
+        verify(formatter).writeTo(any(), eq(printStream));
+        verify(consumer).receive();
+        verify(printStream).checkError();
 
-            consumer.cleanup();
-        }
+        consumer.cleanup();
+    }
 
 }

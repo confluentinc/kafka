@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.tools;
 
-import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaShareConsumer;
 import org.apache.kafka.clients.consumer.ShareConsumer;
@@ -71,7 +70,7 @@ public class ConsoleShareConsumer {
         addShutdownHook(consumerWrapper);
 
         try {
-            process(opts.maxMessages(), opts.formatter(), consumerWrapper, System.out, opts.rejectMessageOnError(), opts.acknowledgeType());
+            process(opts.maxMessages(), opts.formatter(), consumerWrapper, System.out, opts.rejectMessageOnError());
         } finally {
             consumerWrapper.cleanup();
             opts.formatter().close();
@@ -93,7 +92,7 @@ public class ConsoleShareConsumer {
     }
 
     static void process(int maxMessages, MessageFormatter formatter, ConsumerWrapper consumer, PrintStream output,
-                        boolean rejectMessageOnError, AcknowledgeType acknowledgeType) {
+                        boolean rejectMessageOnError) {
         while (messageCount < maxMessages || maxMessages == -1) {
             ConsumerRecord<byte[], byte[]> msg;
             try {

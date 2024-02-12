@@ -18,7 +18,6 @@ package org.apache.kafka.tools;
 
 import joptsimple.OptionException;
 import joptsimple.OptionSpec;
-import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.MessageFormatter;
@@ -40,13 +39,10 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
-
-    private static final Random RANDOM = new Random();
     private final OptionSpec<String> messageFormatterOpt;
     private final OptionSpec<String> messageFormatterConfigOpt;
     private final OptionSpec<String> messageFormatterArgOpt;
@@ -75,11 +71,11 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
                 .withRequiredArg()
                 .describedAs("config file")
                 .ofType(String.class);
-        messageFormatterOpt = parser.accepts("formatter", "The name of a class to use for formatting kafka messages for display.")
+        messageFormatterOpt = parser.accepts("formatter", "The name of a class to use for formatting Kafka messages for display.")
                 .withRequiredArg()
                 .describedAs("class")
                 .ofType(String.class)
-                .defaultsTo(DefaultMessageFormatter.class.getName());
+                .defaultsTo(DefaultMessageFormatterTemporary.class.getName());
         messageFormatterArgOpt = parser.accepts("property",
                         "The properties to initialize the message formatter. Default properties include: \n" +
                                 " print.timestamp=true|false\n" +
@@ -125,11 +121,10 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
                 .withRequiredArg()
                 .describedAs("deserializer for values")
                 .ofType(String.class);
-        groupIdOpt = parser.accepts("group", "The consumer group id of the consumer.")
+        groupIdOpt = parser.accepts("group", "The share group id of the consumer.")
                 .withRequiredArg()
                 .describedAs("consumer group id")
                 .ofType(String.class);
-        // TODO : Add --release and --reject option
 
         try {
             options = parser.parse(args);
@@ -137,7 +132,7 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
             CommandLineUtils.printUsageAndExit(parser, oe.getMessage());
         }
 
-        CommandLineUtils.maybePrintHelpOrVersion(this, "This tool helps to read data from Kafka topics using consumer share groups and outputs it to standard output.");
+        CommandLineUtils.maybePrintHelpOrVersion(this, "This tool helps to read data from Kafka topics using share groups and outputs it to standard output.");
 
         checkRequiredArgs();
 
@@ -146,7 +141,7 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
                 : new Properties();
         Properties extraConsumerProps = CommandLineUtils.parseKeyValueArgs(options.valuesOf(consumerPropertyOpt));
 
-        Set<String> groupIdsProvided = checkConsumerGroup(consumerPropsFromFile, extraConsumerProps);
+        Set<String> groupIdsProvided = checkShareGroup(consumerPropsFromFile, extraConsumerProps);
         consumerProps = buildConsumerProps(consumerPropsFromFile, extraConsumerProps, groupIdsProvided);
         formatter = buildFormatter();
     }
@@ -158,7 +153,7 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
         CommandLineUtils.checkRequiredArgs(parser, options, bootstrapServerOpt);
     }
 
-    private Set<String> checkConsumerGroup(Properties consumerPropsFromFile, Properties extraConsumerProps) {
+    private Set<String> checkShareGroup(Properties consumerPropsFromFile, Properties extraConsumerProps) {
         // if the group id is provided in more than place (through different means) all values must be the same
         Set<String> groupIdsProvided = new HashSet<>();
         if (options.has(groupIdOpt)) {
@@ -172,7 +167,10 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
         if (extraConsumerProps.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
             groupIdsProvided.add(extraConsumerProps.getProperty(ConsumerConfig.GROUP_ID_CONFIG));
         }
-        if (groupIdsProvided.size() > 1) {
+        // The default value for group.id is "share"
+        if (groupIdsProvided.isEmpty()) {
+            groupIdsProvided.add("share");
+        } else if (groupIdsProvided.size() > 1) {
             CommandLineUtils.printUsageAndExit(parser, "The group ids provided in different places (directly using '--group', "
                     + "via '--consumer-property', or via '--consumer.config') do not match. "
                     + "Detected group ids: "
@@ -186,19 +184,10 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
         consumerProps.putAll(extraConsumerProps);
         consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServer());
         if (consumerProps.getProperty(ConsumerConfig.CLIENT_ID_CONFIG) == null) {
-            consumerProps.put(ConsumerConfig.CLIENT_ID_CONFIG, "console-consumer");
+            consumerProps.put(ConsumerConfig.CLIENT_ID_CONFIG, "console-share-consumer");
         }
 
-        if (groupIdsProvided.isEmpty()) {
-            consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, "console-consumer-" + RANDOM.nextInt(100000));
-            // By default, avoid unnecessary expansion of the coordinator cache since
-            // the auto-generated group and its offsets is not intended to be used again
-            if (!consumerProps.containsKey(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG)) {
-                consumerProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-            }
-        } else {
-            consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupIdsProvided.iterator().next());
-        }
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupIdsProvided.iterator().next());
         return consumerProps;
     }
 
@@ -228,11 +217,6 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
 
     boolean rejectMessageOnError() {
         return options.has(rejectMessageOnErrorOpt);
-    }
-
-    AcknowledgeType acknowledgeType() {
-        // TODO : Once --release and --reject are implemented, change according to option
-        return AcknowledgeType.ACCEPT;
     }
 
     String topicArg() {
@@ -277,8 +261,8 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
      * in the open PR - <a href="https://github.com/apache/kafka/pull/15274/files#">...</a>
      * These inner classes are temporary and will be removed once the above PR gets merged.
      */
-    public static class DefaultMessageFormatter implements MessageFormatter {
-        private static final Logger LOG = LoggerFactory.getLogger(DefaultMessageFormatter.class);
+    public static class DefaultMessageFormatterTemporary implements MessageFormatter {
+        private static final Logger LOG = LoggerFactory.getLogger(DefaultMessageFormatterTemporary.class);
 
         private boolean printTimestamp = false;
         private boolean printKey = false;
@@ -450,36 +434,6 @@ public final class ConsoleShareConsumerOptions extends CommandDefaultOptions {
                 }
             }
             return Optional.empty();
-        }
-    }
-
-    public static class LoggingMessageFormatter implements MessageFormatter {
-
-        private static final Logger LOG = LoggerFactory.getLogger(LoggingMessageFormatter.class);
-        private final DefaultMessageFormatter defaultWriter = new DefaultMessageFormatter();
-
-        @Override
-        public void configure(Map<String, ?> configs) {
-            defaultWriter.configure(configs);
-        }
-
-        @Override
-        public void writeTo(ConsumerRecord<byte[], byte[]> consumerRecord, PrintStream output) {
-            defaultWriter.writeTo(consumerRecord, output);
-            String timestamp = consumerRecord.timestampType() != TimestampType.NO_TIMESTAMP_TYPE
-                    ? consumerRecord.timestampType() + ":" + consumerRecord.timestamp() + ", "
-                    : "";
-            String key = "key:" + (consumerRecord.key() == null ? "null " : new String(consumerRecord.key(), StandardCharsets.UTF_8) + ", ");
-            String value = "value:" + (consumerRecord.value() == null ? "null" : new String(consumerRecord.value(), StandardCharsets.UTF_8));
-            LOG.info(timestamp + key + value);
-        }
-    }
-
-    public static class NoOpMessageFormatter implements MessageFormatter {
-
-        @Override
-        public void writeTo(ConsumerRecord<byte[], byte[]> consumerRecord, PrintStream output) {
-
         }
     }
 
