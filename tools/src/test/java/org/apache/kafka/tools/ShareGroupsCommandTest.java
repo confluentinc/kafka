@@ -16,86 +16,129 @@
  */
 package org.apache.kafka.tools;
 
-import kafka.server.KafkaConfig;
-import kafka.utils.TestUtils;
+import joptsimple.OptionException;
+
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.consumer.KafkaShareConsumer;
-import org.apache.kafka.common.errors.WakeupException;
-import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.clients.admin.KafkaAdminClient;
+import org.apache.kafka.clients.admin.ListShareGroupsOptions;
+import org.apache.kafka.clients.admin.ListShareGroupsResult;
+import org.apache.kafka.clients.admin.MockAdminClient;
+import org.apache.kafka.clients.admin.ShareGroupListing;
+import org.apache.kafka.common.KafkaFuture;
+import org.apache.kafka.common.ShareGroupState;
+import org.apache.kafka.test.TestUtils;
 import org.apache.kafka.tools.ShareGroupsCommand.ShareGroupService;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.TestInfo;
-import scala.collection.JavaConverters;
-import scala.collection.Seq;
+import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.IntStream;
+import java.util.Set;
 
-public class ShareGroupsCommandTest extends kafka.integration.KafkaServerTestHarness {
-    public static final String TOPIC = "foo";
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-    List<ShareGroupService> shareGroupService = new ArrayList<>();
-    List<ShareGroupExecutor> shareGroupExecutors = new ArrayList<>();
+public class ShareGroupsCommandTest {
 
-    @Override
-    public Seq<KafkaConfig> generateConfigs() {
-        List<KafkaConfig> cfgs = new ArrayList<>();
+    @Test
+    public void testListShareGroups() throws Exception {
+        String firstGroup = "first-group";
+        String secondGroup = "second-group";
+        String bootstrapServer = "localhost:9092";
 
-        TestUtils.createBrokerConfigs(
-                1,
-                zkConnectOrNull(),
-                false,
-                true,
-                scala.None$.empty(),
-                scala.None$.empty(),
-                scala.None$.empty(),
-                true,
-                false,
-                false,
-                false,
-                scala.collection.immutable.Map$.MODULE$.empty(),
-                1,
-                false,
-                1,
-                (short) 1,
-                0,
-                false
-        ).foreach(props -> {
-            if (isNewGroupCoordinatorEnabled()) {
-                props.setProperty(KafkaConfig.NewGroupCoordinatorEnableProp(), "true");
-            }
+        String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--list"};
+        Admin adminClient = mock(KafkaAdminClient.class);
+        ListShareGroupsResult result = mock(ListShareGroupsResult.class);
+        when(result.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
+                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
+                new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))
+        )));
+        when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(result);
+        ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
+        Set<String> expectedGroups = new HashSet<>(Arrays.asList(firstGroup, secondGroup));
 
-            cfgs.add(KafkaConfig.fromProps(props));
-            return null;
-        });
-
-        return seq(cfgs);
+        final Set[] foundGroups = new Set[]{Collections.emptySet()};
+        TestUtils.waitForCondition(() -> {
+            foundGroups[0] = new HashSet<>(service.listShareGroups());
+            return Objects.equals(expectedGroups, foundGroups[0]);
+        }, "Expected --list to show groups " + expectedGroups + ", but found " + foundGroups[0] + ".");
+        service.close();
     }
 
-    @BeforeEach
-    @Override
-    public void setUp(TestInfo testInfo) {
-        super.setUp(testInfo);
-        createTopic(TOPIC, 1, 1, new Properties(), listenerName(), new Properties());
+    @Test
+    public void testListWithUnrecognizedNewConsumerOption() {
+        String bootstrapServer = "localhost:9092";
+        String[] cgcArgs = new String[]{"--new-consumer", "--bootstrap-server", bootstrapServer, "--list"};
+        assertThrows(OptionException.class, () -> getShareGroupService(cgcArgs, new MockAdminClient()));
     }
 
-    @AfterEach
-    @Override
-    public void tearDown() {
-        shareGroupService.forEach(ShareGroupService::close);
-        shareGroupExecutors.forEach(ShareGroupExecutor::shutdown);
-        super.tearDown();
+    @Test
+    public void testListShareGroupsWithStates() throws Exception {
+        String firstGroup = "first-group";
+        String secondGroup = "second-group";
+        String bootstrapServer = "localhost:9092";
+
+        String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--list", "--state"};
+        Admin adminClient = mock(KafkaAdminClient.class);
+        ListShareGroupsResult resultWithAllStates = mock(ListShareGroupsResult.class);
+        when(resultWithAllStates.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
+                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
+                new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))
+        )));
+        when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(resultWithAllStates);
+        ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
+        Set<ShareGroupListing> expectedListing = new HashSet<>(Arrays.asList(
+                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
+                new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))));
+
+        final Set[] foundListing = new Set[]{Collections.emptySet()};
+        TestUtils.waitForCondition(() -> {
+            foundListing[0] = new HashSet<>(service.listShareGroupsWithState(new HashSet<>(Arrays.asList(ShareGroupState.values()))));
+            return Objects.equals(expectedListing, foundListing[0]);
+        }, "Expected to show groups " + expectedListing + ", but found " + foundListing[0]);
+
+        ListShareGroupsResult resultWithStableState = mock(ListShareGroupsResult.class);
+        when(resultWithStableState.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
+                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE))
+        )));
+        when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(resultWithStableState);
+        Set<ShareGroupListing> expectedListingStable = Collections.singleton(
+                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)));
+
+        foundListing[0] = Collections.emptySet();
+
+        TestUtils.waitForCondition(() -> {
+            foundListing[0] = new HashSet<>(service.listShareGroupsWithState(Collections.singleton(ShareGroupState.STABLE)));
+            return Objects.equals(expectedListingStable, foundListing[0]);
+        }, "Expected to show groups " + expectedListingStable + ", but found " + foundListing[0]);
+        service.close();
+    }
+
+    @Test
+    public void testShareGroupStatesFromString() {
+        Set<ShareGroupState> result = ShareGroupsCommand.shareGroupStatesFromString("Stable");
+        assertEquals(Collections.singleton(ShareGroupState.STABLE), result);
+
+        result = ShareGroupsCommand.shareGroupStatesFromString("stable");
+        assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.STABLE)), result);
+
+        result = ShareGroupsCommand.shareGroupStatesFromString("dead");
+        assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.DEAD)), result);
+
+        result = ShareGroupsCommand.shareGroupStatesFromString("empty");
+        assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.EMPTY)), result);
+
+        assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("bad, wrong"));
+
+        assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("  bad, Stable"));
+
+        assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("   ,   ,"));
     }
 
     ShareGroupService getShareGroupService(String[] args, Admin adminClient) {
@@ -105,116 +148,6 @@ public class ShareGroupsCommandTest extends kafka.integration.KafkaServerTestHar
                 Collections.singletonMap(AdminClientConfig.RETRIES_CONFIG, Integer.toString(Integer.MAX_VALUE)),
                 adminClient
         );
-
-        shareGroupService.add(0, service);
         return service;
-    }
-
-    ShareGroupExecutor addShareGroupExecutor(int numConsumers, String group) {
-        ShareGroupExecutor executor = new ShareGroupExecutor(bootstrapServers(listenerName()), numConsumers, group,
-                TOPIC, Optional.empty(), false);
-        addExecutor(executor);
-        return executor;
-    }
-
-    private ShareGroupExecutor addExecutor(ShareGroupExecutor executor) {
-        shareGroupExecutors.add(0, executor);
-        return executor;
-    }
-
-    class ShareConsumerRunnable implements Runnable {
-        final String broker;
-        final String groupId;
-        final Optional<Properties> customPropsOpt;
-        final boolean syncCommit;
-        final String topic;
-
-        final Properties props = new Properties();
-        KafkaShareConsumer<String, String> consumer;
-
-        boolean configured = false;
-
-        public ShareConsumerRunnable(String broker, String groupId, Optional<Properties> customPropsOpt, boolean syncCommit, String topic) {
-            this.broker = broker;
-            this.groupId = groupId;
-            this.customPropsOpt = customPropsOpt;
-            this.syncCommit = syncCommit;
-            this.topic = topic;
-        }
-
-        void configure() {
-            configured = true;
-            configure(props);
-            customPropsOpt.ifPresent(props::putAll);
-            consumer = new KafkaShareConsumer<>(props);
-        }
-
-        void configure(Properties props) {
-            props.put("bootstrap.servers", broker);
-            props.put("group.id", groupId);
-            props.put("key.deserializer", StringDeserializer.class.getName());
-            props.put("value.deserializer", StringDeserializer.class.getName());
-        }
-
-        public void subscribe() {
-            consumer.subscribe(Collections.singleton(topic));
-        }
-
-        @Override
-        public void run() {
-            assert configured : "Must call configure before use";
-            try {
-                subscribe();
-                while (true) {
-                    consumer.poll(Duration.ofMillis(Long.MAX_VALUE));
-                    if (syncCommit)
-                        consumer.commitSync();
-                }
-            } catch (WakeupException e) {
-                // OK
-            } finally {
-                consumer.close();
-            }
-        }
-
-        void shutdown() {
-            consumer.wakeup();
-        }
-    }
-
-    class ShareGroupExecutor {
-        final int numThreads;
-        final ExecutorService executor;
-        final List<ShareConsumerRunnable> consumers = new ArrayList<>();
-
-        public ShareGroupExecutor(String broker, int numConsumers, String groupId, String topic, Optional<Properties> customPropsOpt, boolean syncCommit) {
-            this.numThreads = numConsumers;
-            this.executor = Executors.newFixedThreadPool(numThreads);
-            IntStream.rangeClosed(1, numConsumers).forEach(i -> {
-                ShareConsumerRunnable th = new ShareConsumerRunnable(broker, groupId, customPropsOpt, syncCommit, topic);
-                th.configure();
-                submit(th);
-            });
-        }
-
-        void submit(ShareConsumerRunnable consumerThread) {
-            consumers.add(consumerThread);
-            executor.submit(consumerThread);
-        }
-
-        void shutdown() {
-            consumers.forEach(ShareConsumerRunnable::shutdown);
-            executor.shutdown();
-            try {
-                executor.awaitTermination(5000, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    @SuppressWarnings({"deprecation"})
-    static <T> Seq<T> seq(Collection<T> seq) {
-        return JavaConverters.asScalaIteratorConverter(seq.iterator()).asScala().toSeq();
     }
 }
