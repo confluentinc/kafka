@@ -5224,37 +5224,16 @@ public class KafkaAdminClientTest {
 
     @Test
     public void testListShareGroupsWithStatesOlderBrokerVersion() throws Exception {
-        ApiVersion listGroupV3 = new ApiVersion()
-                .setApiKey(ApiKeys.LIST_GROUPS.id)
-                .setMinVersion((short) 0)
-                .setMaxVersion((short) 3);
         ApiVersion listGroupV4 = new ApiVersion()
                 .setApiKey(ApiKeys.LIST_GROUPS.id)
                 .setMinVersion((short) 0)
                 .setMaxVersion((short) 4);
         try (AdminClientUnitTestEnv env = new AdminClientUnitTestEnv(mockCluster(1, 0))) {
-            env.kafkaClient().setNodeApiVersions(NodeApiVersions.create(Collections.singletonList(listGroupV3)));
-
-            env.kafkaClient().prepareResponse(prepareMetadataResponse(env.cluster(), Errors.NONE));
-
-            // Check we should not be able to list share groups with v3 broker
-            env.kafkaClient().prepareResponseFrom(
-                    new ListGroupsResponse(new ListGroupsResponseData()
-                            .setErrorCode(Errors.NONE.code())
-                            .setGroups(Collections.singletonList(
-                                    new ListGroupsResponseData.ListedGroup()
-                                            .setGroupId("share-group-1")))),
-                    env.cluster().nodeById(0));
-            ListShareGroupsOptions options = new ListShareGroupsOptions();
-            ListShareGroupsResult result = env.adminClient().listShareGroups(options);
-            TestUtils.assertFutureThrows(result.all(), UnsupportedVersionException.class);
-        }
-        try (AdminClientUnitTestEnv env = new AdminClientUnitTestEnv(mockCluster(1, 0))) {
             env.kafkaClient().setNodeApiVersions(NodeApiVersions.create(Collections.singletonList(listGroupV4)));
 
             env.kafkaClient().prepareResponse(prepareMetadataResponse(env.cluster(), Errors.NONE));
 
-            // Check we should not be able to list share groups with v4 broker
+            // Check we should not be able to list share groups with broker having version < 5
             env.kafkaClient().prepareResponseFrom(
                     new ListGroupsResponse(new ListGroupsResponseData()
                             .setErrorCode(Errors.NONE.code())
