@@ -385,6 +385,23 @@ public class ShareMembershipManagerTest {
     }
 
     @Test
+    public void testIgnoreHeartbeatWhenLeavingGroup() {
+        ShareMembershipManager membershipManager = createMemberInStableState();
+        mockLeaveGroup();
+
+        CompletableFuture<Void> leaveResult = membershipManager.leaveGroup();
+
+        membershipManager.onHeartbeatResponseReceived(createShareGroupHeartbeatResponse(createAssignment(true)).data());
+
+        assertEquals(MemberState.LEAVING, membershipManager.state());
+        assertEquals(-1, membershipManager.memberEpoch());
+        assertEquals(MEMBER_ID, membershipManager.memberId());
+        assertTrue(membershipManager.currentAssignment().isEmpty());
+        assertFalse(leaveResult.isDone(), "Leave group result should not complete until the " +
+                "heartbeat request to leave is sent out.");
+    }
+
+    @Test
     public void testLeaveGroupWhenMemberOwnsAssignment() {
         Uuid topicId = Uuid.randomUuid();
         String topicName = "topic1";

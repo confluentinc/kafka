@@ -297,6 +297,12 @@ public class ShareMembershipManager implements RequestManager {
             throw new IllegalArgumentException(errorMessage);
         }
 
+        if (state == MemberState.LEAVING) {
+            log.debug("Ignoring heartbeat response received from broker. Member {} with epoch {} is " +
+                    "already leaving the group.", memberId, memberEpoch);
+            return;
+        }
+
         // Update the group member id label in the client telemetry reporter if the member id has
         // changed. Initially the member id is empty, and it is updated when the member joins the
         // group. This is done here to avoid updating the label on every heartbeat response. Also
