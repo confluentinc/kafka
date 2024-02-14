@@ -64,11 +64,12 @@ public class ShareGroupDescribeRequest extends AbstractRequest {
     ShareGroupDescribeResponseData data = new ShareGroupDescribeResponseData()
         .setThrottleTimeMs(throttleTimeMs);
     // Set error for each group
+    short errorCode = Errors.forException(e).code();
     this.data.groupIds().forEach(
         groupId -> data.groups().add(
             new ShareGroupDescribeResponseData.DescribedGroup()
                 .setGroupId(groupId)
-                .setErrorCode(Errors.forException(e).code())
+                .setErrorCode(errorCode)
         )
     );
     return new ShareGroupDescribeResponse(data);
