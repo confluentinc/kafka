@@ -18,6 +18,7 @@ package org.apache.kafka.coordinator.group;
 
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ConsumerGroupHeartbeatResponseData;
+import org.apache.kafka.common.message.ShareGroupHeartbeatResponseData;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentValue;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupPartitionMetadataValue;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
@@ -54,9 +55,35 @@ public class Assertions {
         }
     }
 
+    public static void assertResponseEquals(
+        ShareGroupHeartbeatResponseData expected,
+        ShareGroupHeartbeatResponseData actual
+    ) {
+        if (!responseEquals(expected, actual)) {
+            assertionFailure()
+                .expected(expected)
+                .actual(actual)
+                .buildAndThrow();
+        }
+    }
+
     private static boolean responseEquals(
         ConsumerGroupHeartbeatResponseData expected,
         ConsumerGroupHeartbeatResponseData actual
+    ) {
+        if (expected.throttleTimeMs() != actual.throttleTimeMs()) return false;
+        if (expected.errorCode() != actual.errorCode()) return false;
+        if (!Objects.equals(expected.errorMessage(), actual.errorMessage())) return false;
+        if (!Objects.equals(expected.memberId(), actual.memberId())) return false;
+        if (expected.memberEpoch() != actual.memberEpoch()) return false;
+        if (expected.heartbeatIntervalMs() != actual.heartbeatIntervalMs()) return false;
+        // Unordered comparison of the assignments.
+        return responseAssignmentEquals(expected.assignment(), actual.assignment());
+    }
+
+    private static boolean responseEquals(
+        ShareGroupHeartbeatResponseData expected,
+        ShareGroupHeartbeatResponseData actual
     ) {
         if (expected.throttleTimeMs() != actual.throttleTimeMs()) return false;
         if (expected.errorCode() != actual.errorCode()) return false;
@@ -79,6 +106,17 @@ public class Assertions {
         return Objects.equals(fromAssignment(expected.topicPartitions()), fromAssignment(actual.topicPartitions()));
     }
 
+    private static boolean responseAssignmentEquals(
+        ShareGroupHeartbeatResponseData.Assignment expected,
+        ShareGroupHeartbeatResponseData.Assignment actual
+    ) {
+        if (expected == actual) return true;
+        if (expected == null) return false;
+        if (actual == null) return false;
+
+        return Objects.equals(fromShareGroupAssignment(expected.assignedTopicPartitions()), fromShareGroupAssignment(actual.assignedTopicPartitions()));
+    }
+
     private static Map<Uuid, Set<Integer>> fromAssignment(
         List<ConsumerGroupHeartbeatResponseData.TopicPartitions> assignment
     ) {
@@ -88,6 +126,18 @@ public class Assertions {
         assignment.forEach(topicPartitions ->
             assignmentMap.put(topicPartitions.topicId(), new HashSet<>(topicPartitions.partitions()))
         );
+        return assignmentMap;
+    }
+
+    private static Map<Uuid, Set<Integer>> fromShareGroupAssignment(
+        List<ShareGroupHeartbeatResponseData.TopicPartitions> assignment
+    ) {
+        if (assignment == null) return null;
+
+        Map<Uuid, Set<Integer>> assignmentMap = new HashMap<>();
+        assignment.forEach(topicPartitions -> {
+            assignmentMap.put(topicPartitions.topicId(), new HashSet<>(topicPartitions.partitions()));
+        });
         return assignmentMap;
     }
 

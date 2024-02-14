@@ -30,6 +30,8 @@ import org.apache.kafka.common.message.JoinGroupResponseData;
 import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.message.LeaveGroupResponseData;
 import org.apache.kafka.common.message.ListGroupsResponseData;
+import org.apache.kafka.common.message.ShareGroupHeartbeatRequestData;
+import org.apache.kafka.common.message.ShareGroupHeartbeatResponseData;
 import org.apache.kafka.common.message.SyncGroupRequestData;
 import org.apache.kafka.common.message.SyncGroupResponseData;
 import org.apache.kafka.common.network.ClientInformation;
@@ -85,8 +87,8 @@ import java.util.stream.IntStream;
 import static org.apache.kafka.common.requests.JoinGroupRequest.UNKNOWN_MEMBER_ID;
 import static org.apache.kafka.coordinator.group.GroupMetadataManager.EMPTY_RESULT;
 import static org.apache.kafka.coordinator.group.GroupMetadataManager.classicGroupHeartbeatKey;
-import static org.apache.kafka.coordinator.group.GroupMetadataManager.consumerGroupRevocationTimeoutKey;
-import static org.apache.kafka.coordinator.group.GroupMetadataManager.consumerGroupSessionTimeoutKey;
+import static org.apache.kafka.coordinator.group.GroupMetadataManager.groupRevocationTimeoutKey;
+import static org.apache.kafka.coordinator.group.GroupMetadataManager.groupSessionTimeoutKey;
 import static org.apache.kafka.coordinator.group.classic.ClassicGroupState.COMPLETING_REBALANCE;
 import static org.apache.kafka.coordinator.group.classic.ClassicGroupState.DEAD;
 import static org.apache.kafka.coordinator.group.classic.ClassicGroupState.EMPTY;
@@ -344,6 +346,7 @@ public class GroupMetadataManagerTestContext {
         final private SnapshotRegistry snapshotRegistry = new SnapshotRegistry(logContext);
         private MetadataImage metadataImage;
         private List<PartitionAssignor> consumerGroupAssignors = Collections.singletonList(new MockPartitionAssignor("range"));
+        private PartitionAssignor shareGroupAssignor = new MockPartitionAssignor("share");
         final private List<ConsumerGroupBuilder> consumerGroupBuilders = new ArrayList<>();
         private int consumerGroupMaxSize = Integer.MAX_VALUE;
         private int consumerGroupMetadataRefreshIntervalMs = Integer.MAX_VALUE;
@@ -361,6 +364,11 @@ public class GroupMetadataManagerTestContext {
 
         public Builder withAssignors(List<PartitionAssignor> assignors) {
             this.consumerGroupAssignors = assignors;
+            return this;
+        }
+
+        public Builder withShareGroupAssignor(PartitionAssignor shareGroupAssignor) {
+            this.shareGroupAssignor = shareGroupAssignor;
             return this;
         }
 
@@ -418,6 +426,7 @@ public class GroupMetadataManagerTestContext {
                     .withConsumerGroupSessionTimeout(45000)
                     .withConsumerGroupMaxSize(consumerGroupMaxSize)
                     .withConsumerGroupAssignors(consumerGroupAssignors)
+                    .withShareGroupAssignor(shareGroupAssignor)
                     .withConsumerGroupMetadataRefreshIntervalMs(consumerGroupMetadataRefreshIntervalMs)
                     .withClassicGroupMaxSize(classicGroupMaxSize)
                     .withClassicGroupMinSessionTimeoutMs(classicGroupMinSessionTimeoutMs)
@@ -525,6 +534,34 @@ public class GroupMetadataManagerTestContext {
         return result;
     }
 
+    public CoordinatorResult<ShareGroupHeartbeatResponseData, Record> shareGroupHeartbeat(
+        ShareGroupHeartbeatRequestData request
+    ) {
+        RequestContext context = new RequestContext(
+            new RequestHeader(
+                ApiKeys.SHARE_GROUP_HEARTBEAT,
+                ApiKeys.SHARE_GROUP_HEARTBEAT.latestVersion(),
+                "client",
+                0
+            ),
+            "1",
+            InetAddress.getLoopbackAddress(),
+            KafkaPrincipal.ANONYMOUS,
+            ListenerName.forSecurityProtocol(SecurityProtocol.PLAINTEXT),
+            SecurityProtocol.PLAINTEXT,
+            ClientInformation.EMPTY,
+            false
+        );
+
+        CoordinatorResult<ShareGroupHeartbeatResponseData, Record> result = groupMetadataManager.shareGroupHeartbeat(
+            context,
+            request
+        );
+
+        result.records().forEach(this::replay);
+        return result;
+    }
+
     public List<MockCoordinatorTimer.ExpiredTimeout<Void, Record>> sleep(long ms) {
         time.sleep(ms);
         List<MockCoordinatorTimer.ExpiredTimeout<Void, Record>> timeouts = timer.poll();
@@ -542,7 +579,7 @@ public class GroupMetadataManagerTestContext {
         long delayMs
     ) {
         MockCoordinatorTimer.ScheduledTimeout<Void, Record> timeout =
-            timer.timeout(consumerGroupSessionTimeoutKey(groupId, memberId));
+            timer.timeout(groupSessionTimeoutKey(groupId, memberId));
         assertNotNull(timeout);
         assertEquals(time.milliseconds() + delayMs, timeout.deadlineMs);
     }
@@ -552,7 +589,7 @@ public class GroupMetadataManagerTestContext {
         String memberId
     ) {
         MockCoordinatorTimer.ScheduledTimeout<Void, Record> timeout =
-            timer.timeout(consumerGroupSessionTimeoutKey(groupId, memberId));
+            timer.timeout(groupSessionTimeoutKey(groupId, memberId));
         assertNull(timeout);
     }
 
@@ -562,7 +599,7 @@ public class GroupMetadataManagerTestContext {
         long delayMs
     ) {
         MockCoordinatorTimer.ScheduledTimeout<Void, Record> timeout =
-            timer.timeout(consumerGroupRevocationTimeoutKey(groupId, memberId));
+            timer.timeout(groupRevocationTimeoutKey(groupId, memberId));
         assertNotNull(timeout);
         assertEquals(time.milliseconds() + delayMs, timeout.deadlineMs);
         return timeout;
@@ -573,7 +610,7 @@ public class GroupMetadataManagerTestContext {
         String memberId
     ) {
         MockCoordinatorTimer.ScheduledTimeout<Void, Record> timeout =
-            timer.timeout(consumerGroupRevocationTimeoutKey(groupId, memberId));
+            timer.timeout(groupRevocationTimeoutKey(groupId, memberId));
         assertNull(timeout);
     }
 
@@ -836,7 +873,7 @@ public class GroupMetadataManagerTestContext {
         assertEquals(Errors.NONE.code(), followerJoinResult.joinFuture.get().errorCode());
         assertEquals(1, leaderJoinResult.joinFuture.get().generationId());
         assertEquals(1, followerJoinResult.joinFuture.get().generationId());
-        assertEquals(2, group.size());
+        assertEquals(2, group.numMembers());
         assertEquals(1, group.generationId());
         assertTrue(group.isInState(COMPLETING_REBALANCE));
 
@@ -886,7 +923,7 @@ public class GroupMetadataManagerTestContext {
         assertEquals(Errors.NONE.code(), followerSyncResult.syncFuture.get().errorCode());
         assertTrue(group.isInState(STABLE));
 
-        assertEquals(2, group.size());
+        assertEquals(2, group.numMembers());
         assertEquals(1, group.generationId());
 
         return new RebalanceResult(
@@ -1001,7 +1038,7 @@ public class GroupMetadataManagerTestContext {
         assertTrue(followerJoinResult.records.isEmpty());
         assertFalse(followerJoinResult.joinFuture.isDone());
         assertTrue(group.isInState(PREPARING_REBALANCE));
-        assertEquals(2, group.size());
+        assertEquals(2, group.numMembers());
         assertEquals(1, group.numPendingJoinMembers());
 
         return new PendingMemberGroupResult(
@@ -1038,7 +1075,7 @@ public class GroupMetadataManagerTestContext {
         assertEquals(expectedRecords, timeouts.get(timeoutsSize - 1).result.records());
         assertNoOrEmptyResult(timeouts.subList(0, timeoutsSize - 1));
         assertTrue(group.isInState(EMPTY));
-        assertEquals(0, group.size());
+        assertEquals(0, group.numMembers());
     }
 
     public HeartbeatResponseData sendClassicGroupHeartbeat(
@@ -1157,7 +1194,7 @@ public class GroupMetadataManagerTestContext {
             return null;
         }).collect(Collectors.toList());
 
-        assertEquals(numMembers, group.size());
+        assertEquals(numMembers, group.numMembers());
         assertTrue(group.isInState(COMPLETING_REBALANCE));
 
         return joinResponses;

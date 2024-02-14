@@ -93,6 +93,7 @@ public class RequestManagers implements Closeable {
         this.commitRequestManager = Optional.empty();
         this.heartbeatRequestManager = Optional.empty();
         this.shareHeartbeatRequestManager = shareHeartbeatRequestManager;
+        this.membershipManager = Optional.empty();
         this.offsetsRequestManager = null;
         this.topicMetadataRequestManager = null;
         this.fetchRequestManager = null;
