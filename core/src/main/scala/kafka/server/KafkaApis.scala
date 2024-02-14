@@ -3881,8 +3881,12 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     if (!config.isNewGroupCoordinatorEnabled) {
       // The API is not supported by the "old" group coordinator (the default). If the
-      // new one is not enabled, we fail directly here.
+      // new one is not enabled, we fail directly here. (KIP-848)
       requestHelper.sendMaybeThrottle(request, request.body[ShareGroupDescribeRequest].getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
+      CompletableFuture.completedFuture[Unit](())
+    } else if (!config.isShareGroupEnabled) {
+      // The API is not supported when the configuration `group.share.enable` has not been set explicitly
+      requestHelper.sendMaybeThrottle(request, shareGroupDescribeRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
     } else {
       val response = new ShareGroupDescribeResponseData()
