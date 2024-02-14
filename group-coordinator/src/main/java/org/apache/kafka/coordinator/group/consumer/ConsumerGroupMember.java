@@ -19,6 +19,7 @@ package org.apache.kafka.coordinator.group.consumer;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
 import org.apache.kafka.coordinator.group.GroupMember;
+import org.apache.kafka.coordinator.group.Utils;
 import org.apache.kafka.coordinator.group.common.Assignment;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentValue;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupMemberMetadataValue;
@@ -418,7 +419,7 @@ public class ConsumerGroupMember extends GroupMember {
     ) {
         List<ConsumerGroupDescribeResponseData.TopicPartitions> topicPartitions = new ArrayList<>();
         partitions.forEach((topicId, partitionSet) -> {
-            String topicName = lookupTopicNameById(topicId, topicsImage);
+            String topicName = Utils.lookupTopicNameById(topicId, topicsImage);
             if (topicName != null) {
                 topicPartitions.add(new ConsumerGroupDescribeResponseData.TopicPartitions()
                     .setTopicId(topicId)
@@ -427,18 +428,6 @@ public class ConsumerGroupMember extends GroupMember {
             }
         });
         return topicPartitions;
-    }
-
-    private static String lookupTopicNameById(
-        Uuid topicId,
-        TopicsImage topicsImage
-    ) {
-        TopicImage topicImage = topicsImage.getTopic(topicId);
-        if (topicImage != null) {
-            return topicImage.name();
-        } else {
-            return null;
-        }
     }
 
     @Override

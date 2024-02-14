@@ -19,6 +19,7 @@ package org.apache.kafka.coordinator.group.share;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ShareGroupDescribeResponseData;
 import org.apache.kafka.coordinator.group.GroupMember;
+import org.apache.kafka.coordinator.group.Utils;
 import org.apache.kafka.image.TopicImage;
 import org.apache.kafka.image.TopicsImage;
 
@@ -241,25 +242,13 @@ public class ShareGroupMember extends GroupMember {
             ')';
   }
 
-  private static String lookupTopicNameById(
-      Uuid topicId,
-      TopicsImage topicsImage
-  ) {
-    TopicImage topicImage = topicsImage.getTopic(topicId);
-    if (topicImage != null) {
-      return topicImage.name();
-    } else {
-      return null;
-    }
-  }
-
   private static List<ShareGroupDescribeResponseData.TopicPartitions> topicPartitionsFromMap(
       Map<Uuid, Set<Integer>> partitions,
       TopicsImage topicsImage
   ) {
     List<ShareGroupDescribeResponseData.TopicPartitions> topicPartitions = new ArrayList<>();
     partitions.forEach((topicId, partitionSet) -> {
-      String topicName = lookupTopicNameById(topicId, topicsImage);
+      String topicName = Utils.lookupTopicNameById(topicId, topicsImage);
       if (topicName != null) {
         topicPartitions.add(new ShareGroupDescribeResponseData.TopicPartitions()
             .setTopicId(topicId)
