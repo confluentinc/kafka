@@ -62,9 +62,10 @@ import static org.apache.kafka.test.TestUtils.DEFAULT_MAX_WAIT_MS;
 
 @Timeout(600)
 public class PlaintextShareConsumerTest extends AbstractConsumerTest {
-    public static final String TEST_WITH_PARAMETERIZED_QUORUM_NAME = "{displayName}.{argumentsWithNames}";
+    public static final String TEST_WITH_PARAMETERIZED_QUORUM_NAME = "{displayName}.quorum={argumentsWithNames}";
+
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"quorum=kraft+kip932"})
+    @ValueSource(strings = {"kraft+kip932"})
     public void testSubscriptionAndPoll(String quorum) {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
@@ -72,12 +73,13 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
                 new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         shareConsumer.subscribe(Collections.singleton(tp().topic()));
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(100000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(10000));
         shareConsumer.close();
         //TODO: the expected value should be changed to 1 and more verification should be added once the fetch functionality is in place
         assertEquals(0, records.count());
     }
 
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testHeaders() {
         int numRecords = 1;
@@ -126,11 +128,13 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
         assertEquals(numRecords, records.size());
     }
 
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testHeadersSerializerDeserializer() {
         testHeadersSerializeDeserialize(new BaseConsumerTest.SerializerImpl(), new BaseConsumerTest.DeserializerImpl());
     }
 
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testMaxPollRecords() {
         int maxPollRecords = 2;
@@ -149,6 +153,7 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
 
     }
 
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testMaxPollIntervalMs() throws InterruptedException {
         consumerConfig().setProperty(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, String.valueOf(1000));
@@ -175,9 +180,7 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
         assertEquals(1, listener.callsToRevoked());
     }
 
-    // TODO: Enable this test for both protocols when the Jira tracking its failure (KAFKA-16009) is fixed. This
-    //       is done by setting the @MethodSource value to "getTestQuorumAndGroupProtocolParametersAll"
-    @Disabled
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testMaxPollIntervalMsDelayInRevocation() {
         consumerConfig().setProperty(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, String.valueOf(5000));
@@ -221,6 +224,7 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
         assertTrue(commitCompleted[0]);
     }
 
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testMaxPollIntervalMsDelayInAssignment() {
         consumerConfig().setProperty(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, String.valueOf(5000));
@@ -246,6 +250,7 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
         ensureNoRebalance(consumer, listener);
     }
 
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testAutoCommitOnClose() {
         consumerConfig().setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
@@ -271,6 +276,7 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
         assertEquals(500, anotherConsumer.committed(new HashSet<>(Collections.singletonList(tp2()))).get(tp2()).offset());
     }
 
+    @Disabled("TODO: The consumer needs to be converted to share consumers once the functionality for this test is available")
     @Test
     public void testAutoCommitOnCloseAfterWakeup() {
         consumerConfig().setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
