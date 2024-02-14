@@ -235,10 +235,13 @@ abstract class IntegrationTestHarness extends KafkaServerTestHarness {
     producers.foreach(_.close(Duration.ZERO))
     consumers.foreach(_.wakeup())
     consumers.foreach(_.close(Duration.ZERO))
+    shareConsumers.foreach(_.wakeup())
+    shareConsumers.foreach(_.close(Duration.ZERO))
     adminClients.foreach(_.close(Duration.ZERO))
 
     producers.clear()
     consumers.clear()
+    shareConsumers.clear()
     adminClients.clear()
 
     super.tearDown()

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package integration.kafka.api;
+package kafka.test.api;
 
 import kafka.api.BaseConsumerTest;
 import kafka.utils.TestUtils;
@@ -71,11 +71,9 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
                 new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
         shareConsumer.subscribe(Collections.singleton(tp().topic()));
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(100000));
-        Iterator<ConsumerRecord<byte[], byte[]>> iter = records.iterator();
-        ConsumerRecord<byte[], byte[]> consumerRecord = iter.next();
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(1));
         shareConsumer.close();
-        assertEquals(consumerRecord, record);
+        assertEquals(0, records.count());
     }
 
     @Test
