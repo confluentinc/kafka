@@ -17,10 +17,10 @@
 
 package org.apache.kafka.clients.admin;
 
-import org.apache.kafka.common.GroupType;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.ShareGroupState;
 import org.apache.kafka.common.acl.AclOperation;
+import org.apache.kafka.common.annotation.InterfaceStability;
 import org.apache.kafka.common.utils.Utils;
 
 import java.util.ArrayList;
@@ -32,44 +32,29 @@ import java.util.Set;
 /**
  * A detailed description of a single share group in the cluster.
  */
+@InterfaceStability.Evolving
 public class ShareGroupDescription {
   private final String groupId;
   private final Collection<MemberDescription> members;
-  private final String partitionAssignor;
-  private final GroupType type;
   private final ShareGroupState state;
   private final Node coordinator;
   private final Set<AclOperation> authorizedOperations;
 
   public ShareGroupDescription(String groupId,
                                Collection<MemberDescription> members,
-                               String partitionAssignor,
                                ShareGroupState state,
                                Node coordinator) {
-    this(groupId, members, partitionAssignor, state, coordinator, Collections.emptySet());
+    this(groupId, members, state, coordinator, Collections.emptySet());
   }
 
   public ShareGroupDescription(String groupId,
                                Collection<MemberDescription> members,
-                               String partitionAssignor,
-                               ShareGroupState state,
-                               Node coordinator,
-                               Set<AclOperation> authorizedOperations) {
-    this(groupId, members, partitionAssignor, GroupType.CLASSIC, state, coordinator, authorizedOperations);
-  }
-
-  public ShareGroupDescription(String groupId,
-                               Collection<MemberDescription> members,
-                               String partitionAssignor,
-                               GroupType type,
                                ShareGroupState state,
                                Node coordinator,
                                Set<AclOperation> authorizedOperations) {
     this.groupId = groupId == null ? "" : groupId;
     this.members = members == null ? Collections.emptyList() :
         Collections.unmodifiableList(new ArrayList<>(members));
-    this.partitionAssignor = partitionAssignor == null ? "" : partitionAssignor;
-    this.type = type;
     this.state = state;
     this.coordinator = coordinator;
     this.authorizedOperations = authorizedOperations;
@@ -82,8 +67,6 @@ public class ShareGroupDescription {
     final ShareGroupDescription that = (ShareGroupDescription) o;
     return Objects.equals(groupId, that.groupId) &&
         Objects.equals(members, that.members) &&
-        Objects.equals(partitionAssignor, that.partitionAssignor) &&
-        type == that.type &&
         state == that.state &&
         Objects.equals(coordinator, that.coordinator) &&
         Objects.equals(authorizedOperations, that.authorizedOperations);
@@ -91,47 +74,32 @@ public class ShareGroupDescription {
 
   @Override
   public int hashCode() {
-    return Objects.hash(groupId, members, partitionAssignor, type, state, coordinator, authorizedOperations);
+    return Objects.hash(groupId, members, state, coordinator, authorizedOperations);
   }
 
   /**
-   * The id of the consumer group.
+   * The id of the share group.
    */
   public String groupId() {
     return groupId;
   }
 
   /**
-   * A list of the members of the consumer group.
+   * A list of the members of the share group.
    */
   public Collection<MemberDescription> members() {
     return members;
   }
 
   /**
-   * The consumer group partition assignor.
-   */
-  public String partitionAssignor() {
-    return partitionAssignor;
-  }
-
-  /**
-   * The group type (or the protocol) of this consumer group. It defaults
-   * to Classic if not provided by the server.
-   */
-  public GroupType type() {
-    return type;
-  }
-
-  /**
-   * The consumer group state, or UNKNOWN if the state is too new for us to parse.
+   * The share group state, or UNKNOWN if the state is too new for us to parse.
    */
   public ShareGroupState state() {
     return state;
   }
 
   /**
-   * The consumer group coordinator, or null if the coordinator is not known.
+   * The share group coordinator, or null if the coordinator is not known.
    */
   public Node coordinator() {
     return coordinator;
@@ -148,8 +116,6 @@ public class ShareGroupDescription {
   public String toString() {
     return "(groupId=" + groupId +
         ", members=" + Utils.join(members, ",") +
-        ", partitionAssignor=" + partitionAssignor +
-        ", type=" + type +
         ", state=" + state +
         ", coordinator=" + coordinator +
         ", authorizedOperations=" + authorizedOperations +
