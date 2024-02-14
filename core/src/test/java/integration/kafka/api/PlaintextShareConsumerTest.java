@@ -14,12 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package kafka.api;
+package integration.kafka.api;
 
+import kafka.api.BaseConsumerTest;
 import kafka.utils.TestUtils;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaShareConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -35,10 +38,13 @@ import org.apache.kafka.common.utils.Utils;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scala.Function0;
 import scala.collection.JavaConverters;
 import scala.collection.mutable.ArrayBuffer;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -55,6 +61,22 @@ import static org.apache.kafka.test.TestUtils.DEFAULT_MAX_WAIT_MS;
 
 @Timeout(600)
 public class PlaintextShareConsumerTest extends BaseConsumerTest {
+    public static final String TEST_WITH_PARAMETERIZED_QUORUM_NAME = "{displayName}.{argumentsWithNames}";
+    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
+    @ValueSource(strings = {"kraft+kip932"})
+    public void testSubscriptionAndPoll(String quorum) {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        producer.send(record);
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
+                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(100000));
+        Iterator<ConsumerRecord<byte[], byte[]>> iter = records.iterator();
+        ConsumerRecord<byte[], byte[]> consumerRecord = iter.next();
+        shareConsumer.close();
+        assertEquals(consumerRecord, record);
+    }
 
     @Test
     public void testHeaders() {
