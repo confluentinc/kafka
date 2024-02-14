@@ -16,6 +16,7 @@
  */
 package kafka.test.api;
 
+import kafka.api.AbstractConsumerTest;
 import kafka.api.BaseConsumerTest;
 import kafka.utils.TestUtils;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -41,8 +42,8 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import scala.Function0;
-import scala.collection.JavaConverters;
 import scala.collection.mutable.ArrayBuffer;
+import scala.jdk.javaapi.CollectionConverters;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -60,19 +61,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.apache.kafka.test.TestUtils.DEFAULT_MAX_WAIT_MS;
 
 @Timeout(600)
-public class PlaintextShareConsumerTest extends BaseConsumerTest {
+public class PlaintextShareConsumerTest extends AbstractConsumerTest {
     public static final String TEST_WITH_PARAMETERIZED_QUORUM_NAME = "{displayName}.{argumentsWithNames}";
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
+    @ValueSource(strings = {"quorum=kraft+kip932"})
     public void testSubscriptionAndPoll(String quorum) {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
         producer.send(record);
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         shareConsumer.subscribe(Collections.singleton(tp().topic()));
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(1));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(100000));
         shareConsumer.close();
+        //TODO: the expected value should be changed to 1 and more verification should be added once the fetch functionality is in place
         assertEquals(0, records.count());
     }
 
@@ -87,7 +89,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
         producer.send(record);
 
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         assertEquals(0, consumer.assignment().size());
         consumer.assign(Collections.singleton(tp()));
         assertEquals(1, consumer.assignment().size());
@@ -97,7 +99,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
 
         assertEquals(numRecords, records.size());
 
-        for (Iterator<ConsumerRecord<byte[], byte[]>> iter = JavaConverters.asJava(records.toIterator()); iter.hasNext();) {
+        for (Iterator<ConsumerRecord<byte[], byte[]>> iter = CollectionConverters.asJava(records.toIterator()); iter.hasNext();) {
             ConsumerRecord<byte[], byte[]> consumerRecord = iter.next();
             Header header = consumerRecord.headers().lastHeader("headerKey");
             if (header != null)
@@ -113,7 +115,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
         producer.send(record);
 
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), deserializer,
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         assertEquals(0, consumer.assignment().size());
         consumer.assign(Collections.singleton(tp()));
         assertEquals(1, consumer.assignment().size());
@@ -126,7 +128,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
 
     @Test
     public void testHeadersSerializerDeserializer() {
-        testHeadersSerializeDeserialize(new SerializerImpl(), new DeserializerImpl());
+        testHeadersSerializeDeserialize(new BaseConsumerTest.SerializerImpl(), new BaseConsumerTest.DeserializerImpl());
     }
 
     @Test
@@ -140,7 +142,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
 
         consumerConfig().setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, String.valueOf(maxPollRecords));
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         consumer.assign(Collections.singleton(tp()));
         consumeAndVerifyRecords(consumer, numRecords, 0, 0, startingTimestamp,
                 TimestampType.CREATE_TIME, tp(), maxPollRecords);
@@ -154,7 +156,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
         consumerConfig().setProperty(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, String.valueOf(2000));
 
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
 
         TestConsumerReassignmentListener listener = new TestConsumerReassignmentListener();
         consumer.subscribe(Collections.singleton(topic()), listener);
@@ -184,7 +186,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
         consumerConfig().setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, String.valueOf(false));
 
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         final boolean[] commitCompleted = {false};
         long committedPosition = -1;
 
@@ -227,7 +229,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
         consumerConfig().setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, String.valueOf(false));
 
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         TestConsumerReassignmentListener listener = new TestConsumerReassignmentListener() {
             @Override
             public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
@@ -248,7 +250,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
     public void testAutoCommitOnClose() {
         consumerConfig().setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
 
         int numRecords = 10000;
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
@@ -264,7 +266,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
 
         // now we should see the committed positions from another consumer
         Consumer<byte[], byte[]> anotherConsumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         assertEquals(300, anotherConsumer.committed(new HashSet<>(Collections.singletonList(tp()))).get(tp()).offset());
         assertEquals(500, anotherConsumer.committed(new HashSet<>(Collections.singletonList(tp2()))).get(tp2()).offset());
     }
@@ -273,7 +275,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
     public void testAutoCommitOnCloseAfterWakeup() {
         consumerConfig().setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
         Consumer<byte[], byte[]> consumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
 
         int numRecords = 10000;
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
@@ -293,7 +295,7 @@ public class PlaintextShareConsumerTest extends BaseConsumerTest {
 
         // now we should see the committed positions from another consumer
         Consumer<byte[], byte[]> anotherConsumer = createConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), JavaConverters.asScala(Collections.<String>emptyList()).toList());
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         assertEquals(300, anotherConsumer.committed(new HashSet<>(Collections.singletonList(tp()))).get(tp()).offset());
         assertEquals(500, anotherConsumer.committed(new HashSet<>(Collections.singletonList(tp2()))).get(tp2()).offset());
     }
