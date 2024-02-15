@@ -21,6 +21,7 @@ import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.DescribeShareGroupsResult;
 import org.apache.kafka.clients.admin.KafkaAdminClient;
+import org.apache.kafka.clients.admin.ListOffsetsResult;
 import org.apache.kafka.clients.admin.ListShareGroupsOptions;
 import org.apache.kafka.clients.admin.ListShareGroupsResult;
 import org.apache.kafka.clients.admin.MemberAssignment;
@@ -54,137 +55,156 @@ import static org.mockito.Mockito.when;
 
 public class ShareGroupsCommandTest {
 
-    @Test
-    public void testListShareGroups() throws Exception {
-        String firstGroup = "first-group";
-        String secondGroup = "second-group";
-        String bootstrapServer = "localhost:9092";
+  @Test
+  public void testListShareGroups() throws Exception {
+    String firstGroup = "first-group";
+    String secondGroup = "second-group";
+    String bootstrapServer = "localhost:9092";
 
-        String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--list"};
-        Admin adminClient = mock(KafkaAdminClient.class);
-        ListShareGroupsResult result = mock(ListShareGroupsResult.class);
-        when(result.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
-                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
-                new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))
-        )));
-        when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(result);
-        ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
-        Set<String> expectedGroups = new HashSet<>(Arrays.asList(firstGroup, secondGroup));
+    String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--list"};
+    Admin adminClient = mock(KafkaAdminClient.class);
+    ListShareGroupsResult result = mock(ListShareGroupsResult.class);
+    when(result.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
+        new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
+        new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))
+    )));
+    when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(result);
+    ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
+    Set<String> expectedGroups = new HashSet<>(Arrays.asList(firstGroup, secondGroup));
 
-        final Set[] foundGroups = new Set[]{Collections.emptySet()};
-        TestUtils.waitForCondition(() -> {
-            foundGroups[0] = new HashSet<>(service.listShareGroups());
-            return Objects.equals(expectedGroups, foundGroups[0]);
-        }, "Expected --list to show groups " + expectedGroups + ", but found " + foundGroups[0] + ".");
-        service.close();
-    }
+    final Set[] foundGroups = new Set[]{Collections.emptySet()};
+    TestUtils.waitForCondition(() -> {
+      foundGroups[0] = new HashSet<>(service.listShareGroups());
+      return Objects.equals(expectedGroups, foundGroups[0]);
+    }, "Expected --list to show groups " + expectedGroups + ", but found " + foundGroups[0] + ".");
+    service.close();
+  }
 
-    @Test
-    public void testDescribeShareGroups() throws Exception {
-        String firstGroup = "first-group";
-        String bootstrapServer = "localhost:9092";
+  @Test
+  public void testDescribeShareGroups() throws Exception {
+    String firstGroup = "group1";
+    Admin adminClient = mock(KafkaAdminClient.class);
+    DescribeShareGroupsResult result = mock(DescribeShareGroupsResult.class);
+    Map<String, ShareGroupDescription> resultMap = new HashMap<>();
+    ShareGroupDescription exp = new ShareGroupDescription(
+        firstGroup,
+        Collections.singletonList(new MemberDescription("memid1", "clId1", "host1", new MemberAssignment(
+            Collections.singleton(new TopicPartition("topic1", 0))
+        ))),
+        ShareGroupState.STABLE,
+        new Node(0, "host1", 9090));
+    resultMap.put(firstGroup, exp);
 
-        String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--describe", "--group", firstGroup};
-        Admin adminClient = mock(KafkaAdminClient.class);
-        DescribeShareGroupsResult result = mock(DescribeShareGroupsResult.class);
-        Map<String, ShareGroupDescription> resultMap = new HashMap<>();
-        resultMap.put(firstGroup, new ShareGroupDescription(
-            firstGroup,
-            Collections.singletonList(new MemberDescription("memid1", "clId1", "host1", new MemberAssignment(
-                Collections.singleton(new TopicPartition("topic1", 0))
-            ))),
-            ShareGroupState.STABLE,
-            new Node(0, "host1", 9090)));
+    when(result.all()).thenReturn(KafkaFuture.completedFuture(resultMap));
+    when(adminClient.describeShareGroups(ArgumentMatchers.anyCollection())).thenReturn(result);
+    ShareGroupService service = new ShareGroupService(null, null, adminClient);
+    assertEquals(exp, service.getDescribeGroup(firstGroup));
+    service.close();
+  }
 
-        when(result.all()).thenReturn(KafkaFuture.completedFuture(resultMap));
-        when(adminClient.describeShareGroups(ArgumentMatchers.anyCollection())).thenReturn(result);
-        ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
+  @Test
+  public void testDescribeShareGroupsGetOffsets() throws Exception {
+    Admin adminClient = mock(KafkaAdminClient.class);
 
-        ShareGroupDescription[] description = new ShareGroupDescription[1];
-        TestUtils.waitForCondition(() -> {
-            description[0] = service.getDescribeGroup(firstGroup);
-            return Objects.equals(resultMap.get(firstGroup), description[0]);
-        }, "Expected --describe to show groups " + resultMap.get(firstGroup) + ", but found " + description[0] + ".");
-        service.close();
-    }
+    ListOffsetsResult startOffset = mock(ListOffsetsResult.class);
+    Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> startOffsetResultMap = new HashMap<>();
+    startOffsetResultMap.put(new TopicPartition("topic1", 0), new ListOffsetsResult.ListOffsetsResultInfo(10, -1, Optional.empty()));
 
-    @Test
-    public void testListWithUnrecognizedNewConsumerOption() {
-        String bootstrapServer = "localhost:9092";
-        String[] cgcArgs = new String[]{"--new-consumer", "--bootstrap-server", bootstrapServer, "--list"};
-        assertThrows(OptionException.class, () -> getShareGroupService(cgcArgs, new MockAdminClient()));
-    }
+    ListOffsetsResult endOffset = mock(ListOffsetsResult.class);
+    Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> endOffsetResultMap = new HashMap<>();
+    endOffsetResultMap.put(new TopicPartition("topic1", 0), new ListOffsetsResult.ListOffsetsResultInfo(30, -1, Optional.empty()));
 
-    @Test
-    public void testListShareGroupsWithStates() throws Exception {
-        String firstGroup = "first-group";
-        String secondGroup = "second-group";
-        String bootstrapServer = "localhost:9092";
+    when(startOffset.all()).thenReturn(KafkaFuture.completedFuture(startOffsetResultMap));
+    when(endOffset.all()).thenReturn(KafkaFuture.completedFuture(endOffsetResultMap));
 
-        String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--list", "--state"};
-        Admin adminClient = mock(KafkaAdminClient.class);
-        ListShareGroupsResult resultWithAllStates = mock(ListShareGroupsResult.class);
-        when(resultWithAllStates.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
-                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
-                new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))
-        )));
-        when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(resultWithAllStates);
-        ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
-        Set<ShareGroupListing> expectedListing = new HashSet<>(Arrays.asList(
-                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
-                new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))));
+    when(adminClient.listOffsets(ArgumentMatchers.anyMap())).thenReturn(startOffset, endOffset);
 
-        final Set[] foundListing = new Set[]{Collections.emptySet()};
-        TestUtils.waitForCondition(() -> {
-            foundListing[0] = new HashSet<>(service.listShareGroupsWithState(new HashSet<>(Arrays.asList(ShareGroupState.values()))));
-            return Objects.equals(expectedListing, foundListing[0]);
-        }, "Expected to show groups " + expectedListing + ", but found " + foundListing[0]);
+    MemberDescription description = new MemberDescription("", "", "",
+        new MemberAssignment(Collections.singleton(new TopicPartition("topic1", 0))));
+    ShareGroupService service = new ShareGroupService(null, null, adminClient);
+    Map<TopicPartition, Long> lags = service.getOffsetLag(Collections.singletonList(description));
+    assertEquals(1, lags.size());
+    assertEquals(20, lags.get(new TopicPartition("topic1", 0)));
+    service.close();
+  }
 
-        ListShareGroupsResult resultWithStableState = mock(ListShareGroupsResult.class);
-        when(resultWithStableState.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
-                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE))
-        )));
-        when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(resultWithStableState);
-        Set<ShareGroupListing> expectedListingStable = Collections.singleton(
-                new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)));
+  @Test
+  public void testListWithUnrecognizedNewConsumerOption() {
+    String bootstrapServer = "localhost:9092";
+    String[] cgcArgs = new String[]{"--new-consumer", "--bootstrap-server", bootstrapServer, "--list"};
+    assertThrows(OptionException.class, () -> getShareGroupService(cgcArgs, new MockAdminClient()));
+  }
 
-        foundListing[0] = Collections.emptySet();
+  @Test
+  public void testListShareGroupsWithStates() throws Exception {
+    String firstGroup = "first-group";
+    String secondGroup = "second-group";
+    String bootstrapServer = "localhost:9092";
 
-        TestUtils.waitForCondition(() -> {
-            foundListing[0] = new HashSet<>(service.listShareGroupsWithState(Collections.singleton(ShareGroupState.STABLE)));
-            return Objects.equals(expectedListingStable, foundListing[0]);
-        }, "Expected to show groups " + expectedListingStable + ", but found " + foundListing[0]);
-        service.close();
-    }
+    String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--list", "--state"};
+    Admin adminClient = mock(KafkaAdminClient.class);
+    ListShareGroupsResult resultWithAllStates = mock(ListShareGroupsResult.class);
+    when(resultWithAllStates.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
+        new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
+        new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))
+    )));
+    when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(resultWithAllStates);
+    ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
+    Set<ShareGroupListing> expectedListing = new HashSet<>(Arrays.asList(
+        new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)),
+        new ShareGroupListing(secondGroup, Optional.of(ShareGroupState.EMPTY))));
 
-    @Test
-    public void testShareGroupStatesFromString() {
-        Set<ShareGroupState> result = ShareGroupsCommand.shareGroupStatesFromString("Stable");
-        assertEquals(Collections.singleton(ShareGroupState.STABLE), result);
+    final Set[] foundListing = new Set[]{Collections.emptySet()};
+    TestUtils.waitForCondition(() -> {
+      foundListing[0] = new HashSet<>(service.listShareGroupsWithState(new HashSet<>(Arrays.asList(ShareGroupState.values()))));
+      return Objects.equals(expectedListing, foundListing[0]);
+    }, "Expected to show groups " + expectedListing + ", but found " + foundListing[0]);
 
-        result = ShareGroupsCommand.shareGroupStatesFromString("stable");
-        assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.STABLE)), result);
+    ListShareGroupsResult resultWithStableState = mock(ListShareGroupsResult.class);
+    when(resultWithStableState.all()).thenReturn(KafkaFuture.completedFuture(Arrays.asList(
+        new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE))
+    )));
+    when(adminClient.listShareGroups(any(ListShareGroupsOptions.class))).thenReturn(resultWithStableState);
+    Set<ShareGroupListing> expectedListingStable = Collections.singleton(
+        new ShareGroupListing(firstGroup, Optional.of(ShareGroupState.STABLE)));
 
-        result = ShareGroupsCommand.shareGroupStatesFromString("dead");
-        assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.DEAD)), result);
+    foundListing[0] = Collections.emptySet();
 
-        result = ShareGroupsCommand.shareGroupStatesFromString("empty");
-        assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.EMPTY)), result);
+    TestUtils.waitForCondition(() -> {
+      foundListing[0] = new HashSet<>(service.listShareGroupsWithState(Collections.singleton(ShareGroupState.STABLE)));
+      return Objects.equals(expectedListingStable, foundListing[0]);
+    }, "Expected to show groups " + expectedListingStable + ", but found " + foundListing[0]);
+    service.close();
+  }
 
-        assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("bad, wrong"));
+  @Test
+  public void testShareGroupStatesFromString() {
+    Set<ShareGroupState> result = ShareGroupsCommand.shareGroupStatesFromString("Stable");
+    assertEquals(Collections.singleton(ShareGroupState.STABLE), result);
 
-        assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("  bad, Stable"));
+    result = ShareGroupsCommand.shareGroupStatesFromString("stable");
+    assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.STABLE)), result);
 
-        assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("   ,   ,"));
-    }
+    result = ShareGroupsCommand.shareGroupStatesFromString("dead");
+    assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.DEAD)), result);
 
-    ShareGroupService getShareGroupService(String[] args, Admin adminClient) {
-        ShareGroupCommandOptions opts = new ShareGroupCommandOptions(args);
-        ShareGroupService service = new ShareGroupService(
-                opts,
-                Collections.singletonMap(AdminClientConfig.RETRIES_CONFIG, Integer.toString(Integer.MAX_VALUE)),
-                adminClient
-        );
-        return service;
-    }
+    result = ShareGroupsCommand.shareGroupStatesFromString("empty");
+    assertEquals(new HashSet<>(Arrays.asList(ShareGroupState.EMPTY)), result);
+
+    assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("bad, wrong"));
+
+    assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("  bad, Stable"));
+
+    assertThrows(IllegalArgumentException.class, () -> ShareGroupsCommand.shareGroupStatesFromString("   ,   ,"));
+  }
+
+  ShareGroupService getShareGroupService(String[] args, Admin adminClient) {
+    ShareGroupCommandOptions opts = new ShareGroupCommandOptions(args);
+    ShareGroupService service = new ShareGroupService(
+        opts,
+        Collections.singletonMap(AdminClientConfig.RETRIES_CONFIG, Integer.toString(Integer.MAX_VALUE)),
+        adminClient
+    );
+    return service;
+  }
 }

@@ -212,34 +212,51 @@ public class ShareGroupsCommand {
         printMemberDetails(description.members());
         return;
       }
-      List<String> lineItem = new ArrayList<>();
-      lineItem.add(description.groupId());
-      lineItem.add(description.coordinator().idString());
-      lineItem.add(getOffsetLag(description.members()).entrySet().stream()
-          .map(entry -> entry.getKey() + "=>" + entry.getValue()).collect(Collectors.joining(", ")));
-
-      if (shouldPrintState) {
-        lineItem.add(description.state().toString());
+      Map<TopicPartition, Long> offsets = getOffsetLag(description.members());
+      boolean notOffset = offsets == null || offsets.size() == 0;
+      if (notOffset) {
+        offsets = new HashMap<>();
+        offsets.put(new TopicPartition("SENTINEL", -1), -1L);
       }
 
+      boolean printedHeader = false;
       int maxItemLength = 20;
-      for (String item : lineItem) {
-        if (item != null) {
-          maxItemLength = Math.max(maxItemLength, item.length());
+      boolean foundMax = false;
+      for (Map.Entry<TopicPartition, Long> offset : offsets.entrySet()) {
+        List<String> lineItem = new ArrayList<>();
+        lineItem.add(description.groupId());
+        lineItem.add(description.coordinator().idString());
+        if (notOffset) {
+          lineItem.add("");
+        } else {
+          lineItem.add(offset.getKey() + "=>" + offset.getValue());
         }
-      }
+        if (shouldPrintState) {
+          lineItem.add(description.state().toString());
+        }
 
-      // header
-      String formatAtom = "%" + (-maxItemLength) + "s";
-      String formatHeader = String.format(formatAtom + " " + formatAtom + " " + formatAtom, "GROUP_ID", "COORDINATOR_NODE", "OFFSETS");
-      if (shouldPrintState) {
-        formatHeader = String.format(formatAtom + " " + formatAtom + " " + formatAtom + " " + formatAtom, "GROUP_ID", "COORDINATOR_NODE", "OFFSETS", "STATE");
+        if (!foundMax) {
+          for (String item : lineItem) {
+            if (item != null) {
+              maxItemLength = Math.max(maxItemLength, item.length());
+            }
+          }
+          foundMax = true;
+        }
+        String formatAtom = "%" + (-maxItemLength) + "s";
+        if (!printedHeader) {
+          String formatHeader = String.format(formatAtom + " " + formatAtom + " " + formatAtom, "GROUP_ID", "COORDINATOR_NODE", "OFFSETS");
+          if (shouldPrintState) {
+            formatHeader = String.format(formatAtom + " " + formatAtom + " " + formatAtom + " " + formatAtom, "GROUP_ID", "COORDINATOR_NODE", "OFFSETS", "STATE");
+          }
+          System.out.println(formatHeader);
+          printedHeader = true;
+        }
+        for (String item : lineItem) {
+          System.out.printf(formatAtom + " ", item);
+        }
+        System.out.println();
       }
-      System.out.println(formatHeader);
-      for (String item : lineItem) {
-        System.out.printf(formatAtom + " ", item);
-      }
-      System.out.println();
     }
 
     private void printMemberDetails(Collection<MemberDescription> members) {
