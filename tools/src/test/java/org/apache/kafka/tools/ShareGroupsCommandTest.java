@@ -17,23 +17,31 @@
 package org.apache.kafka.tools;
 
 import joptsimple.OptionException;
-
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.DescribeShareGroupsResult;
 import org.apache.kafka.clients.admin.KafkaAdminClient;
 import org.apache.kafka.clients.admin.ListShareGroupsOptions;
 import org.apache.kafka.clients.admin.ListShareGroupsResult;
+import org.apache.kafka.clients.admin.MemberAssignment;
+import org.apache.kafka.clients.admin.MemberDescription;
 import org.apache.kafka.clients.admin.MockAdminClient;
+import org.apache.kafka.clients.admin.ShareGroupDescription;
 import org.apache.kafka.clients.admin.ShareGroupListing;
 import org.apache.kafka.common.KafkaFuture;
+import org.apache.kafka.common.Node;
 import org.apache.kafka.common.ShareGroupState;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.test.TestUtils;
 import org.apache.kafka.tools.ShareGroupsCommand.ShareGroupService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -68,6 +76,35 @@ public class ShareGroupsCommandTest {
             foundGroups[0] = new HashSet<>(service.listShareGroups());
             return Objects.equals(expectedGroups, foundGroups[0]);
         }, "Expected --list to show groups " + expectedGroups + ", but found " + foundGroups[0] + ".");
+        service.close();
+    }
+
+    @Test
+    public void testDescribeShareGroups() throws Exception {
+        String firstGroup = "first-group";
+        String bootstrapServer = "localhost:9092";
+
+        String[] cgcArgs = new String[]{"--bootstrap-server", bootstrapServer, "--describe", "--group", firstGroup};
+        Admin adminClient = mock(KafkaAdminClient.class);
+        DescribeShareGroupsResult result = mock(DescribeShareGroupsResult.class);
+        Map<String, ShareGroupDescription> resultMap = new HashMap<>();
+        resultMap.put(firstGroup, new ShareGroupDescription(
+            firstGroup,
+            Collections.singletonList(new MemberDescription("memid1", "clId1", "host1", new MemberAssignment(
+                Collections.singleton(new TopicPartition("topic1", 0))
+            ))),
+            ShareGroupState.STABLE,
+            new Node(0, "host1", 9090)));
+
+        when(result.all()).thenReturn(KafkaFuture.completedFuture(resultMap));
+        when(adminClient.describeShareGroups(ArgumentMatchers.anyCollection())).thenReturn(result);
+        ShareGroupService service = getShareGroupService(cgcArgs, adminClient);
+
+        ShareGroupDescription[] description = new ShareGroupDescription[1];
+        TestUtils.waitForCondition(() -> {
+            description[0] = service.getDescribeGroups();
+            return Objects.equals(resultMap.get(firstGroup), description[0]);
+        }, "Expected --describe to show groups " + resultMap.get(firstGroup) + ", but found " + description[0] + ".");
         service.close();
     }
 

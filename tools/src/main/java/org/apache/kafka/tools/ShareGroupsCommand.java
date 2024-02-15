@@ -21,8 +21,11 @@ import joptsimple.OptionException;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AbstractOptions;
 import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.DescribeShareGroupsResult;
 import org.apache.kafka.clients.admin.ListShareGroupsOptions;
 import org.apache.kafka.clients.admin.ListShareGroupsResult;
+import org.apache.kafka.clients.admin.MemberDescription;
+import org.apache.kafka.clients.admin.ShareGroupDescription;
 import org.apache.kafka.clients.admin.ShareGroupListing;
 import org.apache.kafka.common.ShareGroupState;
 import org.apache.kafka.common.utils.Utils;
@@ -68,6 +71,9 @@ public class ShareGroupsCommand {
             // Currently the tool only supports listing of share groups
             if (opts.options.has(opts.listOpt))
                 shareGroupService.listGroups();
+            else if (opts.options.has(opts.describeOpt)) {
+                shareGroupService.describeGroups();
+            }
             shareGroupService.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -152,6 +158,94 @@ public class ShareGroupsCommand {
                 String groupId = tuple.v1;
                 String state = tuple.v2;
                 System.out.printf("%" + (-maxGroupLen) + "s %s", groupId, state);
+            }
+        }
+
+        void describeGroups() throws ExecutionException, InterruptedException {
+            ShareGroupDescription description = getDescribeGroups();
+            printGroupDescriptionTable(description);
+        }
+        ShareGroupDescription getDescribeGroups() throws ExecutionException, InterruptedException {
+            String group = opts.options.valueOf(opts.groupOpt);
+            DescribeShareGroupsResult result = adminClient.describeShareGroups(Collections.singletonList(group));
+            Map<String, ShareGroupDescription> descriptionMap = result.all().get();
+            if (descriptionMap.containsKey(group)) {
+                return descriptionMap.get(group);
+            }
+            return null;
+        }
+
+        private void printGroupDescriptionTable(ShareGroupDescription description) {
+            boolean shouldPrintState = opts.options.has(opts.stateOpt);
+            boolean shouldPrintMemDetails = opts.options.has(opts.membersOpt);
+            if (description == null) {
+                return;
+            }
+            if (shouldPrintMemDetails) {
+                printMemberDetails(description.members());
+                return;
+            }
+            List<String> lineItem = new ArrayList<>();
+            lineItem.add(description.groupId());
+            System.out.println(description.members());
+            lineItem.add(description.members().stream().map(MemberDescription::consumerId).collect(Collectors.joining(",")));
+            lineItem.add(description.coordinator().idString());
+            if (shouldPrintState) {
+                lineItem.add(description.state().toString());
+            }
+
+            int maxItemLength = 20;
+            for (String item : lineItem) {
+                if (item != null) {
+                    maxItemLength = Math.max(maxItemLength, item.length());
+                }
+            }
+
+            // header
+            String formatAtom = "%" + (-maxItemLength) + "s";
+            String formatHeader = "";
+            if (shouldPrintState) {
+                formatHeader = String.format(formatAtom + " " + formatAtom + " " + formatAtom + " " + formatAtom, "GROUP_ID", "MEMBERS", "COORDINATOR_NODE", "STATE");
+            } else {
+                formatHeader = String.format(formatAtom + " " + formatAtom + " " + formatAtom, "GROUP_ID", "MEMBERS", "COORDINATOR_NODE");
+            }
+            System.out.println(formatHeader);
+            for (String item : lineItem) {
+                System.out.printf(formatAtom + " ", item);
+            }
+            System.out.println();
+        }
+
+        private void printMemberDetails(Collection<MemberDescription> members) {
+            List<List<String>> lineItems = new ArrayList<>();
+            int maxLen = 20;
+            for (MemberDescription member : members) {
+                List<String> lineItem = new ArrayList<>();
+                lineItem.add(member.consumerId());
+                lineItem.add(member.groupInstanceId().isPresent() ? member.groupInstanceId().get() : "");
+                lineItem.add(member.clientId());
+                lineItem.add(member.host());
+                lineItem.add(member.assignment().topicPartitions().stream().map(part -> part.topic() + ":" + part.partition()).collect(Collectors.joining(",")));
+                lineItem.add(member.targetAssignment().isPresent()
+                    ? member.targetAssignment().get().topicPartitions().stream().map(part -> part.topic() + ":" + part.partition()).collect(Collectors.joining(","))
+                    : "");
+                for (String item : lineItem) {
+                    if (item != null) {
+                        maxLen = Math.max(maxLen, item.length());
+                    }
+                }
+                lineItems.add(lineItem);
+            }
+
+            String fmt = "%" + (-maxLen) + "s";
+            String header = fmt + " " + fmt + " " + fmt + " " + fmt + " " + fmt + " " + fmt;
+            System.out.printf(header, "MEMBER_ID", "GRP_INSTANCE_ID", "CLIENT_ID", "HOST", "ASSIGNMENT", "TARGET_ASSIGNMENT");
+            System.out.println();
+            for (List<String> item : lineItems) {
+                for (String atom : item) {
+                    System.out.printf(fmt + " ", atom);
+                }
+                System.out.println();
             }
         }
 
