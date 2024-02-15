@@ -102,7 +102,7 @@ public class ShareGroupsCommandTest {
 
         ShareGroupDescription[] description = new ShareGroupDescription[1];
         TestUtils.waitForCondition(() -> {
-            description[0] = service.getDescribeGroups();
+            description[0] = service.getDescribeGroup(firstGroup);
             return Objects.equals(resultMap.get(firstGroup), description[0]);
         }, "Expected --describe to show groups " + resultMap.get(firstGroup) + ", but found " + description[0] + ".");
         service.close();
