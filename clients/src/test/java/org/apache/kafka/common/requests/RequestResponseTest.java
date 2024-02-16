@@ -210,6 +210,10 @@ import org.apache.kafka.common.message.SaslAuthenticateRequestData;
 import org.apache.kafka.common.message.SaslAuthenticateResponseData;
 import org.apache.kafka.common.message.SaslHandshakeRequestData;
 import org.apache.kafka.common.message.SaslHandshakeResponseData;
+import org.apache.kafka.common.message.ShareAcknowledgeRequestData;
+import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
+import org.apache.kafka.common.message.ShareFetchRequestData;
+import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.message.ShareGroupDescribeRequestData;
 import org.apache.kafka.common.message.ShareGroupDescribeResponseData;
 import org.apache.kafka.common.message.ShareGroupHeartbeatRequestData;
@@ -1005,6 +1009,10 @@ public class RequestResponseTest {
         assertEquals(1, createTxnOffsetCommitResponse().errorCounts().get(Errors.NONE));
         assertEquals(1, createUpdateMetadataResponse().errorCounts().get(Errors.NONE));
         assertEquals(1, createWriteTxnMarkersResponse().errorCounts().get(Errors.NONE));
+        assertEquals(1, createShareGroupHeartbeatResponse().errorCounts().get(Errors.NONE));
+        assertEquals(1, createShareGroupDescribeResponse().errorCounts().get(Errors.NONE));
+        assertEquals(2, createShareFetchResponse().errorCounts().get(Errors.NONE));
+        assertEquals(2, createShareAcknowledgeResponse().errorCounts().get(Errors.NONE));
     }
 
     private AbstractRequest getRequest(ApiKeys apikey, short version) {
@@ -1087,6 +1095,8 @@ public class RequestResponseTest {
             case DESCRIBE_TOPIC_PARTITIONS: return createDescribeTopicPartitionsRequest(version);
             case SHARE_GROUP_HEARTBEAT: return createShareGroupHeartbeatRequest(version);
             case SHARE_GROUP_DESCRIBE: return createShareGroupDescribeRequest(version);
+            case SHARE_FETCH: return createShareFetchRequest(version);
+            case SHARE_ACKNOWLEDGE: return createShareAcknowledgeRequest(version);
             default: throw new IllegalArgumentException("Unknown API key " + apikey);
         }
     }
@@ -1171,6 +1181,8 @@ public class RequestResponseTest {
             case DESCRIBE_TOPIC_PARTITIONS: return createDescribeTopicPartitionsResponse();
             case SHARE_GROUP_HEARTBEAT: return createShareGroupHeartbeatResponse();
             case SHARE_GROUP_DESCRIBE: return createShareGroupDescribeResponse();
+            case SHARE_FETCH: return createShareFetchResponse();
+            case SHARE_ACKNOWLEDGE: return createShareAcknowledgeResponse();
             default: throw new IllegalArgumentException("Unknown API key " + apikey);
         }
     }
@@ -1388,6 +1400,65 @@ public class RequestResponseTest {
                 ))
                 .setThrottleTimeMs(1000);
         return new ShareGroupDescribeResponse(data);
+    }
+
+    private ShareFetchRequest createShareFetchRequest(short version) {
+        ShareFetchRequestData data = new ShareFetchRequestData()
+                .setGroupId("group")
+                .setMemberId(Uuid.randomUuid().toString())
+                .setTopics(singletonList(new ShareFetchRequestData.FetchTopic()
+                        .setTopicId(Uuid.randomUuid())
+                        .setPartitions(singletonList(new ShareFetchRequestData.FetchPartition()
+                                .setPartitionIndex(0)
+                                .setCurrentLeaderEpoch(1)))));
+        return new ShareFetchRequest.Builder(data).build(version);
+    }
+
+    private ShareFetchResponse createShareFetchResponse() {
+        ShareFetchResponseData data = new ShareFetchResponseData();
+        MemoryRecords records = MemoryRecords.withRecords(CompressionType.NONE, new SimpleRecord("blah".getBytes()));
+        ShareFetchResponseData.PartitionData partition = new ShareFetchResponseData.PartitionData()
+                .setPartitionIndex(0)
+                .setErrorCode(Errors.NONE.code())
+                .setRecords(records)
+                .setAcquiredRecords(singletonList(new ShareFetchResponseData.AcquiredRecords()
+                        .setBaseOffset(0)
+                        .setLastOffset(0)
+                        .setDeliveryCount((short) 1)));
+        ShareFetchResponseData.ShareFetchableTopicResponse response = new ShareFetchResponseData.ShareFetchableTopicResponse()
+                .setTopicId(Uuid.randomUuid())
+                .setPartitions(singletonList(partition));
+
+        data.setResponses(singletonList(response));
+        data.setThrottleTimeMs(345);
+        data.setErrorCode(Errors.NONE.code());
+        return new ShareFetchResponse(data);
+    }
+
+    private ShareAcknowledgeRequest createShareAcknowledgeRequest(short version) {
+        ShareAcknowledgeRequestData data = new ShareAcknowledgeRequestData()
+                .setMemberId(Uuid.randomUuid().toString())
+                .setTopics(singletonList(new ShareAcknowledgeRequestData.AcknowledgeTopic()
+                        .setTopicId(Uuid.randomUuid())
+                        .setPartitions(singletonList(new ShareAcknowledgeRequestData.AcknowledgePartition()
+                                .setPartitionIndex(0)
+                                .setAcknowledgementBatches(singletonList(new ShareAcknowledgeRequestData.AcknowledgementBatch()
+                                        .setStartOffset(0)
+                                        .setLastOffset(0)
+                                        .setAcknowledgeType((byte) 0)))))));
+        return new ShareAcknowledgeRequest.Builder(data).build(version);
+    }
+
+    private ShareAcknowledgeResponse createShareAcknowledgeResponse() {
+        ShareAcknowledgeResponseData data = new ShareAcknowledgeResponseData();
+        data.setResponses(singletonList(new ShareAcknowledgeResponseData.ShareAcknowledgeTopicResponse()
+                .setTopicId(Uuid.randomUuid())
+                .setPartitions(singletonList(new ShareAcknowledgeResponseData.PartitionData()
+                        .setPartitionIndex(0)
+                        .setErrorCode(Errors.NONE.code())))));
+        data.setThrottleTimeMs(345);
+        data.setErrorCode(Errors.NONE.code());
+        return new ShareAcknowledgeResponse(data);
     }
 
     private ControllerRegistrationRequest createControllerRegistrationRequest(short version) {
