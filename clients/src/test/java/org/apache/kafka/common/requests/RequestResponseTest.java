@@ -20,6 +20,7 @@ import org.apache.kafka.common.ConsumerGroupState;
 import org.apache.kafka.common.ElectionType;
 import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.Node;
+import org.apache.kafka.common.ShareGroupState;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
@@ -209,6 +210,8 @@ import org.apache.kafka.common.message.SaslAuthenticateRequestData;
 import org.apache.kafka.common.message.SaslAuthenticateResponseData;
 import org.apache.kafka.common.message.SaslHandshakeRequestData;
 import org.apache.kafka.common.message.SaslHandshakeResponseData;
+import org.apache.kafka.common.message.ShareGroupDescribeRequestData;
+import org.apache.kafka.common.message.ShareGroupDescribeResponseData;
 import org.apache.kafka.common.message.ShareGroupHeartbeatRequestData;
 import org.apache.kafka.common.message.ShareGroupHeartbeatResponseData;
 import org.apache.kafka.common.message.StopReplicaRequestData.StopReplicaPartitionState;
@@ -1083,6 +1086,7 @@ public class RequestResponseTest {
             case LIST_CLIENT_METRICS_RESOURCES: return createListClientMetricsResourcesRequest(version);
             case DESCRIBE_TOPIC_PARTITIONS: return createDescribeTopicPartitionsRequest(version);
             case SHARE_GROUP_HEARTBEAT: return createShareGroupHeartbeatRequest(version);
+            case SHARE_GROUP_DESCRIBE: return createShareGroupDescribeRequest(version);
             default: throw new IllegalArgumentException("Unknown API key " + apikey);
         }
     }
@@ -1166,6 +1170,7 @@ public class RequestResponseTest {
             case LIST_CLIENT_METRICS_RESOURCES: return createListClientMetricsResourcesResponse();
             case DESCRIBE_TOPIC_PARTITIONS: return createDescribeTopicPartitionsResponse();
             case SHARE_GROUP_HEARTBEAT: return createShareGroupHeartbeatResponse();
+            case SHARE_GROUP_DESCRIBE: return createShareGroupDescribeResponse();
             default: throw new IllegalArgumentException("Unknown API key " + apikey);
         }
     }
@@ -1343,7 +1348,7 @@ public class RequestResponseTest {
                 .setSubscribedTopicNames(Arrays.asList("foo", "bar"));
         return new ShareGroupHeartbeatRequest.Builder(data).build(version);
     }
-//
+
     private ShareGroupHeartbeatResponse createShareGroupHeartbeatResponse() {
         ShareGroupHeartbeatResponseData data = new ShareGroupHeartbeatResponseData()
                 .setErrorCode(Errors.NONE.code())
@@ -1362,6 +1367,27 @@ public class RequestResponseTest {
                         ))
                 );
         return new ShareGroupHeartbeatResponse(data);
+    }
+
+    private ShareGroupDescribeRequest createShareGroupDescribeRequest(short version) {
+        ShareGroupDescribeRequestData data = new ShareGroupDescribeRequestData()
+                .setGroupIds(Collections.singletonList("group"))
+                .setIncludeAuthorizedOperations(false);
+        return new ShareGroupDescribeRequest.Builder(data).build(version);
+    }
+
+    private ShareGroupDescribeResponse createShareGroupDescribeResponse() {
+        ShareGroupDescribeResponseData data = new ShareGroupDescribeResponseData()
+                .setGroups(Collections.singletonList(
+                        new ShareGroupDescribeResponseData.DescribedGroup()
+                                .setGroupId("group")
+                                .setErrorCode((short) 0)
+                                .setErrorMessage(Errors.forCode((short) 0).message())
+                                .setGroupState(ShareGroupState.EMPTY.toString())
+                                .setMembers(new ArrayList<>(0))
+                ))
+                .setThrottleTimeMs(1000);
+        return new ShareGroupDescribeResponse(data);
     }
 
     private ControllerRegistrationRequest createControllerRegistrationRequest(short version) {
