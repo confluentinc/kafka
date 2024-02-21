@@ -19,6 +19,7 @@ package org.apache.kafka.common.requests;
 import org.apache.kafka.clients.consumer.internals.ShareSessionHandler;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ShareFetchRequestData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -29,6 +30,8 @@ import org.apache.kafka.common.record.RecordBatch;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 public class ShareFetchRequest extends AbstractRequest {
 
@@ -121,5 +124,45 @@ public class ShareFetchRequest extends AbstractRequest {
             new ShareFetchRequestData(new ByteBufferAccessor(buffer), version),
             version
         );
+    }
+
+    public static final class SharePartitionData {
+        public final Uuid topicId;
+        public final int maxBytes;
+        public final Optional<Integer> currentLeaderEpoch;
+
+        public SharePartitionData(
+                Uuid topicId,
+                int maxBytes,
+                Optional<Integer> currentLeaderEpoch
+        ) {
+            this.topicId = topicId;
+            this.maxBytes = maxBytes;
+            this.currentLeaderEpoch = currentLeaderEpoch;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ShareFetchRequest.SharePartitionData that = (ShareFetchRequest.SharePartitionData) o;
+            return Objects.equals(topicId, that.topicId) &&
+                    maxBytes == that.maxBytes &&
+                    Objects.equals(currentLeaderEpoch, that.currentLeaderEpoch);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(topicId, maxBytes, currentLeaderEpoch);
+        }
+
+        @Override
+        public String toString() {
+            return "SharePartitionData(" +
+                    "topicId=" + topicId +
+                    ", maxBytes=" + maxBytes +
+                    ", currentLeaderEpoch=" + currentLeaderEpoch +
+                    ')';
+        }
     }
 }
