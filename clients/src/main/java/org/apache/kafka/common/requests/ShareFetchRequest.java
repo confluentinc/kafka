@@ -16,13 +16,19 @@
  */
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.clients.consumer.internals.ShareSessionHandler;
+import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.message.ShareFetchRequestData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.record.RecordBatch;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Map;
 
 public class ShareFetchRequest extends AbstractRequest {
 
@@ -39,6 +45,32 @@ public class ShareFetchRequest extends AbstractRequest {
             this.data = data;
         }
 
+        public static Builder forConsumer(int maxWait, int minBytes, Map<TopicPartition, TopicIdPartition> send) {
+            ShareFetchRequestData data = new ShareFetchRequestData();
+            data.setMaxWaitMs(maxWait);
+            data.setMinBytes(minBytes);
+
+            // We collect the partitions in a single FetchTopic only if they appear sequentially in the fetchData
+            data.setTopics(new ArrayList<>());
+            ShareFetchRequestData.FetchTopic fetchTopic = null;
+            for (TopicIdPartition topicPartition : send.values()) {
+                if (fetchTopic == null || !topicPartition.topicId().equals(fetchTopic.topicId())) {
+                    fetchTopic = new ShareFetchRequestData.FetchTopic()
+                            .setTopicId(topicPartition.topicId())
+                            .setPartitions(new ArrayList<>());
+                    data.topics().add(fetchTopic);
+                }
+
+                ShareFetchRequestData.FetchPartition fetchPartition = new ShareFetchRequestData.FetchPartition()
+                        .setPartitionIndex(topicPartition.partition())
+                        .setCurrentLeaderEpoch(RecordBatch.NO_PARTITION_LEADER_EPOCH);
+
+                fetchTopic.partitions().add(fetchPartition);
+            }
+
+            return new Builder(data);
+        }
+
         @Override
         public ShareFetchRequest build(short version) {
             return new ShareFetchRequest(data, version);
@@ -47,6 +79,20 @@ public class ShareFetchRequest extends AbstractRequest {
         @Override
         public String toString() {
             return data.toString();
+        }
+
+        public Builder forShareSession(String groupId, ShareSessionHandler.ShareFetchMetadata metadata) {
+            if (metadata != null) {
+                data.setShareSessionEpoch(metadata.epoch());
+            } else {
+                data.setGroupId(groupId);
+            }
+            return this;
+        }
+
+        public Builder setMaxBytes(int maxBytes) {
+            data.setMaxBytes(maxBytes);
+            return this;
         }
     }
 
