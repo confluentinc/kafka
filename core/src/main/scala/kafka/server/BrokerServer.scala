@@ -391,6 +391,8 @@ class BrokerServer(
         new FetchSessionCache(config.maxIncrementalFetchSessionCacheSlots,
           KafkaServer.MIN_INCREMENTAL_FETCH_SESSION_EVICTION_MS))
 
+      val sharePartitionManager = new SharePartitionManager(replicaManager);
+
       // Create the request processor objects.
       val raftSupport = RaftSupport(forwardingManager, metadataCache)
       dataPlaneRequestProcessor = new KafkaApis(
@@ -408,6 +410,7 @@ class BrokerServer(
         authorizer = authorizer,
         quotas = quotaManagers,
         fetchManager = fetchManager,
+        sharePartitionManager = sharePartitionManager,
         brokerTopicStats = brokerTopicStats,
         clusterId = clusterId,
         time = time,

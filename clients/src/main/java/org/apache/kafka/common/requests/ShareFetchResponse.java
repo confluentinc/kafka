@@ -18,13 +18,17 @@ package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.message.FetchResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.record.MemoryRecords;
+import org.apache.kafka.common.record.Records;
 
 import java.nio.ByteBuffer;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Iterator;
 import java.util.Collections;
@@ -99,6 +103,23 @@ public class ShareFetchResponse extends AbstractResponse {
     }
 
     /**
+     * Returns `partition.records` as `Records` (instead of `BaseRecords`). If `records` is `null`, returns `MemoryRecords.EMPTY`.
+     *
+     * If this response was deserialized after a share fetch, this method should never fail. An example where this would
+     * fail is a down-converted response (e.g. LazyDownConversionRecords) on the broker (before it's serialized and
+     * sent on the wire).
+     *
+     * @param partition partition data
+     * @return Records or empty record if the records in PartitionData is null.
+     */
+    public static Records recordsOrFail(ShareFetchResponseData.PartitionData partition) {
+        if (partition.records() == null) return MemoryRecords.EMPTY;
+        if (partition.records() instanceof Records) return (Records) partition.records();
+        throw new ClassCastException("The record type is " + partition.records().getClass().getSimpleName() + ", which is not a subtype of " +
+                Records.class.getSimpleName() + ". This method is only safe to call if the `FetchResponse` was deserialized from bytes.");
+    }
+
+    /**
      * Convenience method to find the size of a response.
      *
      * @param version       The version of the request
@@ -112,6 +133,20 @@ public class ShareFetchResponse extends AbstractResponse {
         ShareFetchResponseData data = toMessage(Errors.NONE, 0, partIterator, Collections.emptyList());
         ObjectSerializationCache cache = new ObjectSerializationCache();
         return 4 + data.size(cache, version);
+    }
+
+    /**
+     * @return The size in bytes of the records. 0 is returned if records of input partition is null.
+     */
+    public static int recordsSize(ShareFetchResponseData.PartitionData partition) {
+        return partition.records() == null ? 0 : partition.records().sizeInBytes();
+    }
+
+    public static ShareFetchResponse of(Errors error,
+                                   int throttleTimeMs,
+                                   LinkedHashMap<TopicIdPartition, ShareFetchResponseData.PartitionData> responseData,
+                                   List<Node> nodeEndpoints) {
+        return new ShareFetchResponse(toMessage(error, throttleTimeMs, responseData.entrySet().iterator(), nodeEndpoints));
     }
 
     public static ShareFetchResponseData toMessage(Errors error, int throttleTimeMs,
@@ -148,5 +183,15 @@ public class ShareFetchResponse extends AbstractResponse {
         return data.setThrottleTimeMs(throttleTimeMs)
                 .setErrorCode(error.code())
                 .setResponses(topicResponseList);
+    }
+
+    public static ShareFetchResponseData.PartitionData partitionResponse(TopicIdPartition topicIdPartition, Errors error) {
+        return partitionResponse(topicIdPartition.topicPartition().partition(), error);
+    }
+
+    public static ShareFetchResponseData.PartitionData partitionResponse(int partition, Errors error) {
+        return new ShareFetchResponseData.PartitionData()
+                .setPartitionIndex(partition)
+                .setErrorCode(error.code());
     }
 }
