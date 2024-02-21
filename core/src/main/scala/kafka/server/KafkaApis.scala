@@ -87,7 +87,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Map, Seq, Set, mutable}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
-import org.apache.kafka.tools
 
 /**
  * Logic to handle the various Kafka requests
@@ -1112,7 +1111,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             .setCurrentLeader(partitionData.currentLeader())
     }
 
-    def processResponseCallback(responsePartitionData: util.List[tools.Tuple2[TopicIdPartition, ShareFetchPartitionData]]): Unit = {
+    def processResponseCallback(responsePartitionData: util.List[Tuple[TopicIdPartition, ShareFetchPartitionData]]): Unit = {
       val partitions = new util.LinkedHashMap[TopicIdPartition, ShareFetchResponseData.PartitionData]
       val nodeEndpoints = new mutable.HashMap[Int, Node]
       responsePartitionData.asScala.toSeq.foreach { response =>
@@ -1219,7 +1218,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
 
     if (interesting.isEmpty) {
-      processResponseCallback(new util.ArrayList[tools.Tuple2[TopicIdPartition, ShareFetchPartitionData]])
+      processResponseCallback(new util.ArrayList[Tuple[TopicIdPartition, ShareFetchPartitionData]])
     } else {
       // for share fetch from consumer, cap fetchMaxBytes to the maximum bytes that could be fetched without being throttled given
       // no bytes were recorded in the recent quota window
@@ -1236,7 +1235,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         fetchMaxBytes,
       )
       val javaList = interesting.map { case (topicIdPartition, sharePartitionData) =>
-        new tools.Tuple2(topicIdPartition, sharePartitionData)
+        new Tuple(topicIdPartition, sharePartitionData)
       }.toList.asJava
       // call the share partition manager to fetch messages from the local replica
       sharePartitionManager.fetchMessages(

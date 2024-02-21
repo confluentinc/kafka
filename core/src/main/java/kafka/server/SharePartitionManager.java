@@ -26,7 +26,6 @@ import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.storage.internals.log.ShareFetchParams;
 import org.apache.kafka.storage.internals.log.ShareFetchPartitionData;
-import org.apache.kafka.tools.Tuple2;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -47,8 +46,8 @@ public class SharePartitionManager {
 
     public void fetchMessages(
             ShareFetchParams params,
-            List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> fetchInfos,
-            Consumer<List<Tuple2<TopicIdPartition, ShareFetchPartitionData>>> responseCallback
+            List<Tuple<TopicIdPartition, ShareFetchRequest.SharePartitionData>> fetchInfos,
+            Consumer<List<Tuple<TopicIdPartition, ShareFetchPartitionData>>> responseCallback
             ) {
       assert replicaManager != null;
       throw new UnsupportedOperationException("Not implemented yet");
