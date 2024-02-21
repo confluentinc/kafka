@@ -1111,6 +1111,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             .setCurrentLeader(partitionData.currentLeader())
     }
 
+    // the callback for processing a share fetch response, invoked before throttling
     def processResponseCallback(responsePartitionData: util.List[Tuple[TopicIdPartition, ShareFetchPartitionData]]): Unit = {
       val partitions = new util.LinkedHashMap[TopicIdPartition, ShareFetchResponseData.PartitionData]
       val nodeEndpoints = new mutable.HashMap[Int, Node]

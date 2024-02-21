@@ -36,7 +36,7 @@ public class ShareFetchParams {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        FetchParams that = (FetchParams) o;
+        ShareFetchParams that = (ShareFetchParams) o;
         return requestVersion == that.requestVersion
                 && maxWaitMs == that.maxWaitMs
                 && minBytes == that.minBytes

@@ -155,7 +155,6 @@ public class ShareFetchRequest extends AbstractRequest {
                     // Assigning the lazy-initialized `fetchData` in the last step
                     // to avoid other threads accessing a half-initialized object.
                     final LinkedHashMap<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchDataTmp = new LinkedHashMap<>();
-                    final short version = version();
                     data.topics().forEach(shareFetchTopic -> {
                         String name = topicNames.get(shareFetchTopic.topicId());
                         shareFetchTopic.partitions().forEach(shareFetchPartition ->
