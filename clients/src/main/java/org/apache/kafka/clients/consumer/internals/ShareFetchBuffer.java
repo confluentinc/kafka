@@ -34,9 +34,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * as they are received. It is essentially a wrapper around a {@link java.util.Queue} of {@link CompletedShareFetch}.
  * There is at most once {@link CompletedShareFetch} per partition in the queue.
  *
- * <p/>
- *
- * <em>Note</em>: this class is thread-safe with the intention that {@link CompletedShareFetch the data} will be
+ * <p><em>Note</em>: this class is thread-safe with the intention that {@link CompletedShareFetch the data} will be
  * "produced" by a background thread and consumed by the application thread.
  */
 public class ShareFetchBuffer implements AutoCloseable {
@@ -147,15 +145,6 @@ public class ShareFetchBuffer implements AutoCloseable {
                     () -> { },
                     () -> log.warn("The fetch buffer was already closed")
             );
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public void add(CompletedFetch completedFetch) {
-        lock.lock();
-        try {
-            completedFetches.add(completedFetch);
         } finally {
             lock.unlock();
         }

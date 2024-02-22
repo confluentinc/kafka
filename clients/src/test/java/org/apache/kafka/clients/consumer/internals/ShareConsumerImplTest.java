@@ -129,6 +129,7 @@ public class ShareConsumerImplTest {
     public void testWakeupBeforeCallingPoll() {
         consumer = newConsumer();
         final String topicName = "foo";
+        doReturn(Fetch.empty()).when(fetchCollector).collectFetch(any(ShareFetchBuffer.class));
         consumer.subscribe(singletonList(topicName));
 
         consumer.wakeup();

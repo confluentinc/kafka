@@ -96,6 +96,7 @@ import static org.apache.kafka.common.utils.Utils.join;
  * {@link ApplicationEvent application events} so that the network I/O can be processed in a dedicated
  * {@link ConsumerNetworkThread network thread}.
  */
+@SuppressWarnings("ClassFanOutComplexity")
 public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
     private static final long NO_CURRENT_THREAD = -1L;
@@ -269,7 +270,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
                     fetchBuffer,
                     config,
                     groupRebalanceConfig,
-                    fetchMetricsManager,
                     networkClientDelegateSupplier,
                     fetchMetricsManager,
                     clientTelemetryReporter,
