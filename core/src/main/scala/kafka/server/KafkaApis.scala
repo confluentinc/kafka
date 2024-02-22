@@ -1249,9 +1249,10 @@ class KafkaApis(val requestChannel: RequestChannel,
       )
       future.whenComplete((responsePartitionData : java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData], throwable : Throwable) => {
         if (throwable != null) {
-          // TODO : Finalize how this error handling will be done
+          val errResponse: AbstractResponse = shareFetchRequest.getErrorResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, throwable)
+          requestChannel.sendResponse(request, errResponse, None)
         } else {
-            processResponseCallback(responsePartitionData.asScala.toMap)
+          processResponseCallback(responsePartitionData.asScala.toMap)
         }
       })
     }
