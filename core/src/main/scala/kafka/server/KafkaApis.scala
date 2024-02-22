@@ -1234,16 +1234,25 @@ class KafkaApis(val requestChannel: RequestChannel,
       val fetchMaxBytes = Math.min(Math.min(shareFetchRequest.maxBytes, config.fetchMaxBytes), maxQuotaWindowBytes)
       val fetchMinBytes = Math.min(shareFetchRequest.minBytes, fetchMaxBytes)
 
+      // TODO : Change these dummy values to actual values after the required implementations are completed
+      val clientMetadata: Optional[ClientMetadata] =
+        Optional.of(new DefaultClientMetadata(
+          "dummy",
+          clientId,
+          request.context.clientAddress,
+          request.context.principal,
+          request.context.listenerName.value))
+
       // Dummy values for replicaId, replicaEpoch, isolationLevel and clientMetadata as they are not used in ShareFetchRequest
       val params = new FetchParams(
         versionId,
-        -1,
+        FetchRequest.FUTURE_LOCAL_REPLICA_ID,
         -1,
         shareFetchRequest.maxWait,
         fetchMinBytes,
         fetchMaxBytes,
-        null,
-        null
+        FetchIsolation.TXN_COMMITTED,
+        clientMetadata
       )
       // call the share partition manager to fetch messages from the local replica
       val future: CompletableFuture[java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]] = sharePartitionManager.fetchMessages(
