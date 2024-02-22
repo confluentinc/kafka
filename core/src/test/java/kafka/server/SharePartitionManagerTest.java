@@ -30,8 +30,6 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 public class SharePartitionManagerTest {
 
     @Test
