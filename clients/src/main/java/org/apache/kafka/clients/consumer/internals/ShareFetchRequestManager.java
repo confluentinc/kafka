@@ -194,7 +194,6 @@ public class ShareFetchRequestManager implements RequestManager {
 
     private Map<Node, ShareSessionHandler.ShareFetchRequestData> prepareShareFetchRequests() {
         Map<Node, ShareSessionHandler.Builder> fetchable = new HashMap<>();
-        long currentTimeMs = time.milliseconds();
         Map<String, Uuid> topicIds = metadata.topicIds();
 
         for (TopicPartition partition : fetchablePartitions()) {

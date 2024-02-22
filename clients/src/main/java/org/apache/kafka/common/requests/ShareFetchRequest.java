@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.common.requests;
 
-import org.apache.kafka.clients.consumer.internals.ShareSessionHandler;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
@@ -84,7 +83,7 @@ public class ShareFetchRequest extends AbstractRequest {
             return data.toString();
         }
 
-        public Builder forShareSession(String groupId, ShareSessionHandler.ShareFetchMetadata metadata) {
+        public Builder forShareSession(String groupId, ShareFetchMetadata metadata) {
             if (metadata != null) {
                 data.setShareSessionEpoch(metadata.epoch());
             } else {

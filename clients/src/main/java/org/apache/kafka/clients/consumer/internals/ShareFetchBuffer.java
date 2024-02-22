@@ -61,8 +61,8 @@ public class ShareFetchBuffer implements AutoCloseable {
     }
 
     public void add(CompletedFetch completedFetch) {
+        lock.lock();
         try {
-            lock.lock();
             completedFetches.add(completedFetch);
         } finally {
             lock.unlock();
