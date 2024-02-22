@@ -1076,6 +1076,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     val versionId = request.header.apiVersion
     val clientId = request.header.clientId
     val shareFetchRequest = request.body[ShareFetchRequest]
+    val groupId = shareFetchRequest.data().groupId()
     val topicNames = metadataCache.topicIdsToNames()
     val shareFetchData = shareFetchRequest.shareFetchData(topicNames)
     val forgottenTopics = shareFetchRequest.forgottenTopics(topicNames)
@@ -1083,12 +1084,14 @@ class KafkaApis(val requestChannel: RequestChannel,
       case Some(manager) => manager
       case None => throw new IllegalStateException("ShareFetchRequest received but SharePartitionManager is not initialized")
     }
-    val shareFetchContext = sharePartitionManager.newContext(shareFetchData, forgottenTopics, topicNames)
+    // TODO : replace this initialization when share fetch session metadata is sent by the client in the shareFetchRequest
+    val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1)
+    val shareFetchContext = sharePartitionManager.newContext(shareFetchData, forgottenTopics, topicNames, newReqMetadata)
     val erroneous = mutable.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]()
-    val interesting = mutable.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData]()
+    val interesting = mutable.ArrayBuffer[TopicIdPartition]()
     // Regular Kafka consumers need READ permission on each partition they are fetching.
     val partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
-    val cachedPartitionData = shareFetchContext.getCachedPartitions().asScala
+    val cachedPartitionData = shareFetchContext.cachedPartitions().asScala
     cachedPartitionData.foreach{ case (topicIdPartition: TopicIdPartition, sharePartitionData: ShareFetchRequest.SharePartitionData) =>
       if (topicIdPartition.topic == null)
         erroneous += topicIdPartition -> ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)
@@ -1103,7 +1106,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       else if (!metadataCache.contains(topicIdPartition.topicPartition))
         erroneous += topicIdPartition -> ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_OR_PARTITION)
       else
-        interesting += topicIdPartition -> data
+        interesting += topicIdPartition
     }
 
     def maybeConvertShareFetchedData(tp: TopicIdPartition,
@@ -1191,7 +1194,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       // Record both bandwidth and request quota-specific values and throttle by muting the channel if any of the
       // quotas have been violated. If both quotas have been violated, use the max throttle time between the two
       // quotas. When throttled, we unrecord the recorded bandwidth quota value
-      val responseSize = shareFetchContext.getResponseSize(partitions, versionId)
+      val responseSize = shareFetchContext.responseSize(partitions, versionId)
       val timeMs = time.milliseconds()
       val requestThrottleTimeMs = quotas.request.maybeRecordAndGetThrottleTimeMs(request, timeMs)
       val bandwidthThrottleTimeMs = quotas.fetch.maybeRecordAndGetThrottleTimeMs(request, responseSize, timeMs)
@@ -1208,7 +1211,7 @@ class KafkaApis(val requestChannel: RequestChannel,
           requestHelper.throttle(quotas.request, request, requestThrottleTimeMs)
         }
         // If throttling is required, return an empty response.
-        unconvertedShareFetchResponse = shareFetchContext.getThrottledResponse(maxThrottleTimeMs)
+        unconvertedShareFetchResponse = shareFetchContext.throttleResponse(maxThrottleTimeMs)
       } else {
         // Get the actual response. This will update the fetch context.
         unconvertedShareFetchResponse = shareFetchContext.updateAndGenerateResponseData(partitions)
@@ -1246,6 +1249,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       val future: CompletableFuture[java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]] = sharePartitionManager.fetchMessages(
         params,
         interesting.asJava,
+        groupId
       )
       future.whenComplete((responsePartitionData : java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData], throwable : Throwable) => {
         if (throwable != null) {
