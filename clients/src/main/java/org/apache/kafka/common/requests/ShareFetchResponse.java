@@ -104,7 +104,7 @@ public class ShareFetchResponse extends AbstractResponse {
     /**
      * Returns `partition.records` as `Records` (instead of `BaseRecords`). If `records` is `null`, returns `MemoryRecords.EMPTY`.
      *
-     * If this response was deserialized after a share fetch, this method should never fail. An example where this would
+     * <p>If this response was deserialized after a share fetch, this method should never fail. An example where this would
      * fail is a down-converted response (e.g. LazyDownConversionRecords) on the broker (before it's serialized and
      * sent on the wire).
      *
@@ -115,7 +115,7 @@ public class ShareFetchResponse extends AbstractResponse {
         if (partition.records() == null) return MemoryRecords.EMPTY;
         if (partition.records() instanceof Records) return (Records) partition.records();
         throw new ClassCastException("The record type is " + partition.records().getClass().getSimpleName() + ", which is not a subtype of " +
-                Records.class.getSimpleName() + ". This method is only safe to call if the `FetchResponse` was deserialized from bytes.");
+                Records.class.getSimpleName() + ". This method is only safe to call if the `ShareFetchResponse` was deserialized from bytes.");
     }
 
     /**
@@ -147,7 +147,6 @@ public class ShareFetchResponse extends AbstractResponse {
                                    List<Node> nodeEndpoints) {
         return new ShareFetchResponse(toMessage(error, throttleTimeMs, responseData.entrySet().iterator(), nodeEndpoints));
     }
-
     public static ShareFetchResponseData toMessage(Errors error, int throttleTimeMs,
                                                     Iterator<Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> partIterator,
                                                     List<Node> nodeEndpoints) {
