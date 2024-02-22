@@ -24,7 +24,7 @@ import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData.PartitionData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.FetchRequest;
-import org.apache.kafka.common.requests.FetchMetadata;
+import org.apache.kafka.common.requests.ShareFetchMetadata;
 import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.Time;
@@ -132,17 +132,19 @@ public class SharePartitionManager {
 
     public ShareFetchContext newContext(Map<TopicIdPartition,
             ShareFetchRequest.SharePartitionData> shareFetchData, List<TopicIdPartition> forgottenTopics,
-                                        Map<Uuid, String> topicNames, FetchMetadata reqMetadata) {
+                                        Map<Uuid, String> topicNames, ShareFetchMetadata reqMetadata) {
         ShareFetchContext context;
         if (reqMetadata.isFull()) {
             String removedFetchSessionStr = "";
-            if (reqMetadata.sessionId() != FetchMetadata.INVALID_SESSION_ID) {
+            // TODO: We will handle the case of INVALID_MEMBER_ID once we have a clear definition for it
+            /*
+            if (!Objects.equals(reqMetadata.memberId(), ShareFetchMetadata.INVALID_MEMBER_ID)) {
                 // Any session specified in a FULL share fetch request will be closed.
-                // TODO: Implement ShareFetchSessionCache and do a remove of share fetch session
                 throw new UnsupportedOperationException("Not implemented yet");
             }
+             */
             String suffix = "";
-            if (reqMetadata.epoch() == FetchMetadata.FINAL_EPOCH) {
+            if (reqMetadata.epoch() == ShareFetchMetadata.FINAL_EPOCH) {
                 // If the epoch is FINAL_EPOCH, don't try to create a new session.
                 suffix = " Will not try to create a new session.";
                 context = new SessionlessShareFetchContext(shareFetchData);
@@ -197,7 +199,7 @@ public class SharePartitionManager {
 
         private Time time;
         private ShareFetchSessionCache cache;
-        private FetchMetadata reqMetadata;
+        private ShareFetchMetadata reqMetadata;
         private Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData;
 
         /**
@@ -206,7 +208,7 @@ public class SharePartitionManager {
          * @param reqMetadata        The request metadata.
          * @param shareFetchData     The share partition data from the share fetch request.
          */
-        public FullShareFetchContext(Time time, ShareFetchSessionCache cache, FetchMetadata reqMetadata,
+        public FullShareFetchContext(Time time, ShareFetchSessionCache cache, ShareFetchMetadata reqMetadata,
                                      Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
             this.log = LoggerFactory.getLogger(FullShareFetchContext.class);
             this.time = time;

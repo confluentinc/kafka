@@ -16,7 +16,7 @@
  */
 package kafka.server;
 
-import org.apache.kafka.common.requests.FetchMetadata;
+import org.apache.kafka.common.requests.ShareFetchMetadata;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.MockTime;
@@ -62,7 +62,7 @@ public class SharePartitionManagerTest {
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
                 new MockTime(), new SharePartitionManager.ShareFetchSessionCache(10, 1000));
 
-        FetchMetadata newReqMetadata = new FetchMetadata(0, -1);
+        ShareFetchMetadata newReqMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1);
         ShareFetchContext shareFetchContext = sharePartitionManager.newContext(new HashMap<>(), new ArrayList<>(),
                 new HashMap<>(), newReqMetadata);
         assertEquals(shareFetchContext.getClass(), SharePartitionManager.SessionlessShareFetchContext.class);
