@@ -73,7 +73,7 @@ import org.apache.kafka.server.authorizer._
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.{IBP_0_11_0_IV0, IBP_2_3_IV0}
 import org.apache.kafka.server.record.BrokerCompressionType
-import org.apache.kafka.storage.internals.log.{AppendOrigin, FetchIsolation, FetchParams, FetchPartitionData, ShareFetchParams, ShareFetchPartitionData}
+import org.apache.kafka.storage.internals.log.{AppendOrigin, FetchIsolation, FetchParams, FetchPartitionData}
 
 import java.lang.{Long => JLong}
 import java.nio.ByteBuffer
@@ -105,7 +105,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 val authorizer: Option[Authorizer],
                 val quotas: QuotaManagers,
                 val fetchManager: FetchManager,
-                val sharePartitionManager: SharePartitionManager,
+                val sharePartitionManagerOption: Option[SharePartitionManager],
                 brokerTopicStats: BrokerTopicStats,
                 val clusterId: String,
                 time: Time,
@@ -1079,9 +1079,13 @@ class KafkaApis(val requestChannel: RequestChannel,
     val topicNames = metadataCache.topicIdsToNames()
     val shareFetchData = shareFetchRequest.shareFetchData(topicNames)
     val forgottenTopics = shareFetchRequest.forgottenTopics(topicNames)
+    val sharePartitionManager : SharePartitionManager = sharePartitionManagerOption match {
+      case Some(manager) => manager
+      case None => throw new IllegalStateException("ShareFetchRequest received but SharePartitionManager is not initialized")
+    }
     val shareFetchContext = sharePartitionManager.newContext(shareFetchData, forgottenTopics, topicNames)
-    val erroneous = mutable.ArrayBuffer[(TopicIdPartition, ShareFetchResponseData.PartitionData)]()
-    val interesting = mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]()
+    val erroneous = mutable.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]()
+    val interesting = mutable.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData]()
     // Regular Kafka consumers need READ permission on each partition they are fetching.
     val partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
     val cachedPartitionData = shareFetchContext.getCachedPartitions().asScala
@@ -1112,19 +1116,17 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
 
     // the callback for processing a share fetch response, invoked before throttling
-    def processResponseCallback(responsePartitionData: util.List[Tuple[TopicIdPartition, ShareFetchPartitionData]]): Unit = {
+    def processResponseCallback(responsePartitionData: Map[TopicIdPartition, ShareFetchResponseData.PartitionData]): Unit = {
       val partitions = new util.LinkedHashMap[TopicIdPartition, ShareFetchResponseData.PartitionData]
       val nodeEndpoints = new mutable.HashMap[Int, Node]
-      responsePartitionData.asScala.toSeq.foreach { response =>
-        val tp = response.v1
-        val data = response.v2
+      responsePartitionData.foreach { case(tp, data) =>
         val partitionData = new ShareFetchResponseData.PartitionData()
           .setPartitionIndex(tp.partition)
-          .setErrorCode(data.error.code)
+          .setErrorCode(data.errorCode())
           .setRecords(data.records)
 
-        data.error match {
-          case Errors.NOT_LEADER_OR_FOLLOWER | Errors.FENCED_LEADER_EPOCH =>
+        data.errorCode() match {
+          case errCode if errCode == Errors.NOT_LEADER_OR_FOLLOWER.code | errCode == Errors.FENCED_LEADER_EPOCH.code =>
             val leaderNode = getCurrentLeader(tp.topicPartition(), request.context.listenerName)
             leaderNode.node.foreach { node =>
               nodeEndpoints.put(node.id(), node)
@@ -1219,7 +1221,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
 
     if (interesting.isEmpty) {
-      processResponseCallback(new util.ArrayList[Tuple[TopicIdPartition, ShareFetchPartitionData]])
+      processResponseCallback(Map.empty)
     } else {
       // for share fetch from consumer, cap fetchMaxBytes to the maximum bytes that could be fetched without being throttled given
       // no bytes were recorded in the recent quota window
@@ -1229,21 +1231,29 @@ class KafkaApis(val requestChannel: RequestChannel,
       val fetchMaxBytes = Math.min(Math.min(shareFetchRequest.maxBytes, config.fetchMaxBytes), maxQuotaWindowBytes)
       val fetchMinBytes = Math.min(shareFetchRequest.minBytes, fetchMaxBytes)
 
-      val params = new ShareFetchParams(
+      // Dummy values for replicaId, replicaEpoch, isolationLevel and clientMetadata as they are not used in ShareFetchRequest
+      val params = new FetchParams(
         versionId,
+        -1,
+        -1,
         shareFetchRequest.maxWait,
         fetchMinBytes,
         fetchMaxBytes,
+        null,
+        null
       )
-      val javaList = interesting.map { case (topicIdPartition, sharePartitionData) =>
-        new Tuple(topicIdPartition, sharePartitionData)
-      }.toList.asJava
       // call the share partition manager to fetch messages from the local replica
-      sharePartitionManager.fetchMessages(
+      val future: CompletableFuture[java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]] = sharePartitionManager.fetchMessages(
         params,
-        javaList,
-        processResponseCallback,
+        interesting.asJava,
       )
+      future.whenComplete((responsePartitionData : java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData], throwable : Throwable) => {
+        if (throwable != null) {
+          // TODO : Finalize how this error handling will be done
+        } else {
+            processResponseCallback(responsePartitionData.asScala.toMap)
+        }
+      })
     }
 
   }

@@ -127,7 +127,7 @@ class KafkaApisTest extends Logging {
   private val quotas = QuotaManagers(clientQuotaManager, clientQuotaManager, clientRequestQuotaManager,
     clientControllerQuotaManager, replicaQuotaManager, replicaQuotaManager, replicaQuotaManager, None)
   private val fetchManager: FetchManager = mock(classOf[FetchManager])
-  private val sharePartitionManager: SharePartitionManager = mock(classOf[SharePartitionManager])
+  private val sharePartitionManager: Option[SharePartitionManager] = Some(mock(classOf[SharePartitionManager]))
   private val clientMetricsManager: ClientMetricsManager = mock(classOf[ClientMetricsManager])
   private val brokerTopicStats = new BrokerTopicStats
   private val clusterId = "clusterId"
@@ -216,7 +216,7 @@ class KafkaApisTest extends Logging {
       authorizer = authorizer,
       quotas = quotas,
       fetchManager = fetchManager,
-      sharePartitionManager = sharePartitionManager,
+      sharePartitionManagerOption = sharePartitionManager,
       brokerTopicStats = brokerTopicStats,
       clusterId = clusterId,
       time = time,

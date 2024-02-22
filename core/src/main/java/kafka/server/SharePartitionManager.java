@@ -24,8 +24,7 @@ import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
-import org.apache.kafka.storage.internals.log.ShareFetchParams;
-import org.apache.kafka.storage.internals.log.ShareFetchPartitionData;
+import org.apache.kafka.storage.internals.log.FetchParams;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,7 +32,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 public class SharePartitionManager {
     private final ReplicaManager replicaManager;
@@ -44,13 +42,11 @@ public class SharePartitionManager {
         sharePartitions = new HashMap<>();
     }
 
-    public void fetchMessages(
-            ShareFetchParams params,
-            List<Tuple<TopicIdPartition, ShareFetchRequest.SharePartitionData>> fetchInfos,
-            Consumer<List<Tuple<TopicIdPartition, ShareFetchPartitionData>>> responseCallback
-            ) {
-      assert replicaManager != null;
-      throw new UnsupportedOperationException("Not implemented yet");
+    public CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> fetchMessages(
+            FetchParams fetchParams,
+            Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> fetchPartitionDataMap
+    ) {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     public CompletableFuture<ShareAcknowledgeResponseData> acknowledge(ShareSession session, PartitionInfo partitionInfo) {

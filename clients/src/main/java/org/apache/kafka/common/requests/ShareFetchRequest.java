@@ -152,7 +152,7 @@ public class ShareFetchRequest extends AbstractRequest {
         if (shareFetchData == null) {
             synchronized (this) {
                 if (shareFetchData == null) {
-                    // Assigning the lazy-initialized `fetchData` in the last step
+                    // Assigning the lazy-initialized `shareFetchData` in the last step
                     // to avoid other threads accessing a half-initialized object.
                     final LinkedHashMap<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchDataTmp = new LinkedHashMap<>();
                     data.topics().forEach(shareFetchTopic -> {
