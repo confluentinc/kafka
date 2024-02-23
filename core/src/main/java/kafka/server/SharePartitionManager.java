@@ -117,7 +117,7 @@ public class SharePartitionManager {
         return future;
     }
 
-    public CompletableFuture<ShareAcknowledgeResponseData> acknowledge(TopicIdPartition topicIdPartition,
+    public CompletableFuture<ShareAcknowledgeResponseData> acknowledge(String groupId, TopicIdPartition topicIdPartition,
                                                                        List<ShareAcknowledgeRequestData.AcknowledgementBatch> ackBatches) {
         throw new UnsupportedOperationException("Not implemented yet");
     }
@@ -126,7 +126,7 @@ public class SharePartitionManager {
         return new SharePartitionKey(groupId, topicIdPartition);
     }
 
-    private SharePartition getSharePartition(SharePartitionKey sharePartitionKey) {
+    private SharePartition sharePartition(SharePartitionKey sharePartitionKey) {
         return partitionCacheMap.getOrDefault(sharePartitionKey, null);
     }
 
