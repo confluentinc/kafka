@@ -7791,4 +7791,19 @@ class KafkaApisTest extends Logging {
     }
     response
   }
+
+  @Test
+  def testShareFetchReturnsUnsupportedVersion(): Unit = {
+    val shareFetchRequest = new ShareFetchRequestData().setGroupId("group")
+
+    val requestChannelRequest = buildRequest(new ShareFetchRequest.Builder(shareFetchRequest, true).build())
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
+    kafkaApis = createKafkaApis(raftSupport = true)
+    kafkaApis.handle(requestChannelRequest, RequestLocal.NoCaching)
+
+    val expectedShareFetchResponse = new ShareFetchResponseData()
+      .setErrorCode(Errors.UNSUPPORTED_VERSION.code)
+    val response = verifyNoThrottling[ShareFetchResponse](requestChannelRequest)
+    assertEquals(expectedShareFetchResponse, response.data)
+  }
 }
