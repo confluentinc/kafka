@@ -127,7 +127,7 @@ class KafkaApisTest extends Logging {
   private val quotas = QuotaManagers(clientQuotaManager, clientQuotaManager, clientRequestQuotaManager,
     clientControllerQuotaManager, replicaQuotaManager, replicaQuotaManager, replicaQuotaManager, None)
   private val fetchManager: FetchManager = mock(classOf[FetchManager])
-  private val sharePartitionManager: Option[SharePartitionManager] = Some(mock(classOf[SharePartitionManager]))
+  private val sharePartitionManager: SharePartitionManager = mock(classOf[SharePartitionManager])
   private val clientMetricsManager: ClientMetricsManager = mock(classOf[ClientMetricsManager])
   private val brokerTopicStats = new BrokerTopicStats
   private val clusterId = "clusterId"
@@ -216,7 +216,7 @@ class KafkaApisTest extends Logging {
       authorizer = authorizer,
       quotas = quotas,
       fetchManager = fetchManager,
-      sharePartitionManagerOption = sharePartitionManager,
+      sharePartitionManagerOption = Some(sharePartitionManager),
       brokerTopicStats = brokerTopicStats,
       clusterId = clusterId,
       time = time,
@@ -4313,6 +4313,139 @@ class KafkaApisTest extends Logging {
     val node = response.data.nodeEndpoints.asScala.head
     assertEquals(2, node.nodeId)
     assertEquals("broker2", node.host)
+  }
+
+  @Test
+  def testShareFetchRequestSuccess(): Unit = {
+    val topicName = "foo"
+    val topicId = Uuid.randomUuid()
+    val partitionIndex = 0
+    addTopicToMetadataCache(topicName, 1, topicId = topicId)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex))
+    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+    )
+
+    when(sharePartitionManager.fetchMessages(
+      any[FetchParams],
+      any[util.List[TopicIdPartition]],
+      anyString()
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
+      new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
+        new ShareFetchResponseData.PartitionData().setPartitionIndex(partitionIndex).setErrorCode(0).setAcknowledgeErrorCode(0).setRecords(null)
+    ).asJava))
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition().
+            setPartitionIndex(0).
+            setCurrentLeaderEpoch(1)).asJava)).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis()
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+
+    assertEquals(0, responseData.errorCode())
+    assertEquals(1, responseData.responses().size())
+    assertEquals(topicId, responseData.responses().get(0).topicId())
+    assertEquals(1, responseData.responses().get(0).partitions().size())
+    assertEquals(partitionIndex, responseData.responses().get(0).partitions().get(0).partitionIndex())
+    assertEquals(0, responseData.responses().get(0).partitions().get(0).errorCode())
+    assertEquals(0, responseData.responses().get(0).partitions().get(0).acknowledgeErrorCode())
+  }
+
+  @Test
+  def testShareFetchRequestErrorPartitionsInCachedData(): Unit = {
+    val topicId = Uuid.randomUuid()
+    val partitionIndex = 0
+    addTopicToMetadataCache("foo", 1, topicId = topicId)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(null, partitionIndex))
+    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+    )
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition().
+            setPartitionIndex(0).
+            setCurrentLeaderEpoch(1)).asJava)).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis()
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+
+    assertEquals(0, responseData.errorCode())
+    assertEquals(1, responseData.responses().size())
+    assertEquals(topicId, responseData.responses().get(0).topicId())
+    assertEquals(1, responseData.responses().get(0).partitions().size())
+    assertEquals(partitionIndex, responseData.responses().get(0).partitions().get(0).partitionIndex())
+    assertEquals(100, responseData.responses().get(0).partitions().get(0).errorCode())
+  }
+
+  @Test
+  def testShareFetchRequestAuthorizationError(): Unit = {
+    val topicId = Uuid.randomUuid()
+    val partitionIndex = 0
+    addTopicToMetadataCache("foo", 1, topicId = topicId)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(null, partitionIndex))
+    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+    )
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition().
+            setPartitionIndex(0).
+            setCurrentLeaderEpoch(1)).asJava)).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis()
+    val authHelper = mock(classOf[AuthHelper])
+    when(authHelper.filterByAuthorized(any(), any(), any(), any())(any())).thenReturn(Set.empty[String])
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+
+    assertEquals(0, responseData.errorCode())
+    assertEquals(1, responseData.responses().size())
+    assertEquals(topicId, responseData.responses().get(0).topicId())
+    assertEquals(1, responseData.responses().get(0).partitions().size())
+    assertEquals(partitionIndex, responseData.responses().get(0).partitions().get(0).partitionIndex())
+    assertEquals(3, responseData.responses().get(0).partitions().get(0).errorCode())
   }
 
   @ParameterizedTest

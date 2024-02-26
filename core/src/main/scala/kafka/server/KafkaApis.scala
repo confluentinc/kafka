@@ -1114,6 +1114,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       val unconvertedRecords = ShareFetchResponse.recordsOrFail(partitionData)
           new ShareFetchResponseData.PartitionData()
             .setPartitionIndex(tp.partition)
+            .setErrorCode(Errors.forCode(partitionData.errorCode).code)
             .setRecords(unconvertedRecords)
             .setCurrentLeader(partitionData.currentLeader())
     }
