@@ -1087,7 +1087,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     // TODO : replace this initialization when share fetch session metadata is sent by the client in the shareFetchRequest
     val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1)
     val shareFetchContext = sharePartitionManager.newContext(shareFetchData, forgottenTopics, topicNames, newReqMetadata)
-    val erroneous = mutable.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]()
+    val erroneous = mutable.ArrayBuffer[(TopicIdPartition, ShareFetchResponseData.PartitionData)]()
     val interesting = mutable.ArrayBuffer[TopicIdPartition]()
     // Regular Kafka consumers need READ permission on each partition they are fetching.
     val partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
