@@ -131,8 +131,8 @@ public class SharePartitionManager {
     }
 
     // TODO: Function requires an in depth implementation in the future. For now, it returns a new share session everytime
-    public ShareSession session(Time time, String memberId, ShareFetchRequest request, boolean isFromFollower) {
-        return new ShareSession(memberId, isFromFollower, new ImplicitLinkedHashCollection<>(),
+    public ShareSession session(Time time, String memberId, ShareFetchRequest request) {
+        return new ShareSession(memberId, new ImplicitLinkedHashCollection<>(),
                 time.milliseconds(), time.milliseconds(), ShareFetchMetadata.nextEpoch(ShareFetchMetadata.INITIAL_EPOCH));
     }
 
@@ -168,7 +168,6 @@ public class SharePartitionManager {
     public static class ShareSession {
 
         private final String id;
-        private final boolean privileged;
         private final ImplicitLinkedHashCollection<SharePartitionManager.CachedPartition> partitionMap;
         private final long creationMs;
         private final long lastUsedMs;
@@ -180,18 +179,15 @@ public class SharePartitionManager {
          * fields are read or modified.  This includes modification of the share session partition map.
          *
          * @param id                 The unique share session ID.
-         * @param privileged         True if this share session is privileged.  Sessions crated by followers
-         *                           are privileged; session created by consumers are not.
          * @param partitionMap       The CachedPartitionMap.
          * @param creationMs         The time in milliseconds when this share session was created.
          * @param lastUsedMs         The last used time in milliseconds. This should only be updated by
          *                           ShareSessionCache#touch.
          * @param epoch              The share session sequence number.
          */
-        public ShareSession(String id, boolean privileged, ImplicitLinkedHashCollection<CachedPartition> partitionMap,
+        public ShareSession(String id, ImplicitLinkedHashCollection<CachedPartition> partitionMap,
                             long creationMs, long lastUsedMs, int epoch) {
             this.id = id;
-            this.privileged = privileged;
             this.partitionMap = partitionMap;
             this.creationMs = creationMs;
             this.lastUsedMs = lastUsedMs;
@@ -369,10 +365,10 @@ public class SharePartitionManager {
     /*
      * A cached partition.
      *
-     * The broker maintains a set of these objects for each incremental share fetch session.
-     * When an incremental share fetch request is made, any partitions which are not explicitly
+     * The broker maintains a set of these objects for each share fetch session.
+     * When a share fetch request is made, any partitions which are not explicitly
      * enumerated in the fetch request are loaded from the cache.  Similarly, when an
-     * incremental share fetch response is being prepared, any partitions that have not changed and
+     * share fetch response is being prepared, any partitions that have not changed and
      * do not have errors are left out of the response.
      *
      * We store many of these objects, so it is important for them to be memory-efficient.
