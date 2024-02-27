@@ -4334,7 +4334,7 @@ class KafkaApisTest extends Logging {
       anyString()
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
-        new ShareFetchResponseData.PartitionData().setPartitionIndex(partitionIndex).setErrorCode(0).setAcknowledgeErrorCode(0).setRecords(null)
+        new ShareFetchResponseData.PartitionData().setPartitionIndex(partitionIndex).setErrorCode(Errors.NONE.code()).setAcknowledgeErrorCode(0).setRecords(null)
     ).asJava))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4357,22 +4357,23 @@ class KafkaApisTest extends Logging {
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
 
-    assertEquals(0, responseData.errorCode())
+    assertEquals(Errors.NONE.code(), responseData.errorCode())
     assertEquals(1, responseData.responses().size())
     assertEquals(topicId, responseData.responses().get(0).topicId())
     assertEquals(1, responseData.responses().get(0).partitions().size())
     assertEquals(partitionIndex, responseData.responses().get(0).partitions().get(0).partitionIndex())
-    assertEquals(0, responseData.responses().get(0).partitions().get(0).errorCode())
-    assertEquals(0, responseData.responses().get(0).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(Errors.NONE.code(), responseData.responses().get(0).partitions().get(0).errorCode())
   }
 
   @Test
   def testHandleShareFetchRequestErrorPartitionsInCachedData(): Unit = {
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
-    addTopicToMetadataCache("foo", 1, topicId = topicId)
+    val topicName = "foo"
+    addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
+    // Name of this topic is set null, so it will be considered as unknown topic by the broker
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(null, partitionIndex))
     when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
       new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
@@ -4403,7 +4404,7 @@ class KafkaApisTest extends Logging {
     assertEquals(topicId, responseData.responses().get(0).topicId())
     assertEquals(1, responseData.responses().get(0).partitions().size())
     assertEquals(partitionIndex, responseData.responses().get(0).partitions().get(0).partitionIndex())
-    assertEquals(100, responseData.responses().get(0).partitions().get(0).errorCode())
+    assertEquals(Errors.UNKNOWN_TOPIC_ID.code(), responseData.responses().get(0).partitions().get(0).errorCode())
   }
 
   @Test
@@ -4428,7 +4429,7 @@ class KafkaApisTest extends Logging {
       anyString()
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
-        new ShareFetchResponseData.PartitionData().setPartitionIndex(partitionIndex).setErrorCode(2).setAcknowledgeErrorCode(0).setRecords(null)
+        new ShareFetchResponseData.PartitionData().setPartitionIndex(partitionIndex).setErrorCode(Errors.REPLICA_NOT_AVAILABLE.code()).setAcknowledgeErrorCode(Errors.NONE.code()).setRecords(null)
     ).asJava))
 
     val shareFetchRequestData = new ShareFetchRequestData().
@@ -4448,12 +4449,12 @@ class KafkaApisTest extends Logging {
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
 
-    assertEquals(0, responseData.errorCode())
+    assertEquals(Errors.NONE.code(), responseData.errorCode())
     assertEquals(1, responseData.responses().size())
     assertEquals(topicId, responseData.responses().get(0).topicId())
     assertEquals(1, responseData.responses().get(0).partitions().size())
     assertEquals(partitionIndex, responseData.responses().get(0).partitions().get(0).partitionIndex())
-    assertEquals(2, responseData.responses().get(0).partitions().get(0).errorCode())
+    assertEquals(Errors.REPLICA_NOT_AVAILABLE.code(), responseData.responses().get(0).partitions().get(0).errorCode())
   }
 
   @Test
@@ -4498,7 +4499,7 @@ class KafkaApisTest extends Logging {
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
 
-    assertEquals(-1, responseData.errorCode())
+    assertEquals(Errors.UNKNOWN_SERVER_ERROR.code(), responseData.errorCode())
   }
 
   @ParameterizedTest
