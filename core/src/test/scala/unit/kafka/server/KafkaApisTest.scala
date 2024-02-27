@@ -4323,9 +4323,12 @@ class KafkaApisTest extends Logging {
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
-    val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex))
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(
+      topicId, new TopicPartition(topicName, partitionIndex)
+    )
     when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
     when(sharePartitionManager.fetchMessages(
@@ -4334,7 +4337,11 @@ class KafkaApisTest extends Logging {
       anyString()
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
-        new ShareFetchResponseData.PartitionData().setPartitionIndex(partitionIndex).setErrorCode(Errors.NONE.code()).setAcknowledgeErrorCode(0).setRecords(null)
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(partitionIndex)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(null)
     ).asJava))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4346,9 +4353,9 @@ class KafkaApisTest extends Logging {
       setTopics(List(new ShareFetchRequestData.FetchTopic().
         setTopicId(topicId).
         setPartitions(List(
-          new ShareFetchRequestData.FetchPartition().
-            setPartitionIndex(0).
-            setCurrentLeaderEpoch(1)).asJava)).asJava)
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)).asJava)).asJava)
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
@@ -4376,7 +4383,8 @@ class KafkaApisTest extends Logging {
     // Name of this topic is set null, so it will be considered as unknown topic by the broker
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(null, partitionIndex))
     when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4388,9 +4396,9 @@ class KafkaApisTest extends Logging {
       setTopics(List(new ShareFetchRequestData.FetchTopic().
         setTopicId(topicId).
         setPartitions(List(
-          new ShareFetchRequestData.FetchPartition().
-            setPartitionIndex(0).
-            setCurrentLeaderEpoch(1)).asJava)).asJava)
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)).asJava)).asJava)
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
@@ -4415,9 +4423,12 @@ class KafkaApisTest extends Logging {
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
-    val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex))
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(
+      topicId, new TopicPartition(topicName, partitionIndex)
+    )
     when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4429,7 +4440,11 @@ class KafkaApisTest extends Logging {
       anyString()
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
-        new ShareFetchResponseData.PartitionData().setPartitionIndex(partitionIndex).setErrorCode(Errors.REPLICA_NOT_AVAILABLE.code()).setAcknowledgeErrorCode(Errors.NONE.code()).setRecords(null)
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(partitionIndex)
+          .setErrorCode(Errors.REPLICA_NOT_AVAILABLE.code())
+          .setAcknowledgeErrorCode(Errors.NONE.code())
+          .setRecords(null)
     ).asJava))
 
     val shareFetchRequestData = new ShareFetchRequestData().
@@ -4438,9 +4453,9 @@ class KafkaApisTest extends Logging {
       setTopics(List(new ShareFetchRequestData.FetchTopic().
         setTopicId(topicId).
         setPartitions(List(
-          new ShareFetchRequestData.FetchPartition().
-            setPartitionIndex(0).
-            setCurrentLeaderEpoch(1)).asJava)).asJava)
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)).asJava)).asJava)
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
@@ -4465,15 +4480,19 @@ class KafkaApisTest extends Logging {
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
-    val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex))
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(
+      topicId, new TopicPartition(topicName, partitionIndex)
+    )
     when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition -> new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
-    val future: CompletableFuture[util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]] = new CompletableFuture[util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]]()
+    val future: CompletableFuture[util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]] =
+      new CompletableFuture[util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]]()
     future.completeExceptionally(new RuntimeException("Mocked exception"))
 
     when(sharePartitionManager.fetchMessages(
@@ -4488,9 +4507,9 @@ class KafkaApisTest extends Logging {
       setTopics(List(new ShareFetchRequestData.FetchTopic().
         setTopicId(topicId).
         setPartitions(List(
-          new ShareFetchRequestData.FetchPartition().
-            setPartitionIndex(0).
-            setCurrentLeaderEpoch(1)).asJava)).asJava)
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)).asJava)).asJava)
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
