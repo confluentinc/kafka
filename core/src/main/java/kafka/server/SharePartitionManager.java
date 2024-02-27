@@ -32,6 +32,7 @@ import org.apache.kafka.storage.internals.log.FetchParams;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
 import org.slf4j.Logger;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -42,6 +43,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.TreeMap;
 
 import scala.Tuple2;
 import scala.jdk.javaapi.CollectionConverters;
@@ -57,9 +59,9 @@ public class SharePartitionManager {
     private final Map<SharePartitionKey, SharePartition> partitionCacheMap;
     private final ReplicaManager replicaManager;
     private final Time time;
-    private final ShareFetchSessionCache cache;
+    private final ShareSessionCache cache;
 
-    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareFetchSessionCache cache) {
+    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
@@ -135,13 +137,17 @@ public class SharePartitionManager {
         return new SharePartitionKey(groupId, topicIdPartition);
     }
 
+    private ShareSessionKey shareSessionKey(String groupId, Uuid memberId) {
+        return new ShareSessionKey(groupId, memberId);
+    }
+
     private SharePartition sharePartition(SharePartitionKey sharePartitionKey) {
         return partitionCacheMap.getOrDefault(sharePartitionKey, null);
     }
 
     // TODO: Function requires an in depth implementation in the future. For now, it returns a new share session everytime
-    public ShareSession session(Time time, String memberId, ShareFetchRequest request) {
-        return new ShareSession(memberId, new ImplicitLinkedHashCollection<>(),
+    public ShareSession session(Time time, String groupId, Uuid memberId, ShareFetchRequest request) {
+        return new ShareSession(shareSessionKey(groupId, memberId), new ImplicitLinkedHashCollection<>(),
                 time.milliseconds(), time.milliseconds(), ShareFetchMetadata.nextEpoch(ShareFetchMetadata.INITIAL_EPOCH));
     }
 
@@ -165,6 +171,7 @@ public class SharePartitionManager {
                 context = new SessionlessShareFetchContext(shareFetchData);
             } else {
                 context = new FullShareFetchContext(time, cache, reqMetadata, shareFetchData);
+                log.debug("Created a new full ShareFetchContext with {}", partitionsToLogString(shareFetchData.keySet()));
             }
         } else {
             // TODO: Implement getting ShareFetchContext using ShareFetchSession cache
@@ -173,34 +180,74 @@ public class SharePartitionManager {
         return context;
     }
 
+    String partitionsToLogString(Collection<TopicIdPartition> partitions) {
+        return FetchSession.partitionsToLogString(partitions, log.isTraceEnabled());
+    }
+
     // TODO: Define share session class.
     public static class ShareSession {
 
-        private final String id;
+        private final ShareSessionKey key;
         private final ImplicitLinkedHashCollection<SharePartitionManager.CachedPartition> partitionMap;
         private final long creationMs;
         private final long lastUsedMs;
         private final int epoch;
+
+        // This is used by the ShareSessionCache to store the last known size of this session.
+        // If this is -1, the Session is not in the cache.
+        private int cachedSize = -1;
 
         /**
          * The share session.
          * Each share session is protected by its own lock, which must be taken before mutable
          * fields are read or modified.  This includes modification of the share session partition map.
          *
-         * @param id                 The unique share session ID.
+         * @param key                The share session key to identify the share session uniquely.
          * @param partitionMap       The CachedPartitionMap.
          * @param creationMs         The time in milliseconds when this share session was created.
          * @param lastUsedMs         The last used time in milliseconds. This should only be updated by
          *                           ShareSessionCache#touch.
          * @param epoch              The share session sequence number.
          */
-        public ShareSession(String id, ImplicitLinkedHashCollection<CachedPartition> partitionMap,
+        public ShareSession(ShareSessionKey key, ImplicitLinkedHashCollection<CachedPartition> partitionMap,
                             long creationMs, long lastUsedMs, int epoch) {
-            this.id = id;
+            this.key = key;
             this.partitionMap = partitionMap;
             this.creationMs = creationMs;
             this.lastUsedMs = lastUsedMs;
             this.epoch = epoch;
+        }
+
+        public int size() {
+            synchronized (this) {
+                return partitionMap.size();
+            }
+        }
+
+        public Boolean isEmpty() {
+            synchronized (this) {
+                return partitionMap.isEmpty();
+            }
+        }
+
+        public LastUsedKey lastUsedKey() {
+            synchronized (this) {
+                return new LastUsedKey(key, lastUsedMs);
+            }
+        }
+
+        public EvictableKey evictableKey() {
+            synchronized (this) {
+                return new EvictableKey(key, cachedSize);
+            }
+        }
+
+        public ShareSessionKey key() {
+            return key;
+        }
+
+        public int cachedSize() {
+            return cachedSize;
         }
     }
 
@@ -240,7 +287,7 @@ public class SharePartitionManager {
     public static class FullShareFetchContext extends ShareFetchContext {
 
         private Time time;
-        private ShareFetchSessionCache cache;
+        private ShareSessionCache cache;
         private ShareFetchMetadata reqMetadata;
         private Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData;
 
@@ -250,7 +297,7 @@ public class SharePartitionManager {
          * @param reqMetadata        The request metadata.
          * @param shareFetchData     The share partition data from the share fetch request.
          */
-        public FullShareFetchContext(Time time, ShareFetchSessionCache cache, ShareFetchMetadata reqMetadata,
+        public FullShareFetchContext(Time time, ShareSessionCache cache, ShareFetchMetadata reqMetadata,
                                      Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
             this.log = LoggerFactory.getLogger(FullShareFetchContext.class);
             this.time = time;
@@ -350,24 +397,195 @@ public class SharePartitionManager {
         }
     }
 
+    // visible for testing
+    static class ShareSessionKey {
+        private final String groupId;
+        private final Uuid memberId;
+
+        public ShareSessionKey(String groupId, Uuid memberId) {
+            this.groupId = Objects.requireNonNull(groupId);
+            this.memberId = Objects.requireNonNull(memberId);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(groupId, memberId);
+        }
+
+        @Override
+        public boolean equals(final Object obj) {
+            if (this == obj)
+                return true;
+            else if (obj == null || getClass() != obj.getClass())
+                return false;
+            else {
+                ShareSessionKey that = (ShareSessionKey) obj;
+                return groupId.equals(that.groupId) && Objects.equals(memberId, that.memberId);
+            }
+        }
+    }
+
+    static class LastUsedKey implements Comparable<LastUsedKey> {
+        private final ShareSessionKey key;
+        private final long lastUsedMs;
+
+        public LastUsedKey(ShareSessionKey key, long lastUsedMs) {
+            this.key = key;
+            this.lastUsedMs = lastUsedMs;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(key, lastUsedMs);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            LastUsedKey other = (LastUsedKey) obj;
+            return lastUsedMs == other.lastUsedMs && Objects.equals(key, other.key);
+        }
+
+        //TODO: Complete this compareTo
+        @Override
+        public int compareTo(LastUsedKey other) {
+            return 0;
+        }
+    }
+
+    static class EvictableKey implements Comparable<EvictableKey> {
+        private final ShareSessionKey key;
+        private final int size;
+
+        public EvictableKey(ShareSessionKey key, int size) {
+            this.key = key;
+            this.size = size;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(key, size);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            EvictableKey other = (EvictableKey) obj;
+            return size == other.size && Objects.equals(key, other.key);
+        }
+
+        //TODO: Complete this compareTo
+        @Override
+        public int compareTo(EvictableKey other) {
+            return 0;
+        }
+    }
+
     /*
-     * Caches share fetch sessions.
+     * Caches share sessions.
      *
      * See tryEvict for an explanation of the cache eviction strategy.
      *
-     * The ShareFetchSessionCache is thread-safe because all of its methods are synchronized.
-     * Note that individual share fetch sessions have their own locks which are separate from the
-     * ShareFetchSessionCache lock.  In order to avoid deadlock, the ShareFetchSessionCache lock
-     * must never be acquired while an individual ShareFetchSession lock is already held.
+     * The ShareSessionCache is thread-safe because all of its methods are synchronized.
+     * Note that individual share sessions have their own locks which are separate from the
+     * ShareSessionCache lock.  In order to avoid deadlock, the ShareSessionCache lock
+     * must never be acquired while an individual ShareSession lock is already held.
      */
-    // TODO: Implement ShareFetchSessionCache class
-    public static class ShareFetchSessionCache {
+    // TODO: Implement ShareSessionCache class
+    public static class ShareSessionCache {
         private final int maxEntries;
         private final long evictionMs;
+        private long numPartitions = 0;
 
-        public ShareFetchSessionCache(int maxEntries, long evictionMs) {
+        // A map of session key to ShareSession.
+        private Map<ShareSessionKey, ShareSession> sessions = new HashMap<>();
+
+        // Maps last used times to sessions.
+        private Map<LastUsedKey, ShareSession> lastUsed = new TreeMap<>();
+
+        // A map containing sessions which can be evicted by sessions on basis of size
+        private Map<EvictableKey, ShareSession> evictable = new TreeMap<>();
+
+        public ShareSessionCache(int maxEntries, long evictionMs) {
             this.maxEntries = maxEntries;
             this.evictionMs = evictionMs;
+        }
+
+        /**
+         * Get a session by session key.
+         *
+         * @param key The share session key.
+         * @return The session, or None if no such session was found.
+         */
+        public ShareSession get(ShareSessionKey key) {
+            synchronized (this) {
+                return sessions.getOrDefault(key, null);
+            }
+        }
+
+        /**
+         * Get the number of entries currently in the share session cache.
+         */
+        public int size() {
+            synchronized (this) {
+                return sessions.size();
+            }
+        }
+
+        /**
+         * Get the total number of cached partitions.
+         */
+        public long totalPartitions() {
+            synchronized (this) {
+                return numPartitions;
+            }
+        }
+
+        public ShareSession remove(ShareSessionKey key) {
+            synchronized (this) {
+                ShareSession session = get(key);
+                if (session != null)
+                    return remove(session);
+                return null;
+            }
+        }
+
+        /**
+         * Remove an entry from the session cache.
+         *
+         * @param session The session.
+         * @return The removed session, or None if there was no such session.
+         */
+        public ShareSession remove(ShareSession session) {
+            synchronized (this) {
+                EvictableKey evictableKey;
+                synchronized (session) {
+                    lastUsed.remove(session.lastUsedKey());
+                    evictableKey = session.evictableKey();
+                }
+                evictable.remove(evictableKey);
+                ShareSession removeResult = sessions.remove(session.key());
+                if (removeResult != null) {
+                    numPartitions = numPartitions - session.cachedSize();
+                }
+                return removeResult;
+            }
         }
     }
 

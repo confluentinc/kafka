@@ -58,7 +58,7 @@ public class SharePartitionManagerTest {
     @Test
     public void testNewContextReturnsSessionlessShareFetchContext() {
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
-                new MockTime(), new SharePartitionManager.ShareFetchSessionCache(10, 1000));
+                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000));
 
         ShareFetchMetadata newReqMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1);
         ShareFetchContext shareFetchContext = sharePartitionManager.newContext(new HashMap<>(), new ArrayList<>(),
