@@ -1261,7 +1261,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         params,
         interesting.asJava,
         groupId
-      ).handle((responsePartitionData, throwable) => {
+      ).whenComplete { (responsePartitionData, throwable) =>
         if (throwable != null) {
           debug(s"Share fetch request with correlation from client $clientId  " +
             s"failed with error ${throwable.getMessage}")
@@ -1270,9 +1270,8 @@ class KafkaApis(val requestChannel: RequestChannel,
         } else {
           processResponseCallback(responsePartitionData.asScala.toMap)
         }
-      })
+      }
     }
-
   }
 
   def replicationQuota(fetchRequest: FetchRequest): ReplicaQuota =
