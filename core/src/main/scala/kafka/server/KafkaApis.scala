@@ -1074,9 +1074,16 @@ class KafkaApis(val requestChannel: RequestChannel,
    * Handle a shareFetch request
    */
   def handleShareFetchRequest(request: RequestChannel.Request): Unit = {
+    val shareFetchRequest = request.body[ShareFetchRequest]
+
+    if (!config.isShareGroupEnabled) {
+      // The API is not supported when the configuration `group.share.enable` has not been set
+      requestHelper.sendMaybeThrottle(request, shareFetchRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
+      CompletableFuture.completedFuture[Unit](())
+      return
+    }
     val versionId = request.header.apiVersion
     val clientId = request.header.clientId
-    val shareFetchRequest = request.body[ShareFetchRequest]
     val groupId = shareFetchRequest.data().groupId()
     val topicNames = metadataCache.topicIdsToNames()
     val shareFetchData = shareFetchRequest.shareFetchData(topicNames)
@@ -1088,7 +1095,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     // TODO : replace this initialization when share fetch session metadata is sent by the client in the shareFetchRequest
     val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1)
     val shareFetchContext = sharePartitionManager.newContext(shareFetchData, forgottenTopics, topicNames, newReqMetadata)
-    val erroneous = mutable.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]()
+    val erroneous = mutable.ArrayBuffer[(TopicIdPartition, ShareFetchResponseData.PartitionData)]()
     val interesting = mutable.ArrayBuffer[TopicIdPartition]()
     // Regular Kafka consumers need READ permission on each partition they are fetching.
     val partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
@@ -1115,6 +1122,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       val unconvertedRecords = ShareFetchResponse.recordsOrFail(partitionData)
           new ShareFetchResponseData.PartitionData()
             .setPartitionIndex(tp.partition)
+            .setErrorCode(Errors.forCode(partitionData.errorCode).code)
             .setRecords(unconvertedRecords)
             .setCurrentLeader(partitionData.currentLeader())
     }
@@ -1261,7 +1269,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         params,
         interesting.asJava,
         groupId
-      ).handle((responsePartitionData, throwable) => {
+      ).whenComplete { (responsePartitionData, throwable) =>
         if (throwable != null) {
           debug(s"Share fetch request with correlation from client $clientId  " +
             s"failed with error ${throwable.getMessage}")
@@ -1269,9 +1277,8 @@ class KafkaApis(val requestChannel: RequestChannel,
         } else {
           processResponseCallback(responsePartitionData.asScala.toMap)
         }
-      })
+      }
     }
-
   }
 
   def replicationQuota(fetchRequest: FetchRequest): ReplicaQuota =
