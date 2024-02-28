@@ -4157,37 +4157,37 @@ class KafkaApis(val requestChannel: RequestChannel,
       return
     }
     val requestPartitionAcknowledgements = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
-    val partitionAcknowledgements = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
     val interesting = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
     shareAcknowledgeRequestData.topics.forEach((acknowledgeTopic: ShareAcknowledgeRequestData.AcknowledgeTopic) => {
-      val name = topicNames.get(acknowledgeTopic.topicId)
-      acknowledgeTopic.partitions.forEach((acknowledgePartition: ShareAcknowledgeRequestData.AcknowledgePartition) =>
-        requestPartitionAcknowledgements +=
-          new TopicIdPartition(
-            acknowledgeTopic.topicId,
-            new TopicPartition(name, acknowledgePartition.partitionIndex)) ->
-          acknowledgePartition
-        // Topic name may be null here if the topic name was unable to be resolved using the topicNames map.
-      )
-    })
 
-    requestPartitionAcknowledgements.foreach{
-      case (topicIdPartition: TopicIdPartition, acknowledgePartition : ShareAcknowledgeRequestData.AcknowledgePartition) =>
-        if (topicIdPartition.topic == null)
-          erroneous += topicIdPartition ->
-            ShareAcknowledgeResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)
-        else
-          partitionAcknowledgements += topicIdPartition -> acknowledgePartition
-    }
+      if(!topicNames.asScala.contains(acknowledgeTopic.topicId)) {
+        acknowledgeTopic.partitions.forEach((acknowledgePartition: ShareAcknowledgeRequestData.AcknowledgePartition) => {
+          val topicIdPartition = new TopicIdPartition(
+            acknowledgeTopic.topicId,
+            new TopicPartition(null, acknowledgePartition.partitionIndex))
+          erroneous +=
+            topicIdPartition -> ShareAcknowledgeResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)
+        })
+      } else {
+        val name = topicNames.get(acknowledgeTopic.topicId)
+        acknowledgeTopic.partitions.forEach((acknowledgePartition: ShareAcknowledgeRequestData.AcknowledgePartition) =>
+          requestPartitionAcknowledgements +=
+            new TopicIdPartition(
+              acknowledgeTopic.topicId,
+              new TopicPartition(name, acknowledgePartition.partitionIndex)) ->
+              acknowledgePartition
+        )
+      }
+    })
     val authorizedTopics = authHelper.filterByAuthorized(
       request.context,
       READ,
       TOPIC,
-      partitionAcknowledgements
+      requestPartitionAcknowledgements
     )(_._1.topicPartition.topic)
 
-    partitionAcknowledgements.foreach {
+    requestPartitionAcknowledgements.foreach {
       case (topicIdPartition : TopicIdPartition, acknowledgePartition : ShareAcknowledgeRequestData.AcknowledgePartition) =>
         if (!authorizedTopics.contains(topicIdPartition.topic))
           erroneous += topicIdPartition ->
