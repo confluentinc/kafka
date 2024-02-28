@@ -153,7 +153,7 @@ public class SharePartitionManager {
     }
 
     public ShareFetchContext newContext(String groupId, Map<TopicIdPartition,
-            ShareFetchRequest.SharePartitionData> shareFetchData, List<TopicIdPartition> forgottenTopics,
+            ShareFetchRequest.SharePartitionData> shareFetchData, List<TopicIdPartition> toForget,
                                         Map<Uuid, String> topicNames, ShareFetchMetadata reqMetadata) {
         ShareFetchContext context;
         if (reqMetadata.isFull()) {
@@ -168,9 +168,9 @@ public class SharePartitionManager {
             if (reqMetadata.epoch() == ShareFetchMetadata.FINAL_EPOCH) {
                 // If the epoch is FINAL_EPOCH, don't try to create a new session.
                 suffix = " Will not try to create a new session.";
-                context = new SessionlessShareFetchContext(shareFetchData);
+                context = new SessionlessContext(shareFetchData);
             } else {
-                context = new FullShareFetchContext(time, cache, reqMetadata, shareFetchData);
+                context = new FullShareSessionContext(time, cache, reqMetadata, shareFetchData);
                 log.debug("Created a new full ShareFetchContext with {} {}",
                         partitionsToLogString(shareFetchData.keySet()), removedFetchSessionStr);
             }
@@ -181,15 +181,32 @@ public class SharePartitionManager {
                 if (shareSession == null) {
                     log.debug("Share session error for {}: no such session ID found", key);
                     context = new ShareSessionErrorContext(Errors.SHARE_SESSION_ID_NOT_FOUND, reqMetadata);
-                }
-                else {
+                } else {
                     if (shareSession.epoch != reqMetadata.epoch()) {
                         log.debug("Share session error for {}: expected epoch {}, but got {} instead", key,
                                 shareSession.epoch, reqMetadata.epoch());
                         context = new ShareSessionErrorContext(Errors.INVALID_SHARE_SESSION_EPOCH, reqMetadata);
-                    }
-                    else {
-
+                    } else {
+                        Map<ModifiedTopicIdPartitionType, List<TopicIdPartition>> modifiedTopicIdPartitions = shareSession.update(
+                                shareFetchData, toForget);
+                        if (shareSession.isEmpty()) {
+                            log.debug("Created a new sessionless FetchContext and closing session key {}, epoch {}: " +
+                                            "after removing {}, there are no more partitions left.", shareSession.key,
+                                    shareSession.epoch, partitionsToLogString(
+                                            modifiedTopicIdPartitions.get(ModifiedTopicIdPartitionType.REMOVED)));
+                            cache.remove(shareSession);
+                            context = new SessionlessContext(shareFetchData);
+                        } else {
+                            cache.touch(shareSession, time.milliseconds());
+                            shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
+                            log.debug("Created a new incremental FetchContext for session key {}, epoch {}: " +
+                                    "added {}, updated {}, removed {}", shareSession.key, shareSession.epoch,
+                                    partitionsToLogString(modifiedTopicIdPartitions.get(ModifiedTopicIdPartitionType.ADDED)),
+                                    partitionsToLogString(modifiedTopicIdPartitions.get(ModifiedTopicIdPartitionType.UPDATED)),
+                                    partitionsToLogString(modifiedTopicIdPartitions.get(ModifiedTopicIdPartitionType.REMOVED))
+                                    );
+                            context = new IncrementalShareSessionContext(time, reqMetadata, shareSession, topicNames);
+                        }
                     }
                 }
             }
@@ -207,8 +224,8 @@ public class SharePartitionManager {
         private final ShareSessionKey key;
         private final ImplicitLinkedHashCollection<SharePartitionManager.CachedPartition> partitionMap;
         private final long creationMs;
-        private final long lastUsedMs;
-        private final int epoch;
+        private long lastUsedMs;
+        private int epoch;
 
         // This is used by the ShareSessionCache to store the last known size of this session.
         // If this is -1, the Session is not in the cache.
@@ -233,6 +250,12 @@ public class SharePartitionManager {
             this.creationMs = creationMs;
             this.lastUsedMs = lastUsedMs;
             this.epoch = epoch;
+        }
+
+        public int cachedSize() {
+            synchronized (this) {
+                return cachedSize;
+            }
         }
 
         public int size() {
@@ -260,7 +283,8 @@ public class SharePartitionManager {
         }
 
         // Update the cached partition data based on the request.
-        public void update(Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData,
+        public Map<ModifiedTopicIdPartitionType, List<TopicIdPartition>> update(Map<TopicIdPartition,
+                ShareFetchRequest.SharePartitionData> shareFetchData,
                            List<TopicIdPartition> toForget) {
             List<TopicIdPartition> added = new ArrayList<>();
             List<TopicIdPartition> updated = new ArrayList<>();
@@ -268,11 +292,10 @@ public class SharePartitionManager {
             shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
                 CachedPartition cachedPartitionKey = new CachedPartition(topicIdPartition, sharePartitionData);
                 CachedPartition cachedPart = partitionMap.find(cachedPartitionKey);
-                if(cachedPart == null) {
+                if (cachedPart == null) {
                     partitionMap.mustAdd(cachedPartitionKey);
                     added.add(topicIdPartition);
-                }
-                else {
+                } else {
                     cachedPart.updateRequestParams(sharePartitionData);
                     updated.add(topicIdPartition);
                 }
@@ -281,7 +304,11 @@ public class SharePartitionManager {
                 if (partitionMap.remove(new CachedPartition(topicIdPartition)))
                     removed.add(topicIdPartition);
             });
-            return added, updated, removed;
+            Map<ModifiedTopicIdPartitionType, List<TopicIdPartition>> result = new HashMap<>();
+            result.put(ModifiedTopicIdPartitionType.ADDED, added);
+            result.put(ModifiedTopicIdPartitionType.UPDATED, updated);
+            result.put(ModifiedTopicIdPartitionType.REMOVED, removed);
+            return result;
         }
 
         public String toString() {
@@ -295,14 +322,22 @@ public class SharePartitionManager {
         }
     }
 
+
+    // Helper enum to return the possible type of modified list of TopicIdPartitions in cache
+    public static enum ModifiedTopicIdPartitionType {
+        ADDED,
+        UPDATED,
+        REMOVED
+    }
+
     /**
      * The share fetch context for a sessionless share fetch request.
      */
-    public static class SessionlessShareFetchContext extends ShareFetchContext {
+    public static class SessionlessContext extends ShareFetchContext {
         private final Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData;
 
-        public SessionlessShareFetchContext(Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
-            this.log = LoggerFactory.getLogger(SessionlessShareFetchContext.class);
+        public SessionlessContext(Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
+            this.log = LoggerFactory.getLogger(SessionlessContext.class);
             this.shareFetchData = shareFetchData;
         }
 
@@ -327,8 +362,7 @@ public class SharePartitionManager {
     /**
      * The fetch context for a full share fetch request.
      */
-    // TODO: Implement FullShareFetchContext when you have share sessions available
-    public static class FullShareFetchContext extends ShareFetchContext {
+    public static class FullShareSessionContext extends ShareFetchContext {
 
         private Time time;
         private ShareSessionCache cache;
@@ -341,9 +375,9 @@ public class SharePartitionManager {
          * @param reqMetadata        The request metadata.
          * @param shareFetchData     The share partition data from the share fetch request.
          */
-        public FullShareFetchContext(Time time, ShareSessionCache cache, ShareFetchMetadata reqMetadata,
-                                     Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
-            this.log = LoggerFactory.getLogger(FullShareFetchContext.class);
+        public FullShareSessionContext(Time time, ShareSessionCache cache, ShareFetchMetadata reqMetadata,
+                                       Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
+            this.log = LoggerFactory.getLogger(FullShareSessionContext.class);
             this.time = time;
             this.cache = cache;
             this.reqMetadata = reqMetadata;
@@ -370,10 +404,11 @@ public class SharePartitionManager {
     /**
      * The share fetch context for a share fetch request that had a session error.
      */
-    // TODO: Implement ShareSessionErrorContext when you have share sessions available
     public static class ShareSessionErrorContext extends ShareFetchContext {
         private final Errors error;
         private final ShareFetchMetadata reqMetadata;
+
+        private final Logger log = LoggerFactory.getLogger(ShareSessionErrorContext.class);
 
         public ShareSessionErrorContext(Errors error, ShareFetchMetadata reqMetadata) {
             this.error = error;
@@ -400,10 +435,25 @@ public class SharePartitionManager {
     }
 
     /**
-     * The share fetch context for an incremental share fetch request.
+     * The share fetch context for a subsequent share fetch/acknowledge request.
      */
     // TODO: Implement IncrementalFetchContext when you have share sessions available
-    public static class IncrementalFetchContext extends ShareFetchContext {
+    public static class IncrementalShareSessionContext extends ShareFetchContext {
+
+        private final Time time;
+        private final ShareFetchMetadata reqMetadata;
+        private final ShareSession session;
+        private final Map<Uuid, String> topicNames;
+
+        private final Logger log = LoggerFactory.getLogger(IncrementalShareSessionContext.class);
+
+        public IncrementalShareSessionContext(Time time, ShareFetchMetadata reqMetadata, ShareSession session,
+                                              Map<Uuid, String> topicNames) {
+            this.time = time;
+            this.reqMetadata = reqMetadata;
+            this.session = session;
+            this.topicNames = topicNames;
+        }
 
         @Override
         int responseSize(LinkedHashMap<TopicIdPartition, ShareFetchResponseData.PartitionData> updates,
@@ -485,6 +535,7 @@ public class SharePartitionManager {
         }
     }
 
+    // visible for testing
     static class LastUsedKey implements Comparable<LastUsedKey> {
         private final ShareSessionKey key;
         private final long lastUsedMs;
@@ -567,7 +618,6 @@ public class SharePartitionManager {
      * ShareSessionCache lock.  In order to avoid deadlock, the ShareSessionCache lock
      * must never be acquired while an individual ShareSession lock is already held.
      */
-    // TODO: Implement ShareSessionCache class
     public static class ShareSessionCache {
         private final int maxEntries;
         private final long evictionMs;
@@ -577,10 +627,10 @@ public class SharePartitionManager {
         private Map<ShareSessionKey, ShareSession> sessions = new HashMap<>();
 
         // Maps last used times to sessions.
-        private Map<LastUsedKey, ShareSession> lastUsed = new TreeMap<>();
+        private TreeMap<LastUsedKey, ShareSession> lastUsed = new TreeMap<>();
 
         // A map containing sessions which can be evicted by sessions on basis of size
-        private Map<EvictableKey, ShareSession> evictable = new TreeMap<>();
+        private TreeMap<EvictableKey, ShareSession> evictable = new TreeMap<>();
 
         public ShareSessionCache(int maxEntries, long evictionMs) {
             this.maxEntries = maxEntries;
@@ -642,9 +692,53 @@ public class SharePartitionManager {
                 evictable.remove(evictableKey);
                 ShareSession removeResult = sessions.remove(session.key);
                 if (removeResult != null) {
-                    numPartitions = numPartitions - session.cachedSize;
+                    numPartitions = numPartitions - session.cachedSize();
                 }
                 return removeResult;
+            }
+        }
+
+        /**
+         * Update a session's position in the lastUsed and evictable trees.
+         *
+         * @param session  The session.
+         * @param now      The current time in milliseconds.
+         */
+        public void touch(ShareSession session, long now) {
+            synchronized (session) {
+                // Update the lastUsed map.
+                lastUsed.remove(session.lastUsedKey());
+                session.lastUsedMs = now;
+                lastUsed.put(session.lastUsedKey(), session);
+
+                int oldSize = session.cachedSize;
+                if (oldSize != -1) {
+                    EvictableKey oldEvictableKey = session.evictableKey();
+                    evictable.remove(oldEvictableKey);
+                    numPartitions = numPartitions - oldSize;
+                }
+                session.cachedSize = session.size();
+                EvictableKey newEvictableKey = session.evictableKey();
+                if (now - session.creationMs > evictionMs) {
+                    evictable.put(newEvictableKey, session);
+                }
+                numPartitions = numPartitions + session.cachedSize;
+            }
+        }
+
+        public ShareSessionKey maybeCreateSession(String groupId, Uuid memberId, long now, int size, ImplicitLinkedHashCollection<CachedPartition> partitionMap) {
+            synchronized (this) {
+                if (sessions.size() < maxEntries) {
+                    ShareSession session = new ShareSession(new ShareSessionKey(groupId, memberId), partitionMap,
+                            now, now, ShareFetchMetadata.nextEpoch(ShareFetchMetadata.INITIAL_EPOCH));
+                    log.debug("Created fetch session " + session);
+                    sessions.put(session.key, session);
+                    touch(session, now);
+                    return session.key;
+                } else {
+                    log.debug("No fetch session created for size = " + size);
+                    return null;
+                }
             }
         }
     }

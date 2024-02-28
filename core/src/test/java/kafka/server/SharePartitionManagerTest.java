@@ -63,6 +63,6 @@ public class SharePartitionManagerTest {
         ShareFetchMetadata newReqMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1);
         ShareFetchContext shareFetchContext = sharePartitionManager.newContext("grp", new HashMap<>(), new ArrayList<>(),
                 new HashMap<>(), newReqMetadata);
-        assertEquals(shareFetchContext.getClass(), SharePartitionManager.SessionlessShareFetchContext.class);
+        assertEquals(shareFetchContext.getClass(), SharePartitionManager.SessionlessContext.class);
     }
 }
