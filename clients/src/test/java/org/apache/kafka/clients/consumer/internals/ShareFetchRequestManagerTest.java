@@ -17,6 +17,7 @@
 package org.apache.kafka.clients.consumer.internals;
 
 import org.apache.kafka.clients.ApiVersions;
+import org.apache.kafka.clients.ClientResponse;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.MockClient;
@@ -29,11 +30,13 @@ import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.AuthenticationException;
 import org.apache.kafka.common.errors.DisconnectException;
 import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
+import org.apache.kafka.common.message.RequestHeaderData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
@@ -49,8 +52,8 @@ import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.requests.MetadataResponse;
+import org.apache.kafka.common.requests.RequestHeader;
 import org.apache.kafka.common.requests.RequestTestUtils;
-import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.Deserializer;
@@ -67,8 +70,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -86,7 +87,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
 
-import static java.util.Collections.emptyList;
 import static java.util.Collections.singleton;
 import static java.util.Collections.singletonMap;
 import static org.apache.kafka.clients.consumer.ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG;
@@ -104,71 +104,52 @@ import static org.mockito.Mockito.verify;
 
 public class ShareFetchRequestManagerTest {
 
-    private String topicName = "test";
-    private String groupId = "test-group";
-    private Uuid topicId = Uuid.randomUuid();
-    private Map<String, Uuid> topicIds = new HashMap<String, Uuid>() {
+    private final String topicName = "test";
+    private final String groupId = "test-group";
+    private final Uuid topicId = Uuid.randomUuid();
+    private final Map<String, Uuid> topicIds = new HashMap<String, Uuid>() {
         {
             put(topicName, topicId);
         }
     };
-    private TopicPartition tp0 = new TopicPartition(topicName, 0);
-    private TopicIdPartition tidp0 = new TopicIdPartition(topicId, tp0);
-    private int validLeaderEpoch = 0;
-    private MetadataResponse initialUpdateResponse =
+    private final TopicPartition tp0 = new TopicPartition(topicName, 0);
+    private final TopicIdPartition tidp0 = new TopicIdPartition(topicId, tp0);
+    private final int validLeaderEpoch = 0;
+    private final MetadataResponse initialUpdateResponse =
             RequestTestUtils.metadataUpdateWithIds(1, singletonMap(topicName, 4), topicIds);
 
-    private int minBytes = 1;
-    private int maxBytes = Integer.MAX_VALUE;
-    private int maxWaitMs = 0;
-    private int fetchSize = 1000;
-    private long retryBackoffMs = 100;
-    private long requestTimeoutMs = 30000;
+    private final long retryBackoffMs = 100;
+    private final long requestTimeoutMs = 30000;
     private MockTime time = new MockTime(1);
     private SubscriptionState subscriptions;
     private ConsumerMetadata metadata;
-    private FetchMetricsRegistry metricsRegistry;
     private FetchMetricsManager metricsManager;
     private MockClient client;
     private Metrics metrics;
-    private ApiVersions apiVersions = new ApiVersions();
+    private final ApiVersions apiVersions = new ApiVersions();
     private TestableShareFetchRequestManager<?, ?> fetcher;
     private TestableNetworkClientDelegate networkClientDelegate;
     private OffsetFetcher offsetFetcher;
     private MemoryRecords records;
-    private MemoryRecords nextRecords;
-    private MemoryRecords emptyRecords;
-    private MemoryRecords partialRecords;
 
     @BeforeEach
     public void setup() {
         records = buildRecords(1L, 3, 1);
-        nextRecords = buildRecords(4L, 2, 4);
-        emptyRecords = buildRecords(0L, 0, 0);
-        partialRecords = buildRecords(4L, 1, 0);
+        MemoryRecords partialRecords = buildRecords(4L, 1, 0);
         partialRecords.buffer().putInt(Records.SIZE_OFFSET, 10000);
     }
 
     private void assignFromSubscribed(Set<TopicPartition> partitions) {
-        //subscriptions.assignFromUser(partitions);
-        subscriptions.subscribe(Collections.singleton(tp0.topic()), Optional.empty());
-        subscriptions.assignFromSubscribed(Collections.singleton(tp0));
-        //subscriptions.seek(tp0, 0);
+        partitions.forEach(partition -> {
+            subscriptions.subscribe(Collections.singleton(partition.topic()), Optional.empty());
+            subscriptions.assignFromSubscribed(Collections.singleton(partition));
+        });
+
         client.updateMetadata(initialUpdateResponse);
 
         // A dummy metadata update to ensure valid leader epoch.
         metadata.updateWithCurrentRequestVersion(RequestTestUtils.metadataUpdateWithIds("dummy", 1,
                 Collections.emptyMap(), singletonMap(topicName, 4),
-                tp -> validLeaderEpoch, topicIds), false, 0L);
-    }
-
-    private void assignFromSubscribed(TopicPartition partition) {
-        subscriptions.assignFromUser(singleton(partition));
-        client.updateMetadata(RequestTestUtils.metadataUpdateWithIds(1, singletonMap(partition.topic(), 1), Collections.emptyMap()));
-
-        // A dummy metadata update to ensure valid leader epoch.
-        metadata.update(9, RequestTestUtils.metadataUpdateWithIds("dummy", 1,
-                Collections.emptyMap(), singletonMap(partition.topic(), 1),
                 tp -> validLeaderEpoch, topicIds), false, 0L);
     }
 
@@ -205,7 +186,7 @@ public class ShareFetchRequestManagerTest {
         assertEquals(1, sendFetches());
         assertFalse(fetcher.hasCompletedFetches());
 
-        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NONE, 100L, 0));
+        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
         assertTrue(fetcher.hasCompletedFetches());
 
@@ -228,121 +209,6 @@ public class ShareFetchRequestManagerTest {
     }
 
     @Test
-    public void testFetchingPendingPartitions() {
-        buildFetcher();
-
-        assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
-
-        // normal fetch
-        assertEquals(1, sendFetches());
-        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NONE, 100L, 0));
-        networkClientDelegate.poll(time.timer(0));
-        assertTrue(fetcher.hasCompletedFetches());
-        assertEquals(fetchRecords().get(tp0).size(), 3);
-
-        // mark partition unfetchable
-        subscriptions.markPendingRevocation(singleton(tp0));
-        assertEquals(0, sendFetches());
-        networkClientDelegate.poll(time.timer(0));
-        assertFalse(fetcher.hasCompletedFetches());
-        assertNull(fetchRecords().get(tp0));
-    }
-
-    @Test
-    public void testFetchWithNoTopicId() {
-        // Should work and default to using old request type.
-        buildFetcher();
-
-        TopicIdPartition noId = new TopicIdPartition(Uuid.ZERO_UUID, new TopicPartition("noId", 0));
-        assignFromSubscribed(noId.topicPartition());
-        subscriptions.seek(noId.topicPartition(), 0);
-
-        assertEquals(1, sendFetches());
-        assertFalse(fetcher.hasCompletedFetches());
-
-
-        client.prepareResponse(
-                fetchRequestMatcher(ApiKeys.SHARE_FETCH.latestVersion(), noId, Optional.empty()),
-                fullFetchResponse(noId, records, Errors.NONE, 100L, 0)
-        );
-        networkClientDelegate.poll(time.timer(0));
-        assertTrue(fetcher.hasCompletedFetches());
-
-        Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> partitionRecords = fetchRecords();
-        assertTrue(partitionRecords.containsKey(noId.topicPartition()));
-
-        List<ConsumerRecord<byte[], byte[]>> records = partitionRecords.get(noId.topicPartition());
-        assertEquals(3, records.size());
-    }
-
-    @Test
-    public void testFetchWithTopicId() {
-        buildFetcher();
-
-        TopicIdPartition tp = new TopicIdPartition(topicId, new TopicPartition(topicName, 0));
-        assignFromSubscribed(singleton(tp.topicPartition()));
-        subscriptions.seek(tp.topicPartition(), 0);
-
-        assertEquals(1, sendFetches());
-        assertFalse(fetcher.hasCompletedFetches());
-
-        client.prepareResponse(
-                fetchRequestMatcher(ApiKeys.SHARE_FETCH.latestVersion(), tp, Optional.empty()),
-                fullFetchResponse(tp, records, Errors.NONE, 100L, 0)
-        );
-        networkClientDelegate.poll(time.timer(0));
-        assertTrue(fetcher.hasCompletedFetches());
-
-        Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> partitionRecords = fetchRecords();
-        assertTrue(partitionRecords.containsKey(tp.topicPartition()));
-
-        List<ConsumerRecord<byte[], byte[]>> records = partitionRecords.get(tp.topicPartition());
-        assertEquals(3, records.size());
-    }
-
-    private MockClient.RequestMatcher fetchRequestMatcher(
-            short expectedVersion,
-            TopicIdPartition tp,
-            Optional<Integer> expectedCurrentLeaderEpoch
-    ) {
-        return fetchRequestMatcher(
-                expectedVersion,
-                singletonMap(tp, new ShareFetchRequest.SharePartitionData(
-                        tp.topicId(),
-                        0,
-                        expectedCurrentLeaderEpoch
-                )),
-                emptyList()
-        );
-    }
-
-    private MockClient.RequestMatcher fetchRequestMatcher(
-            short expectedVersion,
-            Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> fetch,
-            List<TopicIdPartition> forgotten
-    ) {
-        return body -> {
-            if (body instanceof ShareFetchRequest) {
-                ShareFetchRequest fetchRequest = (ShareFetchRequest) body;
-                assertEquals(expectedVersion, fetchRequest.version());
-                assertEquals(fetch, fetchRequest.shareFetchData(topicNames(new ArrayList<>(fetch.keySet()))));
-                assertEquals(forgotten, fetchRequest.forgottenTopics(topicNames(forgotten)));
-                return true;
-            } else {
-                fail("Should have seen FetchRequest");
-                return false;
-            }
-        };
-    }
-
-    private Map<Uuid, String> topicNames(List<TopicIdPartition> partitions) {
-        Map<Uuid, String> topicNames = new HashMap<>();
-        partitions.forEach(partition -> topicNames.putIfAbsent(partition.topicId(), partition.topic()));
-        return topicNames;
-    }
-
-    @Test
     public void testFetchError() {
         buildFetcher();
 
@@ -352,7 +218,7 @@ public class ShareFetchRequestManagerTest {
         assertEquals(1, sendFetches());
         assertFalse(fetcher.hasCompletedFetches());
 
-        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NOT_LEADER_OR_FOLLOWER, 100L, 0));
+        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NOT_LEADER_OR_FOLLOWER));
         networkClientDelegate.poll(time.timer(0));
         assertTrue(fetcher.hasCompletedFetches());
 
@@ -386,7 +252,7 @@ public class ShareFetchRequestManagerTest {
 
         // normal fetch
         assertEquals(1, sendFetches());
-        client.prepareResponse(fullFetchResponse(tidp0, MemoryRecords.readableRecords(buffer), Errors.NONE, 100L, 0));
+        client.prepareResponse(fullFetchResponse(tidp0, MemoryRecords.readableRecords(buffer), Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
 
         for (int i = 0; i < 2; i++) {
@@ -414,7 +280,7 @@ public class ShareFetchRequestManagerTest {
 
         // normal fetch
         assertEquals(1, sendFetches());
-        client.prepareResponse(fullFetchResponse(tidp0, MemoryRecords.readableRecords(buffer), Errors.NONE, 100L, 0));
+        client.prepareResponse(fullFetchResponse(tidp0, MemoryRecords.readableRecords(buffer), Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
 
         assertThrows(KafkaException.class, this::collectFetch);
@@ -442,7 +308,7 @@ public class ShareFetchRequestManagerTest {
         assignFromSubscribed(singleton(tp0));
         subscriptions.seek(tp0, 1);
 
-        client.prepareResponse(fullFetchResponse(tidp0, memoryRecords, Errors.NONE, 100L, 0));
+        client.prepareResponse(fullFetchResponse(tidp0, memoryRecords, Errors.NONE));
 
         assertEquals(1, sendFetches());
         networkClientDelegate.poll(time.timer(0));
@@ -473,7 +339,7 @@ public class ShareFetchRequestManagerTest {
         subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
-        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.TOPIC_AUTHORIZATION_FAILED, 100L, 0));
+        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.TOPIC_AUTHORIZATION_FAILED));
         networkClientDelegate.poll(time.timer(0));
         try {
             collectFetch();
@@ -490,7 +356,7 @@ public class ShareFetchRequestManagerTest {
         subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
-        client.prepareResponse(fetchResponseWithTopLevelError(tidp0, Errors.FETCH_SESSION_TOPIC_ID_ERROR, 0));
+        client.prepareResponse(fetchResponseWithTopLevelError(tidp0, Errors.FETCH_SESSION_TOPIC_ID_ERROR));
         networkClientDelegate.poll(time.timer(0));
         assertEmptyFetch("Should not return records or advance position on fetch error");
         assertEquals(0L, metadata.timeToNextUpdate(time.milliseconds()));
@@ -499,7 +365,6 @@ public class ShareFetchRequestManagerTest {
     @ParameterizedTest
     @MethodSource("handleFetchResponseErrorSupplier")
     public void testHandleFetchResponseError(Errors error,
-                                             long highWatermark,
                                              boolean hasTopLevelError,
                                              boolean shouldRequestMetadataUpdate) {
         buildFetcher();
@@ -511,9 +376,9 @@ public class ShareFetchRequestManagerTest {
         final ShareFetchResponse fetchResponse;
 
         if (hasTopLevelError)
-            fetchResponse = fetchResponseWithTopLevelError(tidp0, error, 0);
+            fetchResponse = fetchResponseWithTopLevelError(tidp0, error);
         else
-            fetchResponse = fullFetchResponse(tidp0, records, error, highWatermark, 0);
+            fetchResponse = fullFetchResponse(tidp0, records, error);
 
         client.prepareResponse(fetchResponse);
         networkClientDelegate.poll(time.timer(0));
@@ -529,17 +394,17 @@ public class ShareFetchRequestManagerTest {
     }
 
     /**
-     * Supplies parameters to {@link #testHandleFetchResponseError(Errors, long, boolean, boolean)}.
+     * Supplies parameters to {@link #testHandleFetchResponseError(Errors, boolean, boolean)}.
      */
     private static Stream<Arguments> handleFetchResponseErrorSupplier() {
         return Stream.of(
-                Arguments.of(Errors.NOT_LEADER_OR_FOLLOWER, 100L, false, true),
-                Arguments.of(Errors.UNKNOWN_TOPIC_OR_PARTITION, 100L, false, true),
-                Arguments.of(Errors.UNKNOWN_TOPIC_ID, -1L, false, true),
-                Arguments.of(Errors.FETCH_SESSION_TOPIC_ID_ERROR, -1L, true, true),
-                Arguments.of(Errors.INCONSISTENT_TOPIC_ID, -1L, false, true),
-                Arguments.of(Errors.FENCED_LEADER_EPOCH, 100L, false, true),
-                Arguments.of(Errors.UNKNOWN_LEADER_EPOCH, 100L, false, false)
+                Arguments.of(Errors.NOT_LEADER_OR_FOLLOWER, false, true),
+                Arguments.of(Errors.UNKNOWN_TOPIC_OR_PARTITION, false, true),
+                Arguments.of(Errors.UNKNOWN_TOPIC_ID, false, true),
+                Arguments.of(Errors.FETCH_SESSION_TOPIC_ID_ERROR, true, true),
+                Arguments.of(Errors.INCONSISTENT_TOPIC_ID, false, true),
+                Arguments.of(Errors.FENCED_LEADER_EPOCH, false, true),
+                Arguments.of(Errors.UNKNOWN_LEADER_EPOCH, false, false)
         );
     }
 
@@ -551,7 +416,7 @@ public class ShareFetchRequestManagerTest {
         subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
-        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NONE, 100L, 0), true);
+        client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NONE), true);
         networkClientDelegate.poll(time.timer(0));
         assertEmptyFetch("Should not return records or advance position on disconnect");
 
@@ -560,7 +425,7 @@ public class ShareFetchRequestManagerTest {
     }
 
     @Test
-    public void testUpdatePositionWithLastRecordMissingFromBatch() {
+    public void testFetchWithLastRecordMissingFromBatch() {
         buildFetcher();
 
         MemoryRecords records = MemoryRecords.withRecords(CompressionType.NONE,
@@ -587,7 +452,7 @@ public class ShareFetchRequestManagerTest {
         assignFromSubscribed(singleton(tp0));
         subscriptions.seek(tp0, 0);
         assertEquals(1, sendFetches());
-        client.prepareResponse(fullFetchResponse(tidp0, compactedRecords, Errors.NONE, 100L, 0));
+        client.prepareResponse(fullFetchResponse(tidp0, compactedRecords, Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
         assertTrue(fetcher.hasCompletedFetches());
 
@@ -621,8 +486,7 @@ public class ShareFetchRequestManagerTest {
         client.prepareResponse(fullFetchResponse(
                 tidp0,
                 buildRecords(1L, 1, 1),
-                Errors.CORRUPT_MESSAGE,
-                100L, 0));
+                Errors.CORRUPT_MESSAGE));
         networkClientDelegate.poll(time.timer(0));
         assertTrue(fetcher.hasCompletedFetches());
 
@@ -630,25 +494,21 @@ public class ShareFetchRequestManagerTest {
         assertThrows(KafkaException.class, this::fetchRecords);
     }
 
-    private ShareFetchResponse fetchResponseWithTopLevelError(TopicIdPartition tp, Errors error, int throttleTime) {
+    private ShareFetchResponse fetchResponseWithTopLevelError(TopicIdPartition tp, Errors error) {
         Map<TopicIdPartition, ShareFetchResponseData.PartitionData> partitions = Collections.singletonMap(tp,
                 new ShareFetchResponseData.PartitionData()
                         .setPartitionIndex(tp.topicPartition().partition())
                         .setErrorCode(error.code()));
-        return ShareFetchResponse.of(error, throttleTime, new LinkedHashMap<>(partitions), Collections.emptyList());
+        return ShareFetchResponse.of(error, 0, new LinkedHashMap<>(partitions), Collections.emptyList());
     }
 
-    private ShareFetchResponse fullFetchResponse(TopicIdPartition tp, MemoryRecords records, Errors error, long hw, int throttleTime) {
-        return fullFetchResponse(tp, records, error, throttleTime);
-    }
-
-    private ShareFetchResponse fullFetchResponse(TopicIdPartition tp, MemoryRecords records, Errors error, int throttleTime) {
+    private ShareFetchResponse fullFetchResponse(TopicIdPartition tp, MemoryRecords records, Errors error) {
         Map<TopicIdPartition, ShareFetchResponseData.PartitionData> partitions = Collections.singletonMap(tp,
                 new ShareFetchResponseData.PartitionData()
                         .setPartitionIndex(tp.topicPartition().partition())
                         .setErrorCode(error.code())
                         .setRecords(records));
-        return ShareFetchResponse.of(Errors.NONE, throttleTime, new LinkedHashMap<>(partitions), Collections.emptyList());
+        return ShareFetchResponse.of(Errors.NONE, 0, new LinkedHashMap<>(partitions), Collections.emptyList());
     }
 
     /**
@@ -675,65 +535,46 @@ public class ShareFetchRequestManagerTest {
         return (Fetch<K, V>) fetcher.collectFetch();
     }
 
-    private void buildFetcher(int maxPollRecords) {
-        buildFetcher(OffsetResetStrategy.EARLIEST, new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                maxPollRecords, IsolationLevel.READ_UNCOMMITTED);
-    }
-
     private void buildFetcher() {
-        buildFetcher(Integer.MAX_VALUE);
+        buildFetcher(new ByteArrayDeserializer(), new ByteArrayDeserializer()
+        );
     }
 
-    private <K, V> void buildFetcher(OffsetResetStrategy offsetResetStrategy,
-                                     Deserializer<K> keyDeserializer,
-                                     Deserializer<V> valueDeserializer,
-                                     int maxPollRecords,
-                                     IsolationLevel isolationLevel) {
-        buildFetcher(new MetricConfig(), offsetResetStrategy, keyDeserializer, valueDeserializer,
-                maxPollRecords, isolationLevel);
-    }
-
-    private <K, V> void buildFetcher(MetricConfig metricConfig,
-                                     OffsetResetStrategy offsetResetStrategy,
-                                     Deserializer<K> keyDeserializer,
-                                     Deserializer<V> valueDeserializer,
-                                     int maxPollRecords,
-                                     IsolationLevel isolationLevel) {
-        buildFetcher(metricConfig, offsetResetStrategy, keyDeserializer, valueDeserializer, maxPollRecords, isolationLevel, Long.MAX_VALUE);
+    private <K, V> void buildFetcher(Deserializer<K> keyDeserializer,
+                                     Deserializer<V> valueDeserializer) {
+        buildFetcher(new MetricConfig(), keyDeserializer, valueDeserializer
+        );
     }
 
     private <K, V> void buildFetcher(MetricConfig metricConfig,
-                                     OffsetResetStrategy offsetResetStrategy,
                                      Deserializer<K> keyDeserializer,
-                                     Deserializer<V> valueDeserializer,
-                                     int maxPollRecords,
-                                     IsolationLevel isolationLevel,
-                                     long metadataExpireMs) {
+                                     Deserializer<V> valueDeserializer) {
         LogContext logContext = new LogContext();
-        SubscriptionState subscriptionState = new SubscriptionState(logContext, offsetResetStrategy);
-        buildFetcher(metricConfig, keyDeserializer, valueDeserializer, maxPollRecords, isolationLevel, metadataExpireMs,
+        SubscriptionState subscriptionState = new SubscriptionState(logContext, OffsetResetStrategy.EARLIEST);
+        buildFetcher(metricConfig, keyDeserializer, valueDeserializer,
                 subscriptionState, logContext);
     }
 
     private <K, V> void buildFetcher(MetricConfig metricConfig,
                                      Deserializer<K> keyDeserializer,
                                      Deserializer<V> valueDeserializer,
-                                     int maxPollRecords,
-                                     IsolationLevel isolationLevel,
-                                     long metadataExpireMs,
                                      SubscriptionState subscriptionState,
                                      LogContext logContext) {
-        buildDependencies(metricConfig, metadataExpireMs, subscriptionState, logContext);
+        buildDependencies(metricConfig, subscriptionState, logContext);
         Deserializers<K, V> deserializers = new Deserializers<>(keyDeserializer, valueDeserializer);
+        int maxWaitMs = 0;
+        int maxBytes = Integer.MAX_VALUE;
+        int fetchSize = 1000;
+        int minBytes = 1;
         FetchConfig fetchConfig = new FetchConfig(
                 minBytes,
                 maxBytes,
                 maxWaitMs,
                 fetchSize,
-                maxPollRecords,
+                Integer.MAX_VALUE,
                 true, // check crc
                 CommonClientConfigs.DEFAULT_CLIENT_RACK,
-                isolationLevel);
+                IsolationLevel.READ_UNCOMMITTED);
         ShareFetchCollector<K, V> shareFetchCollector = new ShareFetchCollector<>(logContext,
                 metadata,
                 subscriptions,
@@ -764,21 +605,20 @@ public class ShareFetchRequestManagerTest {
                 time,
                 retryBackoffMs,
                 requestTimeoutMs,
-                isolationLevel,
+                IsolationLevel.READ_UNCOMMITTED,
                 apiVersions);
     }
 
     private void buildDependencies(MetricConfig metricConfig,
-                                   long metadataExpireMs,
                                    SubscriptionState subscriptionState,
                                    LogContext logContext) {
         time = new MockTime(1, 0, 0);
         subscriptions = subscriptionState;
-        metadata = new ConsumerMetadata(0, 0, metadataExpireMs, false, false,
+        metadata = new ConsumerMetadata(0, 0, Long.MAX_VALUE, false, false,
                 subscriptions, logContext, new ClusterResourceListeners());
         client = new MockClient(time, metadata);
         metrics = new Metrics(metricConfig, time);
-        metricsRegistry = new FetchMetricsRegistry(metricConfig.tags().keySet(), "consumer" + groupId);
+        FetchMetricsRegistry metricsRegistry = new FetchMetricsRegistry(metricConfig.tags().keySet(), "consumer" + groupId);
         metricsManager = new FetchMetricsManager(metrics, metricsRegistry);
 
         Properties properties = new Properties();
@@ -818,8 +658,6 @@ public class ShareFetchRequestManagerTest {
     }
 
     private class TestableNetworkClientDelegate extends NetworkClientDelegate {
-
-        private final Logger log = LoggerFactory.getLogger(NetworkClientDelegate.class);
         private final ConcurrentLinkedQueue<Node> pendingDisconnects = new ConcurrentLinkedQueue<>();
 
         public TestableNetworkClientDelegate(Time time,
@@ -879,11 +717,23 @@ public class ShareFetchRequestManagerTest {
                     // Remove entry before invoking request callback to avoid callbacks handling
                     // coordinator failures traversing the unsent list again.
                     for (UnsentRequest unsentRequest : removeUnsentRequestByNode(node)) {
-                        // TODO: this should likely emulate what's done in ConsumerNetworkClient
-                        log.error("checkDisconnects - please update! unsentRequest: {}", unsentRequest);
+                        FutureCompletionHandler handler = unsentRequest.handler();
+                        AuthenticationException authenticationException = client.authenticationException(node);
+                        long startMs = unsentRequest.timer().currentTimeMs() - unsentRequest.timer().elapsedMs();
+                        handler.onComplete(new ClientResponse(makeHeader(unsentRequest.requestBuilder().latestAllowedVersion()),
+                                unsentRequest.handler(), unsentRequest.node().toString(), startMs, currentTimeMs, true,
+                                null, authenticationException, null));
                     }
                 }
             }
+        }
+
+        private RequestHeader makeHeader(short version) {
+            return new RequestHeader(
+                    new RequestHeaderData()
+                            .setRequestApiKey(ApiKeys.SHARE_FETCH.id)
+                            .setRequestApiVersion(version),
+                    ApiKeys.SHARE_FETCH.requestHeaderVersion(version));
         }
 
         private void handlePendingDisconnects() {
@@ -892,16 +742,16 @@ public class ShareFetchRequestManagerTest {
                 if (node == null)
                     break;
 
-                failUnsentRequests(node, DisconnectException.INSTANCE);
+                failUnsentRequests(node);
                 client.disconnect(node.idString());
             }
         }
 
-        private void failUnsentRequests(Node node, RuntimeException e) {
+        private void failUnsentRequests(Node node) {
             // clear unsent requests to node and fail their corresponding futures
             for (UnsentRequest unsentRequest : removeUnsentRequestByNode(node)) {
                 FutureCompletionHandler handler = unsentRequest.handler();
-                handler.onFailure(time.milliseconds(), e);
+                handler.onFailure(time.milliseconds(), DisconnectException.INSTANCE);
             }
         }
     }
