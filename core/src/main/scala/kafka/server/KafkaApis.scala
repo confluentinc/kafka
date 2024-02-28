@@ -4147,13 +4147,15 @@ class KafkaApis(val requestChannel: RequestChannel,
     val topicNames = metadataCache.topicIdsToNames()
     val sharePartitionManager : SharePartitionManager = sharePartitionManagerOption match {
       case Some(manager) => manager
-      case None => throw new IllegalStateException("ShareFetchRequest received but SharePartitionManager is not initialized")
+      case None => throw new IllegalStateException("ShareAcknowledgeRequest received but SharePartitionManager is not initialized")
     }
-    if (!authHelper.authorize(request.context, READ, GROUP, groupId))
+    if (!authHelper.authorize(request.context, READ, GROUP, groupId)) {
       requestHelper.sendMaybeThrottle(
         request,
         shareAcknowledgeRequest.getErrorResponse(Errors.GROUP_AUTHORIZATION_FAILED.exception)
       )
+      return
+    }
     val requestPartitionAcknowledgements = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
     val partitionAcknowledgements = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
     val interesting = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
@@ -4197,7 +4199,7 @@ class KafkaApis(val requestChannel: RequestChannel,
           interesting += topicIdPartition -> acknowledgePartition
     }
 
-    // the callback for processing a share fetch response, invoked before throttling
+    // the callback for processing a share acknowledge response, invoked before throttling
     def processResponseCallback(
                                  responseAcknowledgeData: Map[TopicIdPartition,
                                    ShareAcknowledgeResponseData.PartitionData]
@@ -4244,7 +4246,7 @@ class KafkaApis(val requestChannel: RequestChannel,
           }
         }
 
-        // Prepare share fetch response from converted data
+        // Prepare share acknowledge response from converted data
         ShareAcknowledgeResponse.of(
           unconvertedShareAcknowledgeResponse.error,
           0,

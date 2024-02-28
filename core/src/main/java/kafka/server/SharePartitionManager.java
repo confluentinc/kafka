@@ -123,8 +123,7 @@ public class SharePartitionManager {
 
     public CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> acknowledge(
             String groupId,
-            Map<TopicIdPartition,
-                    ShareAcknowledgeRequestData.AcknowledgePartition> acknowledgeTopics
+            Map<TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition> acknowledgeTopics
     ) {
         throw new UnsupportedOperationException("Not implemented yet");
     }
