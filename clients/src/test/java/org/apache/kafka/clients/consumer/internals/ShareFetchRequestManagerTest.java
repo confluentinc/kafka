@@ -170,7 +170,6 @@ public class ShareFetchRequestManagerTest {
     public void testFetchNormal() {
         buildFetcher();
 
-        //assignFromUser(singleton(tp0));
         subscriptions.subscribe(Collections.singleton(tp0.topic()), Optional.empty());
         subscriptions.assignFromSubscribed(Collections.singleton(tp0));
         subscriptions.seek(tp0, 0);
