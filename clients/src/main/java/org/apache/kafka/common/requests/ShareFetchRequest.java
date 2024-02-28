@@ -41,7 +41,7 @@ public class ShareFetchRequest extends AbstractRequest {
         private final ShareFetchRequestData data;
 
         public Builder(ShareFetchRequestData data) {
-            this(data, true);
+            this(data, false);
         }
 
         public Builder(ShareFetchRequestData data, boolean enableUnstableLastVersion) {
