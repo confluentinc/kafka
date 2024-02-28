@@ -4230,7 +4230,6 @@ class KafkaApis(val requestChannel: RequestChannel,
       var unconvertedShareAcknowledgeResponse: ShareAcknowledgeResponse = null
 
       def createResponse(): ShareAcknowledgeResponse = {
-        // Down-convert messages for each partition if required
         val convertedData = new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]
         unconvertedShareAcknowledgeResponse.data().responses().forEach { topicResponse =>
           topicResponse.partitions().forEach { unconvertedPartitionData =>
@@ -4263,7 +4262,7 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     if (interesting.isEmpty) {
       processResponseCallback(Map.empty)
-    }else{
+    } else {
       // call the share partition manager to acknowledge messages in the share partition
       sharePartitionManager.acknowledge(
         groupId,
