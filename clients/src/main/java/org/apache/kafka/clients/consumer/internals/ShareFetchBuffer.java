@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 
 /**
  * {@code ShareFetchBuffer} buffers up {@link CompletedShareFetch the results} from the broker responses
@@ -137,6 +138,15 @@ public class ShareFetchBuffer implements AutoCloseable {
         }
     }
 
+    boolean isEmpty() {
+        lock.lock();
+        try {
+            return completedFetches.isEmpty();
+        } finally {
+            lock.unlock();
+        }
+    }
+
     @Override
     public void close() {
         lock.lock();
@@ -145,6 +155,15 @@ public class ShareFetchBuffer implements AutoCloseable {
                     () -> { },
                     () -> log.warn("The fetch buffer was already closed")
             );
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    boolean hasCompletedFetches(Predicate<CompletedShareFetch> predicate) {
+        try {
+            lock.lock();
+            return completedFetches.stream().anyMatch(predicate);
         } finally {
             lock.unlock();
         }
