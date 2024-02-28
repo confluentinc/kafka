@@ -1073,9 +1073,16 @@ class KafkaApis(val requestChannel: RequestChannel,
    * Handle a shareFetch request
    */
   def handleShareFetchRequest(request: RequestChannel.Request): Unit = {
+    val shareFetchRequest = request.body[ShareFetchRequest]
+
+    if (!config.isShareGroupEnabled) {
+      // The API is not supported when the configuration `group.share.enable` has not been set
+      requestHelper.sendMaybeThrottle(request, shareFetchRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
+      CompletableFuture.completedFuture[Unit](())
+      return
+    }
     val versionId = request.header.apiVersion
     val clientId = request.header.clientId
-    val shareFetchRequest = request.body[ShareFetchRequest]
     val groupId = shareFetchRequest.data().groupId()
     val topicNames = metadataCache.topicIdsToNames()
     val shareFetchData = shareFetchRequest.shareFetchData(topicNames)
@@ -1087,7 +1094,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     // TODO : replace this initialization when share fetch session metadata is sent by the client in the shareFetchRequest
     val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1)
     val shareFetchContext = sharePartitionManager.newContext(shareFetchData, forgottenTopics, topicNames, newReqMetadata)
-    val erroneous = mutable.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]()
+    val erroneous = mutable.ArrayBuffer[(TopicIdPartition, ShareFetchResponseData.PartitionData)]()
     val interesting = mutable.ArrayBuffer[TopicIdPartition]()
     // Regular Kafka consumers need READ permission on each partition they are fetching.
     val partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
@@ -1100,7 +1107,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
     val authorizedTopics = authHelper.filterByAuthorized(request.context, READ, TOPIC, partitionDatas)(_._1.topicPartition.topic)
 
-    partitionDatas.foreach { case (topicIdPartition, data) =>
+    partitionDatas.foreach { case (topicIdPartition, _) =>
       if (!authorizedTopics.contains(topicIdPartition.topic))
         erroneous += topicIdPartition -> ShareFetchResponse.partitionResponse(topicIdPartition, Errors.TOPIC_AUTHORIZATION_FAILED)
       else if (!metadataCache.contains(topicIdPartition.topicPartition))
@@ -1114,6 +1121,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       val unconvertedRecords = ShareFetchResponse.recordsOrFail(partitionData)
           new ShareFetchResponseData.PartitionData()
             .setPartitionIndex(tp.partition)
+            .setErrorCode(Errors.forCode(partitionData.errorCode).code)
             .setRecords(unconvertedRecords)
             .setCurrentLeader(partitionData.currentLeader())
     }
@@ -1254,22 +1262,23 @@ class KafkaApis(val requestChannel: RequestChannel,
         FetchIsolation.TXN_COMMITTED,
         clientMetadata
       )
+
       // call the share partition manager to fetch messages from the local replica
-      val future: CompletableFuture[java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData]] = sharePartitionManager.fetchMessages(
+      sharePartitionManager.fetchMessages(
         params,
         interesting.asJava,
         groupId
-      )
-      future.whenComplete((responsePartitionData : java.util.Map[TopicIdPartition, ShareFetchResponseData.PartitionData], throwable : Throwable) => {
+      ).whenComplete { (responsePartitionData, throwable) =>
         if (throwable != null) {
+          debug(s"Share fetch request with correlation from client $clientId  " +
+            s"failed with error ${throwable.getMessage}")
           val errResponse: AbstractResponse = shareFetchRequest.getErrorResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, throwable)
           requestChannel.sendResponse(request, errResponse, None)
         } else {
           processResponseCallback(responsePartitionData.asScala.toMap)
         }
-      })
+      }
     }
-
   }
 
   def replicationQuota(fetchRequest: FetchRequest): ReplicaQuota =
