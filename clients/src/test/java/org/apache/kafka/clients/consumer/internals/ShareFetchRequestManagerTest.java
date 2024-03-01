@@ -139,7 +139,6 @@ public class ShareFetchRequestManagerTest {
         partitions.forEach(partition -> {
             subscriptions.subscribeToShareGroup(Collections.singleton(partition.topic()));
             subscriptions.assignFromSubscribed(Collections.singleton(partition));
-            subscriptions.seek(tp0, 0);
         });
 
         client.updateMetadata(initialUpdateResponse);
