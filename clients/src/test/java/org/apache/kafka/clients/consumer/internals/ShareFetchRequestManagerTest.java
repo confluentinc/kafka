@@ -232,7 +232,6 @@ public class ShareFetchRequestManagerTest {
         buffer.position(0);
 
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         // normal fetch
         assertEquals(1, sendFetches());
@@ -242,7 +241,6 @@ public class ShareFetchRequestManagerTest {
         for (int i = 0; i < 2; i++) {
             // the fetchRecords() should always throw exception due to the bad batch.
             assertThrows(KafkaException.class, this::collectFetch);
-            assertEquals(0, subscriptions.position(tp0).offset);
         }
     }
 
@@ -260,7 +258,6 @@ public class ShareFetchRequestManagerTest {
         buffer.putInt(32, buffer.get(32) ^ 87238423);
 
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         // normal fetch
         assertEquals(1, sendFetches());
@@ -290,7 +287,6 @@ public class ShareFetchRequestManagerTest {
 
         List<ConsumerRecord<byte[], byte[]>> records;
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 1);
 
         client.prepareResponse(fullFetchResponse(tidp0, memoryRecords, Errors.NONE));
 
@@ -320,7 +316,6 @@ public class ShareFetchRequestManagerTest {
         buildFetcher();
 
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
         client.prepareResponse(fullFetchResponse(tidp0, records, Errors.TOPIC_AUTHORIZATION_FAILED));
@@ -337,7 +332,6 @@ public class ShareFetchRequestManagerTest {
     public void testFetchSessionIdError() {
         buildFetcher();
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
         client.prepareResponse(fetchResponseWithTopLevelError(tidp0, Errors.FETCH_SESSION_TOPIC_ID_ERROR));
@@ -353,7 +347,6 @@ public class ShareFetchRequestManagerTest {
                                              boolean shouldRequestMetadataUpdate) {
         buildFetcher();
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
 
@@ -397,15 +390,11 @@ public class ShareFetchRequestManagerTest {
         buildFetcher();
 
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
         client.prepareResponse(fullFetchResponse(tidp0, records, Errors.NONE), true);
         networkClientDelegate.poll(time.timer(0));
         assertEmptyFetch("Should not return records or advance position on disconnect");
-
-        // disconnects should have no effect on subscription state
-        assertTrue(subscriptions.isFetchable(tp0));
     }
 
     @Test
@@ -434,7 +423,6 @@ public class ShareFetchRequestManagerTest {
         MemoryRecords compactedRecords = MemoryRecords.readableRecords(result.outputBuffer());
 
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
         assertEquals(1, sendFetches());
         client.prepareResponse(fullFetchResponse(tidp0, compactedRecords, Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
@@ -461,7 +449,6 @@ public class ShareFetchRequestManagerTest {
     public void testCorruptMessageError() {
         buildFetcher();
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
         assertFalse(fetcher.hasCompletedFetches());
