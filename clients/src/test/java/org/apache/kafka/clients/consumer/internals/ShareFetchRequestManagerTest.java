@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.clients.consumer.internals;
 
-import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.ClientResponse;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.KafkaClient;
@@ -81,7 +80,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -126,10 +124,8 @@ public class ShareFetchRequestManagerTest {
     private FetchMetricsManager metricsManager;
     private MockClient client;
     private Metrics metrics;
-    private final ApiVersions apiVersions = new ApiVersions();
     private TestableShareFetchRequestManager<?, ?> fetcher;
     private TestableNetworkClientDelegate networkClientDelegate;
-    private OffsetFetcher offsetFetcher;
     private MemoryRecords records;
 
     @BeforeEach
@@ -141,8 +137,9 @@ public class ShareFetchRequestManagerTest {
 
     private void assignFromSubscribed(Set<TopicPartition> partitions) {
         partitions.forEach(partition -> {
-            subscriptions.subscribe(Collections.singleton(partition.topic()), Optional.empty());
+            subscriptions.subscribeToShareGroup(Collections.singleton(partition.topic()));
             subscriptions.assignFromSubscribed(Collections.singleton(partition));
+            subscriptions.seek(tp0, 0);
         });
 
         client.updateMetadata(initialUpdateResponse);
@@ -162,7 +159,6 @@ public class ShareFetchRequestManagerTest {
     }
 
     private int sendFetches() {
-        offsetFetcher.validatePositionsOnMetadataChange();
         return fetcher.sendFetches();
     }
 
@@ -170,16 +166,7 @@ public class ShareFetchRequestManagerTest {
     public void testFetchNormal() {
         buildFetcher();
 
-        subscriptions.subscribe(Collections.singleton(tp0.topic()), Optional.empty());
-        subscriptions.assignFromSubscribed(Collections.singleton(tp0));
-        subscriptions.seek(tp0, 0);
-
-        client.updateMetadata(initialUpdateResponse);
-
-        // A dummy metadata update to ensure valid leader epoch.
-        metadata.updateWithCurrentRequestVersion(RequestTestUtils.metadataUpdateWithIds("dummy", 1,
-                Collections.emptyMap(), singletonMap(topicName, 4),
-                tp -> validLeaderEpoch, topicIds), false, 0L);
+        assignFromSubscribed(Collections.singleton(tp0));
 
         // normal fetch
         assertEquals(1, sendFetches());
@@ -212,7 +199,6 @@ public class ShareFetchRequestManagerTest {
         buildFetcher();
 
         assignFromSubscribed(singleton(tp0));
-        subscriptions.seek(tp0, 0);
 
         assertEquals(1, sendFetches());
         assertFalse(fetcher.hasCompletedFetches());
@@ -589,23 +575,6 @@ public class ShareFetchRequestManagerTest {
                 metricsManager,
                 shareFetchCollector
                 ));
-        ConsumerNetworkClient consumerNetworkClient = new ConsumerNetworkClient(
-                logContext,
-                client,
-                metadata,
-                time,
-                retryBackoffMs,
-                (int) requestTimeoutMs,
-                Integer.MAX_VALUE);
-        offsetFetcher = new OffsetFetcher(logContext,
-                consumerNetworkClient,
-                metadata,
-                subscriptions,
-                time,
-                retryBackoffMs,
-                requestTimeoutMs,
-                IsolationLevel.READ_UNCOMMITTED,
-                apiVersions);
     }
 
     private void buildDependencies(MetricConfig metricConfig,
