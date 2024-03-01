@@ -259,7 +259,7 @@ public class SharePartition {
               " memberId=" + memberId +
               ", startOffset=" + startOffset +
               ", lastOffset=" + lastOffset +
-              " state=" + state.toString() +
+              ", state=" + state.toString() +
               ", deliveryCount=" + ((deliveryCount == 0) ? "" : ("(" + deliveryCount + ")")) +
               ", gapOffsets=" + ((gapOffsets == null) ? "" : gapOffsets) +
               ")";
@@ -268,13 +268,13 @@ public class SharePartition {
 
   static class AcknowledgementBatch {
 
-      private final long startOffset;
+      private final long baseOffset;
       private final long lastOffset;
       private final List<Long> gapOffsets;
       private final AcknowledgeType acknowledgeType;
 
-      public AcknowledgementBatch(long startOffset, long lastOffset, List<Long> gapOffsets, AcknowledgeType acknowledgeType) {
-          this.startOffset = startOffset;
+      public AcknowledgementBatch(long baseOffset, long lastOffset, List<Long> gapOffsets, AcknowledgeType acknowledgeType) {
+          this.baseOffset = baseOffset;
           this.lastOffset = lastOffset;
           this.gapOffsets = gapOffsets;
           this.acknowledgeType = acknowledgeType;
@@ -283,7 +283,7 @@ public class SharePartition {
       @Override
       public String toString() {
           return "AcknowledgementBatch(" +
-              " startOffset=" + startOffset +
+              " baseOffset=" + baseOffset +
               ", lastOffset=" + lastOffset +
               ", gapOffsets=" + gapOffsets +
               ", acknowledgeType=" + acknowledgeType +
