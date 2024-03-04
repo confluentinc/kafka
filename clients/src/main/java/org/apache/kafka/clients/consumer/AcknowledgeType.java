@@ -25,4 +25,17 @@ public enum AcknowledgeType {
     public String toString() {
         return super.toString().toLowerCase(Locale.ROOT);
     }
+
+    public static AcknowledgeType acknowledgeTypeFromNumber(int a) {
+        switch (a) {
+            case 0:
+                return ACCEPT;
+            case 1:
+                return RELEASE;
+            case 2:
+                return REJECT;
+            default:
+                throw new IllegalArgumentException("Unknown acknowledge type: " + a);
+        }
+    }
 }

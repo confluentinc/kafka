@@ -16,6 +16,7 @@
  */
 package kafka.server;
 
+import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
@@ -33,6 +34,7 @@ import org.apache.kafka.storage.internals.log.FetchParams;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -69,9 +71,12 @@ public class SharePartitionManager {
 
     // TODO: Move some part in share session context and change method signature to accept share
     //  partition data along TopicIdPartition.
-    public CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> fetchMessages(FetchParams fetchParams,
-        List<TopicIdPartition> topicIdPartitions, String groupId) {
-        log.debug("Fetch request for topicIdPartitions: {} with groupId: {} fetch params: {}",
+    public CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> fetchMessages(
+        String groupId,
+        String memberId,
+        FetchParams fetchParams,
+        List<TopicIdPartition> topicIdPartitions) {
+        log.trace("Fetch request for topicIdPartitions: {} with groupId: {} fetch params: {}",
             topicIdPartitions, groupId, fetchParams);
         CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future = new CompletableFuture<>();
 
@@ -111,7 +116,7 @@ public class SharePartitionManager {
                             .setAcknowledgeErrorCode(Errors.NONE.code());
 
                         SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
-                        sharePartition.update(fetchPartitionData);
+                        sharePartition.update(memberId, fetchPartitionData);
 
                         result.put(topicIdPartition, partitionData);
                         future.complete(result);
@@ -123,40 +128,46 @@ public class SharePartitionManager {
     }
 
     public CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> acknowledge(
+            String memberId,
             String groupId,
             Map<TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition> acknowledgeTopics
     ) {
         log.debug("Acknowledge request for topicIdPartitions: {} with groupId: {}",
                 acknowledgeTopics.keySet(), groupId);
-        CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> future = new CompletableFuture<>();
+        Map<TopicIdPartition, CompletableFuture<Errors>> futures = new HashMap<>();
         synchronized (this) {
-            Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = new HashMap<>();
             acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionData) -> {
                 SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
                 if (sharePartition != null) {
-                    try {
-                        Errors acknowledgeError = sharePartition.acknowledge(acknowledgePartitionData.acknowledgementBatches().stream()
-                                .map(batch -> new SharePartition.AcknowledgementBatch(batch.startOffset(), batch.lastOffset(), batch.gapOffsets(), batch.acknowledgeType()))
-                                .collect(Collectors.toList()));
 
-                        result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
-                                .setPartitionIndex(topicIdPartition.partition())
-                                .setErrorCode(acknowledgeError.code()));
-                    } catch(InvalidRecordStateException e) {
-                        result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
-                                .setPartitionIndex(topicIdPartition.partition())
-                                .setErrorCode(Errors.UNKNOWN_SERVER_ERROR.code()));
-                    }
+                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches = acknowledgePartitionData.acknowledgementBatches()
+                            .stream()
+                            .map(batch -> new SharePartition.AcknowledgementBatch(
+                                    batch.startOffset(),
+                                    batch.lastOffset(),
+                                    batch.gapOffsets(),
+                                    AcknowledgeType.acknowledgeTypeFromNumber(batch.acknowledgeType())))
+                            .collect(Collectors.toList());
+                    CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgementBatches);
+
+                    futures.put(topicIdPartition, future);
                 } else {
-                    result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
-                            .setPartitionIndex(topicIdPartition.partition())
-                            .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code()));
+                    futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
                 }
             });
-            future.complete(result);
         }
 
-        return future;
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                futures.values().toArray(new CompletableFuture[futures.size()]));
+        return allFutures.thenApply(v -> {
+            Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = new HashMap<>();
+            futures.forEach((topicIdPartition, future) -> {
+                result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
+                                .setPartitionIndex(topicIdPartition.partition())
+                                .setErrorCode(future.join().code()));
+            });
+            return result;
+        });
     }
 
     private SharePartitionKey sharePartitionKey(String groupId, TopicIdPartition topicIdPartition) {
