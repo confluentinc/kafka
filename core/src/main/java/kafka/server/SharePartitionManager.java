@@ -18,6 +18,7 @@ package kafka.server;
 
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.message.ShareAcknowledgeRequestData;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
@@ -125,7 +126,37 @@ public class SharePartitionManager {
             String groupId,
             Map<TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition> acknowledgeTopics
     ) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        log.debug("Acknowledge request for topicIdPartitions: {} with groupId: {}",
+                acknowledgeTopics.keySet(), groupId);
+        CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> future = new CompletableFuture<>();
+        synchronized (this) {
+            Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = new HashMap<>();
+            acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionData) -> {
+                SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
+                if (sharePartition != null) {
+                    try {
+                        Errors acknowledgeError = sharePartition.acknowledge(acknowledgePartitionData.acknowledgementBatches().stream()
+                                .map(batch -> new SharePartition.AcknowledgementBatch(batch.startOffset(), batch.lastOffset(), batch.gapOffsets(), batch.acknowledgeType()))
+                                .collect(Collectors.toList()));
+
+                        result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
+                                .setPartitionIndex(topicIdPartition.partition())
+                                .setErrorCode(acknowledgeError.code()));
+                    } catch(InvalidRecordStateException e) {
+                        result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
+                                .setPartitionIndex(topicIdPartition.partition())
+                                .setErrorCode(Errors.UNKNOWN_SERVER_ERROR.code()));
+                    }
+                } else {
+                    result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
+                            .setPartitionIndex(topicIdPartition.partition())
+                            .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code()));
+                }
+            });
+            future.complete(result);
+        }
+
+        return future;
     }
 
     private SharePartitionKey sharePartitionKey(String groupId, TopicIdPartition topicIdPartition) {

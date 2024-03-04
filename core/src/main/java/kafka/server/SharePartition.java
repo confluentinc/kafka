@@ -16,6 +16,8 @@
  */
 package kafka.server;
 
+import org.apache.kafka.common.errors.InvalidRecordStateException;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,9 +94,10 @@ public class SharePartition {
           fetchPartitionData.lastStableOffset.getAsLong() : fetchPartitionData.highWatermark;
   }
 
-  public void acknowledge(List<AcknowledgementBatch> acknowledgementBatch) {
+  public Errors acknowledge(List<AcknowledgementBatch> acknowledgementBatch) throws InvalidRecordStateException {
     log.debug("Acknowledgement batch request for share partition: " + acknowledgementBatch);
     // TODO: Implement the logic to handle the acknowledgement batch request.
+    throw new UnsupportedOperationException("Not implemented yet");
   }
 
   public long nextFetchOffset() {
