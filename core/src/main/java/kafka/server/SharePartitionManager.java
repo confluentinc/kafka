@@ -133,12 +133,12 @@ public class SharePartitionManager {
         log.debug("Acknowledge request for topicIdPartitions: {} with groupId: {}",
                 acknowledgeTopics.keySet(), groupId);
         Map<TopicIdPartition, CompletableFuture<Errors>> futures = new HashMap<>();
-        synchronized (this) {
-            acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionData) -> {
-                SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
-                if (sharePartition != null) {
-
-                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches = acknowledgePartitionData.acknowledgementBatches()
+        acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionData) -> {
+            SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
+            if (sharePartition != null) {
+                synchronized (sharePartition) {
+                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches =
+                            acknowledgePartitionData.acknowledgementBatches()
                             .stream()
                             .map(batch -> new SharePartition.AcknowledgementBatch(
                                     batch.startOffset(),
@@ -149,11 +149,11 @@ public class SharePartitionManager {
                     CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgementBatches);
 
                     futures.put(topicIdPartition, future);
-                } else {
-                    futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
                 }
-            });
-        }
+            } else {
+                futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
+            }
+        });
 
         CompletableFuture<Void> allFutures = CompletableFuture.allOf(
                 futures.values().toArray(new CompletableFuture[futures.size()]));
