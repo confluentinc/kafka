@@ -1101,7 +1101,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     // Regular Kafka consumers need READ permission on each partition they are fetching.
     var partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
     val erroneousAndValidPartitionData : ErroneousAndValidPartitionData = shareFetchContext.getErroneousAndValidTopicIdPartitions
-    erroneous = erroneousAndValidPartitionData.erroneous.asScala
+    erroneous = erroneousAndValidPartitionData.erroneous
     partitionDatas = erroneousAndValidPartitionData.validTopicIdPartitions
     val authorizedTopics = authHelper.filterByAuthorized(request.context, READ, TOPIC, partitionDatas)(_._1.topicPartition.topic)
 

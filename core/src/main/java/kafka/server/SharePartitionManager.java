@@ -336,16 +336,16 @@ public class SharePartitionManager {
 
     // Helper class to return the erroneous partitions and valid partition data
     public static class ErroneousAndValidPartitionData {
-        private final Map<TopicIdPartition, ShareFetchResponseData.PartitionData> erroneous;
+        private final ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous;
         private final ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions;
 
-        public ErroneousAndValidPartitionData(Map<TopicIdPartition, ShareFetchResponseData.PartitionData> erroneous,
+        public ErroneousAndValidPartitionData(ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous,
                                               ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions) {
             this.erroneous = erroneous;
             this.validTopicIdPartitions = validTopicIdPartitions;
         }
 
-        public Map<TopicIdPartition, ShareFetchResponseData.PartitionData> erroneous() {
+        public ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous() {
             return erroneous;
         }
 
@@ -384,11 +384,11 @@ public class SharePartitionManager {
 
         @Override
         ErroneousAndValidPartitionData getErroneousAndValidTopicIdPartitions() {
-            Map<TopicIdPartition, ShareFetchResponseData.PartitionData> erroneous = new HashMap<>();
+            ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayBuffer<>();
             ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayBuffer<>();
             shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
                 if (topicIdPartition.topic() == null) {
-                    erroneous.put(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID));
+                    erroneous.addOne(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                 } else {
                     valid.addOne(new Tuple2<>(topicIdPartition, sharePartitionData));
                 }
@@ -477,13 +477,13 @@ public class SharePartitionManager {
         // Iterator that goes over the given partition map and selects partitions that need to be included in the response.
         // If updateShareContextAndRemoveUnselected is set to true, the share context will be updated for the selected
         // partitions and also remove unselected ones as they are encountered.
-        private class PartitionIterator implements Iterator<Map.Entry<TopicIdPartition, PartitionData>> {
-            private final Iterator<Map.Entry<TopicIdPartition, PartitionData>> iterator;
+        private class PartitionIterator implements Iterator<Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> {
+            private final Iterator<Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> iterator;
             private final boolean updateShareContextAndRemoveUnselected;
-            private Map.Entry<TopicIdPartition, PartitionData> nextElement;
+            private Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData> nextElement;
 
 
-            public PartitionIterator(Iterator<Map.Entry<TopicIdPartition, PartitionData>> iterator, boolean updateShareContextAndRemoveUnselected) {
+            public PartitionIterator(Iterator<Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> iterator, boolean updateShareContextAndRemoveUnselected) {
                 this.iterator = iterator;
                 this.updateShareContextAndRemoveUnselected = updateShareContextAndRemoveUnselected;
             }
@@ -491,9 +491,9 @@ public class SharePartitionManager {
             @Override
             public boolean hasNext() {
                 while ((nextElement == null) && iterator.hasNext()) {
-                    Map.Entry<TopicIdPartition, PartitionData> element = iterator.next();
+                    Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData> element = iterator.next();
                     TopicIdPartition topicPart = element.getKey();
-                    PartitionData respData = element.getValue();
+                    ShareFetchResponseData.PartitionData respData = element.getValue();
                     CachedSharePartition cachedPart = session.partitionMap.find(new CachedSharePartition(topicPart));
                     boolean mustRespond = cachedPart.maybeUpdateResponseData(respData);
                     if (mustRespond) {
@@ -512,9 +512,9 @@ public class SharePartitionManager {
             }
 
             @Override
-            public Map.Entry<TopicIdPartition, PartitionData> next() {
+            public Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData> next() {
                 if (!hasNext()) throw new NoSuchElementException();
-                Map.Entry<TopicIdPartition, PartitionData> element = nextElement;
+                Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData> element = nextElement;
                 nextElement = null;
                 return element;
             }
@@ -561,7 +561,7 @@ public class SharePartitionManager {
                         Errors.NONE, 0, updates.entrySet().iterator(), Collections.emptyList()));
             } else {
                 // Iterate over the update list using PartitionIterator. This will prune updates which don't need to be sent
-                Iterator<Map.Entry<TopicIdPartition, PartitionData>> partitionIterator = new PartitionIterator(
+                Iterator<Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> partitionIterator = new PartitionIterator(
                         updates.entrySet().iterator(), true);
                 while (partitionIterator.hasNext()) {
                     partitionIterator.next();
@@ -575,12 +575,12 @@ public class SharePartitionManager {
 
         @Override
         ErroneousAndValidPartitionData getErroneousAndValidTopicIdPartitions() {
-            Map<TopicIdPartition, ShareFetchResponseData.PartitionData> erroneous = new HashMap<>();
+            ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayBuffer<>();
             ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayBuffer<>();
             if (!isSubsequent) {
                 shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
                     if (topicIdPartition.topic() == null) {
-                        erroneous.put(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID));
+                        erroneous.addOne(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                     } else {
                         valid.addOne(new Tuple2<>(topicIdPartition, sharePartitionData));
                     }
@@ -594,7 +594,7 @@ public class SharePartitionManager {
                                 TopicPartition(cachedSharePartition.topic, cachedSharePartition.partition));
                         ShareFetchRequest.SharePartitionData reqData = cachedSharePartition.reqData();
                         if (topicIdPartition.topic() == null) {
-                            erroneous.put(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID));
+                            erroneous.addOne(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                         } else {
                             valid.addOne(new Tuple2<>(topicIdPartition, reqData));
                         }
@@ -633,7 +633,7 @@ public class SharePartitionManager {
 
         @Override
         SharePartitionManager.ErroneousAndValidPartitionData getErroneousAndValidTopicIdPartitions() {
-            return new ErroneousAndValidPartitionData(new HashMap<>(), new ArrayBuffer<>());
+            return new ErroneousAndValidPartitionData(new ArrayBuffer<>(), new ArrayBuffer<>());
         }
     }
 

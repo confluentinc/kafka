@@ -4326,8 +4326,8 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
-    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessContext(Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
@@ -4388,8 +4388,8 @@ class KafkaApisTest extends Logging {
 
     // Name of this topic is set null, so it will be considered as unknown topic by the broker
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(null, partitionIndex))
-    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessContext(Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
@@ -4433,8 +4433,8 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
-    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessContext(Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
@@ -4492,8 +4492,8 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
-    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessContext(Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
@@ -4542,8 +4542,8 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
-    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessContext(Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
@@ -4596,8 +4596,8 @@ class KafkaApisTest extends Logging {
     when(partition.leaderReplicaIdOpt).thenAnswer(_ => Some(newLeaderId))
     when(partition.getLeaderEpoch).thenAnswer(_ => newLeaderEpoch)
 
-    when(sharePartitionManager.newContext(any(), any(), any(), any())).thenReturn(
-      new SharePartitionManager.SessionlessShareFetchContext(Map(topicIdPartition ->
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new SharePartitionManager.SessionlessContext(Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
     )
 
