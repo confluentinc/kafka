@@ -7822,6 +7822,7 @@ class KafkaApisTest extends Logging {
 
     when(sharePartitionManager.acknowledge(
       any(),
+      any(),
       any()
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
@@ -7921,6 +7922,7 @@ class KafkaApisTest extends Logging {
 
     when(sharePartitionManager.acknowledge(
       any(),
+      any(),
       any()
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
@@ -7982,6 +7984,7 @@ class KafkaApisTest extends Logging {
 
     when(sharePartitionManager.acknowledge(
       any(),
+      any(),
       any()
     )).thenReturn(future)
 
@@ -8033,6 +8036,7 @@ class KafkaApisTest extends Logging {
 
 
     when(sharePartitionManager.acknowledge(
+      any(),
       any(),
       any()
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](

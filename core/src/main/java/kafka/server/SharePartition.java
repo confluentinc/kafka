@@ -16,7 +16,6 @@
  */
 package kafka.server;
 
-import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.record.RecordBatch;
@@ -29,7 +28,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -48,10 +46,10 @@ public class SharePartition {
      * offset, or be state persisted to disk.
      */
     public enum RecordState {
-        AVAILABLE ((byte) 0),
-        ACQUIRED ((byte) 1),
-        ACKNOWLEDGED ((byte) 2),
-        ARCHIVED ((byte) 3);
+        AVAILABLE((byte) 0),
+        ACQUIRED((byte) 1),
+        ACKNOWLEDGED((byte) 2),
+        ARCHIVED((byte) 3);
 
         public final byte id;
         RecordState(byte id) {
