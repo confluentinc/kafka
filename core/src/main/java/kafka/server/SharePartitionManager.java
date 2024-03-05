@@ -50,7 +50,6 @@ import java.util.stream.Collectors;
 import java.util.TreeMap;
 
 import scala.Tuple2;
-import scala.collection.mutable.ArrayBuffer;
 import scala.jdk.javaapi.CollectionConverters;
 import scala.runtime.BoxedUnit;
 
@@ -338,20 +337,20 @@ public class SharePartitionManager {
 
     // Helper class to return the erroneous partitions and valid partition data
     public static class ErroneousAndValidPartitionData {
-        private final ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous;
-        private final ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions;
+        private final List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous;
+        private final List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions;
 
-        public ErroneousAndValidPartitionData(ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous,
-                                              ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions) {
+        public ErroneousAndValidPartitionData(List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous,
+                                              List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions) {
             this.erroneous = erroneous;
             this.validTopicIdPartitions = validTopicIdPartitions;
         }
 
-        public ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous() {
+        public List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous() {
             return erroneous;
         }
 
-        public ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions() {
+        public List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions() {
             return validTopicIdPartitions;
         }
     }
@@ -386,13 +385,13 @@ public class SharePartitionManager {
 
         @Override
         ErroneousAndValidPartitionData getErroneousAndValidTopicIdPartitions() {
-            ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayBuffer<>();
-            ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayBuffer<>();
+            List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayList<>();
+            List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayList<>();
             shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
                 if (topicIdPartition.topic() == null) {
-                    erroneous.addOne(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
+                    erroneous.add(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                 } else {
-                    valid.addOne(new Tuple2<>(topicIdPartition, sharePartitionData));
+                    valid.add(new Tuple2<>(topicIdPartition, sharePartitionData));
                 }
             });
             return new ErroneousAndValidPartitionData(erroneous, valid);
@@ -581,14 +580,14 @@ public class SharePartitionManager {
 
         @Override
         ErroneousAndValidPartitionData getErroneousAndValidTopicIdPartitions() {
-            ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayBuffer<>();
-            ArrayBuffer<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayBuffer<>();
+            List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayList<>();
+            List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayList<>();
             if (!isSubsequent) {
                 shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
                     if (topicIdPartition.topic() == null) {
-                        erroneous.addOne(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
+                        erroneous.add(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                     } else {
-                        valid.addOne(new Tuple2<>(topicIdPartition, sharePartitionData));
+                        valid.add(new Tuple2<>(topicIdPartition, sharePartitionData));
                     }
                 });
                 return new ErroneousAndValidPartitionData(erroneous, valid);
@@ -600,9 +599,9 @@ public class SharePartitionManager {
                                 TopicPartition(cachedSharePartition.topic, cachedSharePartition.partition));
                         ShareFetchRequest.SharePartitionData reqData = cachedSharePartition.reqData();
                         if (topicIdPartition.topic() == null) {
-                            erroneous.addOne(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
+                            erroneous.add(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                         } else {
-                            valid.addOne(new Tuple2<>(topicIdPartition, reqData));
+                            valid.add(new Tuple2<>(topicIdPartition, reqData));
                         }
                     });
                     return new ErroneousAndValidPartitionData(erroneous, valid);
@@ -639,7 +638,7 @@ public class SharePartitionManager {
 
         @Override
         SharePartitionManager.ErroneousAndValidPartitionData getErroneousAndValidTopicIdPartitions() {
-            return new ErroneousAndValidPartitionData(new ArrayBuffer<>(), new ArrayBuffer<>());
+            return new ErroneousAndValidPartitionData(new ArrayList<>(), new ArrayList<>());
         }
     }
 

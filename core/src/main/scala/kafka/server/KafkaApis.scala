@@ -1096,13 +1096,17 @@ class KafkaApis(val requestChannel: RequestChannel,
     // TODO : replace this initialization when share fetch session metadata is sent by the client in the shareFetchRequest
     val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1)
     val shareFetchContext = sharePartitionManager.newContext(groupId, shareFetchData, forgottenTopics, topicNames, newReqMetadata)
-    var erroneous = mutable.ArrayBuffer[(TopicIdPartition, ShareFetchResponseData.PartitionData)]()
+    val erroneous = mutable.ArrayBuffer[(TopicIdPartition, ShareFetchResponseData.PartitionData)]()
     val interesting = mutable.ArrayBuffer[TopicIdPartition]()
     // Regular Kafka consumers need READ permission on each partition they are fetching.
-    var partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
+    val partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, ShareFetchRequest.SharePartitionData)]
     val erroneousAndValidPartitionData : ErroneousAndValidPartitionData = shareFetchContext.getErroneousAndValidTopicIdPartitions
-    erroneous = erroneousAndValidPartitionData.erroneous
-    partitionDatas = erroneousAndValidPartitionData.validTopicIdPartitions
+    erroneousAndValidPartitionData.erroneous.forEach {
+      erroneousData => erroneous += erroneousData
+    }
+    erroneousAndValidPartitionData.validTopicIdPartitions.forEach {
+      validPartitionData => partitionDatas += validPartitionData
+    }
     val authorizedTopics = authHelper.filterByAuthorized(request.context, READ, TOPIC, partitionDatas)(_._1.topicPartition.topic)
 
     partitionDatas.foreach { case (topicIdPartition, _) =>
