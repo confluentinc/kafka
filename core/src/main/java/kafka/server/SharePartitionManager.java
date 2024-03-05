@@ -210,7 +210,6 @@ public class SharePartitionManager {
         return FetchSession.partitionsToLogString(partitions, log.isTraceEnabled());
     }
 
-    // TODO: Define share session class.
     public static class ShareSession {
 
         private final ShareSessionKey key;
@@ -256,7 +255,7 @@ public class SharePartitionManager {
             }
         }
 
-        public ImplicitLinkedHashCollection<CachedSharePartition> partitionMap() {
+        public Collection<CachedSharePartition> partitionMap() {
             synchronized (this) {
                 return partitionMap;
             }
@@ -293,21 +292,23 @@ public class SharePartitionManager {
             List<TopicIdPartition> added = new ArrayList<>();
             List<TopicIdPartition> updated = new ArrayList<>();
             List<TopicIdPartition> removed = new ArrayList<>();
-            shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
-                CachedSharePartition cachedSharePartitionKey = new CachedSharePartition(topicIdPartition, sharePartitionData);
-                CachedSharePartition cachedPart = partitionMap.find(cachedSharePartitionKey);
-                if (cachedPart == null) {
-                    partitionMap.mustAdd(cachedSharePartitionKey);
-                    added.add(topicIdPartition);
-                } else {
-                    cachedPart.updateRequestParams(sharePartitionData);
-                    updated.add(topicIdPartition);
-                }
-            });
-            toForget.forEach(topicIdPartition -> {
-                if (partitionMap.remove(new CachedSharePartition(topicIdPartition)))
-                    removed.add(topicIdPartition);
-            });
+            synchronized (this) {
+                shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
+                    CachedSharePartition cachedSharePartitionKey = new CachedSharePartition(topicIdPartition, sharePartitionData);
+                    CachedSharePartition cachedPart = partitionMap.find(cachedSharePartitionKey);
+                    if (cachedPart == null) {
+                        partitionMap.mustAdd(cachedSharePartitionKey);
+                        added.add(topicIdPartition);
+                    } else {
+                        cachedPart.updateRequestParams(sharePartitionData);
+                        updated.add(topicIdPartition);
+                    }
+                });
+                toForget.forEach(topicIdPartition -> {
+                    if (partitionMap.remove(new CachedSharePartition(topicIdPartition)))
+                        removed.add(topicIdPartition);
+                });
+            }
             Map<ModifiedTopicIdPartitionType, List<TopicIdPartition>> result = new HashMap<>();
             result.put(ModifiedTopicIdPartitionType.ADDED, added);
             result.put(ModifiedTopicIdPartitionType.UPDATED, updated);
@@ -321,7 +322,8 @@ public class SharePartitionManager {
                     ", partitionMap=" + partitionMap +
                     ", creationMs=" + creationMs +
                     ", lastUsedMs=" + lastUsedMs +
-                    ", epoch=" +
+                    ", epoch=" + epoch +
+                    ", cachedSize=" + cachedSize +
                     ")";
         }
     }
@@ -412,7 +414,7 @@ public class SharePartitionManager {
         private final Logger log = LoggerFactory.getLogger(ShareSessionContext.class);
 
         /**
-         * The session context for a new share fetch/acknowledge request.
+         * The session context for the first request that starts a share session.
          *
          * @param time               The clock to use.
          * @param cache              The share fetch session cache.
@@ -460,17 +462,19 @@ public class SharePartitionManager {
                 return new ShareFetchResponse(ShareFetchResponse.toMessage(Errors.NONE, throttleTimeMs,
                         Collections.emptyIterator(), Collections.emptyList()));
             } else {
+                int expectedEpoch = ShareFetchMetadata.nextEpoch(reqMetadata.epoch());
+                int sessionEpoch;
                 synchronized (session) {
-                    int expectedEpoch = ShareFetchMetadata.nextEpoch(reqMetadata.epoch());
-                    if (session.epoch != expectedEpoch) {
-                        log.info("Subsequent share session {} expected epoch {}, but got {}. " +
-                                "Possible duplicate request.", session.key, expectedEpoch, session.epoch);
-                        return new ShareFetchResponse(ShareFetchResponse.toMessage(Errors.INVALID_SHARE_SESSION_EPOCH,
-                                throttleTimeMs, Collections.emptyIterator(), Collections.emptyList()));
-                    } else
-                        return new ShareFetchResponse(ShareFetchResponse.toMessage(Errors.NONE, throttleTimeMs,
-                                Collections.emptyIterator(), Collections.emptyList()));
+                    sessionEpoch = session.epoch;
                 }
+                if (sessionEpoch != expectedEpoch) {
+                    log.debug("Subsequent share session {} expected epoch {}, but got {}. " +
+                            "Possible duplicate request.", session.key, expectedEpoch, sessionEpoch);
+                    return new ShareFetchResponse(ShareFetchResponse.toMessage(Errors.INVALID_SHARE_SESSION_EPOCH,
+                            throttleTimeMs, Collections.emptyIterator(), Collections.emptyList()));
+                } else
+                    return new ShareFetchResponse(ShareFetchResponse.toMessage(Errors.NONE, throttleTimeMs,
+                            Collections.emptyIterator(), Collections.emptyList()));
             }
         }
 
@@ -499,6 +503,8 @@ public class SharePartitionManager {
                     if (mustRespond) {
                         nextElement = element;
                         if (updateShareContextAndRemoveUnselected && ShareFetchResponse.recordsSize(respData) > 0) {
+                            // Session.partitionMap is of type ImplicitLinkedHashCollection<> which tracks the order of insertion of elements.
+                            // Since, we are updating an element in this case, we need to perform a remove and then a mustAdd to maintain the correct order
                             session.partitionMap.remove(cachedPart);
                             session.partitionMap.mustAdd(cachedPart);
                         }
