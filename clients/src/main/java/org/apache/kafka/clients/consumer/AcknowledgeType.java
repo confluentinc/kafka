@@ -19,7 +19,7 @@ package org.apache.kafka.clients.consumer;
 import java.util.Locale;
 
 public enum AcknowledgeType {
-    ACCEPT ((byte) 0), RELEASE ((byte) 1), REJECT ((byte) 2);
+    ACCEPT((byte) 0), RELEASE((byte) 1), REJECT((byte) 2);
 
     public final byte id;
 

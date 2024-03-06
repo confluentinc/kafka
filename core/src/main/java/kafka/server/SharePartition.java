@@ -731,14 +731,6 @@ public class SharePartition {
             this.gapOffsets.add(gapOffset);
         }
 
-        private void addGapOffsets(List<Long> gapOffsets) {
-            if (this.gapOffsets == null) {
-                this.gapOffsets = new HashSet<>(gapOffsets);
-            } else {
-                this.gapOffsets.addAll(gapOffsets);
-            }
-        }
-
         private void addOffsetState(long baseOffset, long lastOffset, RecordState state, boolean incrementDeliveryCount) {
             maybeInitializeOffsetStateUpdate();
             // The offset state map is already initialized hence update the state of the offsets.
