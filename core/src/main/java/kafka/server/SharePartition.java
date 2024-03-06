@@ -284,18 +284,9 @@ public class SharePartition {
             if (subMap.isEmpty()) {
                 log.trace("No cached data exists for the share partition for requested fetch batch: {}-{}",
                     groupId, topicIdPartition);
-                cachedState.put(firstBatch.baseOffset(), new InFlightBatch(
-                    memberId,
-                    firstBatch.baseOffset(),
-                    lastBatch.lastOffset(),
-                    RecordState.ACQUIRED,
-                    1));
-                endOffset = lastBatch.lastOffset();
-                nextFetchOffset = lastBatch.nextOffset();
-                future.complete(Collections.singletonList(new AcquiredRecords()
-                        .setBaseOffset(firstBatch.baseOffset())
-                        .setLastOffset(lastBatch.lastOffset())
-                        .setDeliveryCount((short) 1)));
+                future.complete(Collections.singletonList(
+                    acquireNewBatchRecords(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(),
+                        lastBatch.nextOffset())));
             } else {
                 log.trace("Overlap exists with in-flight records. Acquire the records if available for"
                     + " the share group: {}-{}", groupId, topicIdPartition);
@@ -353,6 +344,14 @@ public class SharePartition {
                         .setBaseOffset(inFlightBatch.baseOffset())
                         .setLastOffset(inFlightBatch.lastOffset())
                         .setDeliveryCount((short) inFlightBatch.batchDeliveryCount()));
+                }
+
+                // Some of the request offsets are not found in the fetched batches. Acquire the
+                // missing records as well.
+                if (subMap.lastEntry().getValue().lastOffset < lastBatch.lastOffset()) {
+                    log.trace("There exists another batch which needs to be acquired as well");
+                    result.add(acquireNewBatchRecords(memberId, subMap.lastEntry().getValue().lastOffset() + 1,
+                        lastBatch.lastOffset(), lastBatch.nextOffset()));
                 }
                 future.complete(result);
             }
@@ -570,6 +569,26 @@ public class SharePartition {
         }
 
         return CompletableFuture.completedFuture(Optional.ofNullable(throwable));
+    }
+
+    private AcquiredRecords acquireNewBatchRecords(String memberId, long baseOffset, long lastOffset, long nextOffset) {
+        lock.writeLock().lock();
+        try {
+            cachedState.put(baseOffset, new InFlightBatch(
+                memberId,
+                baseOffset,
+                lastOffset,
+                RecordState.ACQUIRED,
+                1));
+            endOffset = lastOffset;
+            nextFetchOffset = nextOffset;
+            return new AcquiredRecords()
+                .setBaseOffset(baseOffset)
+                .setLastOffset(lastOffset)
+                .setDeliveryCount((short) 1);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     private void acquireSubsetBatchRecords(long requestBaseOffset, long requestLastOffset,

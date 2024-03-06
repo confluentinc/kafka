@@ -146,6 +146,34 @@ public class SharePartitionTest {
     }
 
     @Test
+    public void testAcquireMultipleRecordsWithOverlapAndNewBatch() {
+        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5);
+        MemoryRecords records = memoryRecords(5, 0);
+
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+            MEMBER_ID,
+            new FetchPartitionData(Errors.NONE, 20, 3, records,
+                Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+
+        List<AcquiredRecords> acquiredRecordsList = result.join();
+        assertArrayEquals(expectedAcquiredRecords(records, 1).toArray(), acquiredRecordsList.toArray());
+        assertEquals(5, sharePartition.nextFetchOffset());
+
+        // Add records from 0-9 offsets, 5-9 should be acquired and 0-4 should be ignored.
+        records = memoryRecords(10, 0);
+        result = sharePartition.acquire(
+            MEMBER_ID,
+            new FetchPartitionData(Errors.NONE, 20, 3, records,
+                Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        acquiredRecordsList = result.join();
+        assertArrayEquals(expectedAcquiredRecords(memoryRecords(5, 5), 1).toArray(), acquiredRecordsList.toArray());
+        assertEquals(10, sharePartition.nextFetchOffset());
+        assertEquals(2, sharePartition.cachedState().size());
+    }
+
+    @Test
     public void testAcquireSameBatchAgain() {
         SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5);
         MemoryRecords records = memoryRecords(5, 10);
