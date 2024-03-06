@@ -17,10 +17,10 @@
 
 package org.apache.kafka.common.errors;
 
-public class ShareSessionIdNotFoundException extends RetriableException {
+public class ShareSessionNotFoundException extends RetriableException {
     private static final long serialVersionUID = 1L;
 
-    public ShareSessionIdNotFoundException(String message) {
+    public ShareSessionNotFoundException(String message) {
         super(message);
     }
 }

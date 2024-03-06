@@ -159,10 +159,10 @@ public class SharePartitionManager {
 
             if (reqMetadata.epoch() == ShareFetchMetadata.FINAL_EPOCH) {
                 // If the epoch is FINAL_EPOCH, don't try to create a new session.
-                context = new SessionlessContext(shareFetchData);
+                context = new FinalContext(shareFetchData);
             } else {
                 context = new ShareSessionContext(time, cache, reqMetadata, shareFetchData);
-                log.debug("Created a new full ShareFetchContext with {} {}",
+                log.debug("Created a new ShareSessionContext with {} {}. A new share session will be started.",
                         partitionsToLogString(shareFetchData.keySet()), removedFetchSessionStr);
             }
         } else {
@@ -170,8 +170,8 @@ public class SharePartitionManager {
                 ShareSessionKey key = shareSessionKey(groupId, reqMetadata.memberId());
                 ShareSession shareSession = cache.get(key);
                 if (shareSession == null) {
-                    log.debug("Share session error for {}: no such session ID found", key);
-                    context = new ShareSessionErrorContext(Errors.SHARE_SESSION_ID_NOT_FOUND);
+                    log.debug("Share session error for {}: no such share session found", key);
+                    context = new ShareSessionErrorContext(Errors.SHARE_SESSION_NOT_FOUND);
                 } else {
                     if (shareSession.epoch != reqMetadata.epoch()) {
                         log.debug("Share session error for {}: expected epoch {}, but got {} instead", key,
@@ -181,16 +181,16 @@ public class SharePartitionManager {
                         Map<ModifiedTopicIdPartitionType, List<TopicIdPartition>> modifiedTopicIdPartitions = shareSession.update(
                                 shareFetchData, toForget);
                         if (shareSession.isEmpty()) {
-                            log.debug("Created a new sessionless FetchContext and closing session key {}, epoch {}: " +
+                            log.debug("Created a new FinalContext and closing session key {}, epoch {}: " +
                                             "after removing {}, there are no more partitions left.", shareSession.key,
                                     shareSession.epoch, partitionsToLogString(
                                             modifiedTopicIdPartitions.get(ModifiedTopicIdPartitionType.REMOVED)));
                             cache.remove(shareSession);
-                            context = new SessionlessContext(shareFetchData);
+                            context = new FinalContext(shareFetchData);
                         } else {
                             cache.touch(shareSession, time.milliseconds());
                             shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
-                            log.debug("Created a new subsequent ShareFetchContext for session key {}, epoch {}: " +
+                            log.debug("Created a new ShareSessionContext for session key {}, epoch {}: " +
                                     "added {}, updated {}, removed {}", shareSession.key, shareSession.epoch,
                                     partitionsToLogString(modifiedTopicIdPartitions.get(ModifiedTopicIdPartitionType.ADDED)),
                                     partitionsToLogString(modifiedTopicIdPartitions.get(ModifiedTopicIdPartitionType.UPDATED)),
@@ -356,13 +356,13 @@ public class SharePartitionManager {
     }
 
     /**
-     * The share fetch context for a sessionless share fetch request.
+     * The share fetch context for a final share fetch request.
      */
-    public static class SessionlessContext extends ShareFetchContext {
+    public static class FinalContext extends ShareFetchContext {
         private final Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData;
 
-        public SessionlessContext(Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
-            this.log = LoggerFactory.getLogger(SessionlessContext.class);
+        public FinalContext(Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> shareFetchData) {
+            this.log = LoggerFactory.getLogger(FinalContext.class);
             this.shareFetchData = shareFetchData;
         }
 
@@ -378,7 +378,7 @@ public class SharePartitionManager {
         @Override
         ShareFetchResponse updateAndGenerateResponseData(String groupId, Uuid memberId,
                                                          LinkedHashMap<TopicIdPartition, ShareFetchResponseData.PartitionData> updates) {
-            log.debug("Sessionless fetch context returning" + partitionsToLogString(updates.keySet()));
+            log.debug("Final context returning" + partitionsToLogString(updates.keySet()));
             return new ShareFetchResponse(ShareFetchResponse.toMessage(Errors.NONE, 0,
                     updates.entrySet().iterator(), Collections.emptyList()));
         }
@@ -413,7 +413,7 @@ public class SharePartitionManager {
         private final Logger log = LoggerFactory.getLogger(ShareSessionContext.class);
 
         /**
-         * The session context for the first request that starts a share session.
+         * The share fetch context for the first request that starts a share session.
          *
          * @param time               The clock to use.
          * @param cache              The share fetch session cache.
@@ -430,7 +430,7 @@ public class SharePartitionManager {
         }
 
         /**
-         * The session context for a subsequent request.
+         * The share fetch context for a subsequent request that utilizes an existing share session.
          *
          * @param time         The clock to use.
          * @param reqMetadata  The request metadata.
@@ -541,7 +541,7 @@ public class SharePartitionManager {
                     if (session.epoch != expectedEpoch) {
                         return ShareFetchResponse.sizeOf(version, Collections.emptyIterator());
                     } else {
-                        // Pass the partition iterator which updates neither the fetch context nor the partition map.
+                        // Pass the partition iterator which updates neither the share fetch context nor the partition map.
                         return ShareFetchResponse.sizeOf(version, new PartitionIterator(updates.entrySet().iterator(), false));
                     }
                 }
@@ -631,7 +631,7 @@ public class SharePartitionManager {
         @Override
         ShareFetchResponse updateAndGenerateResponseData(String groupId, Uuid memberId,
                                                          LinkedHashMap<TopicIdPartition, ShareFetchResponseData.PartitionData> updates) {
-            log.debug("Share session error fetch context returning " + error);
+            log.debug("Share session error context returning " + error);
             return new ShareFetchResponse(ShareFetchResponse.toMessage(error, 0,
                     updates.entrySet().iterator(), Collections.emptyList()));
         }

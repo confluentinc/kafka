@@ -77,14 +77,14 @@ public class SharePartitionManagerTest {
     }
 
     @Test
-    public void testNewContextReturnsSessionlessShareFetchContext() {
+    public void testNewContextReturnsFinalContext() {
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
                 new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000));
 
         ShareFetchMetadata newReqMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1);
         ShareFetchContext shareFetchContext = sharePartitionManager.newContext("grp", new HashMap<>(), new ArrayList<>(),
                 new HashMap<>(), newReqMetadata);
-        assertEquals(shareFetchContext.getClass(), SharePartitionManager.SessionlessContext.class);
+        assertEquals(shareFetchContext.getClass(), SharePartitionManager.FinalContext.class);
     }
 
     private ImplicitLinkedHashCollection<SharePartitionManager.CachedSharePartition> dummyCreate(int size) {
@@ -181,8 +181,8 @@ public class SharePartitionManagerTest {
 
     private Map<TopicIdPartition, Optional<Integer>> cachedLeaderEpochs(ShareFetchContext context) {
         Map<TopicIdPartition, Optional<Integer>> cachedLeaderMap = new HashMap<>();
-        if (context.getClass() == SharePartitionManager.SessionlessContext.class) {
-            ((SharePartitionManager.SessionlessContext) context).shareFetchData().forEach((topicIdPartition, sharePartitionData) ->
+        if (context.getClass() == SharePartitionManager.FinalContext.class) {
+            ((SharePartitionManager.FinalContext) context).shareFetchData().forEach((topicIdPartition, sharePartitionData) ->
                     cachedLeaderMap.put(topicIdPartition, sharePartitionData.currentLeaderEpoch));
         } else if (context.getClass() == SharePartitionManager.ShareSessionErrorContext.class) {
             return cachedLeaderMap;
@@ -285,10 +285,10 @@ public class SharePartitionManagerTest {
 
         String groupId = "grp";
 
-        // Verify that Sessionless requests get a SessionlessShareContext
+        // Verify that final epoch requests get a FinalContext
         ShareFetchContext context1 = sharePartitionManager.newContext(groupId, new HashMap<>(), emptyPartList,
                 topicNames, new ShareFetchMetadata(Uuid.randomUuid(), ShareFetchMetadata.FINAL_EPOCH));
-        assertEquals(context1.getClass(), SharePartitionManager.SessionlessContext.class);
+        assertEquals(context1.getClass(), SharePartitionManager.FinalContext.class);
 
         // Create a new share session with an initial share fetch request
         Map<TopicIdPartition, ShareFetchRequest.SharePartitionData> reqData2 = new LinkedHashMap<>();
@@ -333,7 +333,7 @@ public class SharePartitionManagerTest {
         ShareFetchContext context4 = sharePartitionManager.newContext(groupId, reqData2, emptyPartList,
                 topicNames, new ShareFetchMetadata(memberId4, 1));
         assertEquals(context4.getClass(), SharePartitionManager.ShareSessionErrorContext.class);
-        assertEquals(Errors.SHARE_SESSION_ID_NOT_FOUND,
+        assertEquals(Errors.SHARE_SESSION_NOT_FOUND,
                 context4.updateAndGenerateResponseData(groupId, memberId4, respData2).error());
 
         // Continue the first fetch session we created.
@@ -381,7 +381,7 @@ public class SharePartitionManagerTest {
         reqData8.put(tp3, new ShareFetchRequest.SharePartitionData(tp3.topicId(), 100, Optional.empty()));
         ShareFetchContext context8 = sharePartitionManager.newContext(groupId, reqData8, emptyPartList,
                 topicNames, new ShareFetchMetadata(reqMetadata2.memberId(), ShareFetchMetadata.FINAL_EPOCH));
-        assertEquals(context8.getClass(), SharePartitionManager.SessionlessContext.class);
+        assertEquals(context8.getClass(), SharePartitionManager.FinalContext.class);
         assertEquals(0, cache.size());
 
         LinkedHashMap<TopicIdPartition, ShareFetchResponseData.PartitionData> respData8 = new LinkedHashMap<>();
@@ -390,5 +390,44 @@ public class SharePartitionManagerTest {
 
         ShareFetchResponse resp8 = context8.updateAndGenerateResponseData(groupId, reqMetadata2.memberId(), respData8);
         assertEquals(Errors.NONE, resp8.error());
+    }
+
+    @Test
+    public void testCachedSharePartitionEqualsAndHashCode() {
+        Uuid topicId = Uuid.randomUuid();
+        String topicName = "topic";
+        int partition = 0;
+
+        SharePartitionManager.CachedSharePartition cachedSharePartitionWithIdAndName = new
+                SharePartitionManager.CachedSharePartition(topicName, topicId, partition);
+        SharePartitionManager.CachedSharePartition cachedSharePartitionWithIdAndNoName = new
+                SharePartitionManager.CachedSharePartition(null, topicId, partition);
+        SharePartitionManager.CachedSharePartition cachedSharePartitionWithDifferentIdAndName = new
+                SharePartitionManager.CachedSharePartition(topicName, Uuid.randomUuid(), partition);
+        SharePartitionManager.CachedSharePartition cachedSharePartitionWithZeroIdAndName = new
+                SharePartitionManager.CachedSharePartition(topicName, Uuid.ZERO_UUID, partition);
+        SharePartitionManager.CachedSharePartition cachedSharePartitionWithZeroIdAndOtherName = new
+                SharePartitionManager.CachedSharePartition("otherTopic", Uuid.ZERO_UUID, partition);
+
+        // CachedSharePartitions with valid topic IDs will compare topic ID and partition but not topic name.
+        assertEquals(cachedSharePartitionWithIdAndName, cachedSharePartitionWithIdAndNoName);
+        assertEquals(cachedSharePartitionWithIdAndName.hashCode(), cachedSharePartitionWithIdAndNoName.hashCode());
+
+        assertNotEquals(cachedSharePartitionWithIdAndName, cachedSharePartitionWithDifferentIdAndName);
+        assertNotEquals(cachedSharePartitionWithIdAndName.hashCode(), cachedSharePartitionWithDifferentIdAndName.hashCode());
+
+        assertNotEquals(cachedSharePartitionWithIdAndName, cachedSharePartitionWithZeroIdAndName);
+        assertNotEquals(cachedSharePartitionWithIdAndName.hashCode(), cachedSharePartitionWithZeroIdAndName.hashCode());
+
+        // CachedSharePartitions will null name and valid IDs will act just like ones with valid names
+
+        assertNotEquals(cachedSharePartitionWithIdAndNoName, cachedSharePartitionWithDifferentIdAndName);
+        assertNotEquals(cachedSharePartitionWithIdAndNoName.hashCode(), cachedSharePartitionWithDifferentIdAndName.hashCode());
+
+        assertNotEquals(cachedSharePartitionWithIdAndNoName, cachedSharePartitionWithZeroIdAndName);
+        assertNotEquals(cachedSharePartitionWithIdAndNoName.hashCode(), cachedSharePartitionWithZeroIdAndName.hashCode());
+
+        assertEquals(cachedSharePartitionWithZeroIdAndName, cachedSharePartitionWithZeroIdAndName);
+        assertEquals(cachedSharePartitionWithZeroIdAndName.hashCode(), cachedSharePartitionWithZeroIdAndName.hashCode());
     }
 }

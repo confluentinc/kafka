@@ -111,7 +111,7 @@ import org.apache.kafka.common.errors.ResourceNotFoundException;
 import org.apache.kafka.common.errors.RetriableException;
 import org.apache.kafka.common.errors.SaslAuthenticationException;
 import org.apache.kafka.common.errors.SecurityDisabledException;
-import org.apache.kafka.common.errors.ShareSessionIdNotFoundException;
+import org.apache.kafka.common.errors.ShareSessionNotFoundException;
 import org.apache.kafka.common.errors.SnapshotNotFoundException;
 import org.apache.kafka.common.errors.StaleBrokerEpochException;
 import org.apache.kafka.common.errors.StaleMemberEpochException;
@@ -397,7 +397,7 @@ public enum Errors {
     TELEMETRY_TOO_LARGE(118, "Client sent a push telemetry request larger than the maximum size the broker will accept.", TelemetryTooLargeException::new),
     INVALID_REGISTRATION(119, "The controller has considered the broker registration to be invalid.", InvalidRegistrationException::new),
     INVALID_RECORD_STATE(120, "The record state is invalid. The acknowledgement of delivery could not be completed.", InvalidRecordStateException::new),
-    SHARE_SESSION_ID_NOT_FOUND(121, "The share session ID was not found.", ShareSessionIdNotFoundException::new),
+    SHARE_SESSION_NOT_FOUND(121, "The share session was not found.", ShareSessionNotFoundException::new),
     INVALID_SHARE_SESSION_EPOCH(122, "The share session epoch is invalid.", InvalidShareSessionEpochException::new);
 
 
