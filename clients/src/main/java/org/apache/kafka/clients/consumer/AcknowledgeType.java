@@ -26,8 +26,8 @@ public enum AcknowledgeType {
         return super.toString().toLowerCase(Locale.ROOT);
     }
 
-    public static AcknowledgeType acknowledgeTypeFromNumber(int a) {
-        switch (a) {
+    public static AcknowledgeType forId(int id) {
+        switch (id) {
             case 0:
                 return ACCEPT;
             case 1:
@@ -35,7 +35,7 @@ public enum AcknowledgeType {
             case 2:
                 return REJECT;
             default:
-                throw new IllegalArgumentException("Unknown acknowledge type: " + a);
+                throw new IllegalArgumentException("Unknown acknowledge type: " + id);
         }
     }
 }

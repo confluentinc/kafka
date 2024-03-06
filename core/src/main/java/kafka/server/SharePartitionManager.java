@@ -33,6 +33,7 @@ import org.apache.kafka.storage.internals.log.FetchParams;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -137,18 +138,27 @@ public class SharePartitionManager {
             SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
             if (sharePartition != null) {
                 synchronized (sharePartition) {
-                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches =
-                            acknowledgePartitionData.acknowledgementBatches()
-                            .stream()
-                            .map(batch -> new SharePartition.AcknowledgementBatch(
+                    boolean exceptionThrown = false;
+                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches = new ArrayList<>();
+                    for (ShareAcknowledgeRequestData.AcknowledgementBatch batch: acknowledgePartitionData.acknowledgementBatches()) {
+                        try {
+                            SharePartition.AcknowledgementBatch acknowledgementBatch = new SharePartition.AcknowledgementBatch(
                                     batch.startOffset(),
                                     batch.lastOffset(),
                                     batch.gapOffsets(),
-                                    AcknowledgeType.acknowledgeTypeFromNumber(batch.acknowledgeType())))
-                            .collect(Collectors.toList());
-                    CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgementBatches);
-
-                    futures.put(topicIdPartition, future);
+                                    AcknowledgeType.forId(batch.acknowledgeType())
+                            );
+                            acknowledgementBatches.add(acknowledgementBatch);
+                        } catch (IllegalArgumentException e) {
+                            exceptionThrown = true;
+                            futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.forException(e)));
+                            break;
+                        }
+                    }
+                    if (!exceptionThrown) {
+                        CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgementBatches);
+                        futures.put(topicIdPartition, future);
+                    }
                 }
             } else {
                 futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
