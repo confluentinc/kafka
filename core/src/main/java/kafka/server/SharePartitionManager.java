@@ -145,7 +145,24 @@ public class SharePartitionManager {
         return new ShareSessionKey(groupId, memberId);
     }
 
-    public Errors shareAcknowledgeError(String groupId, Uuid memberId, int reqEpoch) {
+    public Errors acknowledgeShareSessionCacheUpdate(String groupId, Uuid memberId, int reqEpoch) {
+        Errors shareAcknowledgeRequestError = shareAcknowledgeError(groupId, memberId, reqEpoch);
+        if (shareAcknowledgeRequestError != Errors.NONE)
+            return shareAcknowledgeRequestError;
+        ShareSessionKey key = shareSessionKey(groupId, memberId);
+        ShareSession shareSession = cache.get(new ShareSessionKey(groupId, memberId));
+        if (reqEpoch == ShareFetchMetadata.FINAL_EPOCH) {
+            if (cache.remove(key) != null)
+                log.info("Removed share session with key " + key);
+            return Errors.NONE;
+        }
+        // Update session's position in the cache
+        cache.touch(shareSession, time.milliseconds());
+        shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
+        return Errors.NONE;
+    }
+
+    private Errors shareAcknowledgeError(String groupId, Uuid memberId, int reqEpoch) {
         if (reqEpoch == ShareFetchMetadata.INITIAL_EPOCH)
             return Errors.INVALID_SHARE_SESSION_EPOCH;
         else {
@@ -155,12 +172,7 @@ public class SharePartitionManager {
                 log.debug("Share session error for {}: no such share session found", key);
                 return Errors.SHARE_SESSION_NOT_FOUND;
             }
-            if (reqEpoch == ShareFetchMetadata.FINAL_EPOCH) {
-                if (cache.remove(key) != null)
-                    log.info("Removed share session with key " + key);
-                return Errors.NONE;
-            }
-            if (reqEpoch != shareSession.epoch) {
+            if (reqEpoch != shareSession.epoch && reqEpoch != ShareFetchMetadata.FINAL_EPOCH) {
                 log.debug("Share session error for {}: expected epoch {}, but got {} instead", key,
                         shareSession.epoch, reqEpoch);
                 return Errors.INVALID_SHARE_SESSION_EPOCH;
@@ -272,6 +284,13 @@ public class SharePartitionManager {
         public Collection<CachedSharePartition> partitionMap() {
             synchronized (this) {
                 return partitionMap;
+            }
+        }
+
+        // Visible for testing
+        public int epoch() {
+            synchronized (this) {
+                return epoch;
             }
         }
 
@@ -434,7 +453,7 @@ public class SharePartitionManager {
          * The share fetch context for the first request that starts a share session.
          *
          * @param time               The clock to use.
-         * @param cache              The share fetch session cache.
+         * @param cache              The share session cache.
          * @param reqMetadata        The request metadata.
          * @param shareFetchData     The share partition data from the share fetch request.
          */
@@ -958,12 +977,12 @@ public class SharePartitionManager {
                 if (sessions.size() < maxEntries || tryEvict(now)) {
                     ShareSession session = new ShareSession(new ShareSessionKey(groupId, memberId), partitionMap,
                             now, now, ShareFetchMetadata.nextEpoch(ShareFetchMetadata.INITIAL_EPOCH));
-                    log.debug("Created fetch session " + session);
+                    log.debug("Created share session " + session);
                     sessions.put(session.key, session);
                     touch(session, now);
                     return session.key;
                 } else {
-                    log.debug("No fetch session created for size = " + size);
+                    log.debug("No share session created for size = " + size);
                     return null;
                 }
             }

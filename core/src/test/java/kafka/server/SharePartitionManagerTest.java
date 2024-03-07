@@ -797,20 +797,35 @@ public class SharePartitionManagerTest {
     }
 
     @Test
-    public void testShareAcknowledgeError() {
+    public void testAcknowledgeShareSessionCacheUpdate() {
         SharePartitionManager.ShareSessionCache cache = new SharePartitionManager.ShareSessionCache(10, 1000);
+        Time time = new MockTime();
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
                 new MockTime(), cache);
         String groupId = "grp";
         Uuid memberId = Uuid.randomUuid();
-        assertEquals(Errors.INVALID_SHARE_SESSION_EPOCH, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 0));
-        assertEquals(Errors.SHARE_SESSION_NOT_FOUND, sharePartitionManager.shareAcknowledgeError(groupId, memberId, -1));
-        assertEquals(Errors.SHARE_SESSION_NOT_FOUND, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 1));
+        assertEquals(Errors.INVALID_SHARE_SESSION_EPOCH, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, 0));
+        assertEquals(Errors.SHARE_SESSION_NOT_FOUND, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, -1));
+        assertEquals(Errors.SHARE_SESSION_NOT_FOUND, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, 1));
         // Manually create a share session in cache
-        cache.maybeCreateSession(groupId, memberId, new MockTime().milliseconds(), 0, new ImplicitLinkedHashCollection<>());
-        assertEquals(Errors.INVALID_SHARE_SESSION_EPOCH, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 5));
-        assertEquals(Errors.NONE, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 1));
-        assertEquals(Errors.NONE, sharePartitionManager.shareAcknowledgeError(groupId, memberId, -1));
+        long now1 = time.milliseconds();
+        cache.maybeCreateSession(groupId, memberId, now1, 0, new ImplicitLinkedHashCollection<>());
+        assertEquals(1, cache.size());
+        assertEquals(Errors.INVALID_SHARE_SESSION_EPOCH, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, 5));
+        assertEquals(1, cache.size());
+
+        assertEquals(Errors.NONE, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, 1));
+        assertEquals(1, cache.size());
+        SharePartitionManager.ShareSession shareSession = cache.get(new SharePartitionManager.ShareSessionKey(groupId, memberId));
+        assertEquals(2, shareSession.epoch());
+
+        assertEquals(Errors.NONE, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, 2));
+        assertEquals(1, cache.size());
+        shareSession = cache.get(new SharePartitionManager.ShareSessionKey(groupId, memberId));
+        assertEquals(3, shareSession.epoch());
+
+        assertEquals(Errors.NONE, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, -1));
+        assertEquals(0, cache.size());
     }
 
     private void assertErroneousAndValidTopicIdPartitions(SharePartitionManager.ErroneousAndValidPartitionData erroneousAndValidPartitionData,
