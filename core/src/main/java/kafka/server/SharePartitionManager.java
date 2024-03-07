@@ -135,23 +135,6 @@ public class SharePartitionManager {
             SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
             if (sharePartition != null) {
                 synchronized (sharePartition) {
-//                    boolean exceptionThrown = false;
-//                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches = new ArrayList<>();
-//                    for (ShareAcknowledgeRequestData.AcknowledgementBatch batch: acknowledgePartitionData.acknowledgementBatches()) {
-//                        try {
-//                            SharePartition.AcknowledgementBatch acknowledgementBatch = new SharePartition.AcknowledgementBatch(
-//                                    batch.startOffset(),
-//                                    batch.lastOffset(),
-//                                    batch.gapOffsets(),
-//                                    AcknowledgeType.forId(batch.acknowledgeType())
-//                            );
-//                            acknowledgementBatches.add(acknowledgementBatch);
-//                        } catch (IllegalArgumentException e) {
-//                            exceptionThrown = true;
-//                            futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.forException(e)));
-//                            break;
-//                        }
-//                    }
                     CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgePartitionBatches);
                     futures.put(topicIdPartition, future);
                 }
