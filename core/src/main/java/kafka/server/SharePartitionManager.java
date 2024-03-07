@@ -16,10 +16,8 @@
  */
 package kafka.server;
 
-import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.message.ShareAcknowledgeRequestData;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.Errors;
@@ -33,7 +31,6 @@ import org.apache.kafka.storage.internals.log.FetchParams;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -129,36 +126,34 @@ public class SharePartitionManager {
     public CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> acknowledge(
             String memberId,
             String groupId,
-            Map<TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition> acknowledgeTopics
+            Map<TopicIdPartition, List<SharePartition.AcknowledgementBatch>> acknowledgeTopics
     ) {
         log.debug("Acknowledge request for topicIdPartitions: {} with groupId: {}",
                 acknowledgeTopics.keySet(), groupId);
         Map<TopicIdPartition, CompletableFuture<Errors>> futures = new HashMap<>();
-        acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionData) -> {
+        acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionBatches) -> {
             SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
             if (sharePartition != null) {
                 synchronized (sharePartition) {
-                    boolean exceptionThrown = false;
-                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches = new ArrayList<>();
-                    for (ShareAcknowledgeRequestData.AcknowledgementBatch batch: acknowledgePartitionData.acknowledgementBatches()) {
-                        try {
-                            SharePartition.AcknowledgementBatch acknowledgementBatch = new SharePartition.AcknowledgementBatch(
-                                    batch.startOffset(),
-                                    batch.lastOffset(),
-                                    batch.gapOffsets(),
-                                    AcknowledgeType.forId(batch.acknowledgeType())
-                            );
-                            acknowledgementBatches.add(acknowledgementBatch);
-                        } catch (IllegalArgumentException e) {
-                            exceptionThrown = true;
-                            futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.forException(e)));
-                            break;
-                        }
-                    }
-                    if (!exceptionThrown) {
-                        CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgementBatches);
-                        futures.put(topicIdPartition, future);
-                    }
+//                    boolean exceptionThrown = false;
+//                    List<SharePartition.AcknowledgementBatch> acknowledgementBatches = new ArrayList<>();
+//                    for (ShareAcknowledgeRequestData.AcknowledgementBatch batch: acknowledgePartitionData.acknowledgementBatches()) {
+//                        try {
+//                            SharePartition.AcknowledgementBatch acknowledgementBatch = new SharePartition.AcknowledgementBatch(
+//                                    batch.startOffset(),
+//                                    batch.lastOffset(),
+//                                    batch.gapOffsets(),
+//                                    AcknowledgeType.forId(batch.acknowledgeType())
+//                            );
+//                            acknowledgementBatches.add(acknowledgementBatch);
+//                        } catch (IllegalArgumentException e) {
+//                            exceptionThrown = true;
+//                            futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.forException(e)));
+//                            break;
+//                        }
+//                    }
+                    CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgePartitionBatches);
+                    futures.put(topicIdPartition, future);
                 }
             } else {
                 futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));

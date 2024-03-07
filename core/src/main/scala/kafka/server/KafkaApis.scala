@@ -29,6 +29,7 @@ import kafka.utils.{CoreUtils, Logging}
 import org.apache.kafka.admin.AdminUtils
 import org.apache.kafka.clients.admin.AlterConfigOp.OpType
 import org.apache.kafka.clients.admin.{AlterConfigOp, ConfigEntry, EndpointType}
+import org.apache.kafka.clients.consumer.AcknowledgeType
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.acl.AclOperation._
 import org.apache.kafka.common.config.ConfigResource
@@ -4166,7 +4167,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       return
     }
     val requestPartitionAcknowledgements = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
-    val interesting = mutable.Map[TopicIdPartition, ShareAcknowledgeRequestData.AcknowledgePartition]()
+    val interesting = mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]]()
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
     shareAcknowledgeRequestData.topics.forEach((acknowledgeTopic: ShareAcknowledgeRequestData.AcknowledgeTopic) => {
 
@@ -4204,8 +4205,36 @@ class KafkaApis(val requestChannel: RequestChannel,
         else if (!metadataCache.contains(topicIdPartition.topicPartition))
           erroneous += topicIdPartition ->
             ShareAcknowledgeResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_OR_PARTITION)
-        else
-          interesting += topicIdPartition -> acknowledgePartition
+        else {
+          try {
+            val acknowledgementBatches = convertAcknowledgePartitionToAcknowledgeBatches(acknowledgePartition)
+            interesting += topicIdPartition -> acknowledgementBatches
+          } catch {
+            case e: IllegalArgumentException =>
+              erroneous += topicIdPartition ->
+                ShareAcknowledgeResponse.partitionResponse(topicIdPartition, Errors.forException(e))
+          }
+        }
+    }
+
+    def convertAcknowledgePartitionToAcknowledgeBatches(acknowledgePartition: ShareAcknowledgeRequestData.AcknowledgePartition):
+    util.List[SharePartition.AcknowledgementBatch] = {
+      val acknowledgementBatches = mutable.ArrayBuffer[SharePartition.AcknowledgementBatch]()
+      for (batch : ShareAcknowledgeRequestData.AcknowledgementBatch <- acknowledgePartition.acknowledgementBatches().asScala) {
+        try {
+          val acknowledgementBatch = new SharePartition.AcknowledgementBatch(
+            batch.startOffset(),
+            batch.lastOffset(),
+            batch.gapOffsets(),
+            AcknowledgeType.forId(batch.acknowledgeType())
+          )
+          acknowledgementBatches += acknowledgementBatch
+        } catch {
+          case e: IllegalArgumentException =>
+            throw e
+        }
+      }
+      acknowledgementBatches.asJava
     }
 
     // the callback for processing a share acknowledge response, invoked before throttling
