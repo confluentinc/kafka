@@ -793,4 +793,21 @@ public class SharePartitionManagerTest {
         // We should have the inconsistent topic ID error on the partition
         assertEquals(Errors.INCONSISTENT_TOPIC_ID.code(), resp2.responseData(topicNames).get(foo).errorCode());
     }
+
+    @Test
+    public void testShareAcknowledgeError() {
+        SharePartitionManager.ShareSessionCache cache = new SharePartitionManager.ShareSessionCache(10, 1000);
+        SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
+                new MockTime(), cache);
+        String groupId = "grp";
+        Uuid memberId = Uuid.randomUuid();
+        assertEquals(Errors.INVALID_SHARE_SESSION_EPOCH, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 0));
+        assertEquals(Errors.SHARE_SESSION_NOT_FOUND, sharePartitionManager.shareAcknowledgeError(groupId, memberId, -1));
+        assertEquals(Errors.SHARE_SESSION_NOT_FOUND, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 1));
+        // Manually create a share session in cache
+        cache.maybeCreateSession(groupId, memberId, new MockTime().milliseconds(), 0, new ImplicitLinkedHashCollection<>());
+        assertEquals(Errors.INVALID_SHARE_SESSION_EPOCH, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 5));
+        assertEquals(Errors.NONE, sharePartitionManager.shareAcknowledgeError(groupId, memberId, 1));
+        assertEquals(Errors.NONE, sharePartitionManager.shareAcknowledgeError(groupId, memberId, -1));
+    }
 }
