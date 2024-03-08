@@ -154,7 +154,7 @@ public class ShareCompletedFetch {
                 TimestampType timestampType = currentBatch.timestampType();
                 ConsumerRecord<K, V> record = parseRecord(deserializers, partition, leaderEpoch, timestampType, lastRecord);
                 // Check if the record is in acquired records.
-                if (isAcquired(record)) {
+                if (acquiredRecords.isEmpty() || isAcquired(record)) {
                     shareInFlightBatch.addRecord(record);
                 }
 
