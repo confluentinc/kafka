@@ -116,7 +116,7 @@ public class ShareFetchCollectorTest {
         assertEquals(0, fetch.numRecords());
         assertTrue(fetch.isEmpty());
 
-        // However, once we read *past* the end of the records in the CompletedShareFetch, then we will call
+        // However, once we read *past* the end of the records in the ShareCompletedFetch, then we will call
         // drain on it, and it will be considered all consumed.
         assertTrue(completedFetch.isConsumed());
     }
@@ -167,7 +167,7 @@ public class ShareFetchCollectorTest {
         assertThrows(expectedException.getClass(), () -> fetchCollector.collect(fetchBuffer));
 
         // If the number of records in the CompletedFetch was 0, the call to FetchCollector.collect() will
-        // remove it from the queue. If there are records in the CompletedShareFetch, FetchCollector.collect will
+        // remove it from the queue. If there are records in the ShareCompletedFetch, FetchCollector.collect will
         // leave it on the queue.
         assertEquals(recordCount == 0, fetchBuffer.isEmpty());
     }

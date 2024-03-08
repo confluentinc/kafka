@@ -71,8 +71,7 @@ public class ShareCompletedFetchTest {
 
         ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
 
-        ShareInFlightBatch<String, String> shareInFlightBatch = completedFetch.fetchRecords(fetchConfig, deserializers, 10);
-        List<ConsumerRecord<String, String>> records = shareInFlightBatch.getInFlightRecords();
+        List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, 10).getInFlightRecords();
         assertEquals(10, records.size());
         ConsumerRecord<String, String> record = records.get(0);
         assertEquals(10, record.offset());

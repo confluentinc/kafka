@@ -45,7 +45,7 @@ import java.util.Optional;
 public class ShareCompletedFetch {
 
     /**
-     * {@link org.apache.kafka.clients.consumer.internals.ShareCompletedFetch} represents a {@link RecordBatch batch} of {@link Record records}
+     * {@link ShareCompletedFetch} represents a {@link RecordBatch batch} of {@link Record records}
      * that was returned from the broker via a {@link ShareFetchRequest}. It contains logic to maintain
      * state between calls to {@link #fetchRecords(FetchConfig, Deserializers, int)}. Although it has
      * similarities with {@link CompletedFetch}, the details are quite different, such as not needing
@@ -98,7 +98,7 @@ public class ShareCompletedFetch {
     }
 
     /**
-     * Draining a {@link org.apache.kafka.clients.consumer.internals.ShareCompletedFetch} will signal that the data has been consumed and the underlying resources
+     * Draining a {@link ShareCompletedFetch} will signal that the data has been consumed and the underlying resources
      * are closed. This is somewhat analogous to {@link Closeable#close() closing}, though no error will result if a
      * caller invokes {@link #fetchRecords(FetchConfig, Deserializers, int)}; an empty {@link List list} will be
      * returned instead.
@@ -153,7 +153,7 @@ public class ShareCompletedFetch {
                 Optional<Integer> leaderEpoch = maybeLeaderEpoch(currentBatch.partitionLeaderEpoch());
                 TimestampType timestampType = currentBatch.timestampType();
                 ConsumerRecord<K, V> record = parseRecord(deserializers, partition, leaderEpoch, timestampType, lastRecord);
-                // Check if the record is in acquired records and acknowledge.
+                // Check if the record is in acquired records.
                 if (isAcquired(record)) {
                     shareInFlightBatch.addRecord(record);
                 }
@@ -174,15 +174,12 @@ public class ShareCompletedFetch {
                         + "continue consumption.", e);
         }
 
-        // We should ideally return the entire batch.
         return shareInFlightBatch;
     }
 
     /**
-     *
      * Check if the record is part of the acquired records.
      */
-
     private <K, V> boolean isAcquired(ConsumerRecord<K, V> record) {
         if (currentIndex >= acquiredRecords.size()) return false;
         ShareFetchResponseData.AcquiredRecords acqRecord = acquiredRecords.get(currentIndex);
@@ -236,7 +233,6 @@ public class ShareCompletedFetch {
                     return null;
                 }
 
-                // We move to next batch
                 currentBatch = batches.next();
                 maybeEnsureValid(fetchConfig, currentBatch);
 

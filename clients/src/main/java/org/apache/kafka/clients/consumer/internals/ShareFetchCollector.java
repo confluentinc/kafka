@@ -127,7 +127,7 @@ public class ShareFetchCollector<K, V> {
     }
 
     /**
-     * Initialize a CompletedShareFetch object.
+     * Initialize a ShareCompletedFetch object.
      */
     protected ShareCompletedFetch initialize(final ShareCompletedFetch completedFetch) {
         final Errors error = Errors.forCode(completedFetch.partitionData.errorCode());
