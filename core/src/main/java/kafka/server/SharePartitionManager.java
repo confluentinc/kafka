@@ -135,7 +135,14 @@ public class SharePartitionManager {
             SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
             if (sharePartition != null) {
                 synchronized (sharePartition) {
-                    CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgePartitionBatches);
+                    CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgePartitionBatches).thenApply(throwable -> {
+                        if (throwable.isPresent()) {
+                            return Errors.forException(throwable.get());
+                        } else {
+                            return Errors.NONE;
+                        }
+
+                    });
                     futures.put(topicIdPartition, future);
                 }
             } else {

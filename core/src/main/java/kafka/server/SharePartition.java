@@ -16,7 +16,6 @@
  */
 package kafka.server;
 
-import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
@@ -28,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -120,7 +120,7 @@ public class SharePartition {
         }
     }
 
-    public CompletableFuture<Errors> acknowledge(String memberId, List<AcknowledgementBatch> acknowledgementBatch) {
+    public CompletableFuture<Optional<Throwable>> acknowledge(String memberId, List<AcknowledgementBatch> acknowledgementBatch) {
         log.debug("Acknowledgement batch request for share partition: " + acknowledgementBatch);
         throw new UnsupportedOperationException("Not implemented yet");
     }
