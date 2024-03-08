@@ -43,6 +43,7 @@ import org.apache.kafka.common.utils.Time;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -62,7 +63,8 @@ public class ShareCompletedFetchTest {
         int startingOffset = 10;
         int numRecords = 11;        // Records for 10-20
         ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
-                .setRecords(newRecords(startingOffset, numRecords, fetchOffset));
+                .setRecords(newRecords(startingOffset, numRecords, fetchOffset))
+                .setAcquiredRecords(acquiredRecords(startingOffset, numRecords));
 
         Deserializers<String, String> deserializers = newStringDeserializers();
         FetchConfig fetchConfig = newFetchConfig(true);
@@ -89,7 +91,8 @@ public class ShareCompletedFetchTest {
         int numRecords = 10;
         Records rawRecords = newTransactionalRecords(numRecords);
         ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
-                .setRecords(rawRecords);
+                .setRecords(rawRecords)
+                .setAcquiredRecords(acquiredRecords(0, numRecords));
         ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
         try (final Deserializers<String, String> deserializers = newStringDeserializers()) {
             FetchConfig fetchConfig = newFetchConfig(true);
@@ -104,7 +107,8 @@ public class ShareCompletedFetchTest {
         int startingOffset = 0;
         int numRecords = 10;
         ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
-                .setRecords(newRecords(startingOffset, numRecords, fetchOffset));
+                .setRecords(newRecords(startingOffset, numRecords, fetchOffset))
+                .setAcquiredRecords(acquiredRecords(0, 10));
 
         try (final Deserializers<String, String> deserializers = newStringDeserializers()) {
             ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
@@ -139,7 +143,8 @@ public class ShareCompletedFetchTest {
 
             ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
                     .setPartitionIndex(0)
-                    .setRecords(records);
+                    .setRecords(records)
+                    .setAcquiredRecords(acquiredRecords(0, 2));
 
             try (final Deserializers<UUID, UUID> deserializers = newUuidDeserializers()) {
                 FetchConfig fetchConfig = newFetchConfig(false);
@@ -191,6 +196,13 @@ public class ShareCompletedFetchTest {
                 builder.append(0L, "key".getBytes(), ("value-" + (firstMessageId + i)).getBytes());
             return builder.build();
         }
+    }
+
+    public static List<ShareFetchResponseData.AcquiredRecords> acquiredRecords(long baseOffset, int count) {
+        ShareFetchResponseData.AcquiredRecords acquiredRecords = new ShareFetchResponseData.AcquiredRecords()
+                .setBaseOffset(baseOffset)
+                .setLastOffset(baseOffset + count);
+        return Collections.singletonList(acquiredRecords);
     }
 
     private Records newTransactionalRecords(int numRecords) {
