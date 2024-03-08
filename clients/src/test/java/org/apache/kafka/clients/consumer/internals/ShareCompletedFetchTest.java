@@ -49,7 +49,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class CompletedShareFetchTest {
+public class ShareCompletedFetchTest {
 
     private final static String TOPIC_NAME = "test";
     private final static TopicIdPartition TIP = new TopicIdPartition(Uuid.randomUuid(), 0, TOPIC_NAME);
@@ -67,19 +67,20 @@ public class CompletedShareFetchTest {
         Deserializers<String, String> deserializers = newStringDeserializers();
         FetchConfig fetchConfig = newFetchConfig(true);
 
-        CompletedShareFetch completedFetch = newCompletedShareFetch(partitionData);
+        ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
 
-        List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, 10);
+        ShareInFlightBatch<String, String> shareInFlightBatch = completedFetch.fetchRecords(fetchConfig, deserializers, 10);
+        List<ConsumerRecord<String, String>> records = shareInFlightBatch.getInFlightRecords();
         assertEquals(10, records.size());
         ConsumerRecord<String, String> record = records.get(0);
         assertEquals(10, record.offset());
 
-        records = completedFetch.fetchRecords(fetchConfig, deserializers, 10);
+        records = completedFetch.fetchRecords(fetchConfig, deserializers, 10).getInFlightRecords();
         assertEquals(1, records.size());
         record = records.get(0);
         assertEquals(20, record.offset());
 
-        records = completedFetch.fetchRecords(fetchConfig, deserializers, 10);
+        records = completedFetch.fetchRecords(fetchConfig, deserializers, 10).getInFlightRecords();
         assertEquals(0, records.size());
     }
 
@@ -89,10 +90,10 @@ public class CompletedShareFetchTest {
         Records rawRecords = newTransactionalRecords(numRecords);
         ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
                 .setRecords(rawRecords);
-        CompletedShareFetch completedFetch = newCompletedShareFetch(partitionData);
+        ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
         try (final Deserializers<String, String> deserializers = newStringDeserializers()) {
             FetchConfig fetchConfig = newFetchConfig(true);
-            List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, 10);
+            List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, 10).getInFlightRecords();
             assertEquals(10, records.size());
         }
     }
@@ -106,10 +107,10 @@ public class CompletedShareFetchTest {
                 .setRecords(newRecords(startingOffset, numRecords, fetchOffset));
 
         try (final Deserializers<String, String> deserializers = newStringDeserializers()) {
-            CompletedShareFetch completedFetch = newCompletedShareFetch(partitionData);
+            ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
             FetchConfig fetchConfig = newFetchConfig(true);
 
-            List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, -10);
+            List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, -10).getInFlightRecords();
             assertEquals(0, records.size());
         }
     }
@@ -119,10 +120,10 @@ public class CompletedShareFetchTest {
         ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
                 .setPartitionIndex(0);
 
-        CompletedShareFetch completedFetch = newCompletedShareFetch(partitionData);
+        ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
         try (final Deserializers<String, String> deserializers = newStringDeserializers()) {
             FetchConfig fetchConfig = newFetchConfig(true);
-            List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, 10);
+            List<ConsumerRecord<String, String>> records = completedFetch.fetchRecords(fetchConfig, deserializers, 10).getInFlightRecords();
             assertEquals(0, records.size());
         }
     }
@@ -142,7 +143,7 @@ public class CompletedShareFetchTest {
 
             try (final Deserializers<UUID, UUID> deserializers = newUuidDeserializers()) {
                 FetchConfig fetchConfig = newFetchConfig(false);
-                CompletedShareFetch completedFetch = newCompletedShareFetch(partitionData);
+                ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
 
                 completedFetch.fetchRecords(fetchConfig, deserializers, 10);
 
@@ -152,10 +153,10 @@ public class CompletedShareFetchTest {
         }
     }
 
-    private CompletedShareFetch newCompletedShareFetch(ShareFetchResponseData.PartitionData partitionData) {
+    private ShareCompletedFetch newShareCompletedFetch(ShareFetchResponseData.PartitionData partitionData) {
         LogContext logContext = new LogContext();
 
-        return new CompletedShareFetch(
+        return new ShareCompletedFetch(
                 logContext,
                 BufferSupplier.create(),
                 TIP,

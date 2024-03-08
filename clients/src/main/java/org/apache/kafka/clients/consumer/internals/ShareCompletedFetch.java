@@ -1,6 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.kafka.clients.consumer.internals;
 
-import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
@@ -23,8 +38,6 @@ import org.slf4j.Logger;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
@@ -32,7 +45,7 @@ import java.util.Optional;
 public class ShareCompletedFetch {
 
     /**
-     * {@link org.apache.kafka.clients.consumer.internals.CompletedShareFetch} represents a {@link RecordBatch batch} of {@link Record records}
+     * {@link org.apache.kafka.clients.consumer.internals.ShareCompletedFetch} represents a {@link RecordBatch batch} of {@link Record records}
      * that was returned from the broker via a {@link ShareFetchRequest}. It contains logic to maintain
      * state between calls to {@link #fetchRecords(FetchConfig, Deserializers, int)}. Although it has
      * similarities with {@link CompletedFetch}, the details are quite different, such as not needing
@@ -47,10 +60,9 @@ public class ShareCompletedFetch {
     private final Logger log;
     private final BufferSupplier decompressionBufferSupplier;
     private final Iterator<? extends RecordBatch> batches;
-
     private RecordBatch currentBatch;
     private Record lastRecord;
-    public CloseableIterator<Record> records;
+    private CloseableIterator<Record> records;
     private Exception cachedRecordException = null;
     private boolean corruptLastRecord = false;
     private boolean isConsumed = false;
@@ -63,7 +75,7 @@ public class ShareCompletedFetch {
                         TopicIdPartition partition,
                         ShareFetchResponseData.PartitionData partitionData,
                         short requestVersion) {
-        this.log = logContext.logger(org.apache.kafka.clients.consumer.internals.CompletedShareFetch.class);
+        this.log = logContext.logger(org.apache.kafka.clients.consumer.internals.ShareCompletedFetch.class);
         this.decompressionBufferSupplier = decompressionBufferSupplier;
         this.partition = partition;
         this.partitionData = partitionData;
@@ -144,7 +156,6 @@ public class ShareCompletedFetch {
                 // Check if the record is in acquired records and acknowledge.
                 if (isAcquired(record)) {
                     shareInFlightBatch.addRecord(record);
-                    shareInFlightBatch.addAcknowledgement(record.offset(), AcknowledgeType.ACCEPT);
                 }
 
                 // In some cases, the deserialization may have thrown an exception and the retry may succeed,
