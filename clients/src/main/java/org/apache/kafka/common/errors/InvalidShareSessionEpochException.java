@@ -14,35 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.clients.consumer;
 
-import java.util.Locale;
+package org.apache.kafka.common.errors;
 
-public enum AcknowledgeType {
-    ACCEPT((byte) 0), RELEASE((byte) 1), REJECT((byte) 2);
+public class InvalidShareSessionEpochException extends RetriableException {
+    private static final long serialVersionUID = 1L;
 
-    public final byte id;
-
-    AcknowledgeType(byte id) {
-        this.id = id;
-    }
-
-    @Override
-    public String toString() {
-        return super.toString().toLowerCase(Locale.ROOT);
-    }
-
-
-    public static AcknowledgeType forId(byte id) {
-        switch (id) {
-            case 0:
-                return ACCEPT;
-            case 1:
-                return RELEASE;
-            case 2:
-                return REJECT;
-            default:
-                throw new IllegalArgumentException("Unknown acknowledge type id: " + id);
-        }
+    public InvalidShareSessionEpochException(String message) {
+        super(message);
     }
 }
