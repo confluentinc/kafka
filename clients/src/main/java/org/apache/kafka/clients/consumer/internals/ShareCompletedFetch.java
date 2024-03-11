@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.clients.consumer.internals;
 
+import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
@@ -63,12 +64,12 @@ public class ShareCompletedFetch {
     private RecordBatch currentBatch;
     private Record lastRecord;
     private CloseableIterator<Record> records;
-    private Exception cachedRecordException = null;
-    private boolean corruptLastRecord = false;
+    private KafkaException cachedBatchException = null;
+    private KafkaException cachedRecordException = null;
     private boolean isConsumed = false;
     private boolean initialized = false;
     public List<ShareFetchResponseData.AcquiredRecords> acquiredRecords;
-    private int currentIndex;
+    private int currentAcquiredRecordsIndex;
 
     ShareCompletedFetch(LogContext logContext,
                         BufferSupplier decompressionBufferSupplier,
@@ -82,7 +83,7 @@ public class ShareCompletedFetch {
         this.requestVersion = requestVersion;
         this.batches = ShareFetchResponse.recordsOrFail(partitionData).batches().iterator();
         this.acquiredRecords = partitionData.acquiredRecords();
-        this.currentIndex = 0;
+        this.currentAcquiredRecordsIndex = 0;
     }
 
     boolean isInitialized() {
@@ -107,6 +108,7 @@ public class ShareCompletedFetch {
         if (!isConsumed) {
             maybeCloseRecordStream();
             cachedRecordException = null;
+            cachedBatchException = null;
             this.isConsumed = true;
         }
     }
@@ -126,28 +128,32 @@ public class ShareCompletedFetch {
     <K, V> ShareInFlightBatch<K, V> fetchRecords(Deserializers<K, V> deserializers,
                                                  int maxRecords,
                                                  boolean checkCrcs) {
-        // Error when fetching the next record before deserialization.
-        if (corruptLastRecord)
-            throw new KafkaException("Received exception when fetching the next record from " + partition
-                    + ". If needed, please seek past the record to "
-                    + "continue consumption.", cachedRecordException);
-
         // Creating an empty ShareInFlightBatch
         ShareInFlightBatch<K, V> shareInFlightBatch = new ShareInFlightBatch<>(partition);
+
+        if (cachedBatchException != null) {
+            // If the event that a CRC check fails, reject the entire record batch because it is corrupt.
+            acknowledgeRecordRange(shareInFlightBatch, currentBatch, AcknowledgeType.REJECT);
+            shareInFlightBatch.setException(cachedBatchException);
+            cachedBatchException = null;
+            return shareInFlightBatch;
+        }
+
+        if (cachedRecordException != null) {
+            shareInFlightBatch.addAcknowledgement(lastRecord.offset(), AcknowledgeType.RELEASE);
+            shareInFlightBatch.setException(
+                    new KafkaException("Received exception when fetching the next record from " + partition
+                    + ". The record has been released.", cachedRecordException));
+            cachedRecordException = null;
+            return shareInFlightBatch;
+        }
 
         if (isConsumed)
             return shareInFlightBatch;
 
         try {
             for (int i = 0; i < maxRecords; i++) {
-                // Only move to next record if there was no exception in the last fetch. Otherwise, we should
-                // use the last record to do deserialization again.
-                if (cachedRecordException == null) {
-                    corruptLastRecord = true;
-                    lastRecord = nextFetchedRecord(checkCrcs);
-                    corruptLastRecord = false;
-                }
-
+                lastRecord = nextFetchedRecord(checkCrcs);
                 if (lastRecord == null)
                     break;
 
@@ -161,20 +167,22 @@ public class ShareCompletedFetch {
                 if (acquiredRecords.isEmpty() || isAcquired(record)) {
                     shareInFlightBatch.addRecord(record);
                 }
-
-                // In some cases, the deserialization may have thrown an exception and the retry may succeed,
-                // we allow user to move forward in this case.
-                cachedRecordException = null;
             }
         } catch (SerializationException se) {
-            cachedRecordException = se;
-            if (shareInFlightBatch.isEmpty())
-                throw se;
-        } catch (KafkaException e) {
-            cachedRecordException = e;
-            if (shareInFlightBatch.isEmpty())
-                throw new KafkaException("Received exception when fetching the next record from " + partition
-                        + ". If needed, please seek past the record to continue consumption.", e);
+            if (shareInFlightBatch.isEmpty()) {
+                shareInFlightBatch.addAcknowledgement(lastRecord.offset(), AcknowledgeType.RELEASE);
+                shareInFlightBatch.setException(se);
+            } else {
+                cachedRecordException = se;
+            }
+        } catch (CorruptRecordException e) {
+            if (shareInFlightBatch.isEmpty()) {
+                // If the event that a CRC check fails, reject the entire record batch because it is corrupt.
+                acknowledgeRecordRange(shareInFlightBatch, currentBatch, AcknowledgeType.REJECT);
+                shareInFlightBatch.setException(e);
+            } else {
+                cachedBatchException = e;
+            }
         }
 
         return shareInFlightBatch;
@@ -184,18 +192,26 @@ public class ShareCompletedFetch {
      * Check if the record is part of the acquired records.
      */
     private <K, V> boolean isAcquired(ConsumerRecord<K, V> record) {
-        if (currentIndex >= acquiredRecords.size()) return false;
-        ShareFetchResponseData.AcquiredRecords acqRecord = acquiredRecords.get(currentIndex);
+        if (currentAcquiredRecordsIndex >= acquiredRecords.size()) return false;
+        ShareFetchResponseData.AcquiredRecords acqRecord = acquiredRecords.get(currentAcquiredRecordsIndex);
         if (record.offset() >= acqRecord.baseOffset() && record.offset() <= acqRecord.lastOffset()) {
             return true;
         } else if (record.offset() > acqRecord.lastOffset()) {
-            currentIndex += 1;
+            currentAcquiredRecordsIndex += 1;
             return isAcquired(record);
         } else {
             return false;
         }
     }
 
+    private <K, V> void acknowledgeRecordRange(ShareInFlightBatch<K, V> batch,
+                                        RecordBatch currentBatch,
+                                        AcknowledgeType acknowledgeType) {
+        // This needs to use the set of acquired records, rather than just a loop
+        for (long offset = currentBatch.baseOffset(); offset <= currentBatch.lastOffset(); offset++) {
+            batch.addAcknowledgement(offset, acknowledgeType);
+        }
+    }
 
     /**
      * Parse the record entry, deserializing the key / value fields if necessary
@@ -261,7 +277,7 @@ public class ShareCompletedFetch {
             try {
                 batch.ensureValid();
             } catch (CorruptRecordException e) {
-                throw new KafkaException("Record batch for partition " + partition.topicPartition()
+                throw new CorruptRecordException("Record batch for partition " + partition.topicPartition()
                         + " at offset " + batch.baseOffset() + " is invalid, cause: " + e.getMessage());
             }
         }
@@ -272,7 +288,7 @@ public class ShareCompletedFetch {
             try {
                 record.ensureValid();
             } catch (CorruptRecordException e) {
-                throw new KafkaException("Record for partition " + partition.topicPartition()
+                throw new CorruptRecordException("Record for partition " + partition.topicPartition()
                         + " at offset " + record.offset() + " is invalid, cause: " + e.getMessage());
             }
         }
