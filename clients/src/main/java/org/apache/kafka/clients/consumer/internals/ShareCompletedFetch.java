@@ -71,11 +71,11 @@ public class ShareCompletedFetch {
     public List<ShareFetchResponseData.AcquiredRecords> acquiredRecords;
     private int currentAcquiredRecordsIndex;
 
-    ShareCompletedFetch(LogContext logContext,
-                        BufferSupplier decompressionBufferSupplier,
-                        TopicIdPartition partition,
-                        ShareFetchResponseData.PartitionData partitionData,
-                        short requestVersion) {
+    ShareCompletedFetch(final LogContext logContext,
+                        final BufferSupplier decompressionBufferSupplier,
+                        final TopicIdPartition partition,
+                        final ShareFetchResponseData.PartitionData partitionData,
+                        final short requestVersion) {
         this.log = logContext.logger(org.apache.kafka.clients.consumer.internals.ShareCompletedFetch.class);
         this.decompressionBufferSupplier = decompressionBufferSupplier;
         this.partition = partition;
@@ -125,9 +125,9 @@ public class ShareCompletedFetch {
      *
      * @return {@link ShareInFlightBatch The ShareInFlightBatch containing records and their acknowledgments}
      */
-    <K, V> ShareInFlightBatch<K, V> fetchRecords(Deserializers<K, V> deserializers,
-                                                 int maxRecords,
-                                                 boolean checkCrcs) {
+    <K, V> ShareInFlightBatch<K, V> fetchRecords(final Deserializers<K, V> deserializers,
+                                                 final int maxRecords,
+                                                 final boolean checkCrcs) {
         // Creating an empty ShareInFlightBatch
         ShareInFlightBatch<K, V> shareInFlightBatch = new ShareInFlightBatch<>(partition);
 
@@ -191,7 +191,7 @@ public class ShareCompletedFetch {
     /**
      * Check if the record is part of the acquired records.
      */
-    private <K, V> boolean isAcquired(ConsumerRecord<K, V> record) {
+    private <K, V> boolean isAcquired(final ConsumerRecord<K, V> record) {
         if (currentAcquiredRecordsIndex >= acquiredRecords.size()) return false;
         ShareFetchResponseData.AcquiredRecords acqRecord = acquiredRecords.get(currentAcquiredRecordsIndex);
         if (record.offset() >= acqRecord.baseOffset() && record.offset() <= acqRecord.lastOffset()) {
@@ -204,23 +204,26 @@ public class ShareCompletedFetch {
         }
     }
 
-    private <K, V> void acknowledgeRecordRange(ShareInFlightBatch<K, V> batch,
-                                        RecordBatch currentBatch,
-                                        AcknowledgeType acknowledgeType) {
-        // This needs to use the set of acquired records, rather than just a loop
-        for (long offset = currentBatch.baseOffset(); offset <= currentBatch.lastOffset(); offset++) {
-            batch.addAcknowledgement(offset, acknowledgeType);
-        }
+    private <K, V> void acknowledgeRecordRange(final ShareInFlightBatch<K, V> batch,
+                                               final RecordBatch currentBatch,
+                                               final AcknowledgeType acknowledgeType) {
+        acquiredRecords.forEach(acqRecord -> {
+            for (long recordOffset = currentBatch.baseOffset(); recordOffset <= currentBatch.lastOffset(); recordOffset++) {
+                if (recordOffset >= acqRecord.baseOffset() && recordOffset <= acqRecord.lastOffset()) {
+                    batch.addAcknowledgement(recordOffset, acknowledgeType);
+                }
+            }
+        });
     }
 
     /**
      * Parse the record entry, deserializing the key / value fields if necessary
      */
-    <K, V> ConsumerRecord<K, V> parseRecord(Deserializers<K, V> deserializers,
-                                            TopicIdPartition partition,
-                                            Optional<Integer> leaderEpoch,
-                                            TimestampType timestampType,
-                                            Record record) {
+    <K, V> ConsumerRecord<K, V> parseRecord(final Deserializers<K, V> deserializers,
+                                            final TopicIdPartition partition,
+                                            final Optional<Integer> leaderEpoch,
+                                            final TimestampType timestampType,
+                                            final Record record) {
         try {
             long offset = record.offset();
             long timestamp = record.timestamp();
@@ -242,7 +245,7 @@ public class ShareCompletedFetch {
         }
     }
 
-    private Record nextFetchedRecord(boolean checkCrcs) {
+    private Record nextFetchedRecord(final boolean checkCrcs) {
         while (true) {
             if (records == null || !records.hasNext()) {
                 maybeCloseRecordStream();
@@ -268,7 +271,7 @@ public class ShareCompletedFetch {
         }
     }
 
-    private Optional<Integer> maybeLeaderEpoch(int leaderEpoch) {
+    private Optional<Integer> maybeLeaderEpoch(final int leaderEpoch) {
         return leaderEpoch == RecordBatch.NO_PARTITION_LEADER_EPOCH ? Optional.empty() : Optional.of(leaderEpoch);
     }
 
@@ -283,7 +286,7 @@ public class ShareCompletedFetch {
         }
     }
 
-    private void maybeEnsureValid(Record record, boolean checkCrcs) {
+    private void maybeEnsureValid(final Record record, final boolean checkCrcs) {
         if (checkCrcs) {
             try {
                 record.ensureValid();
