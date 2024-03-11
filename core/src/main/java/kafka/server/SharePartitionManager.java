@@ -87,12 +87,33 @@ public class SharePartitionManager {
             List<TopicIdPartition> topicIdPartitions) {
         log.trace("Fetch request for topicIdPartitions: {} with groupId: {} fetch params: {}",
                 topicIdPartitions, groupId, fetchParams);
-        ShareFetchPartitionData shareFetchPartitionData = new ShareFetchPartitionData(fetchParams, groupId, memberId, topicIdPartitions);
+        CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future = new CompletableFuture<>();
+        Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData = new HashMap<>();
+        topicIdPartitions.forEach(topicIdPartition -> {
+            // TODO: Fetch inflight and delivery count from config.
+            SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey(groupId, topicIdPartition),
+                    k -> new SharePartition(groupId, topicIdPartition, 100, 5));
+            lock.lock();
+            try {
+                // we add a share partition to the request for fetch queue only if its fetch lock is available
+                if (sharePartition.isFetchLockAvailable()) {
+                    topicPartitionData.put(topicIdPartition, new FetchRequest.PartitionData(
+                        topicIdPartition.topicId(),
+                        sharePartition.nextFetchOffset(),
+                        -1,
+                        Integer.MAX_VALUE,
+                        Optional.empty()));
+                }
+            } finally {
+                lock.unlock();
+            }
+        });
+        ShareFetchPartitionData shareFetchPartitionData = new ShareFetchPartitionData(fetchParams, groupId, memberId,
+                topicPartitionData, future);
         addToFetchQueue(shareFetchPartitionData);
 
-        Map<ShareFetchPartitionData, CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>>>
-                fetchResultData = fetchResults();
-        return fetchResultData.get(shareFetchPartitionData);
+        fetchResults();
+        return future;
     }
 
     public void addToFetchQueue(ShareFetchPartitionData shareFetchPartitionData) {
@@ -122,32 +143,16 @@ public class SharePartitionManager {
         }
     }
 
-    public Map<ShareFetchPartitionData, CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>>> fetchResults() {
-        Map<ShareFetchPartitionData, CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>>> fetchResults =
-                new HashMap<>();
+    public void fetchResults() {
         lock.lock();
         try {
             while (!isFetchQueueEmpty()) {
                 ShareFetchPartitionData shareFetchPartitionData = pollFetchQueue();
-                CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future = new CompletableFuture<>();
-                Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData = new HashMap<>();
-                shareFetchPartitionData.topicIdPartitions().forEach(topicIdPartition -> {
-                    // TODO: Fetch inflight and delivery count from config.
-                    SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey(shareFetchPartitionData.groupId(),
-                                    topicIdPartition),
-                            k -> new SharePartition(shareFetchPartitionData.groupId(), topicIdPartition, 100, 5));
-                    topicPartitionData.put(topicIdPartition, new FetchRequest.PartitionData(
-                            topicIdPartition.topicId(),
-                            sharePartition.nextFetchOffset(),
-                            -1,
-                            Integer.MAX_VALUE,
-                            Optional.empty()));
-                });
                 replicaManager.fetchMessages(
                     shareFetchPartitionData.fetchParams(),
                     CollectionConverters.asScala(
-                            topicPartitionData.entrySet().stream().map(entry -> new Tuple2<>(entry.getKey(), entry.getValue())).collect(
-                                    Collectors.toList())
+                            shareFetchPartitionData.topicPartitionData().entrySet().stream().map(entry ->
+                                    new Tuple2<>(entry.getKey(), entry.getValue())).collect(Collectors.toList())
                     ),
                     QuotaFactory.UnboundedQuota$.MODULE$,
                     responsePartitionData -> {
@@ -158,9 +163,11 @@ public class SharePartitionManager {
                             TopicIdPartition topicIdPartition = data._1;
                             FetchPartitionData fetchPartitionData = data._2;
 
-                            partitionCacheMap.get(sharePartitionKey(shareFetchPartitionData.groupId(), topicIdPartition))
-                                .acquire(shareFetchPartitionData.memberId(), fetchPartitionData).whenComplete((
-                                        acquiredRecords, throwable) -> {
+                            SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(shareFetchPartitionData.groupId(), topicIdPartition));
+
+                            if (sharePartition.getFetchLock()) {
+                                sharePartition.acquire(shareFetchPartitionData.memberId(), fetchPartitionData)
+                                    .whenComplete((acquiredRecords, throwable) -> {
                                     ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
                                             .setPartitionIndex(topicIdPartition.partition());
 
@@ -178,17 +185,17 @@ public class SharePartitionManager {
                                                 .setAcknowledgeErrorCode(Errors.NONE.code());
                                     }
                                     result.put(topicIdPartition, partitionData);
-                                });
+                                    });
+                                sharePartition.setFetchLockAvailable();
+                            }
                         });
-                        future.complete(result);
+                        shareFetchPartitionData.future().complete(result);
                         return BoxedUnit.UNIT;
                     });
-                fetchResults.put(shareFetchPartitionData, future);
             }
         } finally {
             lock.unlock();
         }
-        return fetchResults;
     }
 
     public CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> acknowledge(
@@ -1236,13 +1243,17 @@ public class SharePartitionManager {
         private final FetchParams fetchParams;
         private final String groupId;
         private final String memberId;
-        private final List<TopicIdPartition> topicIdPartitions;
+        private final Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData;
+        private final CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future;
 
-        public ShareFetchPartitionData(FetchParams fetchParams, String groupId, String memberId, List<TopicIdPartition> topicIdPartitions) {
+        public ShareFetchPartitionData(FetchParams fetchParams, String groupId, String memberId,
+                                       Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData,
+                                       CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future) {
             this.fetchParams = fetchParams;
             this.groupId = groupId;
             this.memberId = memberId;
-            this.topicIdPartitions = topicIdPartitions;
+            this.topicPartitionData = topicPartitionData;
+            this.future = future;
         }
 
         public FetchParams fetchParams() {
@@ -1257,13 +1268,17 @@ public class SharePartitionManager {
             return memberId;
         }
 
-        public List<TopicIdPartition> topicIdPartitions() {
-            return topicIdPartitions;
+        public Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData() {
+            return topicPartitionData;
+        }
+
+        public CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future() {
+            return future;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(fetchParams, groupId, memberId, topicIdPartitions);
+            return Objects.hash(fetchParams, groupId, memberId, topicPartitionData, future);
         }
 
         @Override
@@ -1275,7 +1290,8 @@ public class SharePartitionManager {
             else {
                 ShareFetchPartitionData that = (ShareFetchPartitionData) obj;
                 return groupId.equals(that.groupId) && memberId.equals(that.memberId) && Objects.equals(fetchParams,
-                        that.fetchParams) && Objects.equals(topicIdPartitions, that.topicIdPartitions);
+                        that.fetchParams) && Objects.equals(topicPartitionData, that.topicPartitionData) &&
+                        Objects.equals(future, that.future);
             }
         }
     }
