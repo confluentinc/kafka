@@ -47,8 +47,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.TreeMap;
 
@@ -68,7 +66,6 @@ public class SharePartitionManager {
     private final Time time;
     private final ShareSessionCache cache;
     private final ConcurrentLinkedQueue<ShareFetchPartitionData> fetchQueue;
-    private final Lock lock;
     private final AtomicBoolean processFetchQueueLock;
 
     public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache) {
@@ -77,7 +74,6 @@ public class SharePartitionManager {
         this.cache = cache;
         partitionCacheMap = new ConcurrentHashMap<>();
         fetchQueue = new ConcurrentLinkedQueue<>();
-        this.lock = new ReentrantLock();
         this.processFetchQueueLock = new AtomicBoolean(false);
     }
 
@@ -105,31 +101,9 @@ public class SharePartitionManager {
         CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future = new CompletableFuture<>();
         ShareFetchPartitionData shareFetchPartitionData = new ShareFetchPartitionData(fetchParams, groupId, memberId,
                 topicIdPartitions, future);
-        addToFetchQueue(shareFetchPartitionData);
+        fetchQueue.add(shareFetchPartitionData);
         maybeProcessFetchQueue();
         return future;
-    }
-
-    public void addToFetchQueue(ShareFetchPartitionData shareFetchPartitionData) {
-        lock.lock();
-        try {
-            fetchQueue.add(shareFetchPartitionData);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public boolean isFetchQueueEmpty() {
-        return fetchQueue.isEmpty();
-    }
-
-    public ShareFetchPartitionData pollFetchQueue() {
-        lock.lock();
-        try {
-            return fetchQueue.poll();
-        } finally {
-            lock.unlock();
-        }
     }
 
     /**
@@ -138,7 +112,7 @@ public class SharePartitionManager {
     public void maybeProcessFetchQueue() {
         if (maybeAcquireProcessFetchQueueLock()) {
             try {
-                ShareFetchPartitionData shareFetchPartitionData = pollFetchQueue();
+                ShareFetchPartitionData shareFetchPartitionData = fetchQueue.poll();
                 Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData = new HashMap<>();
                 shareFetchPartitionData.topicIdPartitions.forEach(topicIdPartition -> {
                     // TODO: Fetch inflight and delivery count from config.
