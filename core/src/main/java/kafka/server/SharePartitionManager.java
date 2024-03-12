@@ -129,8 +129,8 @@ public class SharePartitionManager {
     }
 
     public void maybeProcessFetchQueue() {
-        try {
-            if (maybeAcquireProcessFetchQueueLock()) {
+        if (maybeAcquireProcessFetchQueueLock()) {
+            try {
                 while (!isFetchQueueEmpty()) {
                     ShareFetchPartitionData shareFetchPartitionData = pollFetchQueue();
                     Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData = new HashMap<>();
@@ -170,8 +170,8 @@ public class SharePartitionManager {
 
                                     SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(shareFetchPartitionData.groupId, topicIdPartition));
 
-                                    try {
-                                        if (sharePartition.maybeAcquireFetchLock()) {
+                                    if (sharePartition.maybeAcquireFetchLock()) {
+                                         try {
                                             sharePartition.acquire(shareFetchPartitionData.memberId, fetchPartitionData)
                                                     .whenComplete((acquiredRecords, throwable) -> {
                                                         ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
@@ -192,18 +192,18 @@ public class SharePartitionManager {
                                                         }
                                                         result.put(topicIdPartition, partitionData);
                                                     });
+                                        } finally {
+                                             sharePartition.releaseFetchLock();
                                         }
-                                    } finally {
-                                        sharePartition.releaseFetchLock();
                                     }
                                 });
                                 shareFetchPartitionData.future.complete(result);
                                 return BoxedUnit.UNIT;
                             });
                 }
+            } finally {
+                releaseProcessFetchQueueLock();
             }
-        } finally {
-            releaseProcessFetchQueueLock();
         }
     }
 
