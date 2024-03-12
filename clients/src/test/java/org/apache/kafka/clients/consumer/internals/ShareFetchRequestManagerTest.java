@@ -320,7 +320,7 @@ public class ShareFetchRequestManagerTest {
 
         client.prepareResponse(fullFetchResponse(tip0,
                 memoryRecords,
-                ShareCompletedFetchTest.acquiredRecords(0L, 3),
+                ShareCompletedFetchTest.acquiredRecords(1L, 3),
                 Errors.NONE));
 
         assertEquals(1, sendFetches());

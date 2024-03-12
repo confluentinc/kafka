@@ -156,7 +156,7 @@ public class ShareCompletedFetchTest {
             ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData()
                     .setPartitionIndex(0)
                     .setRecords(records)
-                    .setAcquiredRecords(acquiredRecords(0, 3));
+                    .setAcquiredRecords(acquiredRecords(0, 4));
 
             try (final Deserializers<UUID, UUID> deserializers = newUuidDeserializers()) {
                 ShareCompletedFetch completedFetch = newShareCompletedFetch(partitionData);
