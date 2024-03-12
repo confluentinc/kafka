@@ -192,7 +192,7 @@ public class ShareFetchRequestManagerTest {
         assertFalse(fetcher.hasCompletedFetches());
 
         client.prepareResponse(fullFetchResponse(tip0, records,
-                ShareCompletedFetchTest.acquiredRecords(1, 1), Errors.NONE));
+                ShareCompletedFetchTest.acquiredRecords(1L, 1), Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
         assertTrue(fetcher.hasCompletedFetches());
 

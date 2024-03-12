@@ -72,7 +72,7 @@ public class ShareCompletedFetchTest {
         List<ConsumerRecord<String, String>> records = batch.getInFlightRecords();
         assertEquals(10, records.size());
         ConsumerRecord<String, String> record = records.get(0);
-        assertEquals(10, record.offset());
+        assertEquals(10L, record.offset());
         Acknowledgements acknowledgements = batch.getAcknowledgements();
         assertEquals(0, acknowledgements.size());
 
@@ -80,7 +80,7 @@ public class ShareCompletedFetchTest {
         records = batch.getInFlightRecords();
         assertEquals(1, records.size());
         record = records.get(0);
-        assertEquals(20, record.offset());
+        assertEquals(20L, record.offset());
         acknowledgements = batch.getAcknowledgements();
         assertEquals(0, acknowledgements.size());
 
@@ -213,10 +213,10 @@ public class ShareCompletedFetchTest {
         assertEquals(6, records.size());
         // The first offset should be 0
         ConsumerRecord<String, String> record = records.get(0);
-        assertEquals(0, record.offset());
+        assertEquals(0L, record.offset());
         // The third offset should be 6
         record = records.get(3);
-        assertEquals(6, record.offset());
+        assertEquals(6L, record.offset());
 
         records = completedFetch.fetchRecords(deserializers, 10, true).getInFlightRecords();
         assertEquals(0, records.size());
@@ -246,10 +246,10 @@ public class ShareCompletedFetchTest {
         assertEquals(5, records.size());
         // The first offset should be 1
         ConsumerRecord<String, String> record = records.get(0);
-        assertEquals(1, record.offset());
+        assertEquals(1L, record.offset());
         // The second offset should be 3
         record = records.get(1);
-        assertEquals(3, record.offset());
+        assertEquals(3L, record.offset());
 
         records = completedFetch.fetchRecords(deserializers, 10, true).getInFlightRecords();
         assertEquals(0, records.size());
