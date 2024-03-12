@@ -143,7 +143,7 @@ public class SharePartition {
 
     /**
      * The lock to ensure that the same share partition does not enter a fetch queue
-     * while another one is being fetched within the queue
+     * while another one is being fetched within the queue.
      */
     private final AtomicBoolean fetchLock;
 
@@ -187,7 +187,7 @@ public class SharePartition {
         // TODO: Just a placeholder for now.
         assert this.maxInFlightMessages > 0;
         assert this.maxDeliveryCount > 0;
-        this.fetchLock = new AtomicBoolean(true);
+        this.fetchLock = new AtomicBoolean(false);
     }
 
     /**
@@ -260,16 +260,12 @@ public class SharePartition {
         }
     }
 
-    public void setFetchLockAvailable() {
-        fetchLock.set(true);
+    public void releaseFetchLock() {
+        fetchLock.set(false);
     }
 
-    public boolean getFetchLock() {
-        return fetchLock.compareAndSet(true, false);
-    }
-
-    public boolean isFetchLockAvailable() {
-        return fetchLock.get();
+    public boolean maybeAcquireFetchLock() {
+        return fetchLock.compareAndSet(false, true);
     }
 
     /**
