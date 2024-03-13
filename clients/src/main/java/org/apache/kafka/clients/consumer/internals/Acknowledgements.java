@@ -146,6 +146,7 @@ public class Acknowledgements {
     public List<ShareFetchRequestData.AcknowledgementBatch> getAcknowledgmentBatches() {
         List<ShareFetchRequestData.AcknowledgementBatch> batches = new ArrayList<>();
         ShareFetchRequestData.AcknowledgementBatch currentBatch = new ShareFetchRequestData.AcknowledgementBatch();
+        if (acknowledgements.isEmpty()) return batches;
         acknowledgements.forEach((offset, acknowledgeType) -> {
             if (batches.isEmpty()) {
                 currentBatch.setStartOffset(offset);

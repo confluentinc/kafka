@@ -65,13 +65,16 @@ public class ShareFetchRequest extends AbstractRequest {
                             .setPartitions(new ArrayList<>());
                     data.topics().add(fetchTopic);
                 }
+                ShareFetchRequestData.FetchPartition fetchPartition = new ShareFetchRequestData.FetchPartition()
+                        .setPartitionIndex(topicPartition.partition())
+                        .setCurrentLeaderEpoch(RecordBatch.NO_PARTITION_LEADER_EPOCH);
 
                 // Get the list of Acknowledgments for the current partition
                 List<ShareFetchRequestData.AcknowledgementBatch> acknowledgementBatches = acknowledgements.get(topicPartition);
-                ShareFetchRequestData.FetchPartition fetchPartition = new ShareFetchRequestData.FetchPartition()
-                        .setPartitionIndex(topicPartition.partition())
-                        .setAcknowledgementBatches(acknowledgementBatches)
-                        .setCurrentLeaderEpoch(RecordBatch.NO_PARTITION_LEADER_EPOCH);
+                if (acknowledgementBatches != null) {
+                    fetchPartition.setAcknowledgementBatches(acknowledgementBatches);
+                }
+
 
                 fetchTopic.partitions().add(fetchPartition);
             }
