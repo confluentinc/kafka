@@ -86,8 +86,8 @@ public class ShareFetchRequest extends AbstractRequest {
         public Builder forShareSession(String groupId, ShareFetchMetadata metadata) {
             data.setGroupId(groupId);
             if (metadata != null) {
-                data.setShareSessionEpoch(metadata.epoch());
                 data.setMemberId(metadata.memberId().toString());
+                data.setShareSessionEpoch(metadata.epoch());
             }
             return this;
         }
