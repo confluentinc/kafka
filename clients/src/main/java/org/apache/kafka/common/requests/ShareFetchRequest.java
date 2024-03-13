@@ -19,6 +19,7 @@ package org.apache.kafka.common.requests;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchRequestData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -117,6 +118,13 @@ public class ShareFetchRequest extends AbstractRequest {
     public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
         Errors error = Errors.forException(e);
         return new ShareFetchResponse(new ShareFetchResponseData()
+                .setThrottleTimeMs(throttleTimeMs)
+                .setErrorCode(error.code()));
+    }
+
+    public AbstractResponse getErrorAcknowledgeResponse(int throttleTimeMs, Throwable e) {
+        Errors error = Errors.forException(e);
+        return new ShareAcknowledgeResponse(new ShareAcknowledgeResponseData()
                 .setThrottleTimeMs(throttleTimeMs)
                 .setErrorCode(error.code()));
     }

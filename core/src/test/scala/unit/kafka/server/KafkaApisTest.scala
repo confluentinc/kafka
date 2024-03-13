@@ -24,7 +24,7 @@ import kafka.coordinator.transaction.{InitProducerIdResult, TransactionCoordinat
 import kafka.log.UnifiedLog
 import kafka.network.{RequestChannel, RequestMetrics}
 import kafka.server.QuotaFactory.QuotaManagers
-import kafka.server.SharePartitionManager.FinalContext
+import kafka.server.SharePartitionManager.{FinalContext, ShareSessionCache, ShareSessionContext, ShareSessionErrorContext}
 import kafka.server.metadata.{ConfigRepository, KRaftMetadataCache, MockConfigRepository, ZkMetadataCache}
 import kafka.utils.{CoreUtils, Log4jController, Logging, TestUtils}
 import kafka.zk.KafkaZkClient
@@ -71,7 +71,7 @@ import org.apache.kafka.common.requests.{FetchMetadata => JFetchMetadata, _}
 import org.apache.kafka.common.resource.{PatternType, Resource, ResourcePattern, ResourceType}
 import org.apache.kafka.common.security.auth.{KafkaPrincipal, KafkaPrincipalSerde, SecurityProtocol}
 import org.apache.kafka.common.utils.annotation.ApiKeyVersionsSource
-import org.apache.kafka.common.utils.{ProducerIdAndEpoch, SecurityUtils, Utils}
+import org.apache.kafka.common.utils.{ProducerIdAndEpoch, SecurityUtils, SystemTime, Utils}
 import org.apache.kafka.common._
 import org.apache.kafka.coordinator.group.GroupCoordinator
 import org.apache.kafka.server.ClientMetricsManager
@@ -4327,9 +4327,16 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(topicIdPartition ->
+      new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
+
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(Map(topicIdPartition ->
-        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
 
     val records = MemoryRecords.withRecords(CompressionType.NONE,
@@ -4389,9 +4396,16 @@ class KafkaApisTest extends Logging {
 
     // Name of this topic is set null, so it will be considered as unknown topic by the broker
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(topicId, new TopicPartition(null, partitionIndex))
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(topicIdPartition ->
+      new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
+
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(Map(topicIdPartition ->
-        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4434,9 +4448,16 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(topicIdPartition ->
+      new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
+
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(Map(topicIdPartition ->
-        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4493,9 +4514,16 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(topicIdPartition ->
+      new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
+
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(Map(topicIdPartition ->
-        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4543,9 +4571,16 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(topicIdPartition ->
+      new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
+
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(Map(topicIdPartition ->
-        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4597,9 +4632,15 @@ class KafkaApisTest extends Logging {
     when(partition.leaderReplicaIdOpt).thenAnswer(_ => Some(newLeaderId))
     when(partition.getLeaderEpoch).thenAnswer(_ => newLeaderEpoch)
 
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(topicIdPartition ->
+      new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
+
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(Map(topicIdPartition ->
-        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
 
     when(sharePartitionManager.fetchMessages(
@@ -4646,6 +4687,703 @@ class KafkaApisTest extends Logging {
     assertEquals(newLeaderId, topicResponses.get(0).partitions().get(0).currentLeader.leaderId())
     assertEquals(newLeaderEpoch, topicResponses.get(0).partitions().get(0).currentLeader.leaderEpoch())
     assertEquals(2, responseData.nodeEndpoints().asScala.head.nodeId())
+  }
+
+  @ParameterizedTest
+  @ValueSource(shorts = Array(121, 122)) // Error codes for SHARE_SESSION_NOT_FOUND and INVALID_SHARE_SESSION_EPOCH respectively
+  def testHandleShareFetchRequestErrorContext(errorCode: Short): Unit = {
+    val topicName = "foo"
+    val topicId = Uuid.randomUuid()
+    addTopicToMetadataCache(topicName, 1, topicId = topicId)
+    val memberId : Uuid = Uuid.ZERO_UUID
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new ShareSessionErrorContext(Errors.forCode(errorCode))
+    )
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)).asJava)).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+
+    assertEquals(errorCode, responseData.errorCode())
+  }
+
+  @Test
+  def testHandleShareFetchRequestSuccessIncludesAcknowledgements(): Unit = {
+    val topicName_1 = "foo"
+    val topicId_1 = Uuid.randomUuid()
+
+    val topicName_2 = "foo2"
+    val topicId_2 = Uuid.randomUuid()
+
+    addTopicToMetadataCache(topicName_1, 1, topicId = topicId_1)
+    addTopicToMetadataCache(topicName_2, 2, topicId = topicId_2)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition_1 : TopicIdPartition = new TopicIdPartition(
+      topicId_1, new TopicPartition(topicName_1, 0)
+    )
+
+    val topicIdPartition_2 : TopicIdPartition = new TopicIdPartition(
+      topicId_2, new TopicPartition(topicName_2, 0)
+    )
+
+    val topicIdPartition_3 : TopicIdPartition = new TopicIdPartition(
+      topicId_2, new TopicPartition(topicName_2, 1)
+    )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(
+      topicIdPartition_1 ->
+        new ShareFetchRequest.SharePartitionData(topicId_1, 1000, Optional.empty()),
+      topicIdPartition_2 ->
+        new ShareFetchRequest.SharePartitionData(topicId_2, 1000, Optional.empty()),
+      topicIdPartition_3 ->
+        new ShareFetchRequest.SharePartitionData(topicId_2, 1000, Optional.empty())
+    ).asJava
+
+
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
+    )
+
+    val records_1 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_1.getBytes(StandardCharsets.UTF_8)))
+
+    val records_2 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_2.getBytes(StandardCharsets.UTF_8)))
+
+    val records_3 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_2.getBytes(StandardCharsets.UTF_8)))
+
+    when(sharePartitionManager.fetchMessages(
+      anyString(),
+      anyString(),
+      any[FetchParams],
+      any[util.List[TopicIdPartition]]
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
+      new TopicIdPartition(topicId_1, new TopicPartition(topicName_1, 0)) ->
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(records_1),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 0)) ->
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(records_2),
+    new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 1)) ->
+      new ShareFetchResponseData.PartitionData()
+        .setPartitionIndex(1)
+        .setErrorCode(Errors.NONE.code())
+        .setAcknowledgeErrorCode(0)
+        .setRecords(records_3)
+    ).asJava))
+
+    when(sharePartitionManager.acknowledge(
+      anyString(),
+      anyString(),
+      any()
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](
+      new TopicIdPartition(topicId_1, new TopicPartition(topicName_1, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code()),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code()),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 1)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(1)
+          .setErrorCode(Errors.NONE.code())
+    ).asJava))
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setShareSessionEpoch(1).
+      setTopics(List(
+        new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId_1).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)
+            .setAcknowledgementBatches(List(
+              new ShareFetchRequestData.AcknowledgementBatch()
+                .setStartOffset(11)
+                .setLastOffset(20)
+            ).asJava)
+        ).asJava),
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_2).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(0)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(21)
+                  .setLastOffset(35)
+              ).asJava),
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(1)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(54)
+                  .setLastOffset(67)
+              ).asJava)
+          ).asJava)
+      ).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+    val topicResponses = responseData.responses()
+
+    assertEquals(Errors.NONE.code(), responseData.errorCode())
+    assertEquals(2, topicResponses.size())
+    assertEquals(topicId_1, topicResponses.get(0).topicId())
+    assertEquals(1, topicResponses.get(0).partitions().size())
+    assertEquals(0, topicResponses.get(0).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(records_1, topicResponses.get(0).partitions().get(0).records())
+
+    assertEquals(topicId_2, topicResponses.get(1).topicId())
+    assertEquals(2, topicResponses.get(1).partitions().size())
+    assertEquals(0, topicResponses.get(1).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(0).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(records_2, topicResponses.get(1).partitions().get(0).records())
+
+    assertEquals(1, topicResponses.get(1).partitions().get(1).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(1).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(1).acknowledgeErrorCode())
+    assertEquals(records_3, topicResponses.get(1).partitions().get(0).records())
+  }
+
+
+  @Test
+  def testHandleShareFetchRequestSuccessMoreAcknowledgementsThanFetch(): Unit = {
+    val topicName_1 = "foo"
+    val topicId_1 = Uuid.randomUuid()
+
+    val topicName_2 = "foo2"
+    val topicId_2 = Uuid.randomUuid()
+
+    val topicName_3 = "foo3"
+    val topicId_3 = Uuid.randomUuid()
+
+    addTopicToMetadataCache(topicName_1, 1, topicId = topicId_1)
+    addTopicToMetadataCache(topicName_2, 2, topicId = topicId_2)
+    addTopicToMetadataCache(topicName_3, 1, topicId = topicId_3)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition_1 : TopicIdPartition = new TopicIdPartition(
+      topicId_1, new TopicPartition(topicName_1, 0)
+    )
+
+    val topicIdPartition_2 : TopicIdPartition = new TopicIdPartition(
+      topicId_2, new TopicPartition(topicName_2, 0)
+    )
+
+    val topicIdPartition_3 : TopicIdPartition = new TopicIdPartition(
+      topicId_3, new TopicPartition(topicName_3, 0)
+    )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(
+      topicIdPartition_1 ->
+        new ShareFetchRequest.SharePartitionData(topicId_1, 1000, Optional.empty()),
+      topicIdPartition_2 ->
+        new ShareFetchRequest.SharePartitionData(topicId_2, 1000, Optional.empty()),
+    ).asJava
+
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
+    )
+
+    val records_1 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_1.getBytes(StandardCharsets.UTF_8)))
+
+    val records_2 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_2.getBytes(StandardCharsets.UTF_8)))
+
+    when(sharePartitionManager.fetchMessages(
+      anyString(),
+      anyString(),
+      any[FetchParams],
+      any[util.List[TopicIdPartition]]
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
+      new TopicIdPartition(topicId_1, new TopicPartition(topicName_1, 0)) ->
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(records_1),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 0)) ->
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(records_2)
+    ).asJava))
+
+    val partition = mock(classOf[Partition])
+    val newLeaderId = 2
+    val newLeaderEpoch = 5
+
+    when(replicaManager.getPartitionOrError(topicIdPartition_3.topicPartition())).thenAnswer(_ => Right(partition))
+    when(partition.leaderReplicaIdOpt).thenAnswer(_ => Some(newLeaderId))
+    when(partition.getLeaderEpoch).thenAnswer(_ => newLeaderEpoch)
+
+    when(sharePartitionManager.acknowledge(
+      anyString(),
+      anyString(),
+      any()
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](
+      new TopicIdPartition(topicId_1, new TopicPartition(topicName_1, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code()),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code()),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 1)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(1)
+          .setErrorCode(Errors.NONE.code()),
+      new TopicIdPartition(topicId_3, new TopicPartition(topicName_3, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NOT_LEADER_OR_FOLLOWER.code())
+    ).asJava))
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setShareSessionEpoch(1).
+      setTopics(List(
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_1).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(0)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(11)
+                  .setLastOffset(20)
+              ).asJava)
+          ).asJava),
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_2).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(0)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(21)
+                  .setLastOffset(35)
+              ).asJava)
+          ).asJava),
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_2).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(1)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(34)
+                  .setLastOffset(54)
+              ).asJava)
+          ).asJava),
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_3).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(0)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(23)
+                  .setLastOffset(32)
+              ).asJava)
+          ).asJava)
+      ).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+    val topicResponses = responseData.responses()
+
+    assertEquals(Errors.NONE.code(), responseData.errorCode())
+    assertEquals(3, topicResponses.size())
+    assertEquals(topicId_1, topicResponses.get(0).topicId())
+    assertEquals(1, topicResponses.get(0).partitions().size())
+    assertEquals(0, topicResponses.get(0).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(records_1, topicResponses.get(0).partitions().get(0).records())
+
+    assertEquals(topicId_2, topicResponses.get(1).topicId())
+    assertEquals(2, topicResponses.get(1).partitions().size())
+    assertEquals(0, topicResponses.get(1).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(0).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(records_2, topicResponses.get(1).partitions().get(0).records())
+
+    assertEquals(1, topicResponses.get(1).partitions().get(1).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(1).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(1).acknowledgeErrorCode())
+
+    assertEquals(topicId_3, topicResponses.get(2).topicId())
+    assertEquals(1, topicResponses.get(2).partitions().size())
+    assertEquals(0, topicResponses.get(2).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(2).partitions().get(0).errorCode())
+    assertEquals(Errors.NOT_LEADER_OR_FOLLOWER.code(), topicResponses.get(2).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(newLeaderId, topicResponses.get(2).partitions().get(0).currentLeader.leaderId())
+    assertEquals(newLeaderEpoch, topicResponses.get(2).partitions().get(0).currentLeader.leaderEpoch())
+  }
+
+  @Test
+  def testHandleShareFetchRequestFirstFetchWithAcknowledgements(): Unit = {
+    val topicName = "foo"
+    val topicId = Uuid.randomUuid()
+    val partitionIndex = 0
+    addTopicToMetadataCache(topicName, 1, topicId = topicId)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(
+      topicId, new TopicPartition(topicName, partitionIndex)
+    )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(topicIdPartition ->
+        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
+
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
+    )
+
+    val records = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName.getBytes(StandardCharsets.UTF_8)))
+
+    when(sharePartitionManager.fetchMessages(
+      anyString(),
+      anyString(),
+      any[FetchParams],
+      any[util.List[TopicIdPartition]]
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
+      new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(partitionIndex)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(records)
+    ).asJava))
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setShareSessionEpoch(ShareFetchMetadata.INITIAL_EPOCH).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)
+            .setAcknowledgementBatches(List(
+              new ShareFetchRequestData.AcknowledgementBatch()
+                .setStartOffset(11)
+                .setLastOffset(20)
+            ).asJava)
+        ).asJava)
+      ).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+
+    assertEquals(Errors.INVALID_REQUEST.code(), responseData.errorCode())
+  }
+
+  @Test
+  def testHandleShareFetchRequestFinalFetchWithShareFetchData(): Unit = {
+    val topicName = "foo"
+    val topicId = Uuid.randomUuid()
+    val partitionIndex = 0
+    addTopicToMetadataCache(topicName, 1, topicId = topicId)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition : TopicIdPartition = new TopicIdPartition(
+      topicId, new TopicPartition(topicName, partitionIndex)
+    )
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new FinalContext(Map(topicIdPartition ->
+        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+    )
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setShareSessionEpoch(ShareFetchMetadata.FINAL_EPOCH).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition()
+            .setPartitionIndex(0)
+            .setCurrentLeaderEpoch(1)).asJava)).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+
+    assertEquals(Errors.INVALID_REQUEST.code(), responseData.errorCode())
+  }
+
+  @Test
+  def testHandleShareFetchRequestAcknowledgementValidationsFail(): Unit = {
+    val topicName_1 = "foo"
+    val topicId_1 = Uuid.randomUuid()
+
+    val topicName_2 = "foo2"
+    val topicId_2 = Uuid.randomUuid()
+
+    val topicName_3 = "foo3"
+    val topicId_3 = Uuid.randomUuid()
+
+    addTopicToMetadataCache(topicName_1, 1, topicId = topicId_1)
+    addTopicToMetadataCache(topicName_2, 2, topicId = topicId_2)
+    addTopicToMetadataCache(topicName_3, 1, topicId = topicId_3)
+    val memberId : Uuid = Uuid.ZERO_UUID
+
+    val topicIdPartition_1 : TopicIdPartition = new TopicIdPartition(
+      topicId_1, new TopicPartition(topicName_1, 0)
+    )
+
+    val topicIdPartition_2 : TopicIdPartition = new TopicIdPartition(
+      topicId_2, new TopicPartition(topicName_2, 0)
+    )
+
+    val topicIdPartition_3 : TopicIdPartition = new TopicIdPartition(
+      topicId_3, new TopicPartition(topicName_3, 0)
+    )
+
+    val time = new SystemTime()
+    val shareSessionCache = new ShareSessionCache(1000, 100)
+    val shareSessionEpoch = ShareFetchMetadata.INITIAL_EPOCH
+    val requestMetadata = new ShareFetchMetadata(memberId, shareSessionEpoch)
+    val shareFetchData = Map(
+      topicIdPartition_1 ->
+        new ShareFetchRequest.SharePartitionData(topicId_1, 1000, Optional.empty()),
+      topicIdPartition_2 ->
+        new ShareFetchRequest.SharePartitionData(topicId_2, 1000, Optional.empty()),
+      topicIdPartition_3 ->
+        new ShareFetchRequest.SharePartitionData(topicId_3, 1000, Optional.empty()),
+    ).asJava
+
+    when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
+      new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
+    )
+
+    val records_1 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_1.getBytes(StandardCharsets.UTF_8)))
+
+    val records_2 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_2.getBytes(StandardCharsets.UTF_8)))
+
+    val records_3 = MemoryRecords.withRecords(CompressionType.NONE,
+      new SimpleRecord(1000, topicName_3.getBytes(StandardCharsets.UTF_8)))
+
+    when(sharePartitionManager.fetchMessages(
+      anyString(),
+      anyString(),
+      any[FetchParams],
+      any[util.List[TopicIdPartition]]
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
+      new TopicIdPartition(topicId_1, new TopicPartition(topicName_1, 0)) ->
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(records_1),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 0)) ->
+        new ShareFetchResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+          .setAcknowledgeErrorCode(0)
+          .setRecords(records_2),
+    new TopicIdPartition(topicId_3, new TopicPartition(topicName_3, 0)) ->
+      new ShareFetchResponseData.PartitionData()
+        .setPartitionIndex(0)
+        .setErrorCode(Errors.NONE.code())
+        .setAcknowledgeErrorCode(0)
+        .setRecords(records_3)
+    ).asJava))
+
+    when(sharePartitionManager.acknowledge(
+      anyString(),
+      anyString(),
+      any()
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](
+      new TopicIdPartition(topicId_1, new TopicPartition(topicName_1, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code()),
+      new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+    ).asJava))
+
+    when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
+      any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
+
+    val shareFetchRequestData = new ShareFetchRequestData().
+      setGroupId("group").
+      setMemberId(memberId.toString).
+      setShareSessionEpoch(1).
+      setTopics(List(
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_1).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(0)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(11)
+                  .setLastOffset(20)
+              ).asJava)
+          ).asJava),
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_2).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(0)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(21)
+                  .setLastOffset(35)
+              ).asJava),
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(1)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(24)
+                  .setLastOffset(34),
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(10)
+                  .setLastOffset(20)
+              ).asJava)
+          ).asJava),
+        new ShareFetchRequestData.FetchTopic().
+          setTopicId(topicId_3).
+          setPartitions(List(
+            new ShareFetchRequestData.FetchPartition()
+              .setPartitionIndex(0)
+              .setCurrentLeaderEpoch(1)
+              .setAcknowledgementBatches(List(
+                new ShareFetchRequestData.AcknowledgementBatch()
+                  .setStartOffset(23)
+                  .setLastOffset(32)
+                  .setGapOffsets(util.Arrays.asList(1L, 2L))
+              ).asJava)
+          ).asJava)
+      ).asJava)
+
+    val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
+    val request = buildRequest(shareFetchRequest)
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis.handleShareFetchRequest(request)
+    val response = verifyNoThrottling[ShareFetchResponse](request)
+    val responseData = response.data()
+    val topicResponses = responseData.responses()
+
+    assertEquals(Errors.NONE.code(), responseData.errorCode())
+    assertEquals(3, topicResponses.size())
+    assertEquals(topicId_1, topicResponses.get(0).topicId())
+    assertEquals(1, topicResponses.get(0).partitions().size())
+    assertEquals(0, topicResponses.get(0).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(records_1, topicResponses.get(0).partitions().get(0).records())
+
+    assertEquals(topicId_2, topicResponses.get(1).topicId())
+    assertEquals(2, topicResponses.get(1).partitions().size())
+    assertEquals(0, topicResponses.get(1).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(0).errorCode())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(records_2, topicResponses.get(1).partitions().get(0).records())
+
+    assertEquals(1, topicResponses.get(1).partitions().get(1).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(1).partitions().get(1).errorCode())
+    assertEquals(Errors.INVALID_REQUEST.code(), topicResponses.get(1).partitions().get(1).acknowledgeErrorCode())
+
+    assertEquals(topicId_3, topicResponses.get(2).topicId())
+    assertEquals(1, topicResponses.get(2).partitions().size())
+    assertEquals(0, topicResponses.get(2).partitions().get(0).partitionIndex())
+    assertEquals(Errors.NONE.code(), topicResponses.get(2).partitions().get(0).errorCode())
+    assertEquals(Errors.INVALID_REQUEST.code(), topicResponses.get(2).partitions().get(0).acknowledgeErrorCode())
   }
 
   @ParameterizedTest
