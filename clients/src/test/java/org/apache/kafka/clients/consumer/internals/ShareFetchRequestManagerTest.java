@@ -182,6 +182,29 @@ public class ShareFetchRequestManagerTest {
     }
 
     @Test
+    public void testFetchWithAcquiredRecords() {
+        buildFetcher();
+
+        assignFromSubscribed(Collections.singleton(tp0));
+
+        // normal fetch
+        assertEquals(1, sendFetches());
+        assertFalse(fetcher.hasCompletedFetches());
+
+        client.prepareResponse(fullFetchResponse(tip0, records,
+                ShareCompletedFetchTest.acquiredRecords(1L, 1), Errors.NONE));
+        networkClientDelegate.poll(time.timer(0));
+        assertTrue(fetcher.hasCompletedFetches());
+
+        Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> partitionRecords = fetchRecords();
+        assertTrue(partitionRecords.containsKey(tp0));
+
+        // As only 1 record was acquired, we must fetch only 1 record.
+        List<ConsumerRecord<byte[], byte[]>> records = partitionRecords.get(tp0);
+        assertEquals(1, records.size());
+    }
+
+    @Test
     public void testCloseShouldBeIdempotent() {
         buildFetcher();
 
@@ -240,10 +263,12 @@ public class ShareFetchRequestManagerTest {
                 Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
 
-        for (int i = 0; i < 2; i++) {
-            // the fetchRecords() should always throw exception due to the bad batch.
-            assertThrows(KafkaException.class, this::collectFetch);
-        }
+        // The first call to collectFetch, throws an exception
+        assertThrows(KafkaException.class, this::collectFetch);
+
+        // The exception is cleared once thrown
+        ShareFetch<String, String> fetch = this.collectFetch();
+        assertTrue(fetch.isEmpty());
     }
 
     @Test
@@ -295,7 +320,7 @@ public class ShareFetchRequestManagerTest {
 
         client.prepareResponse(fullFetchResponse(tip0,
                 memoryRecords,
-                ShareCompletedFetchTest.acquiredRecords(0L, 3),
+                ShareCompletedFetchTest.acquiredRecords(1L, 3),
                 Errors.NONE));
 
         assertEquals(1, sendFetches());

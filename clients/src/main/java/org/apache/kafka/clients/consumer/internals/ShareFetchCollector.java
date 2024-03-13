@@ -85,14 +85,9 @@ public class ShareFetchCollector<K, V> {
                         try {
                             fetchBuffer.setNextInLineFetch(initialize(completedFetch));
                         } catch (Exception e) {
-                            // Remove a completedFetch upon a parse with exception if (1) it contains no completedFetch, and
-                            // (2) there are no fetched completedFetch with actual content preceding this exception.
-                            // The first condition ensures that the completedFetches is not stuck with the same completedFetch
-                            // in cases such as the TopicAuthorizationException, and the second condition ensures that no
-                            // potential data loss due to an exception in a following record.
-                            if (ShareFetchResponse.recordsOrFail(completedFetch.partitionData).sizeInBytes() == 0)
+                            if (fetch.isEmpty()) {
                                 fetchBuffer.poll();
-
+                            }
                             throw e;
                         }
                     } else {
@@ -115,11 +110,16 @@ public class ShareFetchCollector<K, V> {
                     final ShareFetch<K, V> nextFetch = ShareFetch.forInFlightBatch(tp, batch);
                     recordsRemaining -= nextFetch.numRecords();
                     fetch.add(nextFetch);
+
+                    if (batch.getException() != null) {
+                        throw batch.getException();
+                    }
                 }
             }
-        } catch (Exception e) {
-            if (fetch.isEmpty())
+        } catch (KafkaException e) {
+            if (fetch.isEmpty()) {
                 throw e;
+            }
         }
 
         return fetch;
@@ -159,29 +159,28 @@ public class ShareFetchCollector<K, V> {
             log.debug("Error in fetch for partition {}: {}", tp, error.exceptionName());
             requestMetadataUpdate(metadata, subscriptions, tp.topicPartition());
         } else if (error == Errors.UNKNOWN_TOPIC_OR_PARTITION) {
-            log.warn("Received unknown topic or partition error in fetch for partition {}", tp);
+            log.warn("Received unknown topic or partition error in fetch for partition {}.", tp);
             requestMetadataUpdate(metadata, subscriptions, tp.topicPartition());
         } else if (error == Errors.UNKNOWN_TOPIC_ID) {
-            log.warn("Received unknown topic ID error in fetch for partition {}", tp);
+            log.warn("Received unknown topic ID error in fetch for partition {}.", tp);
             requestMetadataUpdate(metadata, subscriptions, tp.topicPartition());
         } else if (error == Errors.INCONSISTENT_TOPIC_ID) {
-            log.warn("Received inconsistent topic ID error in fetch for partition {}", tp);
+            log.warn("Received inconsistent topic ID error in fetch for partition {}.", tp);
             requestMetadataUpdate(metadata, subscriptions, tp.topicPartition());
         } else if (error == Errors.TOPIC_AUTHORIZATION_FAILED) {
             // Log the actual partition and not just the topic to help with ACL propagation issues in large clusters
             log.warn("Not authorized to read from partition {}.", tp.topicPartition());
             throw new TopicAuthorizationException(Collections.singleton(tp.topic()));
         } else if (error == Errors.UNKNOWN_LEADER_EPOCH) {
-            log.debug("Received unknown leader epoch error in fetch for partition {}", tp);
+            log.debug("Received unknown leader epoch error in fetch for partition {}.", tp);
         } else if (error == Errors.UNKNOWN_SERVER_ERROR) {
-            log.warn("Unknown server error while fetching topic-partition {}",
+            log.warn("Unknown server error while fetching topic-partition {}.",
                     tp.topicPartition());
         } else if (error == Errors.CORRUPT_MESSAGE) {
             throw new KafkaException("Encountered corrupt message when fetching topic-partition "
                     + tp.topicPartition());
         } else {
-            throw new IllegalStateException("Unexpected error code "
-                    + error.code()
+            throw new IllegalStateException("Unexpected error code " + error.code()
                     + " while fetching from topic-partition " + tp.topicPartition());
         }
     }

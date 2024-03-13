@@ -1322,6 +1322,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             .setPartitionIndex(tp.partition)
             .setErrorCode(Errors.forCode(partitionData.errorCode).code)
             .setRecords(unconvertedRecords)
+            .setAcquiredRecords(partitionData.acquiredRecords)
             .setCurrentLeader(partitionData.currentLeader())
     }
 
