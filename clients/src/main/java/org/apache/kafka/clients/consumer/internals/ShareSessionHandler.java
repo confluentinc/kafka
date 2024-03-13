@@ -155,12 +155,10 @@ public class ShareSessionHandler {
     public class Builder {
 
         private LinkedHashMap<TopicPartition, TopicIdPartition> next;
-        private LinkedHashMap<TopicIdPartition, Acknowledgements> acknowledgements;
         private Map<Uuid, String> topicNames;
 
         Builder() {
             this.next = new LinkedHashMap<>();
-            this.acknowledgements = new LinkedHashMap<>();
             this.topicNames = new HashMap<>();
         }
 
