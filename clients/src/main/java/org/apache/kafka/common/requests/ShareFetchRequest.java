@@ -49,7 +49,8 @@ public class ShareFetchRequest extends AbstractRequest {
             this.data = data;
         }
 
-        public static Builder forConsumer(int maxWait, int minBytes, Map<TopicPartition, TopicIdPartition> send) {
+        public static Builder forConsumer(int maxWait, int minBytes, Map<TopicPartition, TopicIdPartition> send,
+                                          Map<TopicIdPartition, List<ShareFetchRequestData.AcknowledgementBatch>> acknowledgements) {
             ShareFetchRequestData data = new ShareFetchRequestData();
             data.setMaxWaitMs(maxWait);
             data.setMinBytes(minBytes);
@@ -65,8 +66,11 @@ public class ShareFetchRequest extends AbstractRequest {
                     data.topics().add(fetchTopic);
                 }
 
+                // Get the list of Acknowledgments for the current partition
+                List<ShareFetchRequestData.AcknowledgementBatch> acknowledgementBatches = acknowledgements.get(topicPartition);
                 ShareFetchRequestData.FetchPartition fetchPartition = new ShareFetchRequestData.FetchPartition()
                         .setPartitionIndex(topicPartition.partition())
+                        .setAcknowledgementBatches(acknowledgementBatches)
                         .setCurrentLeaderEpoch(RecordBatch.NO_PARTITION_LEADER_EPOCH);
 
                 fetchTopic.partitions().add(fetchPartition);
@@ -79,6 +83,7 @@ public class ShareFetchRequest extends AbstractRequest {
             data.setGroupId(groupId);
             if (metadata != null) {
                 data.setShareSessionEpoch(metadata.epoch());
+                data.setMemberId(metadata.memberId().toString());
             }
             return this;
         }
