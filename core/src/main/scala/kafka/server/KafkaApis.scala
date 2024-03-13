@@ -22,7 +22,7 @@ import kafka.controller.ReplicaAssignment
 import kafka.coordinator.transaction.{InitProducerIdResult, TransactionCoordinator}
 import kafka.network.RequestChannel
 import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
-import kafka.server.SharePartitionManager.{ErroneousAndValidPartitionData, ShareSessionErrorContext}
+import kafka.server.SharePartitionManager.ErroneousAndValidPartitionData
 import kafka.server.handlers.DescribeTopicPartitionsRequestHandler
 import kafka.server.metadata.{ConfigRepository, KRaftMetadataCache}
 import kafka.utils.Implicits._
@@ -1486,8 +1486,6 @@ class KafkaApis(val requestChannel: RequestChannel,
     val forgottenTopics = shareFetchRequest.forgottenTopics(topicNames)
 
     // TODO : replace this initialization when share fetch session metadata is sent by the client in the shareFetchRequest
-    val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.fromString(memberId), shareSessionEpoch)
-    val shareFetchContext = sharePartitionManager.newContext(groupId, shareFetchData, forgottenTopics, topicNames, newReqMetadata)
 
     def isAcknowledgeDataPresentInFetchRequest() : Boolean = {
       var isAcknowledgeDataPresent = false
@@ -1509,32 +1507,32 @@ class KafkaApis(val requestChannel: RequestChannel,
     var shareAcknowledgeResponse : ShareAcknowledgeResponse = null
     var shareFetchResponse : ShareFetchResponse = null
 
-
     // Handling the Acknowledgements from the ShareFetchRequest
-    shareFetchContext match {
-      case shareSessionErrorContext: ShareSessionErrorContext =>
-        // If there is an error related to share fetch session, we do not need to process the acknowledgements
-        shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, shareSessionErrorContext.error().exception) match {
+    val shareSessionError: Errors = sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, Uuid.fromString(memberId), shareSessionEpoch)
+    if (shareSessionError.code() != Errors.NONE.code()) {
+      shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, shareSessionError.exception) match {
+        case response: ShareAcknowledgeResponse => response
+        case _ => null
+      }
+    } else if (!isAcknowledgeDataPresentInFetchRequest()) {
+      shareAcknowledgeResponse = ShareAcknowledgeResponse.of(
+        Errors.NONE,
+        AbstractResponse.DEFAULT_THROTTLE_TIME,
+        new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
+        Collections.emptyList())
+    } else if (shareSessionEpoch == ShareFetchMetadata.INITIAL_EPOCH && isAcknowledgeDataPresentInFetchRequest()) {
+        // If this is a full fetch request, it should not contain any acknowledgement Data
+        shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, Errors.INVALID_REQUEST.exception) match {
           case response: ShareAcknowledgeResponse => response
           case _ => null
         }
-      case _ =>
-        if (!isAcknowledgeDataPresentInFetchRequest()) {
-          shareAcknowledgeResponse = ShareAcknowledgeResponse.of(
-            Errors.NONE,
-            AbstractResponse.DEFAULT_THROTTLE_TIME,
-            new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
-            Collections.emptyList())
-        } else if (shareSessionEpoch == ShareFetchMetadata.INITIAL_EPOCH && isAcknowledgeDataPresentInFetchRequest()) {
-          // If this is a full fetch request, it should not contain any acknowledgement Data
-          shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, Errors.INVALID_REQUEST.exception) match {
-            case response: ShareAcknowledgeResponse => response
-            case _ => null
-          }
-        } else {
-          shareAcknowledgeResponse = handleAcknowledgeFromShareFetchRequest(request, topicNames, sharePartitionManager)
-        }
+      }
+    else {
+      shareAcknowledgeResponse = handleAcknowledgeFromShareFetchRequest(request, topicNames, sharePartitionManager)
     }
+
+    val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.fromString(memberId), shareSessionEpoch)
+    val shareFetchContext = sharePartitionManager.newContext(groupId, shareFetchData, forgottenTopics, topicNames, newReqMetadata)
 
     // Handling the Fetch from the ShareFetchRequest
     // Fetching should not proceed under any one of the following scenarios -

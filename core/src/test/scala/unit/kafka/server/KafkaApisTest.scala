@@ -4335,6 +4335,11 @@ class KafkaApisTest extends Logging {
     val shareFetchData = Map(topicIdPartition ->
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -4404,6 +4409,11 @@ class KafkaApisTest extends Logging {
     val shareFetchData = Map(topicIdPartition ->
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -4456,6 +4466,11 @@ class KafkaApisTest extends Logging {
     val shareFetchData = Map(topicIdPartition ->
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -4522,6 +4537,11 @@ class KafkaApisTest extends Logging {
     val shareFetchData = Map(topicIdPartition ->
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -4579,6 +4599,11 @@ class KafkaApisTest extends Logging {
     val shareFetchData = Map(topicIdPartition ->
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -4639,6 +4664,11 @@ class KafkaApisTest extends Logging {
     val shareFetchData = Map(topicIdPartition ->
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -4700,6 +4730,11 @@ class KafkaApisTest extends Logging {
       new ShareSessionErrorContext(Errors.forCode(errorCode))
     )
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.forCode(errorCode))
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
@@ -4760,6 +4795,11 @@ class KafkaApisTest extends Logging {
         new ShareFetchRequest.SharePartitionData(topicId_2, 1000, Optional.empty())
     ).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
 
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
@@ -4931,6 +4971,11 @@ class KafkaApisTest extends Logging {
         new ShareFetchRequest.SharePartitionData(topicId_2, 1000, Optional.empty()),
     ).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -5106,6 +5151,11 @@ class KafkaApisTest extends Logging {
     val shareFetchData = Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
@@ -5169,6 +5219,11 @@ class KafkaApisTest extends Logging {
     val topicIdPartition : TopicIdPartition = new TopicIdPartition(
       topicId, new TopicPartition(topicName, partitionIndex)
     )
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new FinalContext(Map(topicIdPartition ->
         new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
@@ -5239,6 +5294,11 @@ class KafkaApisTest extends Logging {
         new ShareFetchRequest.SharePartitionData(topicId_3, 1000, Optional.empty()),
     ).asJava
 
+    when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
+      any(),
+      any()
+    )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
       new ShareSessionContext(time, shareSessionCache, requestMetadata, shareFetchData)
     )
