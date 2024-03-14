@@ -5232,6 +5232,17 @@ class KafkaApisTest extends Logging {
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
+    when(sharePartitionManager.acknowledge(
+      anyString(),
+      anyString(),
+      any()
+    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](
+      new TopicIdPartition(topicId, new TopicPartition(topicName, 0)) ->
+        new ShareAcknowledgeResponseData.PartitionData()
+          .setPartitionIndex(0)
+          .setErrorCode(Errors.NONE.code())
+    ).asJava))
+
     val shareFetchRequestData = new ShareFetchRequestData().
       setGroupId("group").
       setMemberId(memberId.toString).
@@ -5241,7 +5252,14 @@ class KafkaApisTest extends Logging {
         setPartitions(List(
           new ShareFetchRequestData.FetchPartition()
             .setPartitionIndex(0)
-            .setCurrentLeaderEpoch(1)).asJava)).asJava)
+            .setCurrentLeaderEpoch(1)
+            .setAcknowledgementBatches(List(
+              new ShareFetchRequestData.AcknowledgementBatch()
+                .setStartOffset(11)
+                .setLastOffset(20)
+            ).asJava)
+        ).asJava)
+      ).asJava)
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
@@ -5249,8 +5267,12 @@ class KafkaApisTest extends Logging {
     kafkaApis.handleShareFetchRequest(request)
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
+    val topicResponses = response.data().responses()
 
-    assertEquals(Errors.INVALID_REQUEST.code(), responseData.errorCode())
+    assertEquals(Errors.NONE.code(), responseData.errorCode())
+    assertEquals(1, topicResponses.size())
+    assertEquals(1, topicResponses.get(0).partitions().size())
+    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).acknowledgeErrorCode())
   }
 
   @Test

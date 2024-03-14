@@ -1539,13 +1539,18 @@ class KafkaApis(val requestChannel: RequestChannel,
     // 1. If shareAcknowledgeResponse has Errors.INVALID_REQUEST error code
     // 2. If this is a Final Fetch request (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) and shareFetchData is not empty
     // 3. If this is a Final Fetch request (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) and forgottenTopics is not empty
-    if (shareAcknowledgeResponse.data().errorCode() ==  Errors.INVALID_REQUEST.code()
-      || (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH && (!shareFetchData.isEmpty || !forgottenTopics.isEmpty))) {
+    if (shareAcknowledgeResponse.data().errorCode() ==  Errors.INVALID_REQUEST.code()) {
       shareFetchResponse = shareFetchRequest.getErrorResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, Errors.INVALID_REQUEST.exception) match {
         case response: ShareFetchResponse => response
         case _ => null
       }
-    } else{
+    } else if (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) {
+      shareFetchResponse = shareFetchRequest.getEmptyResponse(AbstractResponse.DEFAULT_THROTTLE_TIME) match {
+        case response: ShareFetchResponse => response
+        case _ => null
+      }
+    }
+    else{
       try {
         shareFetchResponse = handleFetchFromShareFetchRequest(request, topicNames, sharePartitionManager, shareFetchContext)
       } catch {
@@ -1562,12 +1567,6 @@ class KafkaApis(val requestChannel: RequestChannel,
                                                        shareAcknowledgeResponse: ShareAcknowledgeResponse
                                                      ) : ShareFetchResponse = {
 
-      if (shareFetchResponse.data().errorCode()!=Errors.NONE.code() && shareAcknowledgeResponse.data().errorCode()!=Errors.NONE.code()) {
-        return shareFetchResponse
-      } else if(shareFetchResponse.data().errorCode()==Errors.NONE.code() && shareAcknowledgeResponse.data().errorCode()!=Errors.NONE.code()) {
-        shareFetchResponse.data().setErrorCode(shareAcknowledgeResponse.data().errorCode())
-        return shareFetchResponse
-      }
       // The outer map has topicId as the key and the inner map has partitionIndex as the key
       val topicPartitionAcknowledgements : mutable.Map[Uuid, mutable.Map[Int, ShareAcknowledgeResponseData.PartitionData]] = mutable.Map()
       shareAcknowledgeResponse.data().responses().forEach { topic =>
@@ -1585,7 +1584,8 @@ class KafkaApis(val requestChannel: RequestChannel,
               topic.partitions().forEach { partition =>
                 subMap.get(partition.partitionIndex()) match {
                   case Some(value) =>
-                    partition.setAcknowledgeErrorCode(value.errorCode())
+                    val ackErrorCode = if(shareAcknowledgeResponse.error().code() != Errors.NONE.code()) shareAcknowledgeResponse.error().code() else value.errorCode()
+                    partition.setAcknowledgeErrorCode(ackErrorCode)
                     if (partition.errorCode() != Errors.NOT_LEADER_OR_FOLLOWER.code
                       && partition.errorCode() != Errors.FENCED_LEADER_EPOCH.code
                       && (value.errorCode() == Errors.NOT_LEADER_OR_FOLLOWER.code
@@ -1600,10 +1600,11 @@ class KafkaApis(val requestChannel: RequestChannel,
               }
               // Add the remaining acknowledgements
               subMap.foreach { case (partitionIndex, partitionData) =>
+                val ackErrorCode = if(shareAcknowledgeResponse.error().code() != Errors.NONE.code()) shareAcknowledgeResponse.error().code() else partitionData.errorCode()
                 val fetchPartitionData = new ShareFetchResponseData.PartitionData()
                   .setPartitionIndex(partitionIndex)
                   .setErrorCode(Errors.NONE.code())
-                  .setAcknowledgeErrorCode(partitionData.errorCode())
+                  .setAcknowledgeErrorCode(ackErrorCode)
                 fetchPartitionData.currentLeader().setLeaderId(partitionData.currentLeader().leaderId())
                 fetchPartitionData.currentLeader().setLeaderEpoch(partitionData.currentLeader().leaderEpoch())
                 topic.partitions().add(fetchPartitionData)
@@ -1617,10 +1618,11 @@ class KafkaApis(val requestChannel: RequestChannel,
         val topicData = new ShareFetchResponseData.ShareFetchableTopicResponse()
           .setTopicId(topicId)
         subMap.foreach { case (partitionIndex, partitionData) =>
+          val ackErrorCode = if(shareAcknowledgeResponse.error().code() != Errors.NONE.code()) shareAcknowledgeResponse.error().code() else partitionData.errorCode()
           val fetchPartitionData = new ShareFetchResponseData.PartitionData()
             .setPartitionIndex(partitionIndex)
             .setErrorCode(Errors.NONE.code())
-            .setAcknowledgeErrorCode(partitionData.errorCode())
+            .setAcknowledgeErrorCode(ackErrorCode)
           fetchPartitionData.currentLeader().setLeaderId(partitionData.currentLeader().leaderId())
           fetchPartitionData.currentLeader().setLeaderEpoch(partitionData.currentLeader().leaderEpoch())
           topicData.partitions().add(fetchPartitionData)

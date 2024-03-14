@@ -130,6 +130,13 @@ public class ShareFetchRequest extends AbstractRequest {
                 .setErrorCode(error.code()));
     }
 
+    public AbstractResponse getEmptyResponse(int throttleTimeMs) {
+        return new ShareFetchResponse(new ShareFetchResponseData()
+                .setThrottleTimeMs(throttleTimeMs)
+                .setErrorCode(Errors.NONE.code())
+                .setResponses(new ArrayList<>()));
+    }
+
     public AbstractResponse getErrorAcknowledgeResponse(int throttleTimeMs, Throwable e) {
         Errors error = Errors.forException(e);
         return new ShareAcknowledgeResponse(new ShareAcknowledgeResponseData()
