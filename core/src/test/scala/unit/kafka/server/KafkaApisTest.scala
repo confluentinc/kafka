@@ -5213,21 +5213,16 @@ class KafkaApisTest extends Logging {
   def testHandleShareFetchRequestFinalFetchWithShareFetchData(): Unit = {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
-    val partitionIndex = 0
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
-    val topicIdPartition : TopicIdPartition = new TopicIdPartition(
-      topicId, new TopicPartition(topicName, partitionIndex)
-    )
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
       any(),
       any(),
       any()
     )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(Map(topicIdPartition ->
-        new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava)
+      new FinalContext(new mutable.HashMap[TopicIdPartition, ShareFetchRequest.SharePartitionData]().asJava)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(

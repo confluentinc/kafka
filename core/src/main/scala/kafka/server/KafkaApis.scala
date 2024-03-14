@@ -1550,22 +1550,13 @@ class KafkaApis(val requestChannel: RequestChannel,
     val shareFetchContext = sharePartitionManager.newContext(groupId, shareFetchData, forgottenTopics, topicNames, newReqMetadata)
 
     // Handling the Fetch from the ShareFetchRequest
-    // Fetching should not proceed under any one of the following scenarios -
-    // 1. If shareAcknowledgeResponse has Errors.INVALID_REQUEST error code
-    // 2. If this is a Final Fetch request (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) and shareFetchData is not empty
-    // 3. If this is a Final Fetch request (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) and forgottenTopics is not empty
+    // Fetching should not proceed if shareAcknowledgeResponse has Errors.INVALID_REQUEST error code
     if (shareAcknowledgeResponse.data().errorCode() ==  Errors.INVALID_REQUEST.code()) {
       shareFetchResponse = shareFetchRequest.getErrorResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, Errors.INVALID_REQUEST.exception) match {
         case response: ShareFetchResponse => response
         case _ => null
       }
-    } else if (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) {
-      shareFetchResponse = shareFetchRequest.getEmptyResponse(AbstractResponse.DEFAULT_THROTTLE_TIME) match {
-        case response: ShareFetchResponse => response
-        case _ => null
-      }
-    }
-    else{
+    } else {
       try {
         shareFetchResponse = handleFetchFromShareFetchRequest(request, topicNames, sharePartitionManager, shareFetchContext, authorizedTopics)
       } catch {

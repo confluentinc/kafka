@@ -304,8 +304,8 @@ object KafkaConfig {
   /** Share Group Configurations **/
   val ShareGroupEnableProp = "group.share.enable"
   val ShareGroupRecordLockPartitionLimitProp = "group.share.record.lock.partition.limit"
-  val ShareGroupMaxGroups = "group.share.max.groups"
-  val ShareGroupMaxSize= "group.share.max.size"
+  val ShareGroupMaxGroupsProp = "group.share.max.groups"
+  val ShareGroupMaxSizeProp = "group.share.max.size"
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeProp = "offset.metadata.max.bytes"
@@ -1175,8 +1175,8 @@ object KafkaConfig {
       /** Share Group Configurations **/
       .define(ShareGroupEnableProp, BOOLEAN, Defaults.SHARE_GROUP_ENABLE, null, MEDIUM, ShareGroupEnableDoc)
       .define(ShareGroupRecordLockPartitionLimitProp, SHORT, Defaults.SHARE_GROUP_RECORD_LOCK_PARTITION_LIMIT, between(100, 10000), MEDIUM, ShareGroupRecordLockPartitionLimitDoc)
-      .define(ShareGroupMaxGroups, SHORT, Defaults.SHARE_GROUP_MAX_GROUPS, between(1, 100), MEDIUM, ShareGroupMaxGroupsDoc)
-      .define(ShareGroupMaxSize, SHORT, Defaults.SHARE_GROUP_MAX_SIZE, between(10, 1000), MEDIUM, ShareGroupMaxSizeDoc)
+      .define(ShareGroupMaxGroupsProp, SHORT, Defaults.SHARE_GROUP_MAX_GROUPS, between(1, 100), MEDIUM, ShareGroupMaxGroupsDoc)
+      .define(ShareGroupMaxSizeProp, SHORT, Defaults.SHARE_GROUP_MAX_SIZE, between(10, 1000), MEDIUM, ShareGroupMaxSizeDoc)
 
       /** ********* Offset management configuration ***********/
       .define(OffsetMetadataMaxSizeProp, INT, Defaults.OFFSET_METADATA_MAX_SIZE, HIGH, OffsetMetadataMaxSizeDoc)
@@ -1835,8 +1835,8 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   /** Share Group Configurations **/
   val isShareGroupEnabled = getBoolean(KafkaConfig.ShareGroupEnableProp)
   val shareGroupRecordLockPartitionLimit = getShort(KafkaConfig.ShareGroupRecordLockPartitionLimitProp)
-  val shareGroupMaxGroups = getShort(KafkaConfig.ShareGroupMaxGroups)
-  val shareGroupMaxSize = getShort(KafkaConfig.ShareGroupMaxSize)
+  val shareGroupMaxGroups = getShort(KafkaConfig.ShareGroupMaxGroupsProp)
+  val shareGroupMaxSize = getShort(KafkaConfig.ShareGroupMaxSizeProp)
 
   /** ********* Offset management configuration ***********/
   val offsetMetadataMaxSize = getInt(KafkaConfig.OffsetMetadataMaxSizeProp)
