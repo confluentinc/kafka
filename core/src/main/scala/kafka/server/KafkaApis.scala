@@ -1485,8 +1485,6 @@ class KafkaApis(val requestChannel: RequestChannel,
     val shareFetchData = shareFetchRequest.shareFetchData(topicNames)
     val forgottenTopics = shareFetchRequest.forgottenTopics(topicNames)
 
-    // TODO : replace this initialization when share fetch session metadata is sent by the client in the shareFetchRequest
-
     def isAcknowledgeDataPresentInFetchRequest() : Boolean = {
       var isAcknowledgeDataPresent = false
       shareFetchRequest.data().topics().forEach ( topic => {
@@ -1526,19 +1524,20 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
     }
     else {
+      if (!isAcknowledgeDataPresent) {
+        shareAcknowledgeResponse = ShareAcknowledgeResponse.of(
+          Errors.NONE,
+          AbstractResponse.DEFAULT_THROTTLE_TIME,
+          new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
+          Collections.emptyList())
+      }
       val shareSessionError: Errors = sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, Uuid.fromString(memberId), shareSessionEpoch)
       if (shareSessionError.code() != Errors.NONE.code()) {
         shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, shareSessionError.exception) match {
           case response: ShareAcknowledgeResponse => response
           case _ => null
         }
-      } else if (!isAcknowledgeDataPresent) {
-        shareAcknowledgeResponse = ShareAcknowledgeResponse.of(
-          Errors.NONE,
-          AbstractResponse.DEFAULT_THROTTLE_TIME,
-          new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
-          Collections.emptyList())
-      } else {
+      }  else {
         shareAcknowledgeResponse = handleAcknowledgeFromShareFetchRequest(request, topicNames, sharePartitionManager)
       }
     }
