@@ -163,7 +163,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         'Name' => ec2_instance_name_prefix + "-" + Socket.gethostname + "-" + name,
         'role' => 'ce-kafka',
         'Owner' => 'ce-kafka',
-        'SemaphoreBuildUrl' => ENV['BUILD_URL'],
+        'JenkinsBuildUrl' => ENV['BUILD_URL']
+        'SemaphoreBuildUrl' => ENV['SEMAPHORE_BUILD_URL'],
         'cflt_environment' => 'devel',
         'cflt_partition' => 'onprem',
         'cflt_managed_by' => 'iac',
