@@ -394,7 +394,8 @@ class BrokerServer(
 
       // TODO : add the config max.incremental.share.fetch.session.cache.slots and the variable MIN_INCREMENTAL_SHARE_FETCH_SESSION_EVICTION_MS
       //  which should be used to initialize shareFetchSessionCache
-      val shareFetchSessionCache : ShareSessionCache = new ShareSessionCache(0, 0)
+      val shareFetchSessionCache : ShareSessionCache = new ShareSessionCache(config.maxIncrementalFetchSessionCacheSlots,
+        KafkaServer.MIN_INCREMENTAL_FETCH_SESSION_EVICTION_MS)
       val sharePartitionManager = new SharePartitionManager(replicaManager, Time.SYSTEM, shareFetchSessionCache);
 
       // Create the request processor objects.

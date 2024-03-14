@@ -178,13 +178,13 @@ public class PlaintextShareConsumerTest extends AbstractConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
                 new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
         shareConsumer.subscribe(Collections.singleton(tp().topic()));
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         producer.send(record);
-        records = shareConsumer.poll(Duration.ofMillis(5000000));
+        records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         producer.send(record);
-        records = shareConsumer.poll(Duration.ofMillis(5000000));
+        records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         shareConsumer.close();
     }

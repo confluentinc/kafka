@@ -1508,27 +1508,39 @@ class KafkaApis(val requestChannel: RequestChannel,
     var shareFetchResponse : ShareFetchResponse = null
 
     // Handling the Acknowledgements from the ShareFetchRequest
-    val shareSessionError: Errors = sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, Uuid.fromString(memberId), shareSessionEpoch)
-    if (shareSessionError.code() != Errors.NONE.code()) {
-      shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, shareSessionError.exception) match {
-        case response: ShareAcknowledgeResponse => response
-        case _ => null
-      }
-    } else if (!isAcknowledgeDataPresentInFetchRequest()) {
-      shareAcknowledgeResponse = ShareAcknowledgeResponse.of(
-        Errors.NONE,
-        AbstractResponse.DEFAULT_THROTTLE_TIME,
-        new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
-        Collections.emptyList())
-    } else if (shareSessionEpoch == ShareFetchMetadata.INITIAL_EPOCH && isAcknowledgeDataPresentInFetchRequest()) {
+    val isAcknowledgeDataPresent = isAcknowledgeDataPresentInFetchRequest()
+    if (shareSessionEpoch == ShareFetchMetadata.INITIAL_EPOCH) {
+      if (isAcknowledgeDataPresent) {
         // If this is a full fetch request, it should not contain any acknowledgement Data
         shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, Errors.INVALID_REQUEST.exception) match {
           case response: ShareAcknowledgeResponse => response
           case _ => null
         }
       }
+      else {
+        shareAcknowledgeResponse = ShareAcknowledgeResponse.of(
+          Errors.NONE,
+          AbstractResponse.DEFAULT_THROTTLE_TIME,
+          new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
+          Collections.emptyList())
+      }
+    }
     else {
-      shareAcknowledgeResponse = handleAcknowledgeFromShareFetchRequest(request, topicNames, sharePartitionManager)
+      val shareSessionError: Errors = sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, Uuid.fromString(memberId), shareSessionEpoch)
+      if (shareSessionError.code() != Errors.NONE.code()) {
+        shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, shareSessionError.exception) match {
+          case response: ShareAcknowledgeResponse => response
+          case _ => null
+        }
+      } else if (!isAcknowledgeDataPresent) {
+        shareAcknowledgeResponse = ShareAcknowledgeResponse.of(
+          Errors.NONE,
+          AbstractResponse.DEFAULT_THROTTLE_TIME,
+          new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
+          Collections.emptyList())
+      } else {
+        shareAcknowledgeResponse = handleAcknowledgeFromShareFetchRequest(request, topicNames, sharePartitionManager)
+      }
     }
 
     val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.fromString(memberId), shareSessionEpoch)
@@ -4601,67 +4613,6 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
       acknowledgementBatches.asJava
     }
-
-    // the callback for processing a share acknowledge response, invoked before throttling
-//    def processResponseCallback(
-//                                 responseAcknowledgeData: Map[TopicIdPartition,
-//                                   ShareAcknowledgeResponseData.PartitionData]
-//                               ): Unit = {
-//      val partitions = new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]
-//      val nodeEndpoints = new mutable.HashMap[Int, Node]
-//      responseAcknowledgeData.foreach { case(tp, data) =>
-//        val partitionData = new ShareAcknowledgeResponseData.PartitionData()
-//          .setPartitionIndex(tp.partition)
-//          .setErrorCode(data.errorCode())
-//
-//        data.errorCode() match {
-//          case errCode if errCode == Errors.NOT_LEADER_OR_FOLLOWER.code | errCode == Errors.FENCED_LEADER_EPOCH.code =>
-//            val leaderNode = getCurrentLeader(tp.topicPartition(), request.context.listenerName)
-//            leaderNode.node.foreach { node =>
-//              nodeEndpoints.put(node.id(), node)
-//            }
-//            partitionData.currentLeader()
-//              .setLeaderId(leaderNode.leaderId)
-//              .setLeaderEpoch(leaderNode.leaderEpoch)
-//          case _ =>
-//        }
-//
-//        partitions.put(tp, partitionData)
-//      }
-//      erroneous.foreach { case (tp, data) => partitions.put(tp, data) }
-//
-//      var unconvertedShareAcknowledgeResponse: ShareAcknowledgeResponse = null
-//
-//      def createResponse(): ShareAcknowledgeResponse = {
-//        val convertedData = new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]
-//        unconvertedShareAcknowledgeResponse.data().responses().forEach { topicResponse =>
-//          topicResponse.partitions().forEach { unconvertedPartitionData =>
-//            val tp = new TopicIdPartition(
-//              topicResponse.topicId,
-//              new TopicPartition(topicNames.get(topicResponse.topicId()), unconvertedPartitionData.partitionIndex())
-//            )
-//            val error = Errors.forCode(unconvertedPartitionData.errorCode)
-//            if (error != Errors.NONE)
-//              debug(s"Share Acknowledge request with correlation id ${request.header.correlationId} from client $clientId " +
-//                s"on partition $tp failed due to ${error.exceptionName}")
-//            convertedData.put(tp, unconvertedPartitionData)
-//          }
-//        }
-//
-//        // Prepare share acknowledge response from converted data
-//        ShareAcknowledgeResponse.of(
-//          unconvertedShareAcknowledgeResponse.error,
-//          0,
-//          convertedData,
-//          nodeEndpoints.values.toList.asJava
-//        )
-//      }
-//      unconvertedShareAcknowledgeResponse = new ShareAcknowledgeResponse(
-//        ShareAcknowledgeResponse.toMessage(Errors.NONE, 0, partitions.entrySet().iterator(), Collections.emptyList())
-//      )
-//
-//      requestHelper.sendMaybeThrottle(request, createResponse())
-//    }
 
     if (interesting.isEmpty) {
       requestHelper.sendMaybeThrottle(request, AcknowledgeResponseCallback(Map.empty, request, erroneous, topicNames))
