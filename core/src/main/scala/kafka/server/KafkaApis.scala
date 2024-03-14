@@ -1138,7 +1138,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                                              request: RequestChannel.Request,
                                              topicNames : util.Map[Uuid, String],
                                              sharePartitionManager : SharePartitionManager,
-                                             unauthorizedTopicPartitions: mutable.Set[TopicIdPartition]
+                                             authorizedTopics: Set[String]
                                            ) : ShareAcknowledgeResponse = {
 
     val shareFetchRequest = request.body[ShareFetchRequest]
@@ -1237,7 +1237,7 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     acknowledgementDataFromRequest.foreach{
       case (topicIdPartition : TopicIdPartition, acknowledgeBatches : util.List[SharePartition.AcknowledgementBatch]) =>
-        if (unauthorizedTopicPartitions.contains(topicIdPartition))
+        if (!authorizedTopics.contains(topicIdPartition.topicPartition.topic))
           erroneous += topicIdPartition ->
             ShareAcknowledgeResponse.partitionResponse(topicIdPartition, Errors.TOPIC_AUTHORIZATION_FAILED)
         else if (!metadataCache.contains(topicIdPartition.topicPartition))
@@ -1274,7 +1274,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                                        topicNames : util.Map[Uuid, String],
                                        sharePartitionManager : SharePartitionManager,
                                        shareFetchContext : ShareFetchContext,
-                                       unauthorizedTopicPartitions: mutable.Set[TopicIdPartition]
+                                       authorizedTopics: Set[String]
                                       ): ShareFetchResponse = {
 
     val shareFetchRequest = request.body[ShareFetchRequest]
@@ -1297,7 +1297,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
 
     partitionDatas.foreach { case (topicIdPartition, _) =>
-      if (unauthorizedTopicPartitions.contains(topicIdPartition))
+      if (!authorizedTopics.contains(topicIdPartition.topicPartition.topic))
         erroneous += topicIdPartition -> ShareFetchResponse.partitionResponse(topicIdPartition, Errors.TOPIC_AUTHORIZATION_FAILED)
       else if (!metadataCache.contains(topicIdPartition.topicPartition))
         erroneous += topicIdPartition -> ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_OR_PARTITION)
@@ -1492,17 +1492,12 @@ class KafkaApis(val requestChannel: RequestChannel,
       isAcknowledgeDataPresent
     }
 
-    val unauthorizedTopicPartitions: mutable.Set[TopicIdPartition] = mutable.Set.empty[TopicIdPartition]
     val authorizedTopics = authHelper.filterByAuthorized(
       request.context,
       READ,
       TOPIC,
       shareFetchData.asScala
     )(_._1.topicPartition.topic)
-    shareFetchData.forEach((tp, _) => {
-      if (!authorizedTopics.contains(tp.topic))
-        unauthorizedTopicPartitions.add(tp)
-    })
 
     var shareAcknowledgeResponse : ShareAcknowledgeResponse = null
     var shareFetchResponse : ShareFetchResponse = null
@@ -1546,7 +1541,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             case _ => null
           }
         } else {
-          shareAcknowledgeResponse = handleAcknowledgeFromShareFetchRequest(request, topicNames, sharePartitionManager, unauthorizedTopicPartitions)
+          shareAcknowledgeResponse = handleAcknowledgeFromShareFetchRequest(request, topicNames, sharePartitionManager, authorizedTopics)
         }
       }
     }
@@ -1572,7 +1567,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
     else{
       try {
-        shareFetchResponse = handleFetchFromShareFetchRequest(request, topicNames, sharePartitionManager, shareFetchContext, unauthorizedTopicPartitions)
+        shareFetchResponse = handleFetchFromShareFetchRequest(request, topicNames, sharePartitionManager, shareFetchContext, authorizedTopics)
       } catch {
         case throwable : Throwable =>
           debug(s"Share fetch request with correlation from client $clientId  " +
