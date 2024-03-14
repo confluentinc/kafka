@@ -4220,7 +4220,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       for (batch : ShareAcknowledgeRequestData.AcknowledgementBatch <- acknowledgePartition.acknowledgementBatches().asScala) {
         try {
           val acknowledgementBatch = new SharePartition.AcknowledgementBatch(
-            batch.startOffset(),
+            batch.baseOffset(),
             batch.lastOffset(),
             batch.gapOffsets(),
             AcknowledgeType.forId(batch.acknowledgeType())
