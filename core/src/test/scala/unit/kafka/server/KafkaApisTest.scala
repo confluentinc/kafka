@@ -4624,6 +4624,7 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     val authorizer: Authorizer = mock(classOf[Authorizer])
+    when(authorizer.authorize(any(), any())).thenReturn(List(AuthorizationResult.DENIED).asJava)
     kafkaApis = createKafkaApis(authorizer = Some(authorizer),
       overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
