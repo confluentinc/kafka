@@ -1271,6 +1271,7 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   def handleFetchFromShareFetchRequest(request: RequestChannel.Request,
+                                       shareFetchData : util.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData],
                                        topicNames : util.Map[Uuid, String],
                                        sharePartitionManager : SharePartitionManager,
                                        shareFetchContext : ShareFetchContext,
@@ -1434,13 +1435,22 @@ class KafkaApis(val requestChannel: RequestChannel,
         clientMetadata
       )
 
+      val partitionMaxBytes = new util.LinkedHashMap[TopicIdPartition, Integer]
+      interesting.foreach { topicIdPartition =>
+        if (shareFetchData.containsKey(topicIdPartition))
+          partitionMaxBytes.put(topicIdPartition, shareFetchData.get(topicIdPartition).maxBytes)
+        else
+          debug(s"Share fetch request does not contain topic partition $topicIdPartition")
+      }
+
       // call the share partition manager to fetch messages from the local replica
       try{
         val responsePartitionData = sharePartitionManager.fetchMessages(
           groupId,
           shareFetchRequest.data.memberId,
           params,
-          interesting.asJava
+          interesting.asJava,
+          partitionMaxBytes
         ).get()
         processResponseCallback(responsePartitionData.asScala.toMap)
       } catch {
@@ -1558,7 +1568,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
     } else {
       try {
-        shareFetchResponse = handleFetchFromShareFetchRequest(request, topicNames, sharePartitionManager, shareFetchContext, authorizedTopics)
+        shareFetchResponse = handleFetchFromShareFetchRequest(request, shareFetchData, topicNames, sharePartitionManager, shareFetchContext, authorizedTopics)
       } catch {
         case throwable : Throwable =>
           debug(s"Share fetch request with correlation from client $clientId  " +

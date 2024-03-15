@@ -4351,7 +4351,8 @@ class KafkaApisTest extends Logging {
       anyString(),
       anyString(),
       any[FetchParams],
-      any[util.List[TopicIdPartition]]
+      any[util.List[TopicIdPartition]],
+      any[util.LinkedHashMap[TopicIdPartition, Integer]]
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
         new ShareFetchResponseData.PartitionData()
@@ -4482,7 +4483,8 @@ class KafkaApisTest extends Logging {
       anyString(),
       anyString(),
       any[FetchParams],
-      any[util.List[TopicIdPartition]]
+      any[util.List[TopicIdPartition]],
+      any[util.LinkedHashMap[TopicIdPartition, Integer]]
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
         new ShareFetchResponseData.PartitionData()
@@ -4557,7 +4559,8 @@ class KafkaApisTest extends Logging {
       anyString(),
       anyString(),
       any[FetchParams],
-      any[util.List[TopicIdPartition]]
+      any[util.List[TopicIdPartition]],
+      any[util.LinkedHashMap[TopicIdPartition, Integer]]
     )).thenReturn(future)
 
     val shareFetchRequestData = new ShareFetchRequestData().
@@ -4678,7 +4681,8 @@ class KafkaApisTest extends Logging {
       anyString(),
       anyString(),
       any[FetchParams],
-      any[util.List[TopicIdPartition]]
+      any[util.List[TopicIdPartition]],
+      any[util.LinkedHashMap[TopicIdPartition, Integer]]
     )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareFetchResponseData.PartitionData](
       new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex)) ->
         new ShareFetchResponseData.PartitionData()
@@ -4699,6 +4703,7 @@ class KafkaApisTest extends Logging {
         setPartitions(List(
           new ShareFetchRequestData.FetchPartition()
             .setPartitionIndex(0)
+            .setPartitionMaxBytes(200)
             .setCurrentLeaderEpoch(1)).asJava)).asJava)
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
