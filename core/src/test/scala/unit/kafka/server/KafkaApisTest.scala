@@ -4338,6 +4338,7 @@ class KafkaApisTest extends Logging {
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
       any(),
       any(),
+      any(),
       any()
     )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
@@ -4414,6 +4415,7 @@ class KafkaApisTest extends Logging {
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
       any(),
       any(),
+      any(),
       any()
     )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
@@ -4470,6 +4472,7 @@ class KafkaApisTest extends Logging {
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
       any(),
       any(),
       any()
@@ -4545,6 +4548,7 @@ class KafkaApisTest extends Logging {
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
       any(),
       any(),
+      any(),
       any()
     )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
@@ -4607,6 +4611,7 @@ class KafkaApisTest extends Logging {
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
       any(),
       any(),
       any()
@@ -4674,6 +4679,7 @@ class KafkaApisTest extends Logging {
       new ShareFetchRequest.SharePartitionData(topicId, 1000, Optional.empty())).asJava
 
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
       any(),
       any(),
       any()
@@ -4744,6 +4750,7 @@ class KafkaApisTest extends Logging {
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
       any(),
       any(),
+      any(),
       any()
     )).thenReturn(Errors.forCode(errorCode))
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
@@ -4808,6 +4815,7 @@ class KafkaApisTest extends Logging {
     ).asJava
 
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
       any(),
       any(),
       any()
@@ -4889,7 +4897,7 @@ class KafkaApisTest extends Logging {
             .setCurrentLeaderEpoch(1)
             .setAcknowledgementBatches(List(
               new ShareFetchRequestData.AcknowledgementBatch()
-                .setStartOffset(11)
+                .setBaseOffset(11)
                 .setLastOffset(20)
             ).asJava)
         ).asJava),
@@ -4902,7 +4910,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(21)
+                  .setBaseOffset(21)
                   .setLastOffset(35)
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
@@ -4911,7 +4919,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(54)
+                  .setBaseOffset(54)
                   .setLastOffset(67)
               ).asJava)
           ).asJava)
@@ -4988,6 +4996,7 @@ class KafkaApisTest extends Logging {
     ).asJava
 
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
       any(),
       any(),
       any()
@@ -5071,7 +5080,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(11)
+                  .setBaseOffset(11)
                   .setLastOffset(20)
               ).asJava)
           ).asJava),
@@ -5084,7 +5093,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(21)
+                  .setBaseOffset(21)
                   .setLastOffset(35)
               ).asJava)
           ).asJava),
@@ -5097,7 +5106,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(34)
+                  .setBaseOffset(34)
                   .setLastOffset(54)
               ).asJava)
           ).asJava),
@@ -5110,7 +5119,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(23)
+                  .setBaseOffset(23)
                   .setLastOffset(32)
               ).asJava)
           ).asJava)
@@ -5175,6 +5184,7 @@ class KafkaApisTest extends Logging {
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
       any(),
       any(),
+      any(),
       any()
     )).thenReturn(Errors.NONE)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
@@ -5215,7 +5225,7 @@ class KafkaApisTest extends Logging {
             .setCurrentLeaderEpoch(1)
             .setAcknowledgementBatches(List(
               new ShareFetchRequestData.AcknowledgementBatch()
-                .setStartOffset(11)
+                .setBaseOffset(11)
                 .setLastOffset(20)
             ).asJava)
         ).asJava)
@@ -5239,6 +5249,7 @@ class KafkaApisTest extends Logging {
     val memberId : Uuid = Uuid.ZERO_UUID
 
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
       any(),
       any(),
       any()
@@ -5274,7 +5285,7 @@ class KafkaApisTest extends Logging {
             .setCurrentLeaderEpoch(1)
             .setAcknowledgementBatches(List(
               new ShareFetchRequestData.AcknowledgementBatch()
-                .setStartOffset(11)
+                .setBaseOffset(11)
                 .setLastOffset(20)
             ).asJava)
         ).asJava)
@@ -5336,6 +5347,7 @@ class KafkaApisTest extends Logging {
     ).asJava
 
     when(sharePartitionManager.acknowledgeShareSessionCacheUpdate(
+      any(),
       any(),
       any(),
       any()
@@ -5412,7 +5424,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(11)
+                  .setBaseOffset(11)
                   .setLastOffset(20)
               ).asJava)
           ).asJava),
@@ -5425,7 +5437,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(21)
+                  .setBaseOffset(21)
                   .setLastOffset(35)
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
@@ -5434,10 +5446,10 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(24)
+                  .setBaseOffset(24)
                   .setLastOffset(34),
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(10)
+                  .setBaseOffset(10)
                   .setLastOffset(20)
               ).asJava)
           ).asJava),
@@ -5450,7 +5462,7 @@ class KafkaApisTest extends Logging {
               .setCurrentLeaderEpoch(1)
               .setAcknowledgementBatches(List(
                 new ShareFetchRequestData.AcknowledgementBatch()
-                  .setStartOffset(23)
+                  .setBaseOffset(23)
                   .setLastOffset(32)
                   .setGapOffsets(util.Arrays.asList(1L, 2L))
               ).asJava)

@@ -1174,7 +1174,7 @@ class KafkaApis(val requestChannel: RequestChannel,
               partition.acknowledgementBatches().forEach( batch => {
                 try {
                   acknowledgeBatches.add(new SharePartition.AcknowledgementBatch(
-                    batch.startOffset(),
+                    batch.baseOffset(),
                     batch.lastOffset(),
                     batch.gapOffsets(),
                     AcknowledgeType.forId(batch.acknowledgeType())
@@ -1544,7 +1544,7 @@ class KafkaApis(val requestChannel: RequestChannel,
             new util.LinkedHashMap[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
             Collections.emptyList())
         }
-        val shareSessionError: Errors = sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, Uuid.fromString(memberId), shareSessionEpoch)
+        val shareSessionError: Errors = sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, Uuid.fromString(memberId), shareSessionEpoch, true)
         if (shareSessionError.code() != Errors.NONE.code()) {
           shareAcknowledgeResponse = shareFetchRequest.getErrorAcknowledgeResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, shareSessionError.exception) match {
             case response: ShareAcknowledgeResponse => response
