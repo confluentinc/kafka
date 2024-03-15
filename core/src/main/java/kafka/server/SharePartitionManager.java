@@ -248,7 +248,10 @@ public class SharePartitionManager {
             return shareAcknowledgeRequestError;
         ShareSessionKey key = shareSessionKey(groupId, memberId);
         ShareSession shareSession = cache.get(new ShareSessionKey(groupId, memberId));
-        // if acknowledgement is piggybacked on fetch, newContext function takes care of updating the share session epoch
+        // Update the session's position in the cache for both piggybacked (to guard against the entry disappearing
+        // from the cache between the ack and the fetch) and standalone acknowledgments.
+        cache.touch(shareSession, time.milliseconds());
+        // If acknowledgement is piggybacked on fetch, newContext function takes care of updating the share session epoch
         // and share session cache. However, if the acknowledgement is standalone, the updates are handled in the if block
         if (!isAcknowledgementPiggybackedOnFetch) {
             if (reqEpoch == ShareFetchMetadata.FINAL_EPOCH) {
@@ -256,8 +259,7 @@ public class SharePartitionManager {
                     log.info("Removed share session with key " + key);
                 return Errors.NONE;
             }
-            // Update session's position in the cache
-            cache.touch(shareSession, time.milliseconds());
+            // Increment the share session epoch
             shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
         }
         return Errors.NONE;
