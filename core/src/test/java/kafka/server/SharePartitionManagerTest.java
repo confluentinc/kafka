@@ -20,6 +20,7 @@ import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.FetchRequest;
 import org.apache.kafka.common.requests.ShareFetchMetadata;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
@@ -29,6 +30,8 @@ import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.storage.internals.log.FetchIsolation;
+import org.apache.kafka.storage.internals.log.FetchParams;
 import org.junit.jupiter.api.Test;
 
 import org.junit.jupiter.api.Timeout;
@@ -45,6 +48,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,6 +59,10 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.internal.verification.VerificationModeFactory.atLeast;
+import static org.mockito.internal.verification.VerificationModeFactory.atMost;
 
 @Timeout(120)
 public class SharePartitionManagerTest {
@@ -1127,5 +1137,84 @@ public class SharePartitionManagerTest {
         ShareFetchResponse resp8 = context8.updateAndGenerateResponseData(groupId, reqMetadata2.memberId(), respData8);
         assertEquals(Errors.NONE, resp8.error());
         assertEquals(4 + resp8.data().size(objectSerializationCache, version), respSize8);
+    }
+
+    @Test
+    public void testMultipleSequentialShareFetches() {
+
+        String groupId = "grp";
+        Uuid memberId1 = Uuid.randomUuid();
+        FetchParams fetchParams = new FetchParams(ApiKeys.SHARE_FETCH.latestVersion(), FetchRequest.FUTURE_LOCAL_REPLICA_ID, -1, 0,
+                1, 1024 * 1024, FetchIsolation.HIGH_WATERMARK, Optional.empty());
+        Uuid fooId = Uuid.randomUuid();
+        Uuid barId = Uuid.randomUuid();
+        TopicIdPartition tp0 = new TopicIdPartition(fooId, new TopicPartition("foo", 0));
+        TopicIdPartition tp1 = new TopicIdPartition(fooId, new TopicPartition("foo", 1));
+        TopicIdPartition tp2 = new TopicIdPartition(barId, new TopicPartition("bar", 0));
+        TopicIdPartition tp3 = new TopicIdPartition(barId, new TopicPartition("bar", 1));
+        TopicIdPartition tp4 = new TopicIdPartition(fooId, new TopicPartition("foo", 2));
+        TopicIdPartition tp5 = new TopicIdPartition(barId, new TopicPartition("bar", 2));
+        TopicIdPartition tp6 = new TopicIdPartition(fooId, new TopicPartition("foo", 3));
+
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        SharePartitionManager sharePartitionManager = new SharePartitionManager(replicaManager, new MockTime(),
+                new SharePartitionManager.ShareSessionCache(10, 1000));
+
+        sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp0, tp1, tp2, tp3));
+        Mockito.verify(replicaManager, times(1)).fetchMessages(
+                any(), any(), any(ReplicaQuota.class), any());
+
+        sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Collections.singletonList(tp4));
+        Mockito.verify(replicaManager, times(2)).fetchMessages(
+                any(), any(), any(ReplicaQuota.class), any());
+
+        sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp5, tp6));
+        Mockito.verify(replicaManager, times(3)).fetchMessages(
+                any(), any(), any(ReplicaQuota.class), any());
+    }
+
+    @Timeout(10000)
+    @Test
+    public void testMultipleConcurrentShareFetches() throws InterruptedException {
+
+        String groupId = "grp";
+        Uuid memberId1 = Uuid.randomUuid();
+        FetchParams fetchParams = new FetchParams(ApiKeys.SHARE_FETCH.latestVersion(), FetchRequest.FUTURE_LOCAL_REPLICA_ID, -1, 0,
+                1, 1024 * 1024, FetchIsolation.HIGH_WATERMARK, Optional.empty());
+        Uuid fooId = Uuid.randomUuid();
+        Uuid barId = Uuid.randomUuid();
+        TopicIdPartition tp0 = new TopicIdPartition(fooId, new TopicPartition("foo", 0));
+        TopicIdPartition tp1 = new TopicIdPartition(fooId, new TopicPartition("foo", 1));
+        TopicIdPartition tp2 = new TopicIdPartition(barId, new TopicPartition("bar", 0));
+        TopicIdPartition tp3 = new TopicIdPartition(barId, new TopicPartition("bar", 1));
+
+        final Time time = new MockTime(0, System.currentTimeMillis(), 0);
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        SharePartitionManager sharePartitionManager = new SharePartitionManager(replicaManager, time,
+                new SharePartitionManager.ShareSessionCache(10, 1000));
+
+        int threadCount = 100;
+        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+
+        try {
+            for (int i = 0; i != threadCount; ++i) {
+                executorService.submit(() -> {
+                    sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp0, tp1, tp2, tp3));
+                });
+                // We are blocking the currently running threads, so they can complete.
+                if (i % 10 == 0)
+                    executorService.awaitTermination(2, TimeUnit.SECONDS);
+            }
+            // Blocking the last batch of 10 threads to complete
+            executorService.awaitTermination(2, TimeUnit.SECONDS);
+        } finally {
+            executorService.shutdown();
+        }
+
+        // We are checking the number of replicaManager fetchMessages() calls which should be much lesser than the expected number
+        Mockito.verify(replicaManager, atMost(40)).fetchMessages(
+                any(), any(), any(ReplicaQuota.class), any());
+        Mockito.verify(replicaManager, atLeast(10)).fetchMessages(
+                any(), any(), any(ReplicaQuota.class), any());
     }
 }
