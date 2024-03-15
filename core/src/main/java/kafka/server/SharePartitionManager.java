@@ -116,9 +116,7 @@ public class SharePartitionManager {
                 ShareFetchPartitionData shareFetchPartitionData = fetchQueue.poll();
                 Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData = new HashMap<>();
                 shareFetchPartitionData.topicIdPartitions.forEach(topicIdPartition -> {
-                    Integer partitionMaxBytes = 0;
-                    if (shareFetchPartitionData.partitionMaxBytes.containsKey(topicIdPartition))
-                        partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.get(topicIdPartition);
+                    Integer partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
 
                     // TODO: Fetch inflight and delivery count from config.
                     SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey(
