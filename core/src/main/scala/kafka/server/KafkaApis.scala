@@ -1556,25 +1556,40 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
     }
 
-    val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.fromString(memberId), shareSessionEpoch)
-    val shareFetchContext = sharePartitionManager.newContext(groupId, shareFetchData, forgottenTopics, topicNames, newReqMetadata)
+    val shareFetchDataWithPartitionMaxBytes: util.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData] =
+      new util.HashMap[TopicIdPartition, ShareFetchRequest.SharePartitionData]()
+    shareFetchData.forEach((tp, sharePartitionData) => {
+      if(sharePartitionData.maxBytes > 0) {
+        shareFetchDataWithPartitionMaxBytes.put(tp, sharePartitionData)
+      }
+    })
 
-    // Handling the Fetch from the ShareFetchRequest
-    // Fetching should not proceed if shareAcknowledgeResponse has Errors.INVALID_REQUEST error code
-    if (shareAcknowledgeResponse.data().errorCode() ==  Errors.INVALID_REQUEST.code()) {
+    if(shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH && !shareFetchDataWithPartitionMaxBytes.isEmpty) {
       shareFetchResponse = shareFetchRequest.getErrorResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, Errors.INVALID_REQUEST.exception) match {
         case response: ShareFetchResponse => response
         case _ => null
       }
     } else {
-      try {
-        shareFetchResponse = handleFetchFromShareFetchRequest(request, shareFetchData, topicNames, sharePartitionManager, shareFetchContext, authorizedTopics)
-      } catch {
-        case throwable : Throwable =>
-          debug(s"Share fetch request with correlation from client $clientId  " +
-            s"failed with error ${throwable.getMessage}")
-          requestHelper.handleError(request, throwable)
-          return
+      val newReqMetadata : ShareFetchMetadata = new ShareFetchMetadata(Uuid.fromString(memberId), shareSessionEpoch)
+      val shareFetchContext = sharePartitionManager.newContext(groupId, shareFetchData, forgottenTopics, topicNames, newReqMetadata)
+
+      // Handling the Fetch from the ShareFetchRequest
+      // Fetching should not proceed if shareAcknowledgeResponse has Errors.INVALID_REQUEST error code
+      if (shareAcknowledgeResponse.data().errorCode() ==  Errors.INVALID_REQUEST.code()) {
+        shareFetchResponse = shareFetchRequest.getErrorResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, Errors.INVALID_REQUEST.exception) match {
+          case response: ShareFetchResponse => response
+          case _ => null
+        }
+      } else {
+        try {
+          shareFetchResponse = handleFetchFromShareFetchRequest(request, shareFetchDataWithPartitionMaxBytes, topicNames, sharePartitionManager, shareFetchContext, authorizedTopics)
+        } catch {
+          case throwable : Throwable =>
+            debug(s"Share fetch request with correlation from client $clientId  " +
+              s"failed with error ${throwable.getMessage}")
+            requestHelper.handleError(request, throwable)
+            return
+        }
       }
     }
 

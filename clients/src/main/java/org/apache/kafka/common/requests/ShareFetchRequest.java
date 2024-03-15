@@ -225,16 +225,14 @@ public class ShareFetchRequest extends AbstractRequest {
                     data.topics().forEach(shareFetchTopic -> {
                         String name = topicNames.get(shareFetchTopic.topicId());
                         shareFetchTopic.partitions().forEach(shareFetchPartition -> {
-                                if(shareFetchPartition.partitionMaxBytes() > 0){
-                                    // Topic name may be null here if the topic name was unable to be resolved using the topicNames map.
-                                    shareFetchDataTmp.put(new TopicIdPartition(shareFetchTopic.topicId(), new TopicPartition(name, shareFetchPartition.partitionIndex())),
-                                            new ShareFetchRequest.SharePartitionData(
-                                                    shareFetchTopic.topicId(),
-                                                    shareFetchPartition.partitionMaxBytes(),
-                                                    optionalEpoch(shareFetchPartition.currentLeaderEpoch())
-                                            )
-                                    );
-                                }
+                                // Topic name may be null here if the topic name was unable to be resolved using the topicNames map.
+                                shareFetchDataTmp.put(new TopicIdPartition(shareFetchTopic.topicId(), new TopicPartition(name, shareFetchPartition.partitionIndex())),
+                                    new ShareFetchRequest.SharePartitionData(
+                                        shareFetchTopic.topicId(),
+                                        shareFetchPartition.partitionMaxBytes(),
+                                        optionalEpoch(shareFetchPartition.currentLeaderEpoch())
+                                    )
+                                );
                             }
                         );
                     });
