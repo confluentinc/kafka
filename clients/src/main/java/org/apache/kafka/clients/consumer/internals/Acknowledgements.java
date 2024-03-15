@@ -21,9 +21,9 @@ import org.apache.kafka.common.message.ShareFetchRequestData;
 import org.apache.kafka.common.protocol.Errors;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * This class maintains the acknowledgement and gap information for a set of records on a single
@@ -37,7 +37,7 @@ public class Acknowledgements {
     private Errors acknowledgeErrorCode;
 
     public static Acknowledgements empty() {
-        return new Acknowledgements(new LinkedHashMap<>());
+        return new Acknowledgements(new TreeMap<>());
     }
 
     private Acknowledgements(Map<Long, AcknowledgeType> acknowledgements) {
