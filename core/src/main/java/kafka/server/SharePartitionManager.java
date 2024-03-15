@@ -242,20 +242,24 @@ public class SharePartitionManager {
         return new ShareSessionKey(groupId, memberId);
     }
 
-    public Errors acknowledgeShareSessionCacheUpdate(String groupId, Uuid memberId, int reqEpoch) {
+    public Errors acknowledgeShareSessionCacheUpdate(String groupId, Uuid memberId, int reqEpoch, boolean isAcknowledgementPiggybackedOnFetch) {
         Errors shareAcknowledgeRequestError = shareAcknowledgeError(groupId, memberId, reqEpoch);
         if (shareAcknowledgeRequestError != Errors.NONE)
             return shareAcknowledgeRequestError;
         ShareSessionKey key = shareSessionKey(groupId, memberId);
         ShareSession shareSession = cache.get(new ShareSessionKey(groupId, memberId));
-        if (reqEpoch == ShareFetchMetadata.FINAL_EPOCH) {
-            if (cache.remove(key) != null)
-                log.info("Removed share session with key " + key);
-            return Errors.NONE;
+        // if acknowledgement is piggybacked on fetch, newContext function takes care of updating the share session epoch
+        // and share session cache. However, if the acknowledgement is standalone, the updates are handled in the if block
+        if (!isAcknowledgementPiggybackedOnFetch) {
+            if (reqEpoch == ShareFetchMetadata.FINAL_EPOCH) {
+                if (cache.remove(key) != null)
+                    log.info("Removed share session with key " + key);
+                return Errors.NONE;
+            }
+            // Update session's position in the cache
+            cache.touch(shareSession, time.milliseconds());
+            shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
         }
-        // Update session's position in the cache
-        cache.touch(shareSession, time.milliseconds());
-        shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
         return Errors.NONE;
     }
 
@@ -339,7 +343,9 @@ public class SharePartitionManager {
         private final ImplicitLinkedHashCollection<CachedSharePartition> partitionMap;
         private final long creationMs;
         private long lastUsedMs;
-        private int epoch;
+
+        // visible for testing
+        public int epoch;
 
         // This is used by the ShareSessionCache to store the last known size of this session.
         // If this is -1, the Session is not in the cache.
