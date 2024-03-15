@@ -8689,7 +8689,7 @@ class KafkaApisTest extends Logging {
             .setPartitionIndex(0)
             .setAcknowledgementBatches(List(
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
-                .setStartOffset(10)
+                .setBaseOffset(10)
                 .setLastOffset(20)
                 .setGapOffsets(List(12L.asInstanceOf[java.lang.Long]).asJava)
             ).asJava)
@@ -8733,7 +8733,7 @@ class KafkaApisTest extends Logging {
             .setPartitionIndex(0)
             .setAcknowledgementBatches(List(
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
-                .setStartOffset(10)
+                .setBaseOffset(10)
                 .setLastOffset(20)
                 .setGapOffsets(List(12L.asInstanceOf[java.lang.Long]).asJava)
             ).asJava)
@@ -8789,7 +8789,7 @@ class KafkaApisTest extends Logging {
             .setPartitionIndex(0)
             .setAcknowledgementBatches(List(
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
-                .setStartOffset(10)
+                .setBaseOffset(10)
                 .setLastOffset(20)
                 .setGapOffsets(List(12L.asInstanceOf[java.lang.Long]).asJava)
             ).asJava)
@@ -8843,7 +8843,7 @@ class KafkaApisTest extends Logging {
             .setPartitionIndex(0)
             .setAcknowledgementBatches(List(
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
-                .setStartOffset(10)
+                .setBaseOffset(10)
                 .setLastOffset(20)
                 .setGapOffsets(List(12L.asInstanceOf[java.lang.Long]).asJava)
             ).asJava)
@@ -8904,7 +8904,7 @@ class KafkaApisTest extends Logging {
             .setPartitionIndex(0)
             .setAcknowledgementBatches(List(
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
-                .setStartOffset(10)
+                .setBaseOffset(10)
                 .setLastOffset(20)
                 .setGapOffsets(List(12L.asInstanceOf[java.lang.Long]).asJava)
             ).asJava)
@@ -8953,7 +8953,7 @@ class KafkaApisTest extends Logging {
             .setPartitionIndex(0)
             .setAcknowledgementBatches(List(
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
-                .setStartOffset(10)
+                .setBaseOffset(10)
                 .setLastOffset(20)
                 .setGapOffsets(List(12L.asInstanceOf[java.lang.Long]).asJava)
                 .setAcknowledgeType(3)
