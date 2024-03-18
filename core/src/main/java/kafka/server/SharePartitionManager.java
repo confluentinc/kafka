@@ -44,7 +44,6 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -68,11 +67,11 @@ public class SharePartitionManager {
     private final ConcurrentLinkedQueue<ShareFetchPartitionData> fetchQueue;
     private final AtomicBoolean processFetchQueueLock;
 
-    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache) {
+    public SharePartitionManager(ReplicaManager replicaManager, Time time, Map<SharePartitionKey, SharePartition> partitionCacheMap, ShareSessionCache cache) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
-        partitionCacheMap = new ConcurrentHashMap<>();
+        this.partitionCacheMap = partitionCacheMap;
         fetchQueue = new ConcurrentLinkedQueue<>();
         this.processFetchQueueLock = new AtomicBoolean(false);
     }
