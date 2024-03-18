@@ -62,7 +62,7 @@ public class SharePartitionManager {
     private final static Logger log = LoggerFactory.getLogger(SharePartitionManager.class);
 
     // TODO: May be use ImplicitLinkedHashCollection.
-    private final Map<SharePartitionKey, SharePartition> partitionCacheMap;
+    final Map<SharePartitionKey, SharePartition> partitionCacheMap;
     private final ReplicaManager replicaManager;
     private final Time time;
     private final ShareSessionCache cache;
@@ -253,7 +253,7 @@ public class SharePartitionManager {
         });
     }
 
-    private SharePartitionKey sharePartitionKey(String groupId, TopicIdPartition topicIdPartition) {
+    SharePartitionKey sharePartitionKey(String groupId, TopicIdPartition topicIdPartition) {
         return new SharePartitionKey(groupId, topicIdPartition);
     }
 

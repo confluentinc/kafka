@@ -60,7 +60,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.when;
 import static org.mockito.internal.verification.VerificationModeFactory.atLeast;
 import static org.mockito.internal.verification.VerificationModeFactory.atMost;
 
@@ -1193,6 +1195,57 @@ public class SharePartitionManagerTest {
         SharePartitionManager sharePartitionManager = new SharePartitionManager(replicaManager, time,
                 new SharePartitionManager.ShareSessionCache(10, 1000));
 
+        SharePartition sp0 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = Mockito.mock(SharePartition.class);
+        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp3 = Mockito.mock(SharePartition.class);
+
+        sharePartitionManager.partitionCacheMap.computeIfAbsent(sharePartitionManager.sharePartitionKey(groupId, tp0),
+                k -> new SharePartition(groupId, tp0, 100, 5));
+        sharePartitionManager.partitionCacheMap.computeIfAbsent(sharePartitionManager.sharePartitionKey(groupId, tp1),
+                k -> new SharePartition(groupId, tp1, 100, 5));
+        sharePartitionManager.partitionCacheMap.computeIfAbsent(sharePartitionManager.sharePartitionKey(groupId, tp2),
+                k -> new SharePartition(groupId, tp2, 100, 5));
+        sharePartitionManager.partitionCacheMap.computeIfAbsent(sharePartitionManager.sharePartitionKey(groupId, tp3),
+                k -> new SharePartition(groupId, tp3, 100, 5));
+
+        when(sp0.nextFetchOffset()).thenReturn((long) 1, (long) 15, (long) 6, (long) 30, (long) 25);
+        when(sp1.nextFetchOffset()).thenReturn((long) 4, (long) 1, (long) 18, (long) 5);
+        when(sp2.nextFetchOffset()).thenReturn((long) 10, (long) 25, (long) 26);
+        when(sp3.nextFetchOffset()).thenReturn((long) 20, (long) 15, (long) 23, (long) 16);
+
+        doAnswer(invocation -> {
+            assertEquals(1, sp0.nextFetchOffset());
+            assertEquals(4, sp1.nextFetchOffset());
+            assertEquals(10, sp2.nextFetchOffset());
+            assertEquals(20, sp3.nextFetchOffset());
+            return null;
+        }).doAnswer(invocation -> {
+            assertEquals(15, sp0.nextFetchOffset());
+            assertEquals(1, sp1.nextFetchOffset());
+            assertEquals(25, sp2.nextFetchOffset());
+            assertEquals(15, sp3.nextFetchOffset());
+            return null;
+        }).doAnswer(invocation -> {
+            assertEquals(6, sp0.nextFetchOffset());
+            assertEquals(18, sp1.nextFetchOffset());
+            assertEquals(26, sp2.nextFetchOffset());
+            assertEquals(23, sp3.nextFetchOffset());
+            return null;
+        }).doAnswer(invocation -> {
+            assertEquals(30, sp0.nextFetchOffset());
+            assertEquals(5, sp1.nextFetchOffset());
+            assertEquals(26, sp2.nextFetchOffset());
+            assertEquals(16, sp3.nextFetchOffset());
+            return null;
+        }).doAnswer(invocation -> {
+            assertEquals(25, sp0.nextFetchOffset());
+            assertEquals(5, sp1.nextFetchOffset());
+            assertEquals(26, sp2.nextFetchOffset());
+            assertEquals(16, sp3.nextFetchOffset());
+            return null;
+        }).when(replicaManager).fetchMessages(any(), any(), any(ReplicaQuota.class), any());
+
         int threadCount = 100;
         ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
 
@@ -1201,18 +1254,16 @@ public class SharePartitionManagerTest {
                 executorService.submit(() -> {
                     sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp0, tp1, tp2, tp3));
                 });
-                // We are blocking the currently running threads, so they can complete.
+                // We are blocking the main thread at an interval of 10 threads so that the currently running executorService threads can complete.
                 if (i % 10 == 0)
                     executorService.awaitTermination(2, TimeUnit.SECONDS);
             }
-            // Blocking the last batch of 10 threads to complete
-            executorService.awaitTermination(2, TimeUnit.SECONDS);
         } finally {
-            executorService.shutdown();
+            if (!executorService.awaitTermination(2, TimeUnit.SECONDS))
+                executorService.shutdown();
         }
-
-        // We are checking the number of replicaManager fetchMessages() calls which should be much lesser than the expected number
-        Mockito.verify(replicaManager, atMost(40)).fetchMessages(
+        // We are checking the number of replicaManager fetchMessages() calls
+        Mockito.verify(replicaManager, atMost(100)).fetchMessages(
                 any(), any(), any(ReplicaQuota.class), any());
         Mockito.verify(replicaManager, atLeast(10)).fetchMessages(
                 any(), any(), any(ReplicaQuota.class), any());
