@@ -1262,7 +1262,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         clientMetadata
       )
 
-      // TODO: We cna simplify the code by removing the need for the additional max bytes map. Rather
+      // TODO: We can simplify the code by removing the need for the additional max bytes map. Rather
       // change "interesting" a tuple to contain both the partition data and the max bytes.
       val partitionMaxBytes = new util.LinkedHashMap[TopicIdPartition, Integer]
       interesting.foreach { topicIdPartition =>

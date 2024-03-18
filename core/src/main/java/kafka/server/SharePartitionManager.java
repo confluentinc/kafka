@@ -134,6 +134,11 @@ public class SharePartitionManager {
                 // No locks for share partitions could be acquired, so we complete the request and
                 // will re-fetch for the client in next poll.
                 shareFetchPartitionData.future.complete(Collections.emptyMap());
+                // Though if no partitions can be locked then there must be some other request which
+                // is in-flight and should release the lock. But it's safe to release the lock as
+                // the lock on share partition already exists which facilitates correct behaviour
+                // with multiple requests from queue being processed.
+                releaseProcessFetchQueueLock();
                 return;
             }
 
@@ -156,7 +161,7 @@ public class SharePartitionManager {
 
                     shareFetchPartitionData.future.complete(result);
                     // Releasing the lock to move ahead with the next request in queue.
-                    releaseProcessFetchQueueLock(shareFetchPartitionData.groupId, topicPartitionData.keySet());
+                    releaseFetchQueueAndPartitionsLock(shareFetchPartitionData.groupId, topicPartitionData.keySet());
                     if (!fetchQueue.isEmpty())
                         maybeProcessFetchQueue();
                     return BoxedUnit.UNIT;
@@ -164,7 +169,7 @@ public class SharePartitionManager {
         } catch (Exception e) {
             // In case exception occurs then release the locks so queue can be further processed.
             log.error("Error processing fetch queue for share partitions", e);
-            releaseProcessFetchQueueLock(shareFetchPartitionData.groupId, topicPartitionData.keySet());
+            releaseFetchQueueAndPartitionsLock(shareFetchPartitionData.groupId, topicPartitionData.keySet());
         }
     }
 
@@ -199,9 +204,13 @@ public class SharePartitionManager {
         return result;
     }
 
-    private void releaseProcessFetchQueueLock(String groupId, Set<TopicIdPartition> topicIdPartitions) {
-        processFetchQueueLock.set(false);
+    private void releaseFetchQueueAndPartitionsLock(String groupId, Set<TopicIdPartition> topicIdPartitions) {
+        releaseProcessFetchQueueLock();
         topicIdPartitions.forEach(tp -> partitionCacheMap.get(sharePartitionKey(groupId, tp)).releaseFetchLock());
+    }
+
+    private void releaseProcessFetchQueueLock() {
+        processFetchQueueLock.set(false);
     }
 
     public CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> acknowledge(
