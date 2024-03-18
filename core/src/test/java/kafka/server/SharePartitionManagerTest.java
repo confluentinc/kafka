@@ -1170,7 +1170,8 @@ public class SharePartitionManagerTest {
                 new SharePartition.AcknowledgementBatch(45, 60, new ArrayList<>(), AcknowledgeType.RELEASE),
                 new SharePartition.AcknowledgementBatch(67, 82, new ArrayList<>(), AcknowledgeType.RELEASE)
         ));
-        CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture = sharePartitionManager.acknowledge(memberId, groupId, acknowledgeTopics);
+        CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
+                sharePartitionManager.acknowledge(memberId, groupId, acknowledgeTopics);
         Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = resultFuture.join();
         assertEquals(3, result.size());
         assertTrue(result.containsKey(tp1));
