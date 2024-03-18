@@ -1189,7 +1189,6 @@ public class SharePartitionManagerTest {
                 any(), any(), any(ReplicaQuota.class), any());
     }
 
-    @Timeout(10000)
     @Test
     public void testMultipleConcurrentShareFetches() throws InterruptedException {
 
@@ -1282,10 +1281,10 @@ public class SharePartitionManagerTest {
                 });
                 // We are blocking the main thread at an interval of 10 threads so that the currently running executorService threads can complete.
                 if (i % 10 == 0)
-                    executorService.awaitTermination(2, TimeUnit.SECONDS);
+                    executorService.awaitTermination(50, TimeUnit.MILLISECONDS);
             }
         } finally {
-            if (!executorService.awaitTermination(2, TimeUnit.SECONDS))
+            if (!executorService.awaitTermination(50, TimeUnit.MILLISECONDS))
                 executorService.shutdown();
         }
         // We are checking the number of replicaManager fetchMessages() calls
