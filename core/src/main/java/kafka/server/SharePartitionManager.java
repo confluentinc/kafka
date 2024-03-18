@@ -62,7 +62,7 @@ public class SharePartitionManager {
     private final static Logger log = LoggerFactory.getLogger(SharePartitionManager.class);
 
     // TODO: May be use ImplicitLinkedHashCollection.
-    final Map<SharePartitionKey, SharePartition> partitionCacheMap;
+    private final Map<SharePartitionKey, SharePartition> partitionCacheMap;
     private final ReplicaManager replicaManager;
     private final Time time;
     private final ShareSessionCache cache;
@@ -76,6 +76,16 @@ public class SharePartitionManager {
         this.partitionCacheMap = new ConcurrentHashMap<>();
         this.fetchQueue = new ConcurrentLinkedQueue<>();
         this.processFetchQueueLock = new AtomicBoolean(false);
+    }
+
+    SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache,
+                                  Map<SharePartitionKey, SharePartition> partitionCacheMap) {
+        this.replicaManager = replicaManager;
+        this.time = time;
+        this.cache = cache;
+        this.fetchQueue = new ConcurrentLinkedQueue<>();
+        this.processFetchQueueLock = new AtomicBoolean(false);
+        this.partitionCacheMap = partitionCacheMap;
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -204,7 +214,8 @@ public class SharePartitionManager {
         return result;
     }
 
-    private void releaseFetchQueueAndPartitionsLock(String groupId, Set<TopicIdPartition> topicIdPartitions) {
+    // Visible for testing.
+    void releaseFetchQueueAndPartitionsLock(String groupId, Set<TopicIdPartition> topicIdPartitions) {
         releaseProcessFetchQueueLock();
         topicIdPartitions.forEach(tp -> partitionCacheMap.get(sharePartitionKey(groupId, tp)).releaseFetchLock());
     }
@@ -253,7 +264,7 @@ public class SharePartitionManager {
         });
     }
 
-    SharePartitionKey sharePartitionKey(String groupId, TopicIdPartition topicIdPartition) {
+    private SharePartitionKey sharePartitionKey(String groupId, TopicIdPartition topicIdPartition) {
         return new SharePartitionKey(groupId, topicIdPartition);
     }
 
