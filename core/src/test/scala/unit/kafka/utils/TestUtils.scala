@@ -1938,7 +1938,7 @@ object TestUtils extends Logging {
       records ++= polledRecords.asScala
       records.size >= numRecords
     }
-    pollRecordsUntilTrue(consumer, pollAction,
+    pollRecordsUntilTrue(consumer, pollAction(_),
       waitTimeMs = waitTimeMs,
       msg = s"Consumed ${records.size} records before timeout instead of the expected $numRecords records")
     records

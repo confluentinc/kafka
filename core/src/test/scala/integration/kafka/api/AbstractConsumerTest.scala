@@ -158,7 +158,7 @@ abstract class AbstractConsumerTest extends BaseRequestTest {
       records ++= polledRecords.asScala
       records.size >= numRecords
     }
-    TestUtils.pollRecordsUntilTrue(consumer, pollAction, waitTimeMs = 60000,
+    TestUtils.pollRecordsUntilTrue(consumer, pollAction(_), waitTimeMs = 60000,
       msg = s"Timed out before consuming expected $numRecords records. " +
         s"The number consumed was ${records.size}.")
     records

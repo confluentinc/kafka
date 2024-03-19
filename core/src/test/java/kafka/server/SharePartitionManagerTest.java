@@ -70,6 +70,8 @@ import static org.mockito.internal.verification.VerificationModeFactory.atMost;
 @Timeout(120)
 public class SharePartitionManagerTest {
 
+    private static final int PARTITION_MAX_BYTES = 40000;
+
     @Test
     public void testSharePartitionKey() {
         SharePartitionManager.SharePartitionKey sharePartitionKey1 = new SharePartitionManager.SharePartitionKey("mock-group-1",
@@ -1159,13 +1161,13 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp5 = new TopicIdPartition(barId, new TopicPartition("bar", 2));
         TopicIdPartition tp6 = new TopicIdPartition(fooId, new TopicPartition("foo", 3));
         Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
-        partitionMaxBytes.put(tp0, 40000);
-        partitionMaxBytes.put(tp1, 40000);
-        partitionMaxBytes.put(tp2, 40000);
-        partitionMaxBytes.put(tp3, 40000);
-        partitionMaxBytes.put(tp4, 40000);
-        partitionMaxBytes.put(tp5, 40000);
-        partitionMaxBytes.put(tp6, 40000);
+        partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp1, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp2, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp3, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp4, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp5, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp6, PARTITION_MAX_BYTES);
 
         ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
         SharePartitionManager sharePartitionManager = new SharePartitionManager(replicaManager, new MockTime(),
@@ -1203,10 +1205,10 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp2 = new TopicIdPartition(barId, new TopicPartition("bar", 0));
         TopicIdPartition tp3 = new TopicIdPartition(barId, new TopicPartition("bar", 1));
         Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
-        partitionMaxBytes.put(tp0, 40000);
-        partitionMaxBytes.put(tp1, 40000);
-        partitionMaxBytes.put(tp2, 40000);
-        partitionMaxBytes.put(tp3, 40000);
+        partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp1, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp2, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp3, PARTITION_MAX_BYTES);
 
         final Time time = new MockTime(0, System.currentTimeMillis(), 0);
         ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
