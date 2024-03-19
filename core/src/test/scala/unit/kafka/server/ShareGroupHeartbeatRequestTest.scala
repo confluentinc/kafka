@@ -380,10 +380,9 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     new ClusterConfigProperty(key = "offsets.topic.num.partitions", value = "1"),
     new ClusterConfigProperty(key = "offsets.topic.replication.factor", value = "1")
   ))
-  def testShareGroupHeartbeatWithPartitionAssignmentChanging(): Unit = {
+  def testPartitionAssignmentWithChangingTopics(): Unit = {
     val raftCluster = cluster.asInstanceOf[RaftClusterInstance]
     val admin = cluster.createAdminClient()
-
     // Creates the __consumer_offsets topics because it won't be created automatically
     // in this test because it does not use FindCoordinator API.
     TestUtils.createOffsetsTopicWithAdmin(
@@ -391,7 +390,6 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
       brokers = raftCluster.brokers.collect(Collectors.toList[BrokerServer]).asScala,
       controllers = raftCluster.controllerServers().asScala.toSeq
     )
-
     // Heartbeat request to join the group. Note that the member subscribes
     // to an nonexistent topic.
     var shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
@@ -399,9 +397,8 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
         .setGroupId("grp")
         .setMemberEpoch(0)
         .setRebalanceTimeoutMs(5 * 60 * 1000)
-        .setSubscribedTopicNames(List("foo", "bar", "top").asJava), true
+        .setSubscribedTopicNames(List("foo", "bar", "baz").asJava), true
     ).build()
-
     // Send the request until receiving a successful response. There is a delay
     // here because the group coordinator is loaded in the background.
     var shareGroupHeartbeatResponse: ShareGroupHeartbeatResponse = null
@@ -409,16 +406,148 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
       shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
       shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code
     }, msg = s"Could not join the group successfully. Last response $shareGroupHeartbeatResponse.")
-
     // Verify the response for member.
     val memberId = shareGroupHeartbeatResponse.data.memberId
     assertNotNull(memberId)
     assertEquals(1, shareGroupHeartbeatResponse.data.memberEpoch)
     assertEquals(new ShareGroupHeartbeatResponseData.Assignment(), shareGroupHeartbeatResponse.data.assignment)
+    // Create the topic foo.
+    val fooTopicId = TestUtils.createTopicWithAdminRaw(
+      admin = admin,
+      topic = "foo",
+      numPartitions = 2
+    )
+    // Create the topic bar.
+    val barTopicId = TestUtils.createTopicWithAdminRaw(
+      admin = admin,
+      topic = "bar",
+      numPartitions = 3
+    )
 
+    var expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
+      .setAssignedTopicPartitions(List(
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(fooTopicId)
+          .setPartitions(List[Integer](0, 1).asJava),
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(barTopicId)
+          .setPartitions(List[Integer](0, 1, 2).asJava)).asJava)
+    // Prepare the next heartbeat for member.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(1), true
+    ).build()
 
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
+      shareGroupHeartbeatResponse.data.assignment != null &&
+      expectedAssignment.assignedTopicPartitions.containsAll(shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions) &&
+      shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions.containsAll(expectedAssignment.assignedTopicPartitions)
+    }, msg = s"Could not get partitions for topic foo and bar assigned. Last response $shareGroupHeartbeatResponse.")
+    // Verify the response.
+    assertEquals(3, shareGroupHeartbeatResponse.data.memberEpoch)
+    // Create the topic baz.
+    val bazTopicId = TestUtils.createTopicWithAdminRaw(
+      admin = admin,
+      topic = "baz",
+      numPartitions = 4
+    )
 
+    expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
+      .setAssignedTopicPartitions(List(
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(fooTopicId)
+          .setPartitions(List[Integer](0, 1).asJava),
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(barTopicId)
+          .setPartitions(List[Integer](0, 1, 2).asJava),
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(bazTopicId)
+          .setPartitions(List[Integer](0, 1, 2, 3).asJava)).asJava)
+    // Prepare the next heartbeat for member.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(3), true
+    ).build()
 
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
+        shareGroupHeartbeatResponse.data.assignment != null &&
+        expectedAssignment.assignedTopicPartitions.containsAll(shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions) &&
+        shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions.containsAll(expectedAssignment.assignedTopicPartitions)
+    }, msg = s"Could not get partitions for topic baz assigned. Last response $shareGroupHeartbeatResponse.")
+    // Verify the response.
+    assertEquals(4, shareGroupHeartbeatResponse.data.memberEpoch)
+    // Increasing the partitions of topic bar which is already being consumed in the share group.
+    TestUtils.increasePartitions(admin, "bar", 6, Seq.empty)
+
+    expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
+      .setAssignedTopicPartitions(List(
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(fooTopicId)
+          .setPartitions(List[Integer](0, 1).asJava),
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(barTopicId)
+          .setPartitions(List[Integer](0, 1, 2, 3, 4, 5).asJava),
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(bazTopicId)
+          .setPartitions(List[Integer](0, 1, 2, 3).asJava)).asJava)
+    // Prepare the next heartbeat for member.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(4), true
+    ).build()
+
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
+        shareGroupHeartbeatResponse.data.assignment != null &&
+        expectedAssignment.assignedTopicPartitions.containsAll(shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions) &&
+        shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions.containsAll(expectedAssignment.assignedTopicPartitions)
+    }, msg = s"Could not update partitions assignment for topic bar. Last response $shareGroupHeartbeatResponse.")
+    // Verify the response.
+    assertEquals(5, shareGroupHeartbeatResponse.data.memberEpoch)
+    // Delete the topic foo.
+    TestUtils.deleteTopicWithAdmin(
+      admin = admin,
+      topic = "foo",
+      brokers = raftCluster.brokers.collect(Collectors.toList[BrokerServer]).asScala,
+      controllers = raftCluster.controllerServers().asScala.toSeq
+    )
+
+    expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
+      .setAssignedTopicPartitions(List(
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(barTopicId)
+          .setPartitions(List[Integer](0, 1, 2, 3, 4, 5).asJava),
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(bazTopicId)
+          .setPartitions(List[Integer](0, 1, 2, 3).asJava)).asJava)
+    // Prepare the next heartbeat for member.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(5), true
+    ).build()
+
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
+        shareGroupHeartbeatResponse.data.assignment != null &&
+        expectedAssignment.assignedTopicPartitions.containsAll(shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions) &&
+        shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions.containsAll(expectedAssignment.assignedTopicPartitions)
+    }, msg = s"Could not update partitions assignment for topic foo. Last response $shareGroupHeartbeatResponse.")
+    // Verify the response.
+    assertEquals(6, shareGroupHeartbeatResponse.data.memberEpoch)
   }
 
   private def connectAndReceive(request: ShareGroupHeartbeatRequest): ShareGroupHeartbeatResponse = {
