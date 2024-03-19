@@ -25,7 +25,7 @@ import kafka.log.remote.RemoteLogManager
 import kafka.network.{DataPlaneAcceptor, SocketServer}
 import kafka.raft.KafkaRaftManager
 import kafka.security.CredentialProvider
-import kafka.server.SharePartitionManager.{SharePartitionKey, ShareSessionCache}
+import kafka.server.SharePartitionManager.ShareSessionCache
 import kafka.server.metadata.{AclPublisher, BrokerMetadataPublisher, ClientQuotaMetadataManager, DelegationTokenPublisher, DynamicClientQuotaPublisher, DynamicConfigPublisher, KRaftMetadataCache, ScramPublisher}
 import kafka.utils.CoreUtils
 import org.apache.kafka.common.config.ConfigException
@@ -58,7 +58,7 @@ import java.util
 import java.util.Optional
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.{Condition, ReentrantLock}
-import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, ExecutionException, TimeUnit, TimeoutException}
+import java.util.concurrent.{CompletableFuture, ExecutionException, TimeUnit, TimeoutException}
 import scala.collection.Map
 import scala.compat.java8.OptionConverters.RichOptionForJava8
 import scala.jdk.CollectionConverters._
@@ -394,8 +394,7 @@ class BrokerServer(
 
       val shareFetchSessionCache : ShareSessionCache = new ShareSessionCache(config.shareGroupMaxGroups * config.shareGroupMaxSize,
         KafkaServer.MIN_INCREMENTAL_FETCH_SESSION_EVICTION_MS)
-      val partitionCacheMap: ConcurrentHashMap[SharePartitionKey, SharePartition] = new ConcurrentHashMap[SharePartitionKey, SharePartition]()
-      val sharePartitionManager = new SharePartitionManager(replicaManager, Time.SYSTEM, partitionCacheMap, shareFetchSessionCache)
+      val sharePartitionManager = new SharePartitionManager(replicaManager, Time.SYSTEM, shareFetchSessionCache)
 
       // Create the request processor objects.
       val raftSupport = RaftSupport(forwardingManager, metadataCache)
