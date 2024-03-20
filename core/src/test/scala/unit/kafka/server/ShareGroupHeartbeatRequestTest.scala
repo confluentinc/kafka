@@ -25,7 +25,7 @@ import org.apache.kafka.common.message.{ShareGroupHeartbeatRequestData, ShareGro
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.{ShareGroupHeartbeatRequest, ShareGroupHeartbeatResponse}
 import org.junit.jupiter.api.Assertions.{assertEquals, assertNotEquals, assertNotNull}
-import org.junit.jupiter.api.{Tag, Timeout}
+import org.junit.jupiter.api.{Disabled, Tag, Timeout}
 import org.junit.jupiter.api.extension.ExtendWith
 
 import java.util.stream.Collectors
@@ -270,7 +270,7 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     new ClusterConfigProperty(key = "offsets.topic.num.partitions", value = "1"),
     new ClusterConfigProperty(key = "offsets.topic.replication.factor", value = "1")
   ))
-  def testShareGroupHeartbeatWithMemberLeavingAndRejoining(): Unit = {
+  def testMemberLeavingAndRejoining(): Unit = {
     val raftCluster = cluster.asInstanceOf[RaftClusterInstance]
     val admin = cluster.createAdminClient()
 
@@ -363,13 +363,11 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
         .setSubscribedTopicNames(List("foo").asJava), true
     ).build()
 
-    TestUtils.waitUntilTrue(() => {
-      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
-      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code
-    }, msg = s"Could not rejoin the group successfully. Last response $shareGroupHeartbeatResponse.")
+    shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
 
     // Verify the response for member 1.
     assertEquals(3, shareGroupHeartbeatResponse.data.memberEpoch)
+    assertEquals(memberId, shareGroupHeartbeatResponse.data.memberId)
     // Partition assignment remains intact on rejoining.
     assertEquals(expectedAssignment, shareGroupHeartbeatResponse.data.assignment)
   }
@@ -548,6 +546,116 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     }, msg = s"Could not update partitions assignment for topic foo. Last response $shareGroupHeartbeatResponse.")
     // Verify the response.
     assertEquals(6, shareGroupHeartbeatResponse.data.memberEpoch)
+  }
+
+  @Disabled
+  @ClusterTest(serverProperties = Array(
+    new ClusterConfigProperty(key = "group.coordinator.new.enable", value = "true"),
+    new ClusterConfigProperty(key = "group.share.enable", value = "true"),
+    new ClusterConfigProperty(key = "offsets.topic.num.partitions", value = "1"),
+    new ClusterConfigProperty(key = "offsets.topic.replication.factor", value = "1"),
+    new ClusterConfigProperty(key = "group.consumer.heartbeat.interval.ms", value = "500"),
+    new ClusterConfigProperty(key = "group.consumer.min.heartbeat.interval.ms", value = "500"),
+    new ClusterConfigProperty(key = "group.consumer.max.heartbeat.interval.ms", value = "500")
+  ))
+  def testMemberJoiningWithSameIdAndExpiring(): Unit = {
+    val raftCluster = cluster.asInstanceOf[RaftClusterInstance]
+    val admin = cluster.createAdminClient()
+
+    // Creates the __consumer_offsets topics because it won't be created automatically
+    // in this test because it does not use FindCoordinator API.
+    TestUtils.createOffsetsTopicWithAdmin(
+      admin = admin,
+      brokers = raftCluster.brokers.collect(Collectors.toList[BrokerServer]).asScala,
+      controllers = raftCluster.controllerServers().asScala.toSeq
+    )
+
+    // Heartbeat request to join the group. Note that the member subscribes
+    // to an nonexistent topic.
+    var shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberEpoch(0)
+        .setRebalanceTimeoutMs(5000)
+        .setSubscribedTopicNames(List("foo").asJava), true
+    ).build()
+
+    // Send the request until receiving a successful response. There is a delay
+    // here because the group coordinator is loaded in the background.
+    var shareGroupHeartbeatResponse: ShareGroupHeartbeatResponse = null
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code
+    }, msg = s"Could not join the group successfully. Last response $shareGroupHeartbeatResponse.")
+
+    // Verify the response for member.
+    val memberId = shareGroupHeartbeatResponse.data.memberId
+    assertNotNull(memberId)
+    assertEquals(1, shareGroupHeartbeatResponse.data.memberEpoch)
+    assertEquals(new ShareGroupHeartbeatResponseData.Assignment(), shareGroupHeartbeatResponse.data.assignment)
+
+    // Create the topic.
+    val topicId = TestUtils.createTopicWithAdminRaw(
+      admin = admin,
+      topic = "foo",
+      numPartitions = 2
+    )
+
+    // This is the expected assignment.
+    val expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
+      .setAssignedTopicPartitions(List(new ShareGroupHeartbeatResponseData.TopicPartitions()
+        .setTopicId(topicId)
+        .setPartitions(List[Integer](0, 1).asJava)).asJava)
+
+    // Prepare the next heartbeat for member.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(1), true
+    ).build()
+
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
+        shareGroupHeartbeatResponse.data.assignment == expectedAssignment
+    }, msg = s"Could not get partitions assigned. Last response $shareGroupHeartbeatResponse.")
+
+    // Verify the response.
+    assertEquals(2, shareGroupHeartbeatResponse.data.memberEpoch)
+    println(memberId)
+
+//    Thread.sleep(2000);
+
+    // Prepare the next heartbeat for a different member with same memberId.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(2), true
+    ).build()
+
+    shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+    println(shareGroupHeartbeatResponse)
+  }
+
+  @Disabled
+  @ClusterTest(serverProperties = Array(
+    new ClusterConfigProperty(key = "group.coordinator.new.enable", value = "true"),
+    new ClusterConfigProperty(key = "group.share.enable", value = "true"),
+    new ClusterConfigProperty(key = "offsets.topic.num.partitions", value = "1"),
+    new ClusterConfigProperty(key = "offsets.topic.replication.factor", value = "1")
+  ))
+  def testGroupCoordinatorChange(): Unit = {
+    val raftCluster = cluster.asInstanceOf[RaftClusterInstance]
+    val admin = cluster.createAdminClient()
+    // Creates the __consumer_offsets topics because it won't be created automatically
+    // in this test because it does not use FindCoordinator API.
+    TestUtils.createOffsetsTopicWithAdmin(
+      admin = admin,
+      brokers = raftCluster.brokers.collect(Collectors.toList[BrokerServer]).asScala,
+      controllers = raftCluster.controllerServers().asScala.toSeq
+    )
   }
 
   private def connectAndReceive(request: ShareGroupHeartbeatRequest): ShareGroupHeartbeatResponse = {
