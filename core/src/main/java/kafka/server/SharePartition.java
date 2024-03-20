@@ -578,7 +578,7 @@ public class SharePartition {
             }
 
             if (throwable != null) {
-                log.info("Acknowledgement batch request failed for share partition, rollback any changed state"
+                log.debug("Acknowledgement batch request failed for share partition, rollback any changed state"
                     + " for the share partition: {}-{}", groupId, topicIdPartition);
                 updatedStates.forEach(state -> state.completeStateTransition(false));
             } else {
