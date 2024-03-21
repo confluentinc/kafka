@@ -377,7 +377,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.acknowledge(consumedRecord);
         records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
-        shareConsumer.acknowledge(consumedRecord);
+        assertThrows(IllegalStateException.class, () -> shareConsumer.acknowledge(consumedRecord));
         shareConsumer.close();
     }
 
@@ -395,7 +395,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         ConsumerRecord<byte[], byte[]> consumedRecord = records.records(tp()).get(0);
         records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
-        shareConsumer.acknowledge(consumedRecord);
+        assertThrows(IllegalStateException.class, () -> shareConsumer.acknowledge(consumedRecord));
         shareConsumer.close();
     }
 }
