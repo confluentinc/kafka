@@ -548,7 +548,6 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     assertEquals(6, shareGroupHeartbeatResponse.data.memberEpoch)
   }
 
-  @Disabled
   @ClusterTest(serverProperties = Array(
     new ClusterConfigProperty(key = "group.coordinator.new.enable", value = "true"),
     new ClusterConfigProperty(key = "group.share.enable", value = "true"),
@@ -558,7 +557,7 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     new ClusterConfigProperty(key = "group.consumer.min.heartbeat.interval.ms", value = "500"),
     new ClusterConfigProperty(key = "group.consumer.max.heartbeat.interval.ms", value = "500")
   ))
-  def testMemberJoiningWithSameIdAndExpiring(): Unit = {
+  def testMemberJoiningAndExpiring(): Unit = {
     val raftCluster = cluster.asInstanceOf[RaftClusterInstance]
     val admin = cluster.createAdminClient()
 
@@ -576,7 +575,7 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
       new ShareGroupHeartbeatRequestData()
         .setGroupId("grp")
         .setMemberEpoch(0)
-        .setRebalanceTimeoutMs(5000)
+        .setRebalanceTimeoutMs(500)
         .setSubscribedTopicNames(List("foo").asJava), true
     ).build()
 
@@ -595,16 +594,22 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     assertEquals(new ShareGroupHeartbeatResponseData.Assignment(), shareGroupHeartbeatResponse.data.assignment)
 
     // Create the topic.
-    val topicId = TestUtils.createTopicWithAdminRaw(
+    val fooId = TestUtils.createTopicWithAdminRaw(
       admin = admin,
       topic = "foo",
       numPartitions = 2
     )
 
+    val barId = TestUtils.createTopicWithAdminRaw(
+      admin = admin,
+      topic = "bar",
+      numPartitions = 1
+    )
+
     // This is the expected assignment.
-    val expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
+    var expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
       .setAssignedTopicPartitions(List(new ShareGroupHeartbeatResponseData.TopicPartitions()
-        .setTopicId(topicId)
+        .setTopicId(fooId)
         .setPartitions(List[Integer](0, 1).asJava)).asJava)
 
     // Prepare the next heartbeat for member.
@@ -619,24 +624,74 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
       shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
       shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
         shareGroupHeartbeatResponse.data.assignment == expectedAssignment
-    }, msg = s"Could not get partitions assigned. Last response $shareGroupHeartbeatResponse.")
+    }, msg = s"Could not get foo partitions assigned. Last response $shareGroupHeartbeatResponse.")
 
     // Verify the response.
     assertEquals(2, shareGroupHeartbeatResponse.data.memberEpoch)
-    println(memberId)
 
-//    Thread.sleep(2000);
-
-    // Prepare the next heartbeat for a different member with same memberId.
+    // Prepare the next heartbeat with a new subscribed topic.
     shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
       new ShareGroupHeartbeatRequestData()
         .setGroupId("grp")
         .setMemberId(memberId)
-        .setMemberEpoch(2), true
+        .setMemberEpoch(2)
+        .setSubscribedTopicNames(List("foo", "bar").asJava), true
     ).build()
 
-    shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
-    println(shareGroupHeartbeatResponse)
+    expectedAssignment = new ShareGroupHeartbeatResponseData.Assignment()
+      .setAssignedTopicPartitions(List(
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+        .setTopicId(fooId)
+        .setPartitions(List[Integer](0, 1).asJava),
+        new ShareGroupHeartbeatResponseData.TopicPartitions()
+          .setTopicId(barId)
+          .setPartitions(List[Integer](0).asJava)).asJava)
+
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
+      shareGroupHeartbeatResponse.data.assignment != null &&
+      expectedAssignment.assignedTopicPartitions.containsAll(shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions) &&
+      shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions.containsAll(expectedAssignment.assignedTopicPartitions)
+    }, msg = s"Could not get bar partitions assigned. Last response $shareGroupHeartbeatResponse.")
+
+    // Verify the response.
+    assertEquals(4, shareGroupHeartbeatResponse.data.memberEpoch)
+
+    // Prepare the next heartbeat which is empty to verify no assignment changes.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(4), true
+    ).build()
+
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code
+    }, msg = s"Could not get empty heartbeat response. Last response $shareGroupHeartbeatResponse.")
+
+    // Verify the response.
+    assertEquals(4, shareGroupHeartbeatResponse.data.memberEpoch)
+
+    // Blocking the thread so that the heartbeat interval expires and the member needs to rejoin.
+    Thread.sleep(1000)
+
+    // Prepare the next heartbeat which is empty to verify no assignment changes.
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberId(memberId)
+        .setMemberEpoch(4), true
+    ).build()
+
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code
+    }, msg = s"Could not get empty heartbeat response. Last response $shareGroupHeartbeatResponse.")
+
+    // Verify the response.
+    assertEquals(4, shareGroupHeartbeatResponse.data.memberEpoch)
   }
 
   @Disabled
