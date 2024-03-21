@@ -515,7 +515,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         acquireAndEnsureOpen();
         try {
             ensureExplicitAcknowledgement();
-            throw new UnsupportedOperationException();
+            currentFetch.acknowledge(record, type);
         } finally {
             release();
         }
@@ -721,8 +721,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         } else if (acknowledgementMode == AcknowledgementMode.PENDING) {
             // The second call to poll(Duration) if PENDING moves into IMPLICIT
             acknowledgementMode = AcknowledgementMode.IMPLICIT;
-        } else if (acknowledgementMode == AcknowledgementMode.EXPLICIT) {
-            throw new IllegalStateException("Explicit acknowledgement of delivery is being used.");
         }
 
         if (currentFetch != null) {

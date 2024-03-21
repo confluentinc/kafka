@@ -201,14 +201,8 @@ public class KafkaShareConsumer<K, V> implements ShareConsumer<K, V> {
      * The acknowledgement is committed on the next {@link #commitSync()}, {@link #commitAsync()} or
      * {@link #poll(Duration)} call.
      *
-     * <p>
-     * Records for each topic-partition must be acknowledged in the order they were returned from
-     * {@link #poll(Duration)}. By using this method, the consumer is using
-     * <b>explicit acknowledgement</b>.
-     *
      * @param record The record to acknowledge
      *
-     * @throws IllegalArgumentException if the record being acknowledged doesn't meet the ordering requirement
      * @throws IllegalStateException if the record is not waiting to be acknowledged, or the consumer has already
      *                               used implicit acknowledgement
      */
@@ -226,7 +220,6 @@ public class KafkaShareConsumer<K, V> implements ShareConsumer<K, V> {
      * @param record The record to acknowledge
      * @param type The acknowledge type which indicates whether it was processed successfully
      *
-     * @throws IllegalArgumentException if the record being acknowledged doesn't meet the ordering requirement
      * @throws IllegalStateException if the record is not waiting to be acknowledged, or the consumer has already
      *                               used implicit acknowledgement
      */
@@ -240,6 +233,7 @@ public class KafkaShareConsumer<K, V> implements ShareConsumer<K, V> {
      * the acknowledgements to commit have been indicated using {@link #acknowledge(ConsumerRecord)} or
      * {@link #acknowledge(ConsumerRecord, AcknowledgeType)}. If the consumer is using implicit acknowledgement,
      * all the records returned by the latest call to {@link #poll(Duration)} are acknowledged.
+     *
      * <p>
      * This is a synchronous commit and will block until either the commit succeeds, an unrecoverable error is
      * encountered (in which case it is thrown to the caller), or the timeout expires.
