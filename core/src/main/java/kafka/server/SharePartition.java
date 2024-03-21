@@ -18,6 +18,7 @@ package kafka.server;
 
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.message.ShareFetchResponseData.AcquiredRecords;
 import org.apache.kafka.common.record.RecordBatch;
@@ -542,7 +543,7 @@ public class SharePartition {
                     if (inFlightBatch.batchState() != RecordState.ACQUIRED) {
                         log.debug("The batch is not in the acquired state: {} for share partition: {}-{}",
                             inFlightBatch, groupId, topicIdPartition);
-                        throwable = new InvalidRequestException("The batch cannot be acknowledged. The batch is not in the acquired state.");
+                        throwable = new InvalidRecordStateException("The batch cannot be acknowledged. The batch is not in the acquired state.");
                         break;
                     }
 
@@ -578,6 +579,7 @@ public class SharePartition {
             }
 
             if (throwable != null) {
+                // the log should be DEBUG to avoid flooding of logs for a faulty client
                 log.debug("Acknowledgement batch request failed for share partition, rollback any changed state"
                     + " for the share partition: {}-{}", groupId, topicIdPartition);
                 updatedStates.forEach(state -> state.completeStateTransition(false));

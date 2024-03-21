@@ -22,6 +22,7 @@ import kafka.server.SharePartition.RecordState;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.message.ShareFetchResponseData.AcquiredRecords;
 import org.apache.kafka.common.protocol.Errors;
@@ -465,7 +466,7 @@ public class SharePartitionTest {
             Collections.singletonList(new AcknowledgementBatch(5, 9, null, AcknowledgeType.ACCEPT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
 
         // Re-acquire the same batch and then acknowledge subset with ACCEPT type.
         result = sharePartition.acquire(
@@ -529,7 +530,7 @@ public class SharePartitionTest {
                 new AcknowledgementBatch(15, 19, null, AcknowledgeType.ACCEPT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
 
         // Check the state of the cache. The state should be acquired itself.
         assertEquals(3, sharePartition.cachedState().size());
