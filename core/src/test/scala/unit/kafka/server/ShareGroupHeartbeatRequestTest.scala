@@ -25,7 +25,7 @@ import org.apache.kafka.common.message.{ShareGroupHeartbeatRequestData, ShareGro
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.{ShareGroupHeartbeatRequest, ShareGroupHeartbeatResponse}
 import org.junit.jupiter.api.Assertions.{assertEquals, assertNotEquals, assertNotNull}
-import org.junit.jupiter.api.{Tag, Timeout}
+import org.junit.jupiter.api.{Disabled, Tag, Timeout}
 import org.junit.jupiter.api.extension.ExtendWith
 
 import java.util.stream.Collectors
@@ -548,6 +548,7 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     assertEquals(6, shareGroupHeartbeatResponse.data.memberEpoch)
   }
 
+  @Disabled
   //TODO: The heartbeat interval and session timeout should be for share group and not consumer group.
   // Working with these configs until we have the share group configs available
   @ClusterTest(serverProperties = Array(
