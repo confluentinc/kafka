@@ -678,7 +678,7 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     // Verify the response.
     assertEquals(4, shareGroupHeartbeatResponse.data.memberEpoch)
 
-    // Blocking the thread for 1 sec so that the heartbeat interval expires and the member needs to rejoin.
+    // Blocking the thread for 1 sec so that the session times out and the member needs to rejoin.
     Thread.sleep(1000)
 
     // Prepare the next heartbeat which is empty to verify no assignment changes.
