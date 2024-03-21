@@ -548,6 +548,8 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     assertEquals(6, shareGroupHeartbeatResponse.data.memberEpoch)
   }
 
+  //TODO: The heartbeat interval and session timeout should be for share group and not consumer group.
+  // Working with these configs until we have the share group configs available
   @ClusterTest(serverProperties = Array(
     new ClusterConfigProperty(key = "group.coordinator.new.enable", value = "true"),
     new ClusterConfigProperty(key = "group.share.enable", value = "true"),
@@ -555,7 +557,8 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     new ClusterConfigProperty(key = "offsets.topic.replication.factor", value = "1"),
     new ClusterConfigProperty(key = "group.consumer.heartbeat.interval.ms", value = "500"),
     new ClusterConfigProperty(key = "group.consumer.min.heartbeat.interval.ms", value = "500"),
-    new ClusterConfigProperty(key = "group.consumer.max.heartbeat.interval.ms", value = "500")
+    new ClusterConfigProperty(key = "group.consumer.session.timeout.ms", value = "500"),
+    new ClusterConfigProperty(key = "group.consumer.min.session.timeout.ms", value = "500")
   ))
   def testMemberJoiningAndExpiring(): Unit = {
     val raftCluster = cluster.asInstanceOf[RaftClusterInstance]
@@ -674,7 +677,7 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
     // Verify the response.
     assertEquals(4, shareGroupHeartbeatResponse.data.memberEpoch)
 
-    // Blocking the thread so that the heartbeat interval expires and the member needs to rejoin.
+    // Blocking the thread for 1 sec so that the heartbeat interval expires and the member needs to rejoin.
     Thread.sleep(1000)
 
     // Prepare the next heartbeat which is empty to verify no assignment changes.
@@ -687,11 +690,27 @@ class ShareGroupHeartbeatRequestTest(cluster: ClusterInstance) {
 
     TestUtils.waitUntilTrue(() => {
       shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
-      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code
-    }, msg = s"Could not get empty heartbeat response. Last response $shareGroupHeartbeatResponse.")
+      shareGroupHeartbeatResponse.data.errorCode == Errors.UNKNOWN_MEMBER_ID.code
+    }, msg = s"Member should have been expired because of the timeout . Last response $shareGroupHeartbeatResponse.")
 
-    // Verify the response.
-    assertEquals(4, shareGroupHeartbeatResponse.data.memberEpoch)
+    // Member sends a request again to join the share group
+    shareGroupHeartbeatRequest = new ShareGroupHeartbeatRequest.Builder(
+      new ShareGroupHeartbeatRequestData()
+        .setGroupId("grp")
+        .setMemberEpoch(0)
+        .setRebalanceTimeoutMs(500)
+        .setSubscribedTopicNames(List("foo", "bar").asJava), true
+    ).build()
+
+    TestUtils.waitUntilTrue(() => {
+      shareGroupHeartbeatResponse = connectAndReceive(shareGroupHeartbeatRequest)
+      shareGroupHeartbeatResponse.data.errorCode == Errors.NONE.code &&
+        shareGroupHeartbeatResponse.data.assignment != null &&
+        expectedAssignment.assignedTopicPartitions.containsAll(shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions) &&
+        shareGroupHeartbeatResponse.data.assignment.assignedTopicPartitions.containsAll(expectedAssignment.assignedTopicPartitions)
+    }, msg = s"Could not get bar partitions assigned upon rejoining. Last response $shareGroupHeartbeatResponse.")
+
+    assertEquals(6, shareGroupHeartbeatResponse.data.memberEpoch)
   }
 
   @ClusterTest(serverProperties = Array(
