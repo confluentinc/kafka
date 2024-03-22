@@ -70,12 +70,7 @@ public class SharePartitionManager {
     private final AtomicBoolean processFetchQueueLock;
 
     public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache) {
-        this.replicaManager = replicaManager;
-        this.time = time;
-        this.cache = cache;
-        this.partitionCacheMap = new ConcurrentHashMap<>();
-        this.fetchQueue = new ConcurrentLinkedQueue<>();
-        this.processFetchQueueLock = new AtomicBoolean(false);
+        this(replicaManager, time, cache, new ConcurrentHashMap<>());
     }
 
     SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache,
