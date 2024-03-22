@@ -482,13 +482,13 @@ public class SharePartitionTest {
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
-        // Re-acknowledge the subset batch with ACCEPT type.
+        // Re-acknowledge the subset batch with REJECT type.
         ackResult = sharePartition.acknowledge(
             MEMBER_ID,
             Collections.singletonList(new AcknowledgementBatch(6, 8, null, AcknowledgeType.REJECT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
     }
 
     @Test
@@ -578,7 +578,7 @@ public class SharePartitionTest {
                 new AcknowledgementBatch(16, 19, null, AcknowledgeType.ACCEPT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
 
         // Check the state of the cache. The state should be acquired itself.
         assertEquals(3, sharePartition.cachedState().size());
