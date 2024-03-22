@@ -14,7 +14,7 @@
 // limitations under the License.
 
 {
-  "apiKey": 80,
+  "apiKey": 83,
   "type": "response",
   "name": "DeleteShareGroupStateResponse",
   "validVersions": "0",

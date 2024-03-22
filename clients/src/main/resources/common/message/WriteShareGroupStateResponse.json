@@ -14,7 +14,7 @@
 // limitations under the License.
 
 {
-  "apiKey": 84,
+  "apiKey": 82,
   "type": "response",
   "name": "WriteShareGroupStateResponse",
   "validVersions": "0",
