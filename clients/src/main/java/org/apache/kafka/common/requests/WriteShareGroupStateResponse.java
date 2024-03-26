@@ -30,7 +30,7 @@ public class WriteShareGroupStateResponse extends AbstractResponse {
   private final WriteShareGroupStateResponseData data;
 
   public WriteShareGroupStateResponse(WriteShareGroupStateResponseData data) {
-    super(ApiKeys.READ_SHARE_GROUP_STATE);
+    super(ApiKeys.WRITE_SHARE_GROUP_STATE);
     this.data = data;
   }
 

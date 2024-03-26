@@ -19,7 +19,6 @@ package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
 import org.apache.kafka.common.message.InitializeShareGroupStateResponseData;
-import org.apache.kafka.common.message.ShareGroupDescribeRequestData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
@@ -71,9 +70,9 @@ public class InitializeShareGroupStateRequest extends AbstractRequest {
     return data;
   }
 
-  public static ShareGroupDescribeRequest parse(ByteBuffer buffer, short version) {
-    return new ShareGroupDescribeRequest(
-        new ShareGroupDescribeRequestData(new ByteBufferAccessor(buffer), version),
+  public static InitializeShareGroupStateRequest parse(ByteBuffer buffer, short version) {
+    return new InitializeShareGroupStateRequest(
+        new InitializeShareGroupStateRequestData(new ByteBufferAccessor(buffer), version),
         version
     );
   }

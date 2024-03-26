@@ -30,7 +30,7 @@ public class DeleteShareGroupStateResponse extends AbstractResponse {
   private final DeleteShareGroupStateResponseData data;
 
   public DeleteShareGroupStateResponse(DeleteShareGroupStateResponseData data) {
-    super(ApiKeys.READ_SHARE_GROUP_STATE);
+    super(ApiKeys.DELETE_SHARE_GROUP_STATE);
     this.data = data;
   }
 
