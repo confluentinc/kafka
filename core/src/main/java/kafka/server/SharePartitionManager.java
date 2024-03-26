@@ -70,12 +70,7 @@ public class SharePartitionManager {
     private final AtomicBoolean processFetchQueueLock;
 
     public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache) {
-        this.replicaManager = replicaManager;
-        this.time = time;
-        this.cache = cache;
-        this.partitionCacheMap = new ConcurrentHashMap<>();
-        fetchQueue = new ConcurrentLinkedQueue<>();
-        this.processFetchQueueLock = new AtomicBoolean(false);
+        this(replicaManager, time, cache, new ConcurrentHashMap<>());
     }
 
     // Visible for testing
@@ -214,7 +209,8 @@ public class SharePartitionManager {
         return result;
     }
 
-    private void releaseFetchQueueAndPartitionsLock(String groupId, Set<TopicIdPartition> topicIdPartitions) {
+    // Visible for testing.
+    void releaseFetchQueueAndPartitionsLock(String groupId, Set<TopicIdPartition> topicIdPartitions) {
         releaseProcessFetchQueueLock();
         topicIdPartitions.forEach(tp -> partitionCacheMap.get(sharePartitionKey(groupId, tp)).releaseFetchLock());
     }
@@ -443,12 +439,6 @@ public class SharePartitionManager {
         public LastUsedKey lastUsedKey() {
             synchronized (this) {
                 return new LastUsedKey(key, lastUsedMs);
-            }
-        }
-
-        public EvictableKey evictableKey() {
-            synchronized (this) {
-                return new EvictableKey(key, cachedSize);
             }
         }
 
@@ -929,46 +919,6 @@ public class SharePartitionManager {
         }
     }
 
-    public static class EvictableKey implements Comparable<EvictableKey> {
-        private final ShareSessionKey key;
-        private final int size;
-
-        public EvictableKey(ShareSessionKey key, int size) {
-            this.key = key;
-            this.size = size;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(key, size);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            EvictableKey other = (EvictableKey) obj;
-            return size == other.size && Objects.equals(key, other.key);
-        }
-
-        @Override
-        public int compareTo(EvictableKey other) {
-            int res = Integer.compare(size, other.size);
-            if (res != 0)
-                return res;
-            else {
-                return Integer.compare(key.hashCode(), other.key.hashCode());
-            }
-        }
-    }
-
     /*
      * Caches share sessions.
      *
@@ -989,9 +939,6 @@ public class SharePartitionManager {
 
         // Maps last used times to sessions.
         private TreeMap<LastUsedKey, ShareSession> lastUsed = new TreeMap<>();
-
-        // A map containing sessions which can be evicted by sessions on basis of size
-        private TreeMap<EvictableKey, ShareSession> evictable = new TreeMap<>();
 
         public ShareSessionCache(int maxEntries, long evictionMs) {
             this.maxEntries = maxEntries;
@@ -1042,12 +989,9 @@ public class SharePartitionManager {
          */
         public ShareSession remove(ShareSession session) {
             synchronized (this) {
-                EvictableKey evictableKey;
                 synchronized (session) {
                     lastUsed.remove(session.lastUsedKey());
-                    evictableKey = session.evictableKey();
                 }
-                evictable.remove(evictableKey);
                 ShareSession removeResult = sessions.remove(session.key);
                 if (removeResult != null) {
                     numPartitions = numPartitions - session.cachedSize();
@@ -1057,7 +1001,7 @@ public class SharePartitionManager {
         }
 
         /**
-         * Update a session's position in the lastUsed and evictable trees.
+         * Update a session's position in the lastUsed tree.
          *
          * @param session  The session.
          * @param now      The current time in milliseconds.
@@ -1071,22 +1015,16 @@ public class SharePartitionManager {
 
                 int oldSize = session.cachedSize;
                 if (oldSize != -1) {
-                    EvictableKey oldEvictableKey = session.evictableKey();
-                    evictable.remove(oldEvictableKey);
                     numPartitions = numPartitions - oldSize;
                 }
                 session.cachedSize = session.size();
-                EvictableKey newEvictableKey = session.evictableKey();
-                if (now - session.creationMs > evictionMs) {
-                    evictable.put(newEvictableKey, session);
-                }
                 numPartitions = numPartitions + session.cachedSize;
             }
         }
 
         /**
          * Try to evict an entry from the session cache.
-         *
+         * <p>
          * A proposed new element A may evict an existing element B if:
          * B is considered "stale" because it has been inactive for a long time.
          *
@@ -1145,8 +1083,9 @@ public class SharePartitionManager {
     public static class CachedSharePartition implements ImplicitLinkedHashCollection.Element {
         private final String topic;
         private final Uuid topicId;
-        private int partition, maxBytes;
-        private Optional<Integer> leaderEpoch;
+        private final int partition;
+        private int maxBytes;
+        private final Optional<Integer> leaderEpoch;
         private boolean requiresUpdateInResponse;
 
         private int cachedNext = ImplicitLinkedHashCollection.INVALID_INDEX;
@@ -1173,7 +1112,7 @@ public class SharePartitionManager {
         public CachedSharePartition(TopicIdPartition topicIdPartition, ShareFetchRequest.SharePartitionData reqData,
                                     boolean requiresUpdateInResponse) {
             this(topicIdPartition.topic(), topicIdPartition.topicId(), topicIdPartition.partition(), reqData.maxBytes,
-                    reqData.currentLeaderEpoch, requiresUpdateInResponse);
+                    Optional.empty(), requiresUpdateInResponse);
         }
 
         public Uuid topicId() {
@@ -1189,13 +1128,12 @@ public class SharePartitionManager {
         }
 
         public ShareFetchRequest.SharePartitionData reqData() {
-            return new ShareFetchRequest.SharePartitionData(topicId, maxBytes, leaderEpoch);
+            return new ShareFetchRequest.SharePartitionData(topicId, maxBytes);
         }
 
         public void updateRequestParams(ShareFetchRequest.SharePartitionData reqData) {
             // Update our cached request parameters.
             maxBytes = reqData.maxBytes;
-            leaderEpoch = reqData.currentLeaderEpoch;
         }
 
         /**
