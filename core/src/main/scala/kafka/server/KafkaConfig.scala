@@ -809,11 +809,11 @@ object KafkaConfig {
   val ShareGroupMaxGroupsDoc = "The maximum number of share groups."
   val ShareGroupMaxSizeDoc = "The maximum number of consumers that a single share group can accommodate."
   val ShareGroupSessionTimeoutMsDoc = "The timeout to detect client failures when using the share group protocol."
-  val ShareGroupMinSessionTimeoutMsDoc = "The minimum allowed session timeout."
-  val ShareGroupMaxSessionTimeoutMsDoc = "The maximum allowed session timeout."
+  val ShareGroupMinSessionTimeoutMsDoc = "The minimum allowed session timeout for share group members."
+  val ShareGroupMaxSessionTimeoutMsDoc = "The maximum allowed session timeout for share group members."
   val ShareGroupHeartbeatIntervalMsDoc = "The heartbeat interval given to the members of a share group."
-  val ShareGroupMinHeartbeatIntervalMsDoc = "The minimum heartbeat interval."
-  val ShareGroupMaxHeartbeatIntervalMsDoc = "The maximum heartbeat interval."
+  val ShareGroupMinHeartbeatIntervalMsDoc = "The minimum heartbeat interval for share group members."
+  val ShareGroupMaxHeartbeatIntervalMsDoc = "The maximum heartbeat interval for share group members."
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeDoc = "The maximum size for a metadata entry associated with an offset commit."
