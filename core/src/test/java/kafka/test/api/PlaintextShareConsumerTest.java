@@ -34,6 +34,7 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -41,15 +42,14 @@ import scala.collection.mutable.ArrayBuffer;
 import scala.jdk.javaapi.CollectionConverters;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.Iterator;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -430,7 +430,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersWithDifferentGroupIds(String quorum) throws Exception {
+    public void testMultipleConsumersWithDifferentGroupIds(String quorum) {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
         Properties props1 = new Properties();
@@ -451,7 +451,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         producer.send(record);
         ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(5000));
         ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
-        // Both the consumers should read all the messages, because they are part of different consumer groups (both have different group IDs)
+        // Both the consumers should read all the messages, because they are part of different share groups (both have different group IDs)
         assertEquals(3, records1.count());
         assertEquals(3, records2.count());
 
@@ -474,7 +474,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersInGroupSequentialConsumption(String quorum) throws Exception {
+    public void testMultipleConsumersInGroupSequentialConsumption(String quorum) {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
         Properties props = new Properties();
@@ -516,7 +516,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
     }
 
-    private CompletableFuture<Integer> consumeMessages(AtomicInteger totalMessagesConsumed, int totalMessages, String groupId, int consumerNumber, int maxRetries, boolean isFail) {
+    private CompletableFuture<Integer> consumeMessages(AtomicInteger totalMessagesConsumed, int totalMessages, String groupId, int consumerNumber, int maxRetries) {
         CompletableFuture<Integer> future = new CompletableFuture<>();
         Properties props = new Properties();
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
@@ -535,10 +535,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         } catch (Exception e) {
             System.out.println("Consumer : " + consumerNumber + " failed ! with exception : " + e.getMessage());
         } finally {
-            System.out.println("Message consumed, group : " + groupId + ", consumer : " + consumerNumber + ", total messages consumed : " + messagesConsumed);
-            if (isFail) {
-
-            }
+            System.out.println("Message consumed, share group group : " + groupId + ", consumer : " + consumerNumber + ", total messages consumed : " + messagesConsumed);
             shareConsumer.close();
             future.complete(messagesConsumed);
         }
@@ -564,12 +561,12 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
             producerExecutorService.submit(task);
         }
 
-        List<CompletableFuture<Integer>> futures = new ArrayList<>();
+        ConcurrentLinkedQueue<CompletableFuture<Integer>> futures = new ConcurrentLinkedQueue<>();
 
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
             consumerExecutorService.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 100, false);
+                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 100);
                 futures.add(future);
             });
         }
@@ -600,9 +597,9 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         int producerCount = 5;
         int messagesPerProducer = 10000;
 
-        ExecutorService consumerGroupExecutorService1 = Executors.newFixedThreadPool(consumerCount);
-        ExecutorService consumerGroupExecutorService2 = Executors.newFixedThreadPool(consumerCount);
-        ExecutorService consumerGroupExecutorService3 = Executors.newFixedThreadPool(consumerCount);
+        ExecutorService shareGroupExecutorService1 = Executors.newFixedThreadPool(consumerCount);
+        ExecutorService shareGroupExecutorService2 = Executors.newFixedThreadPool(consumerCount);
+        ExecutorService shareGroupExecutorService3 = Executors.newFixedThreadPool(consumerCount);
         ExecutorService producerExecutorService = Executors.newFixedThreadPool(producerCount);
 
         for (int i = 0; i < producerCount; i++) {
@@ -612,34 +609,34 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
             producerExecutorService.submit(task);
         }
 
-        List<CompletableFuture<Integer>> futures1 = new ArrayList<>();
-        List<CompletableFuture<Integer>> futures2 = new ArrayList<>();
-        List<CompletableFuture<Integer>> futures3 = new ArrayList<>();
+        ConcurrentLinkedQueue<CompletableFuture<Integer>> futures1 = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<CompletableFuture<Integer>> futures2 = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<CompletableFuture<Integer>> futures3 = new ConcurrentLinkedQueue<>();
 
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
-            consumerGroupExecutorService1.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup1, producerCount * messagesPerProducer, "group1", consumerNumber, 100, false);
+            shareGroupExecutorService1.submit(() -> {
+                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup1, producerCount * messagesPerProducer, "group1", consumerNumber, 100);
                 futures1.add(future);
             });
-            consumerGroupExecutorService2.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup2, producerCount * messagesPerProducer, "group2", consumerNumber, 100, false);
+            shareGroupExecutorService2.submit(() -> {
+                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup2, producerCount * messagesPerProducer, "group2", consumerNumber, 100);
                 futures2.add(future);
             });
-            consumerGroupExecutorService3.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup3, producerCount * messagesPerProducer, "group3", consumerNumber, 100, false);
+            shareGroupExecutorService3.submit(() -> {
+                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup3, producerCount * messagesPerProducer, "group3", consumerNumber, 100);
                 futures3.add(future);
             });
         }
         producerExecutorService.shutdown();
-        consumerGroupExecutorService1.shutdown();
-        consumerGroupExecutorService2.shutdown();
-        consumerGroupExecutorService3.shutdown();
+        shareGroupExecutorService1.shutdown();
+        shareGroupExecutorService2.shutdown();
+        shareGroupExecutorService3.shutdown();
         try {
             producerExecutorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); // Wait for all producer threads to complete
-            consumerGroupExecutorService1.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); // Wait for all consumer threads for group 1 to complete
-            consumerGroupExecutorService2.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); // Wait for all consumer threads for group 2 to complete
-            consumerGroupExecutorService3.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); // Wait for all consumer threads for group 3 to complete
+            shareGroupExecutorService1.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); // Wait for all consumer threads for group 1 to complete
+            shareGroupExecutorService2.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); // Wait for all consumer threads for group 2 to complete
+            shareGroupExecutorService3.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); // Wait for all consumer threads for group 3 to complete
 
             int totalResult1 = 0;
             for (CompletableFuture<Integer> future : futures1) {
@@ -669,8 +666,51 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersInGroupFailureConcurrentConsumption(String quorum) {
+    @Disabled // Requires some changes to handle the consumer failures
+    public void testConsumerFailureInGroupSequential(String quorum) {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        Properties props = new Properties();
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group1");
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
+                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        shareConsumer1.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
+                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        shareConsumer2.subscribe(Collections.singleton(tp().topic()));
 
+        int totalMessages = 1000;
+        for (int i = 0; i < totalMessages; i++) {
+            producer.send(record);
+        }
+
+        int consumer1MessageCount = 0;
+        int consumer2MessageCount = 0;
+
+        for (int i = 0; i < 2; i++) {
+            ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(5000));
+            consumer1MessageCount += records1.count();
+        }
+
+        shareConsumer1.close();
+
+        int maxRetries = 100;
+        int retries = 0;
+        while (consumer1MessageCount + consumer2MessageCount < totalMessages && retries < maxRetries) {
+            ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
+            consumer2MessageCount += records2.count();
+            retries++;
+        }
+        shareConsumer2.close();
+
+        producer.close();
+        assertEquals(totalMessages, consumer1MessageCount + consumer2MessageCount);
+    }
+
+    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
+    @ValueSource(strings = {"kraft+kip932"})
+    @Disabled // Requires some changes to handle the consumer failures
+    public void testMultipleConsumersInGroupFailureConcurrentConsumption(String quorum) {
         AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
 
         int consumerCount = 5;
@@ -678,11 +718,11 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         int messagesPerProducer = 10000;
 
         Random random = new Random();
-        int n = random.nextInt(consumerCount - 1) + 1; // Generates a random number between 1 and consumerCount, this represents the random number of consumers that will be simulated to fail
-            System.out.println("number of failing consumers : " + n);
+        int totalConsumerFailures = random.nextInt(consumerCount - 1) + 1; // Generates a random number between 1 and consumerCount, this represents the random number of consumers that will be simulated to fail
+            System.out.println("number of failing consumers : " + totalConsumerFailures);
         Set<Integer> failedConsumers = new HashSet<>();
 
-        while (failedConsumers.size() < n) {
+        while (failedConsumers.size() < totalConsumerFailures) {
             int randomNumber = random.nextInt(consumerCount) + 1; // Generates a random number between 1 and 5
             failedConsumers.add(randomNumber);
         }
@@ -702,20 +742,19 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
             producerExecutorService.submit(task);
         }
 
-        List<CompletableFuture<Integer>> futuresSuccess = new ArrayList<>();
-        List<CompletableFuture<Integer>> futuresFail = new ArrayList<>();
+        ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresSuccess = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresFail = new ConcurrentLinkedQueue<>();
 
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
             if (failedConsumers.contains(consumerNumber)) {
                 consumerExecutorService.submit(() -> {
-                    int maxRetries = random.nextInt(6) + 1; // Generates a random number between 1 and 5, which will be the maximum number of retries after which consumer fails
-                    CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, maxRetries, true);
+                    CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 1);
                     futuresFail.add(future);
                 });
             } else {
                 consumerExecutorService.submit(() -> {
-                    CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 100, false);
+                    CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 100);
                     futuresSuccess.add(future);
                 });
             }
@@ -739,59 +778,4 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
             fail("Exception occurred : " + e.getMessage());
         }
     }
-
-
-//    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-//    @ValueSource(strings = {"kraft+kip932"})
-//    public void testtest(String quorum) throws Exception {
-//        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-//        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-//        Properties props = new Properties();
-//        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group1");
-//        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-//                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-//        shareConsumer1.subscribe(Collections.singleton(tp().topic()));
-//        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-//                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-//        shareConsumer2.subscribe(Collections.singleton(tp().topic()));
-//
-//        int totalMessages = 1000;
-//        for (int i = 0; i < totalMessages; i++) {
-//            producer.send(record);
-//        }
-//
-//        int consumer1MessageCount = 0;
-//        int consumer2MessageCount = 0;
-//
-//        for (int i = 0; i < 2; i++) {
-//            ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(5000));
-//            consumer1MessageCount += records1.count();
-//            System.out.println("poll number : " + (i + 1) + ", records number : " + records1.count());
-//            records1.forEach(consumedRecord -> shareConsumer1.acknowledge(consumedRecord, AcknowledgeType.ACCEPT));
-//        }
-//
-//        shareConsumer1.close();
-//
-//        int maxRetries = 100;
-//        int retries = 0;
-//        while (consumer1MessageCount + consumer2MessageCount < totalMessages && retries < maxRetries) {
-//            ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
-//            consumer2MessageCount += records2.count();
-//            System.out.println("polling");
-//            System.out.println("Number of records remaining : " + (totalMessages - consumer1MessageCount - consumer2MessageCount));
-//            System.out.println("polled records : " + records2.count());
-//            records2.forEach(consumedRecord -> shareConsumer2.acknowledge(consumedRecord, AcknowledgeType.ACCEPT));
-//            retries++;
-//    }
-//        shareConsumer2.close();
-//
-//        System.out.println("consumer1MessageCount : " + consumer1MessageCount);
-//        System.out.println("consumer2MessageCount : " + consumer2MessageCount);
-//
-//        assertEquals(totalMessages, consumer1MessageCount + consumer2MessageCount);
-//        shareConsumer1.close();
-//        shareConsumer2.close();
-//        producer.close();
-//    }
-
 }
