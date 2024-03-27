@@ -312,6 +312,8 @@ object KafkaConfig {
   val ShareGroupHeartbeatIntervalMsProp = "group.share.heartbeat.interval.ms"
   val ShareGroupMinHeartbeatIntervalMsProp = "group.share.min.heartbeat.interval.ms"
   val ShareGroupMaxHeartbeatIntervalMsProp = "group.share.max.heartbeat.interval.ms"
+  val ShareGroupRecordLockDurationMsProp = "group.share.record.lock.duration.ms"
+  val ShareGroupMaxRecordLockDurationMsProp = "group.share.record.lock.duration.max.ms"
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeProp = "offset.metadata.max.bytes"
@@ -814,6 +816,8 @@ object KafkaConfig {
   val ShareGroupHeartbeatIntervalMsDoc = "The heartbeat interval given to the members of a share group."
   val ShareGroupMinHeartbeatIntervalMsDoc = "The minimum heartbeat interval for share group members."
   val ShareGroupMaxHeartbeatIntervalMsDoc = "The maximum heartbeat interval for share group members."
+  val ShareGroupRecordLockDurationMsDoc = "Share-group record acquisition lock duration in milliseconds."
+  val ShareGroupMaxRecordLockDurationMsDoc = "Share-group record acquisition lock maximum duration in milliseconds."
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeDoc = "The maximum size for a metadata entry associated with an offset commit."
@@ -1195,6 +1199,8 @@ object KafkaConfig {
       .define(ShareGroupHeartbeatIntervalMsProp, INT, Defaults.SHARE_GROUP_HEARTBEAT_INTERVAL_MS, atLeast(1), MEDIUM, ShareGroupHeartbeatIntervalMsDoc)
       .define(ShareGroupMinHeartbeatIntervalMsProp, INT, Defaults.SHARE_GROUP_MIN_HEARTBEAT_INTERVAL_MS, atLeast(1), MEDIUM, ShareGroupMinHeartbeatIntervalMsDoc)
       .define(ShareGroupMaxHeartbeatIntervalMsProp, INT, Defaults.SHARE_GROUP_MAX_HEARTBEAT_INTERVAL_MS, atLeast(1), MEDIUM, ShareGroupMaxHeartbeatIntervalMsDoc)
+      .define(ShareGroupRecordLockDurationMsProp, INT, Defaults.SHARE_GROUP_RECORD_LOCK_DURATION_MS, between(1000, 60000), MEDIUM, ShareGroupRecordLockDurationMsDoc)
+      .define(ShareGroupMaxRecordLockDurationMsProp, INT, Defaults.SHARE_GROUP_MAX_RECORD_LOCK_DURATION_MS, between(1000, 3600000), MEDIUM, ShareGroupMaxRecordLockDurationMsDoc)
 
       /** ********* Offset management configuration ***********/
       .define(OffsetMetadataMaxSizeProp, INT, Defaults.OFFSET_METADATA_MAX_SIZE, HIGH, OffsetMetadataMaxSizeDoc)
@@ -1861,7 +1867,11 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val shareGroupHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupHeartbeatIntervalMsProp)
   val shareGroupMinHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupMinHeartbeatIntervalMsProp)
   val shareGroupMaxHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupMaxHeartbeatIntervalMsProp)
+  val ShareGroupRecordLockDurationMs = getInt(KafkaConfig.ShareGroupRecordLockDurationMsProp)
+  val ShareGroupMaxRecordLockDurationMs = getInt(KafkaConfig.ShareGroupMaxRecordLockDurationMsProp)
 
+
+  //TODO: Add require to test between lock duration and max lock duration
   /** ********* Offset management configuration ***********/
   val offsetMetadataMaxSize = getInt(KafkaConfig.OffsetMetadataMaxSizeProp)
   val offsetsLoadBufferSize = getInt(KafkaConfig.OffsetsLoadBufferSizeProp)
