@@ -49,10 +49,20 @@ public class ShareFetchRequest extends AbstractRequest {
             this.data = data;
         }
 
-        public static Builder forConsumer(int maxWait, int minBytes, int maxBytes, int fetchSize,
+        public static Builder forConsumer(String groupId, ShareFetchMetadata metadata,
+                                          int maxWait, int minBytes, int maxBytes, int fetchSize,
                                           Map<TopicPartition, TopicIdPartition> send,
                                           Map<TopicIdPartition, List<ShareFetchRequestData.AcknowledgementBatch>> acknowledgementsMap) {
             ShareFetchRequestData data = new ShareFetchRequestData();
+            data.setGroupId(groupId);
+            boolean isClosingShareSession = false;
+            if (metadata != null) {
+                data.setMemberId(metadata.memberId().toString());
+                data.setShareSessionEpoch(metadata.epoch());
+                if (metadata.isFinalEpoch()) {
+                    isClosingShareSession = true;
+                }
+            }
             data.setMaxWaitMs(maxWait);
             data.setMinBytes(minBytes);
             data.setMaxBytes(maxBytes);
@@ -61,12 +71,14 @@ public class ShareFetchRequest extends AbstractRequest {
             Map<Uuid, Map<Integer, ShareFetchRequestData.FetchPartition>> fetchMap = new HashMap<>();
 
             // First, start by adding the list of topic-partitions we are fetching
-            for (TopicIdPartition tip : send.values()) {
-                Map<Integer, ShareFetchRequestData.FetchPartition> partMap = fetchMap.computeIfAbsent(tip.topicId(), k -> new HashMap<>());
-                ShareFetchRequestData.FetchPartition fetchPartition = new ShareFetchRequestData.FetchPartition()
-                        .setPartitionIndex(tip.partition())
-                        .setPartitionMaxBytes(fetchSize);
-                partMap.put(tip.partition(), fetchPartition);
+            if (!isClosingShareSession) {
+                for (TopicIdPartition tip : send.values()) {
+                    Map<Integer, ShareFetchRequestData.FetchPartition> partMap = fetchMap.computeIfAbsent(tip.topicId(), k -> new HashMap<>());
+                    ShareFetchRequestData.FetchPartition fetchPartition = new ShareFetchRequestData.FetchPartition()
+                            .setPartitionIndex(tip.partition())
+                            .setPartitionMaxBytes(fetchSize);
+                    partMap.put(tip.partition(), fetchPartition);
+                }
             }
 
             // Next, add acknowledgements that we are piggybacking onto the fetch. Generally, the list of
@@ -97,15 +109,6 @@ public class ShareFetchRequest extends AbstractRequest {
             });
 
             return new Builder(data, true);
-        }
-
-        public Builder forShareSession(String groupId, ShareFetchMetadata metadata) {
-            data.setGroupId(groupId);
-            if (metadata != null) {
-                data.setMemberId(metadata.memberId().toString());
-                data.setShareSessionEpoch(metadata.epoch());
-            }
-            return this;
         }
 
         @Override
