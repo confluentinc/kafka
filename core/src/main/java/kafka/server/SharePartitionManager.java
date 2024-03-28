@@ -309,6 +309,52 @@ public class SharePartitionManager {
         }
     }
 
+    public List<TopicIdPartition> cachedTopicIdPartitionsInShareSession(String groupId, Uuid memberId) {
+        ShareSessionKey key = shareSessionKey(groupId, memberId);
+        ShareSession shareSession = cache.get(key);
+        if (shareSession == null) {
+            return null;
+        }
+        List<TopicIdPartition> cachedTopicIdPartitions = new ArrayList<>();
+        shareSession.partitionMap.forEach(cachedSharePartition -> cachedTopicIdPartitions.add(
+                new TopicIdPartition(cachedSharePartition.topicId, new TopicPartition(cachedSharePartition.topic, cachedSharePartition.partition
+        ))));
+        return cachedTopicIdPartitions;
+    }
+
+    public CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> releaseAcquiredRecords(
+            String groupId, String memberId, List<TopicIdPartition> topicIdPartitions) {
+        Map<TopicIdPartition, CompletableFuture<Errors>> futures = new HashMap<>();
+        topicIdPartitions.forEach(topicIdPartition -> {
+            SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
+            if (sharePartition == null) {
+                log.debug("No share partition found for groupId {} topicPartition {} while releasing acquired topic partitions", groupId, topicIdPartition);
+                futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
+            } else {
+                synchronized (sharePartition) {
+                    CompletableFuture<Errors> future = sharePartition.releaseAcquiredRecords(memberId).thenApply(throwable -> {
+                        if (throwable.isPresent()) {
+                            return Errors.forException(throwable.get());
+                        } else {
+                            return Errors.NONE;
+                        }
+                    });
+                    futures.put(topicIdPartition, future);
+                }
+            }
+        });
+
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                futures.values().toArray(new CompletableFuture[futures.size()]));
+        return allFutures.thenApply(v -> {
+            Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = new HashMap<>();
+            futures.forEach((topicIdPartition, future) -> result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
+                    .setPartitionIndex(topicIdPartition.partition())
+                    .setErrorCode(future.join().code())));
+            return result;
+        });
+    }
+
     public ShareFetchContext newContext(String groupId, Map<TopicIdPartition,
             ShareFetchRequest.SharePartitionData> shareFetchData, List<TopicIdPartition> toForget,
                                         Map<Uuid, String> topicNames, ShareFetchMetadata reqMetadata) {
