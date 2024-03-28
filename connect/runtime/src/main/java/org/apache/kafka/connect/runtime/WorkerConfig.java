@@ -25,6 +25,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.metrics.Sensor;
+import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.apache.kafka.connect.storage.Converter;
@@ -449,7 +450,7 @@ public class WorkerConfig extends AbstractConfig {
     }
 
     public WorkerConfig(ConfigDef definition, Map<String, String> props) {
-        super(definition, props);
+        super(definition, props, Utils.castToStringObjectMap(props), true);
         logInternalConverterDeprecationWarnings(props);
         logPluginPathConfigProviderWarning(props);
     }
@@ -541,5 +542,12 @@ public class WorkerConfig extends AbstractConfig {
                     + "'[action] [header name]:[header value]' and optionally surrounded by double quotes "
                     + "if any part of a header rule contains a comma";
         }
+    }
+
+    @Override
+    public Map<String, Object> originals() {
+        Map<String, Object> map = super.originals();
+        map.remove(AbstractConfig.CONFIG_PROVIDERS_CONFIG);
+        return map;
     }
 }

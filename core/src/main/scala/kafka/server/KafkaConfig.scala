@@ -1393,7 +1393,7 @@ object KafkaConfig {
 }
 
 class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigOverride: Option[DynamicBrokerConfig])
-  extends AbstractConfig(KafkaConfig.configDef, props, doLog) {
+  extends AbstractConfig(KafkaConfig.configDef, props, Utils.castToStringObjectMap(props), doLog) {
 
   def this(props: java.util.Map[_, _]) = this(props, true, None)
   def this(props: java.util.Map[_, _], doLog: Boolean) = this(props, doLog, None)

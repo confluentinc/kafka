@@ -1202,6 +1202,7 @@ public class WorkerWithTopicCreationTest extends ThreadedTest {
         connConfig.put("metadata.max.age.ms", "10000");
 
         Map<String, String> expectedConfigs = new HashMap<>(workerProps);
+        expectedConfigs.remove(AbstractConfig.CONFIG_PROVIDERS_CONFIG);
 
         expectedConfigs.put("bootstrap.servers", "localhost:9092");
         expectedConfigs.put("client.id", "testid");
