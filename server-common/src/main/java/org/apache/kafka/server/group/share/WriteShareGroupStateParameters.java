@@ -22,7 +22,7 @@ import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class WriteShareGroupStateParameters implements PersisterResult {
+public class WriteShareGroupStateParameters implements PersisterParameters {
   private final GroupTopicPartitionData groupTopicPartitionData;
   private final int stateEpoch;
   private final long startOffset;

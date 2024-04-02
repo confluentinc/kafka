@@ -19,7 +19,7 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.DeleteShareGroupStateRequestData;
 
-public class DeleteShareGroupStateParameters implements PersisterResult {
+public class DeleteShareGroupStateParameters implements PersisterParameters {
 
   private final GroupTopicPartitionData groupTopicPartitionData;
 

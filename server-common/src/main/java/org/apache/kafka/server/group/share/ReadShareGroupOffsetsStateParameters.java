@@ -19,7 +19,7 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.ReadShareGroupOffsetsStateRequestData;
 
-public class ReadShareGroupOffsetsStateParameters implements PersisterResult {
+public class ReadShareGroupOffsetsStateParameters implements PersisterParameters {
   private final GroupTopicPartitionData groupTopicPartitionData;
 
   private ReadShareGroupOffsetsStateParameters(GroupTopicPartitionData groupTopicPartitionData) {
