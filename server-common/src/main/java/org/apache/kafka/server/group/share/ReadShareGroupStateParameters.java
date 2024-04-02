@@ -46,7 +46,7 @@ public class ReadShareGroupStateParameters implements PersisterResult {
     }
 
     public ReadShareGroupStateParameters build() {
-      return new ReadShareGroupStateParameters(this.groupTopicPartitionData);
+      return new ReadShareGroupStateParameters(groupTopicPartitionData);
     }
   }
 }

@@ -38,15 +38,15 @@ public class DeleteShareGroupStateParameters implements PersisterResult {
   }
 
   public static class Builder {
-    private GroupTopicPartitionData gtpData;
+    private GroupTopicPartitionData groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData gtpData) {
-      this.gtpData = gtpData;
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+      this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }
 
     public DeleteShareGroupStateParameters build() {
-      return new DeleteShareGroupStateParameters(gtpData);
+      return new DeleteShareGroupStateParameters(groupTopicPartitionData);
     }
   }
 }

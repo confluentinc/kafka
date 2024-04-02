@@ -77,10 +77,10 @@ public class GroupTopicPartitionData {
       return this;
     }
 
-    public Builder setGroupTopicPartition(GroupTopicPartitionData data) {
-      this.groupId = data.groupId();
-      this.topicId = data.topicId();
-      this.partition = data.partition();
+    public Builder setGroupTopicPartition(GroupTopicPartitionData groupTopicPartitionData) {
+      this.groupId = groupTopicPartitionData.groupId();
+      this.topicId = groupTopicPartitionData.topicId();
+      this.partition = groupTopicPartitionData.partition();
       return this;
     }
 

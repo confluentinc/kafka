@@ -37,15 +37,15 @@ public class ReadShareGroupOffsetsStateParameters implements PersisterResult {
   }
 
   public static class Builder {
-    private GroupTopicPartitionData data;
+    private GroupTopicPartitionData groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData data) {
-      this.data = data;
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+      this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }
 
     public ReadShareGroupOffsetsStateParameters build() {
-      return new ReadShareGroupOffsetsStateParameters(this.data);
+      return new ReadShareGroupOffsetsStateParameters(groupTopicPartitionData);
     }
   }
 }

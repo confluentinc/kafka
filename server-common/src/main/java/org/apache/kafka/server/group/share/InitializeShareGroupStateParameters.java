@@ -56,8 +56,8 @@ public class InitializeShareGroupStateParameters implements PersisterResult {
     private int stateEpoch;
     private long startOffset;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData data) {
-      this.groupTopicPartitionData = data;
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+      this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }
 
