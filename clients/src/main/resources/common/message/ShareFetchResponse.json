@@ -52,6 +52,13 @@
             "The last offset of this batch of acquired records." },
           { "name": "DeliveryCount", "type": "int16", "versions": "0+",
             "about": "The delivery count of this batch of acquired records." }
+        ]},
+        { "name": "AbortedTransactions", "type": "[]AbortedTransaction", "versions": "0+", "nullableVersions": "0+", "ignorable": true,
+          "about": "The aborted transactions.",  "fields": [
+          { "name": "ProducerId", "type": "int64", "versions": "0+", "entityType": "producerId",
+            "about": "The producer id associated with the aborted transaction." },
+          { "name": "FirstOffset", "type": "int64", "versions": "0+",
+            "about": "The first offset in the aborted transaction." }
         ]}
       ]}
     ]},
