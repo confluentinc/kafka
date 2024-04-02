@@ -17,7 +17,10 @@
 
 package org.apache.kafka.server.group.share;
 
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ReadShareGroupStateResponseDTO implements PersisterDTO {
   private final short errorCode;
@@ -48,6 +51,17 @@ public class ReadShareGroupStateResponseDTO implements PersisterDTO {
     return stateBatches;
   }
 
+  public static ReadShareGroupStateResponseDTO from(ReadShareGroupStateResponseData data) {
+    return new Builder()
+        .setErrorCode(data.errorCode())
+        .setStateEpoch(data.stateEpoch())
+        .setStartOffset(data.startOffset())
+        .setStateBatches(data.stateBatches().stream()
+            .map(PersisterStateBatch::from)
+            .collect(Collectors.toList()))
+        .build();
+  }
+
   public static class Builder {
 
     private short errorCode;
@@ -55,20 +69,24 @@ public class ReadShareGroupStateResponseDTO implements PersisterDTO {
     private long startOffset;
     private List<PersisterStateBatch> stateBatches;
 
-    public void setErrorCode(short errorCode) {
+    public Builder setErrorCode(short errorCode) {
       this.errorCode = errorCode;
+      return this;
     }
 
-    public void setStateEpoch(int stateEpoch) {
+    public Builder setStateEpoch(int stateEpoch) {
       this.stateEpoch = stateEpoch;
+      return this;
     }
 
-    public void setStartOffset(long startOffset) {
+    public Builder setStartOffset(long startOffset) {
       this.startOffset = startOffset;
+      return this;
     }
 
-    public void setStateBatches(List<PersisterStateBatch> stateBatches) {
+    public Builder setStateBatches(List<PersisterStateBatch> stateBatches) {
       this.stateBatches = stateBatches;
+      return this;
     }
 
     public ReadShareGroupStateResponseDTO build() {

@@ -17,6 +17,8 @@
 
 package org.apache.kafka.server.group.share;
 
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+
 public class WriteShareGroupStateResponseDTO implements PersisterDTO {
   private final short errorCode;
 
@@ -28,11 +30,18 @@ public class WriteShareGroupStateResponseDTO implements PersisterDTO {
     return errorCode;
   }
 
+  public static WriteShareGroupStateResponseDTO from(WriteShareGroupStateResponseData data) {
+    return new Builder()
+        .setErrorCode(data.errorCode())
+        .build();
+  }
+
   public static class Builder {
     private short errorCode;
 
-    public void setErrorCode(short errorCode) {
+    public Builder setErrorCode(short errorCode) {
       this.errorCode = errorCode;
+      return this;
     }
 
     public WriteShareGroupStateResponseDTO build() {

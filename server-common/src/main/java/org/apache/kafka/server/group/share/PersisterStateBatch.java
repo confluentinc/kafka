@@ -17,15 +17,18 @@
 
 package org.apache.kafka.server.group.share;
 
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+
 public class PersisterStateBatch {
   private final long baseOffset;
-  private final long startOffset;
+  private final long lastOffset;
   private final byte state;
   private final short deliveryCount;
 
-  public PersisterStateBatch(long baseOffset, long startOffset, byte state, short deliveryCount) {
+  public PersisterStateBatch(long baseOffset, long lastOffset, byte state, short deliveryCount) {
     this.baseOffset = baseOffset;
-    this.startOffset = startOffset;
+    this.lastOffset = lastOffset;
     this.state = state;
     this.deliveryCount = deliveryCount;
   }
@@ -34,8 +37,8 @@ public class PersisterStateBatch {
     return baseOffset;
   }
 
-  public long getStartOffset() {
-    return startOffset;
+  public long getLastOffset() {
+    return lastOffset;
   }
 
   public byte getState() {
@@ -44,5 +47,21 @@ public class PersisterStateBatch {
 
   public short getDeliveryCount() {
     return deliveryCount;
+  }
+
+  public static PersisterStateBatch from(ReadShareGroupStateResponseData.StateBatch batch) {
+    return new PersisterStateBatch(
+        batch.baseOffset(),
+        batch.lastOffset(),
+        batch.state(),
+        batch.deliveryCount());
+  }
+
+  public static PersisterStateBatch from(WriteShareGroupStateRequestData.StateBatch batch) {
+    return new PersisterStateBatch(
+        batch.baseOffset(),
+        batch.lastOffset(),
+        batch.state(),
+        batch.deliveryCount());
   }
 }

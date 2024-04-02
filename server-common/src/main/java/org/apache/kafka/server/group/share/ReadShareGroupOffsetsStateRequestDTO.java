@@ -18,6 +18,7 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.message.ReadShareGroupOffsetsStateRequestData;
 
 public class ReadShareGroupOffsetsStateRequestDTO implements PersisterDTO {
   private final String groupId;
@@ -42,21 +43,32 @@ public class ReadShareGroupOffsetsStateRequestDTO implements PersisterDTO {
     return partition;
   }
 
+  public static ReadShareGroupOffsetsStateRequestDTO from(ReadShareGroupOffsetsStateRequestData data) {
+    return new Builder()
+        .setGroupId(data.groupId())
+        .setTopicId(data.topicId())
+        .setPartition(data.partition())
+        .build();
+  }
+
   public static class Builder {
     private String groupId;
     private Uuid topicId;
     private int partition;
 
-    public void setGroupId(String groupId) {
+    public Builder setGroupId(String groupId) {
       this.groupId = groupId;
+      return this;
     }
 
-    public void setTopicId(Uuid topicId) {
+    public Builder setTopicId(Uuid topicId) {
       this.topicId = topicId;
+      return this;
     }
 
-    public void setPartition(int partition) {
+    public Builder setPartition(int partition) {
       this.partition = partition;
+      return this;
     }
 
     public ReadShareGroupOffsetsStateRequestDTO build() {

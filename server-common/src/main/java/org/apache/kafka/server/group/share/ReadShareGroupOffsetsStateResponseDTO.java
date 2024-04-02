@@ -17,6 +17,8 @@
 
 package org.apache.kafka.server.group.share;
 
+import org.apache.kafka.common.message.ReadShareGroupOffsetsStateResponseData;
+
 public class ReadShareGroupOffsetsStateResponseDTO implements PersisterDTO {
   private final short errorCode;
   private final int stateEpoch;
@@ -40,21 +42,32 @@ public class ReadShareGroupOffsetsStateResponseDTO implements PersisterDTO {
     return startOffset;
   }
 
+  public static ReadShareGroupOffsetsStateResponseDTO from(ReadShareGroupOffsetsStateResponseData data) {
+    return new Builder()
+        .setErrorCode(data.errorCode())
+        .setStateEpoch(data.stateEpoch())
+        .setStartOffset(data.startOffset())
+        .build();
+  }
+
   public static class Builder {
     private short errorCode;
     private int stateEpoch;
     private long startOffset;
 
-    public void setErrorCode(short errorCode) {
+    public Builder setErrorCode(short errorCode) {
       this.errorCode = errorCode;
+      return this;
     }
 
-    public void setStateEpoch(int stateEpoch) {
+    public Builder setStateEpoch(int stateEpoch) {
       this.stateEpoch = stateEpoch;
+      return this;
     }
 
-    public void setStartOffset(long startOffset) {
+    public Builder setStartOffset(long startOffset) {
       this.startOffset = startOffset;
+      return this;
     }
 
     public ReadShareGroupOffsetsStateResponseDTO build() {

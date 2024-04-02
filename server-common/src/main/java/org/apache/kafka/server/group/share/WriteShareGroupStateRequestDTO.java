@@ -18,8 +18,10 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class WriteShareGroupStateRequestDTO implements PersisterDTO {
   private final String groupId;
@@ -62,6 +64,19 @@ public class WriteShareGroupStateRequestDTO implements PersisterDTO {
     return stateBatches;
   }
 
+  public static WriteShareGroupStateRequestDTO from(WriteShareGroupStateRequestData data) {
+    return new Builder()
+        .setGroupId(data.groupId())
+        .setTopicId(data.topicId())
+        .setPartition(data.partition())
+        .setStateEpoch(data.stateEpoch())
+        .setStartOffset(data.startOffset())
+        .setStateBatches(data.stateBatches().stream()
+            .map(PersisterStateBatch::from)
+            .collect(Collectors.toList()))
+        .build();
+  }
+
   public static class Builder {
     private String groupId;
     private Uuid topicId;
@@ -70,28 +85,34 @@ public class WriteShareGroupStateRequestDTO implements PersisterDTO {
     private long startOffset;
     private List<PersisterStateBatch> stateBatches;
 
-    public void setGroupId(String groupId) {
+    public Builder setGroupId(String groupId) {
       this.groupId = groupId;
+      return this;
     }
 
-    public void setTopicId(Uuid topicId) {
+    public Builder setTopicId(Uuid topicId) {
       this.topicId = topicId;
+      return this;
     }
 
-    public void setPartition(int partition) {
+    public Builder setPartition(int partition) {
       this.partition = partition;
+      return this;
     }
 
-    public void setStateEpoch(int stateEpoch) {
+    public Builder setStateEpoch(int stateEpoch) {
       this.stateEpoch = stateEpoch;
+      return this;
     }
 
-    public void setStartOffset(long startOffset) {
+    public Builder setStartOffset(long startOffset) {
       this.startOffset = startOffset;
+      return this;
     }
 
-    public void setStateBatches(List<PersisterStateBatch> stateBatches) {
+    public Builder setStateBatches(List<PersisterStateBatch> stateBatches) {
       this.stateBatches = stateBatches;
+      return this;
     }
 
     public WriteShareGroupStateRequestDTO build() {

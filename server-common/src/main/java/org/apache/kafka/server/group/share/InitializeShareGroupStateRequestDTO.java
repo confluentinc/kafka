@@ -18,6 +18,7 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
 
 public class InitializeShareGroupStateRequestDTO implements PersisterDTO {
 
@@ -27,7 +28,7 @@ public class InitializeShareGroupStateRequestDTO implements PersisterDTO {
   private final int stateEpoch;
   private final long startOffset;
 
-  private InitializeShareGroupStateRequestDTO(String groupId, Uuid topicId, int partition, int stateEpoch, int startOffset) {
+  private InitializeShareGroupStateRequestDTO(String groupId, Uuid topicId, int partition, int stateEpoch, long startOffset) {
     this.groupId = groupId;
     this.topicId = topicId;
     this.partition = partition;
@@ -55,30 +56,46 @@ public class InitializeShareGroupStateRequestDTO implements PersisterDTO {
     return startOffset;
   }
 
+  public static InitializeShareGroupStateRequestDTO from(InitializeShareGroupStateRequestData data) {
+    return new Builder()
+        .setGroupId(data.groupId())
+        .setTopicId(data.topicId())
+        .setPartition(data.partition())
+        .setStateEpoch(data.stateEpoch())
+        .setStartOffset(data.startOffset())
+        .build();
+  }
+
   public static class Builder {
     private String groupId;
     private Uuid topicId;
     private int partition;
     private int stateEpoch;
-    private int startOffset;
-    public void setGroupId(String groupId) {
+    private long startOffset;
+
+    public Builder setGroupId(String groupId) {
       this.groupId = groupId;
+      return this;
     }
 
-    public void setTopicId(Uuid topicId) {
+    public Builder setTopicId(Uuid topicId) {
       this.topicId = topicId;
+      return this;
     }
 
-    public void setPartition(int partition) {
+    public Builder setPartition(int partition) {
       this.partition = partition;
+      return this;
     }
 
-    public void setStateEpoch(int stateEpoch) {
+    public Builder setStateEpoch(int stateEpoch) {
       this.stateEpoch = stateEpoch;
+      return this;
     }
 
-    public void setStartOffset(int startOffset) {
+    public Builder setStartOffset(long startOffset) {
       this.startOffset = startOffset;
+      return this;
     }
 
     public InitializeShareGroupStateRequestDTO build() {
