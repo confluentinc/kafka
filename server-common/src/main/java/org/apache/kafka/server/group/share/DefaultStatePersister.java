@@ -78,7 +78,7 @@ public class DefaultStatePersister implements Persister {
    * This is an inter-broker RPC authorized as a cluster action.
    *
    * @param request ReadShareGroupOffsetsStateParameters
-   * @return ReadShareGroupOffsetsStateParameters
+   * @return ReadShareGroupOffsetsStateResult
    */
   public CompletableFuture<ReadShareGroupOffsetsStateResult> readShareGroupOffsets(ReadShareGroupOffsetsStateParameters request) {
     throw new RuntimeException("not implemented");

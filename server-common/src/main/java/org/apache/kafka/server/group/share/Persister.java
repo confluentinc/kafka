@@ -65,7 +65,7 @@ public interface Persister {
    * The ReadShareGroupOffsetsState API is used to read the offset information from share-partition state from a persistence impl.
    *
    * @param request ReadShareGroupOffsetsStateParameters
-   * @return ReadShareGroupOffsetsStateParameters
+   * @return ReadShareGroupOffsetsStateResult
    */
   CompletableFuture<ReadShareGroupOffsetsStateResult> readShareGroupOffsets(ReadShareGroupOffsetsStateParameters request);
 }
