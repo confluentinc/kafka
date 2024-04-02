@@ -18,22 +18,17 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupOffsetsStateRequestData;
 
-public class InitializeShareGroupStateRequestDTO implements PersisterDTO {
-
+public class ReadShareGroupOffsetsStateParameters implements PersisterParamResult {
   private final String groupId;
   private final Uuid topicId;
   private final int partition;
-  private final int stateEpoch;
-  private final long startOffset;
 
-  private InitializeShareGroupStateRequestDTO(String groupId, Uuid topicId, int partition, int stateEpoch, long startOffset) {
+  private ReadShareGroupOffsetsStateParameters(String groupId, Uuid topicId, int partition) {
     this.groupId = groupId;
     this.topicId = topicId;
     this.partition = partition;
-    this.stateEpoch = stateEpoch;
-    this.startOffset = startOffset;
   }
 
   public String getGroupId() {
@@ -48,21 +43,11 @@ public class InitializeShareGroupStateRequestDTO implements PersisterDTO {
     return partition;
   }
 
-  public int getStateEpoch() {
-    return stateEpoch;
-  }
-
-  public long getStartOffset() {
-    return startOffset;
-  }
-
-  public static InitializeShareGroupStateRequestDTO from(InitializeShareGroupStateRequestData data) {
+  public static ReadShareGroupOffsetsStateParameters from(ReadShareGroupOffsetsStateRequestData data) {
     return new Builder()
         .setGroupId(data.groupId())
         .setTopicId(data.topicId())
         .setPartition(data.partition())
-        .setStateEpoch(data.stateEpoch())
-        .setStartOffset(data.startOffset())
         .build();
   }
 
@@ -70,8 +55,6 @@ public class InitializeShareGroupStateRequestDTO implements PersisterDTO {
     private String groupId;
     private Uuid topicId;
     private int partition;
-    private int stateEpoch;
-    private long startOffset;
 
     public Builder setGroupId(String groupId) {
       this.groupId = groupId;
@@ -88,18 +71,8 @@ public class InitializeShareGroupStateRequestDTO implements PersisterDTO {
       return this;
     }
 
-    public Builder setStateEpoch(int stateEpoch) {
-      this.stateEpoch = stateEpoch;
-      return this;
-    }
-
-    public Builder setStartOffset(long startOffset) {
-      this.startOffset = startOffset;
-      return this;
-    }
-
-    public InitializeShareGroupStateRequestDTO build() {
-      return new InitializeShareGroupStateRequestDTO(this.groupId, this.topicId, this.partition, this.stateEpoch, this.startOffset);
+    public ReadShareGroupOffsetsStateParameters build() {
+      return new ReadShareGroupOffsetsStateParameters(groupId, topicId, partition);
     }
   }
 }

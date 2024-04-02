@@ -18,26 +18,18 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 
-import java.util.List;
-import java.util.stream.Collectors;
+public class ReadShareGroupStateParameters implements PersisterParamResult {
 
-public class WriteShareGroupStateRequestDTO implements PersisterDTO {
   private final String groupId;
   private final Uuid topicId;
   private final int partition;
-  private final int stateEpoch;
-  private final long startOffset;
-  private final List<PersisterStateBatch> stateBatches;
 
-  private WriteShareGroupStateRequestDTO(String groupId, Uuid topicId, int partition, int stateEpoch, long startOffset, List<PersisterStateBatch> stateBatches) {
+  private ReadShareGroupStateParameters(String groupId, Uuid topicId, int partition) {
     this.groupId = groupId;
     this.topicId = topicId;
     this.partition = partition;
-    this.stateEpoch = stateEpoch;
-    this.startOffset = startOffset;
-    this.stateBatches = stateBatches;
   }
 
   public String getGroupId() {
@@ -52,28 +44,11 @@ public class WriteShareGroupStateRequestDTO implements PersisterDTO {
     return partition;
   }
 
-  public int getStateEpoch() {
-    return stateEpoch;
-  }
-
-  public long getStartOffset() {
-    return startOffset;
-  }
-
-  public List<PersisterStateBatch> getStateBatches() {
-    return stateBatches;
-  }
-
-  public static WriteShareGroupStateRequestDTO from(WriteShareGroupStateRequestData data) {
+  public static ReadShareGroupStateParameters from(ReadShareGroupStateRequestData data) {
     return new Builder()
         .setGroupId(data.groupId())
         .setTopicId(data.topicId())
         .setPartition(data.partition())
-        .setStateEpoch(data.stateEpoch())
-        .setStartOffset(data.startOffset())
-        .setStateBatches(data.stateBatches().stream()
-            .map(PersisterStateBatch::from)
-            .collect(Collectors.toList()))
         .build();
   }
 
@@ -81,9 +56,6 @@ public class WriteShareGroupStateRequestDTO implements PersisterDTO {
     private String groupId;
     private Uuid topicId;
     private int partition;
-    private int stateEpoch;
-    private long startOffset;
-    private List<PersisterStateBatch> stateBatches;
 
     public Builder setGroupId(String groupId) {
       this.groupId = groupId;
@@ -100,23 +72,8 @@ public class WriteShareGroupStateRequestDTO implements PersisterDTO {
       return this;
     }
 
-    public Builder setStateEpoch(int stateEpoch) {
-      this.stateEpoch = stateEpoch;
-      return this;
-    }
-
-    public Builder setStartOffset(long startOffset) {
-      this.startOffset = startOffset;
-      return this;
-    }
-
-    public Builder setStateBatches(List<PersisterStateBatch> stateBatches) {
-      this.stateBatches = stateBatches;
-      return this;
-    }
-
-    public WriteShareGroupStateRequestDTO build() {
-      return new WriteShareGroupStateRequestDTO(groupId, topicId, partition, stateEpoch, startOffset, stateBatches);
+    public ReadShareGroupStateParameters build() {
+      return new ReadShareGroupStateParameters(groupId, topicId, partition);
     }
   }
 }

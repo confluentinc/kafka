@@ -18,17 +18,22 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.message.DeleteShareGroupStateRequestData;
+import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
 
-public class DeleteShareGroupStateRequestDTO implements PersisterDTO {
+public class InitializeShareGroupStateParameters implements PersisterParamResult {
+
   private final String groupId;
   private final Uuid topicId;
   private final int partition;
+  private final int stateEpoch;
+  private final long startOffset;
 
-  private DeleteShareGroupStateRequestDTO(String groupId, Uuid topicId, int partition) {
+  private InitializeShareGroupStateParameters(String groupId, Uuid topicId, int partition, int stateEpoch, long startOffset) {
     this.groupId = groupId;
     this.topicId = topicId;
     this.partition = partition;
+    this.stateEpoch = stateEpoch;
+    this.startOffset = startOffset;
   }
 
   public String getGroupId() {
@@ -43,11 +48,21 @@ public class DeleteShareGroupStateRequestDTO implements PersisterDTO {
     return partition;
   }
 
-  public static DeleteShareGroupStateRequestDTO from(DeleteShareGroupStateRequestData data) {
+  public int getStateEpoch() {
+    return stateEpoch;
+  }
+
+  public long getStartOffset() {
+    return startOffset;
+  }
+
+  public static InitializeShareGroupStateParameters from(InitializeShareGroupStateRequestData data) {
     return new Builder()
         .setGroupId(data.groupId())
         .setTopicId(data.topicId())
         .setPartition(data.partition())
+        .setStateEpoch(data.stateEpoch())
+        .setStartOffset(data.startOffset())
         .build();
   }
 
@@ -55,6 +70,8 @@ public class DeleteShareGroupStateRequestDTO implements PersisterDTO {
     private String groupId;
     private Uuid topicId;
     private int partition;
+    private int stateEpoch;
+    private long startOffset;
 
     public Builder setGroupId(String groupId) {
       this.groupId = groupId;
@@ -71,8 +88,18 @@ public class DeleteShareGroupStateRequestDTO implements PersisterDTO {
       return this;
     }
 
-    public DeleteShareGroupStateRequestDTO build() {
-      return new DeleteShareGroupStateRequestDTO(groupId, topicId, partition);
+    public Builder setStateEpoch(int stateEpoch) {
+      this.stateEpoch = stateEpoch;
+      return this;
+    }
+
+    public Builder setStartOffset(long startOffset) {
+      this.startOffset = startOffset;
+      return this;
+    }
+
+    public InitializeShareGroupStateParameters build() {
+      return new InitializeShareGroupStateParameters(this.groupId, this.topicId, this.partition, this.stateEpoch, this.startOffset);
     }
   }
 }

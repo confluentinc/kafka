@@ -17,61 +17,35 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.message.ReadShareGroupOffsetsStateResponseData;
+import org.apache.kafka.common.message.InitializeShareGroupStateResponseData;
 
-public class ReadShareGroupOffsetsStateResponseDTO implements PersisterDTO {
+public class InitializeShareGroupStateResult implements PersisterParamResult {
   private final short errorCode;
-  private final int stateEpoch;
-  private final long startOffset;
 
-  private ReadShareGroupOffsetsStateResponseDTO(short errorCode, int stateEpoch, long startOffset) {
+  private InitializeShareGroupStateResult(short errorCode) {
     this.errorCode = errorCode;
-    this.stateEpoch = stateEpoch;
-    this.startOffset = startOffset;
   }
 
   public short getErrorCode() {
     return errorCode;
   }
 
-  public int getStateEpoch() {
-    return stateEpoch;
-  }
-
-  public long getStartOffset() {
-    return startOffset;
-  }
-
-  public static ReadShareGroupOffsetsStateResponseDTO from(ReadShareGroupOffsetsStateResponseData data) {
+  public static InitializeShareGroupStateResult from(InitializeShareGroupStateResponseData data) {
     return new Builder()
         .setErrorCode(data.errorCode())
-        .setStateEpoch(data.stateEpoch())
-        .setStartOffset(data.startOffset())
         .build();
   }
 
   public static class Builder {
     private short errorCode;
-    private int stateEpoch;
-    private long startOffset;
 
     public Builder setErrorCode(short errorCode) {
       this.errorCode = errorCode;
       return this;
     }
 
-    public Builder setStateEpoch(int stateEpoch) {
-      this.stateEpoch = stateEpoch;
-      return this;
-    }
-
-    public Builder setStartOffset(long startOffset) {
-      this.startOffset = startOffset;
-      return this;
-    }
-
-    public ReadShareGroupOffsetsStateResponseDTO build() {
-      return new ReadShareGroupOffsetsStateResponseDTO(errorCode, stateEpoch, startOffset);
+    public InitializeShareGroupStateResult build() {
+      return new InitializeShareGroupStateResult(errorCode);
     }
   }
 }

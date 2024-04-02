@@ -17,26 +17,39 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class ReadShareGroupStateResponseDTO implements PersisterDTO {
-  private final short errorCode;
+public class WriteShareGroupStateParameters implements PersisterParamResult {
+  private final String groupId;
+  private final Uuid topicId;
+  private final int partition;
   private final int stateEpoch;
   private final long startOffset;
   private final List<PersisterStateBatch> stateBatches;
 
-  private ReadShareGroupStateResponseDTO(short errorCode, int stateEpoch, long startOffset, List<PersisterStateBatch> stateBatches) {
-    this.errorCode = errorCode;
+  private WriteShareGroupStateParameters(String groupId, Uuid topicId, int partition, int stateEpoch, long startOffset, List<PersisterStateBatch> stateBatches) {
+    this.groupId = groupId;
+    this.topicId = topicId;
+    this.partition = partition;
     this.stateEpoch = stateEpoch;
     this.startOffset = startOffset;
     this.stateBatches = stateBatches;
   }
 
-  public short getErrorCode() {
-    return errorCode;
+  public String getGroupId() {
+    return groupId;
+  }
+
+  public Uuid getTopicId() {
+    return topicId;
+  }
+
+  public int getPartition() {
+    return partition;
   }
 
   public int getStateEpoch() {
@@ -51,9 +64,11 @@ public class ReadShareGroupStateResponseDTO implements PersisterDTO {
     return stateBatches;
   }
 
-  public static ReadShareGroupStateResponseDTO from(ReadShareGroupStateResponseData data) {
+  public static WriteShareGroupStateParameters from(WriteShareGroupStateRequestData data) {
     return new Builder()
-        .setErrorCode(data.errorCode())
+        .setGroupId(data.groupId())
+        .setTopicId(data.topicId())
+        .setPartition(data.partition())
         .setStateEpoch(data.stateEpoch())
         .setStartOffset(data.startOffset())
         .setStateBatches(data.stateBatches().stream()
@@ -63,14 +78,25 @@ public class ReadShareGroupStateResponseDTO implements PersisterDTO {
   }
 
   public static class Builder {
-
-    private short errorCode;
+    private String groupId;
+    private Uuid topicId;
+    private int partition;
     private int stateEpoch;
     private long startOffset;
     private List<PersisterStateBatch> stateBatches;
 
-    public Builder setErrorCode(short errorCode) {
-      this.errorCode = errorCode;
+    public Builder setGroupId(String groupId) {
+      this.groupId = groupId;
+      return this;
+    }
+
+    public Builder setTopicId(Uuid topicId) {
+      this.topicId = topicId;
+      return this;
+    }
+
+    public Builder setPartition(int partition) {
+      this.partition = partition;
       return this;
     }
 
@@ -89,8 +115,8 @@ public class ReadShareGroupStateResponseDTO implements PersisterDTO {
       return this;
     }
 
-    public ReadShareGroupStateResponseDTO build() {
-      return new ReadShareGroupStateResponseDTO(errorCode, stateEpoch, startOffset, stateBatches);
+    public WriteShareGroupStateParameters build() {
+      return new WriteShareGroupStateParameters(groupId, topicId, partition, stateEpoch, startOffset, stateBatches);
     }
   }
 }

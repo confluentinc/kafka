@@ -17,35 +17,61 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.message.InitializeShareGroupStateResponseData;
+import org.apache.kafka.common.message.ReadShareGroupOffsetsStateResponseData;
 
-public class InitializeShareGroupStateResponseDTO implements PersisterDTO {
+public class ReadShareGroupOffsetsStateResult implements PersisterParamResult {
   private final short errorCode;
+  private final int stateEpoch;
+  private final long startOffset;
 
-  private InitializeShareGroupStateResponseDTO(short errorCode) {
+  private ReadShareGroupOffsetsStateResult(short errorCode, int stateEpoch, long startOffset) {
     this.errorCode = errorCode;
+    this.stateEpoch = stateEpoch;
+    this.startOffset = startOffset;
   }
 
   public short getErrorCode() {
     return errorCode;
   }
 
-  public static InitializeShareGroupStateResponseDTO from(InitializeShareGroupStateResponseData data) {
+  public int getStateEpoch() {
+    return stateEpoch;
+  }
+
+  public long getStartOffset() {
+    return startOffset;
+  }
+
+  public static ReadShareGroupOffsetsStateResult from(ReadShareGroupOffsetsStateResponseData data) {
     return new Builder()
         .setErrorCode(data.errorCode())
+        .setStateEpoch(data.stateEpoch())
+        .setStartOffset(data.startOffset())
         .build();
   }
 
   public static class Builder {
     private short errorCode;
+    private int stateEpoch;
+    private long startOffset;
 
     public Builder setErrorCode(short errorCode) {
       this.errorCode = errorCode;
       return this;
     }
 
-    public InitializeShareGroupStateResponseDTO build() {
-      return new InitializeShareGroupStateResponseDTO(errorCode);
+    public Builder setStateEpoch(int stateEpoch) {
+      this.stateEpoch = stateEpoch;
+      return this;
+    }
+
+    public Builder setStartOffset(long startOffset) {
+      this.startOffset = startOffset;
+      return this;
+    }
+
+    public ReadShareGroupOffsetsStateResult build() {
+      return new ReadShareGroupOffsetsStateResult(errorCode, stateEpoch, startOffset);
     }
   }
 }

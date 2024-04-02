@@ -19,10 +19,10 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.DeleteShareGroupStateResponseData;
 
-public class DeleteShareGroupStateResponseDTO implements PersisterDTO {
+public class DeleteShareGroupStateResult implements PersisterParamResult {
   private final short errorCode;
 
-  private DeleteShareGroupStateResponseDTO(short errorCode) {
+  private DeleteShareGroupStateResult(short errorCode) {
     this.errorCode = errorCode;
   }
 
@@ -30,7 +30,7 @@ public class DeleteShareGroupStateResponseDTO implements PersisterDTO {
     return errorCode;
   }
 
-  public static DeleteShareGroupStateResponseDTO from(DeleteShareGroupStateResponseData data) {
+  public static DeleteShareGroupStateResult from(DeleteShareGroupStateResponseData data) {
     return new Builder()
         .setErrorCode(data.errorCode())
         .build();
@@ -44,8 +44,8 @@ public class DeleteShareGroupStateResponseDTO implements PersisterDTO {
       return this;
     }
 
-    public DeleteShareGroupStateResponseDTO build() {
-      return new DeleteShareGroupStateResponseDTO(errorCode);
+    public DeleteShareGroupStateResult build() {
+      return new DeleteShareGroupStateResult(errorCode);
     }
   }
 }

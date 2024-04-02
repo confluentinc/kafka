@@ -19,16 +19,24 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.annotation.InterfaceStability;
 
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * The default implementation of the {@link Persister} interface which is used by the
+ * group coordinator and share-partition leaders to manage the durable share-partition state.
+ * This implementation uses inter-broker RPCs to make requests with the share coordinator
+ * which is responsible for persisting the share-partition state.
+ */
 @InterfaceStability.Evolving
-public class DefaultStatePersister {
+public class DefaultStatePersister implements Persister {
   /**
    * The InitializeShareGroupState API is used by the group coordinator to initialize the share-partition state.
    * This is an inter-broker RPC authorized as a cluster action.
    *
-   * @param request InitializeShareGroupStateRequestDTO
-   * @return InitializeShareGroupStateResponseDTO
+   * @param request InitializeShareGroupStateParameters
+   * @return InitializeShareGroupStateResult
    */
-  public InitializeShareGroupStateResponseDTO initializeShareGroupState(InitializeShareGroupStateRequestDTO request) {
+  public CompletableFuture<InitializeShareGroupStateResult> initializeShareGroupState(InitializeShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
@@ -36,10 +44,10 @@ public class DefaultStatePersister {
    * The ReadShareGroupState API is used by share-partition leaders to read share-partition state from a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
-   * @param request ReadShareGroupStateRequestDTO
-   * @return ReadShareGroupStateResponseDTO
+   * @param request ReadShareGroupStateParameters
+   * @return ReadShareGroupStateResult
    */
-  public ReadShareGroupStateResponseDTO readShareGroupState(ReadShareGroupStateRequestDTO request) {
+  public CompletableFuture<ReadShareGroupStateResult> readShareGroupState(ReadShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
@@ -47,10 +55,10 @@ public class DefaultStatePersister {
    * The WriteShareGroupState API is used by share-partition leaders to write share-partition state to a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
-   * @param requestDTO WriteShareGroupStateRequestDTO
-   * @return WriteShareGroupStateResponseDTO
+   * @param request WriteShareGroupStateParameters
+   * @return WriteShareGroupStateResult
    */
-  public WriteShareGroupStateResponseDTO writeShareGroupState(WriteShareGroupStateRequestDTO requestDTO) {
+  public CompletableFuture<WriteShareGroupStateResult> writeShareGroupState(WriteShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
@@ -58,10 +66,10 @@ public class DefaultStatePersister {
    * The DeleteShareGroupState API is used by the group coordinator to delete share-partition state from a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
-   * @param request DeleteShareGroupStateRequestDTO
-   * @return DeleteShareGroupStateResponseDTO
+   * @param request DeleteShareGroupStateParameters
+   * @return DeleteShareGroupStateResult
    */
-  public DeleteShareGroupStateResponseDTO deleteShareGroupState(DeleteShareGroupStateRequestDTO request) {
+  public CompletableFuture<DeleteShareGroupStateResult> deleteShareGroupState(DeleteShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
@@ -69,10 +77,10 @@ public class DefaultStatePersister {
    * The ReadShareGroupOffsetsState API is used by the group coordinator to read the offset information from share-partition state from a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
-   * @param request ReadShareGroupOffsetsStateRequestDTO
-   * @return ReadShareGroupOffsetsStateRequestDTO
+   * @param request ReadShareGroupOffsetsStateParameters
+   * @return ReadShareGroupOffsetsStateParameters
    */
-  public ReadShareGroupOffsetsStateResponseDTO readShareGroupOffsets(ReadShareGroupOffsetsStateRequestDTO request) {
+  public CompletableFuture<ReadShareGroupOffsetsStateResult> readShareGroupOffsets(ReadShareGroupOffsetsStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 }

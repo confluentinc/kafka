@@ -18,13 +18,13 @@
 package org.apache.kafka.server.group.share;
 
 /**
- * Marker interface for DTO classes related to the
- * persister DTO classes. In this impl (KIP-932), the persister will invoke
+ * Marker interface for parameter/result classes related to the
+ * persister parameter/result classes. In this impl (KIP-932), the persister will invoke
  * the share coordinator to store state information. However, this could change
  * in the future where some other strategy could be used to persist state. Hence,
  * we do not want to expose the persister RPCs to the external callers.
  * To get around this we introduce a few DTO classes to serve as the arguments
  * and return types of the DefaultStatePersister class.
  */
-public interface PersisterDTO {
+public interface PersisterParamResult {
 }

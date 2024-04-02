@@ -18,14 +18,14 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.message.ReadShareGroupOffsetsStateRequestData;
+import org.apache.kafka.common.message.DeleteShareGroupStateRequestData;
 
-public class ReadShareGroupOffsetsStateRequestDTO implements PersisterDTO {
+public class DeleteShareGroupStateParameters implements PersisterParamResult {
   private final String groupId;
   private final Uuid topicId;
   private final int partition;
 
-  private ReadShareGroupOffsetsStateRequestDTO(String groupId, Uuid topicId, int partition) {
+  private DeleteShareGroupStateParameters(String groupId, Uuid topicId, int partition) {
     this.groupId = groupId;
     this.topicId = topicId;
     this.partition = partition;
@@ -43,7 +43,7 @@ public class ReadShareGroupOffsetsStateRequestDTO implements PersisterDTO {
     return partition;
   }
 
-  public static ReadShareGroupOffsetsStateRequestDTO from(ReadShareGroupOffsetsStateRequestData data) {
+  public static DeleteShareGroupStateParameters from(DeleteShareGroupStateRequestData data) {
     return new Builder()
         .setGroupId(data.groupId())
         .setTopicId(data.topicId())
@@ -71,8 +71,8 @@ public class ReadShareGroupOffsetsStateRequestDTO implements PersisterDTO {
       return this;
     }
 
-    public ReadShareGroupOffsetsStateRequestDTO build() {
-      return new ReadShareGroupOffsetsStateRequestDTO(groupId, topicId, partition);
+    public DeleteShareGroupStateParameters build() {
+      return new DeleteShareGroupStateParameters(groupId, topicId, partition);
     }
   }
 }
