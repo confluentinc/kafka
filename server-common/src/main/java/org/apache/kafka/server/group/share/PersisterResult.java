@@ -26,5 +26,5 @@ package org.apache.kafka.server.group.share;
  * To get around this we introduce a few DTO classes to serve as the arguments
  * and return types of the DefaultStatePersister class.
  */
-public interface PersisterParamResult {
+public interface PersisterResult {
 }

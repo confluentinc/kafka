@@ -35,19 +35,19 @@ public class PersisterStateBatch {
     this.deliveryCount = deliveryCount;
   }
 
-  public long getBaseOffset() {
+  public long baseOffset() {
     return baseOffset;
   }
 
-  public long getLastOffset() {
+  public long lastOffset() {
     return lastOffset;
   }
 
-  public byte getState() {
+  public byte state() {
     return state;
   }
 
-  public short getDeliveryCount() {
+  public short deliveryCount() {
     return deliveryCount;
   }
 

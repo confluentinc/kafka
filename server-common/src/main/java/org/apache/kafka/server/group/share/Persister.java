@@ -30,42 +30,42 @@ import java.util.concurrent.CompletableFuture;
 @InterfaceStability.Evolving
 public interface Persister {
   /**
-   * The InitializeShareGroupState API is used to initialize the share-partition state.
+   * Initialize the share partition state.
    *
    * @param request InitializeShareGroupStateParameters
    * @return InitializeShareGroupStateResult
    */
-  CompletableFuture<InitializeShareGroupStateResult> initializeShareGroupState(InitializeShareGroupStateParameters request);
+  CompletableFuture<InitializeShareGroupStateResult> initializeState(InitializeShareGroupStateParameters request);
 
   /**
-   * The ReadShareGroupState API is used to read share-partition state from a persistence impl.
+   * Read share-partition state from a persistence impl.
    *
    * @param request ReadShareGroupStateParameters
    * @return ReadShareGroupStateResult
    */
-  CompletableFuture<ReadShareGroupStateResult> readShareGroupState(ReadShareGroupStateParameters request);
+  CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request);
 
   /**
-   * The WriteShareGroupState API is used to write share-partition state to a persistence impl.
+   * Write share-partition state to a persistence impl.
    *
    * @param requestDTO WriteShareGroupStateParameters
    * @return WriteShareGroupStateResult
    */
-  CompletableFuture<WriteShareGroupStateResult> writeShareGroupState(WriteShareGroupStateParameters requestDTO);
+  CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters requestDTO);
 
   /**
-   * The DeleteShareGroupState API is used to delete share-partition state from a persistence impl.
+   * Delete share-partition state from a persistence impl.
    *
    * @param request DeleteShareGroupStateParameters
    * @return DeleteShareGroupStateResult
    */
-  CompletableFuture<DeleteShareGroupStateResult> deleteShareGroupState(DeleteShareGroupStateParameters request);
+  CompletableFuture<DeleteShareGroupStateResult> deleteState(DeleteShareGroupStateParameters request);
 
   /**
-   * The ReadShareGroupOffsetsState API is used to read the offset information from share-partition state from a persistence impl.
+   * Read the offset information from share-partition state from a persistence impl.
    *
    * @param request ReadShareGroupOffsetsStateParameters
    * @return ReadShareGroupOffsetsStateResult
    */
-  CompletableFuture<ReadShareGroupOffsetsStateResult> readShareGroupOffsets(ReadShareGroupOffsetsStateParameters request);
+  CompletableFuture<ReadShareGroupOffsetsStateResult> readOffsets(ReadShareGroupOffsetsStateParameters request);
 }

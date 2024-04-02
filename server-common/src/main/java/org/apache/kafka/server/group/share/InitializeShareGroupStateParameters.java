@@ -17,74 +17,47 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
 
-public class InitializeShareGroupStateParameters implements PersisterParamResult {
+public class InitializeShareGroupStateParameters implements PersisterResult {
 
-  private final String groupId;
-  private final Uuid topicId;
-  private final int partition;
+  private final GroupTopicPartitionData groupTopicPartitionData;
   private final int stateEpoch;
   private final long startOffset;
 
-  private InitializeShareGroupStateParameters(String groupId, Uuid topicId, int partition, int stateEpoch, long startOffset) {
-    this.groupId = groupId;
-    this.topicId = topicId;
-    this.partition = partition;
+  private InitializeShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData, int stateEpoch, long startOffset) {
+    this.groupTopicPartitionData = groupTopicPartitionData;
     this.stateEpoch = stateEpoch;
     this.startOffset = startOffset;
   }
 
-  public String getGroupId() {
-    return groupId;
+  public GroupTopicPartitionData groupTopicPartitionData() {
+    return groupTopicPartitionData;
   }
 
-  public Uuid getTopicId() {
-    return topicId;
-  }
-
-  public int getPartition() {
-    return partition;
-  }
-
-  public int getStateEpoch() {
+  public int stateEpoch() {
     return stateEpoch;
   }
 
-  public long getStartOffset() {
+  public long startOffset() {
     return startOffset;
   }
 
   public static InitializeShareGroupStateParameters from(InitializeShareGroupStateRequestData data) {
     return new Builder()
-        .setGroupId(data.groupId())
-        .setTopicId(data.topicId())
-        .setPartition(data.partition())
+        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topicId(), data.partition()))
         .setStateEpoch(data.stateEpoch())
         .setStartOffset(data.startOffset())
         .build();
   }
 
   public static class Builder {
-    private String groupId;
-    private Uuid topicId;
-    private int partition;
+    private GroupTopicPartitionData groupTopicPartitionData;
     private int stateEpoch;
     private long startOffset;
 
-    public Builder setGroupId(String groupId) {
-      this.groupId = groupId;
-      return this;
-    }
-
-    public Builder setTopicId(Uuid topicId) {
-      this.topicId = topicId;
-      return this;
-    }
-
-    public Builder setPartition(int partition) {
-      this.partition = partition;
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData data) {
+      this.groupTopicPartitionData = data;
       return this;
     }
 
@@ -99,7 +72,7 @@ public class InitializeShareGroupStateParameters implements PersisterParamResult
     }
 
     public InitializeShareGroupStateParameters build() {
-      return new InitializeShareGroupStateParameters(this.groupId, this.topicId, this.partition, this.stateEpoch, this.startOffset);
+      return new InitializeShareGroupStateParameters(this.groupTopicPartitionData, this.stateEpoch, this.startOffset);
     }
   }
 }

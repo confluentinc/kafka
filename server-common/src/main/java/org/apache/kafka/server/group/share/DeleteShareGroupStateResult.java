@@ -19,14 +19,14 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.DeleteShareGroupStateResponseData;
 
-public class DeleteShareGroupStateResult implements PersisterParamResult {
+public class DeleteShareGroupStateResult implements PersisterResult {
   private final short errorCode;
 
   private DeleteShareGroupStateResult(short errorCode) {
     this.errorCode = errorCode;
   }
 
-  public short getErrorCode() {
+  public short errorCode() {
     return errorCode;
   }
 

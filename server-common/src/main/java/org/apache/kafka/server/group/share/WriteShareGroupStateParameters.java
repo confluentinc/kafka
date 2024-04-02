@@ -17,58 +17,43 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class WriteShareGroupStateParameters implements PersisterParamResult {
-  private final String groupId;
-  private final Uuid topicId;
-  private final int partition;
+public class WriteShareGroupStateParameters implements PersisterResult {
+  private final GroupTopicPartitionData groupTopicPartitionData;
   private final int stateEpoch;
   private final long startOffset;
   private final List<PersisterStateBatch> stateBatches;
 
-  private WriteShareGroupStateParameters(String groupId, Uuid topicId, int partition, int stateEpoch, long startOffset, List<PersisterStateBatch> stateBatches) {
-    this.groupId = groupId;
-    this.topicId = topicId;
-    this.partition = partition;
+  private WriteShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData, int stateEpoch, long startOffset, List<PersisterStateBatch> stateBatches) {
+    this.groupTopicPartitionData = groupTopicPartitionData;
     this.stateEpoch = stateEpoch;
     this.startOffset = startOffset;
     this.stateBatches = stateBatches;
   }
 
-  public String getGroupId() {
-    return groupId;
+  public GroupTopicPartitionData groupTopicPartitionData() {
+    return groupTopicPartitionData;
   }
 
-  public Uuid getTopicId() {
-    return topicId;
-  }
-
-  public int getPartition() {
-    return partition;
-  }
-
-  public int getStateEpoch() {
+  public int stateEpoch() {
     return stateEpoch;
   }
 
-  public long getStartOffset() {
+  public long startOffset() {
     return startOffset;
   }
 
-  public List<PersisterStateBatch> getStateBatches() {
+  public List<PersisterStateBatch> stateBatches() {
     return stateBatches;
   }
 
   public static WriteShareGroupStateParameters from(WriteShareGroupStateRequestData data) {
     return new Builder()
-        .setGroupId(data.groupId())
-        .setTopicId(data.topicId())
-        .setPartition(data.partition())
+        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topicId(), data.partition()))
         .setStateEpoch(data.stateEpoch())
         .setStartOffset(data.startOffset())
         .setStateBatches(data.stateBatches().stream()
@@ -78,25 +63,13 @@ public class WriteShareGroupStateParameters implements PersisterParamResult {
   }
 
   public static class Builder {
-    private String groupId;
-    private Uuid topicId;
-    private int partition;
+    private GroupTopicPartitionData groupTopicPartitionData;
     private int stateEpoch;
     private long startOffset;
     private List<PersisterStateBatch> stateBatches;
 
-    public Builder setGroupId(String groupId) {
-      this.groupId = groupId;
-      return this;
-    }
-
-    public Builder setTopicId(Uuid topicId) {
-      this.topicId = topicId;
-      return this;
-    }
-
-    public Builder setPartition(int partition) {
-      this.partition = partition;
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+      this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }
 
@@ -116,7 +89,7 @@ public class WriteShareGroupStateParameters implements PersisterParamResult {
     }
 
     public WriteShareGroupStateParameters build() {
-      return new WriteShareGroupStateParameters(groupId, topicId, partition, stateEpoch, startOffset, stateBatches);
+      return new WriteShareGroupStateParameters(groupTopicPartitionData, stateEpoch, startOffset, stateBatches);
     }
   }
 }

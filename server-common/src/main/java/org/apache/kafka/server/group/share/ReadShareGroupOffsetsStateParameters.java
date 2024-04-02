@@ -17,62 +17,35 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ReadShareGroupOffsetsStateRequestData;
 
-public class ReadShareGroupOffsetsStateParameters implements PersisterParamResult {
-  private final String groupId;
-  private final Uuid topicId;
-  private final int partition;
+public class ReadShareGroupOffsetsStateParameters implements PersisterResult {
+  private final GroupTopicPartitionData groupTopicPartitionData;
 
-  private ReadShareGroupOffsetsStateParameters(String groupId, Uuid topicId, int partition) {
-    this.groupId = groupId;
-    this.topicId = topicId;
-    this.partition = partition;
+  private ReadShareGroupOffsetsStateParameters(GroupTopicPartitionData groupTopicPartitionData) {
+    this.groupTopicPartitionData = groupTopicPartitionData;
   }
 
-  public String getGroupId() {
-    return groupId;
-  }
-
-  public Uuid getTopicId() {
-    return topicId;
-  }
-
-  public int getPartition() {
-    return partition;
+  public GroupTopicPartitionData groupTopicPartitionData() {
+    return groupTopicPartitionData;
   }
 
   public static ReadShareGroupOffsetsStateParameters from(ReadShareGroupOffsetsStateRequestData data) {
     return new Builder()
-        .setGroupId(data.groupId())
-        .setTopicId(data.topicId())
-        .setPartition(data.partition())
+        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topicId(), data.partition()))
         .build();
   }
 
   public static class Builder {
-    private String groupId;
-    private Uuid topicId;
-    private int partition;
+    private GroupTopicPartitionData data;
 
-    public Builder setGroupId(String groupId) {
-      this.groupId = groupId;
-      return this;
-    }
-
-    public Builder setTopicId(Uuid topicId) {
-      this.topicId = topicId;
-      return this;
-    }
-
-    public Builder setPartition(int partition) {
-      this.partition = partition;
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData data) {
+      this.data = data;
       return this;
     }
 
     public ReadShareGroupOffsetsStateParameters build() {
-      return new ReadShareGroupOffsetsStateParameters(groupId, topicId, partition);
+      return new ReadShareGroupOffsetsStateParameters(this.data);
     }
   }
 }

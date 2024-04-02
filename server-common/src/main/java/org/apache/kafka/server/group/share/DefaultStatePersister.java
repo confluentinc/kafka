@@ -30,57 +30,57 @@ import java.util.concurrent.CompletableFuture;
 @InterfaceStability.Evolving
 public class DefaultStatePersister implements Persister {
   /**
-   * The InitializeShareGroupState API is used by the group coordinator to initialize the share-partition state.
+   * Used by the group coordinator to initialize the share-partition state.
    * This is an inter-broker RPC authorized as a cluster action.
    *
    * @param request InitializeShareGroupStateParameters
    * @return InitializeShareGroupStateResult
    */
-  public CompletableFuture<InitializeShareGroupStateResult> initializeShareGroupState(InitializeShareGroupStateParameters request) {
+  public CompletableFuture<InitializeShareGroupStateResult> initializeState(InitializeShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
   /**
-   * The ReadShareGroupState API is used by share-partition leaders to read share-partition state from a share coordinator.
+   * Used by share-partition leaders to read share-partition state from a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
    * @param request ReadShareGroupStateParameters
    * @return ReadShareGroupStateResult
    */
-  public CompletableFuture<ReadShareGroupStateResult> readShareGroupState(ReadShareGroupStateParameters request) {
+  public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
   /**
-   * The WriteShareGroupState API is used by share-partition leaders to write share-partition state to a share coordinator.
+   * Used by share-partition leaders to write share-partition state to a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
    * @param request WriteShareGroupStateParameters
    * @return WriteShareGroupStateResult
    */
-  public CompletableFuture<WriteShareGroupStateResult> writeShareGroupState(WriteShareGroupStateParameters request) {
+  public CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
   /**
-   * The DeleteShareGroupState API is used by the group coordinator to delete share-partition state from a share coordinator.
+   * Used by the group coordinator to delete share-partition state from a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
    * @param request DeleteShareGroupStateParameters
    * @return DeleteShareGroupStateResult
    */
-  public CompletableFuture<DeleteShareGroupStateResult> deleteShareGroupState(DeleteShareGroupStateParameters request) {
+  public CompletableFuture<DeleteShareGroupStateResult> deleteState(DeleteShareGroupStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 
   /**
-   * The ReadShareGroupOffsetsState API is used by the group coordinator to read the offset information from share-partition state from a share coordinator.
+   * Used by the group coordinator to read the offset information from share-partition state from a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
    * @param request ReadShareGroupOffsetsStateParameters
    * @return ReadShareGroupOffsetsStateResult
    */
-  public CompletableFuture<ReadShareGroupOffsetsStateResult> readShareGroupOffsets(ReadShareGroupOffsetsStateParameters request) {
+  public CompletableFuture<ReadShareGroupOffsetsStateResult> readOffsets(ReadShareGroupOffsetsStateParameters request) {
     throw new RuntimeException("not implemented");
   }
 }

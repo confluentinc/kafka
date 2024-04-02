@@ -22,7 +22,7 @@ import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class ReadShareGroupStateResult implements PersisterParamResult {
+public class ReadShareGroupStateResult implements PersisterResult {
   private final short errorCode;
   private final int stateEpoch;
   private final long startOffset;
@@ -35,19 +35,19 @@ public class ReadShareGroupStateResult implements PersisterParamResult {
     this.stateBatches = stateBatches;
   }
 
-  public short getErrorCode() {
+  public short errorCode() {
     return errorCode;
   }
 
-  public int getStateEpoch() {
+  public int stateEpoch() {
     return stateEpoch;
   }
 
-  public long getStartOffset() {
+  public long startOffset() {
     return startOffset;
   }
 
-  public List<PersisterStateBatch> getStateBatches() {
+  public List<PersisterStateBatch> stateBatches() {
     return stateBatches;
   }
 

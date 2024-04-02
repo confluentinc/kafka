@@ -19,7 +19,7 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.ReadShareGroupOffsetsStateResponseData;
 
-public class ReadShareGroupOffsetsStateResult implements PersisterParamResult {
+public class ReadShareGroupOffsetsStateResult implements PersisterResult {
   private final short errorCode;
   private final int stateEpoch;
   private final long startOffset;
@@ -30,15 +30,15 @@ public class ReadShareGroupOffsetsStateResult implements PersisterParamResult {
     this.startOffset = startOffset;
   }
 
-  public short getErrorCode() {
+  public short errorCode() {
     return errorCode;
   }
 
-  public int getStateEpoch() {
+  public int stateEpoch() {
     return stateEpoch;
   }
 
-  public long getStartOffset() {
+  public long startOffset() {
     return startOffset;
   }
 

@@ -19,14 +19,14 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.InitializeShareGroupStateResponseData;
 
-public class InitializeShareGroupStateResult implements PersisterParamResult {
+public class InitializeShareGroupStateResult implements PersisterResult {
   private final short errorCode;
 
   private InitializeShareGroupStateResult(short errorCode) {
     this.errorCode = errorCode;
   }
 
-  public short getErrorCode() {
+  public short errorCode() {
     return errorCode;
   }
 
