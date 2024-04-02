@@ -20,6 +20,8 @@ package org.apache.kafka.server.group.share;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 
+import java.util.Objects;
+
 public class PersisterStateBatch {
   private final long baseOffset;
   private final long lastOffset;
@@ -63,5 +65,18 @@ public class PersisterStateBatch {
         batch.lastOffset(),
         batch.state(),
         batch.deliveryCount());
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    PersisterStateBatch that = (PersisterStateBatch) o;
+    return baseOffset == that.baseOffset && lastOffset == that.lastOffset && state == that.state && deliveryCount == that.deliveryCount;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(baseOffset, lastOffset, state, deliveryCount);
   }
 }
