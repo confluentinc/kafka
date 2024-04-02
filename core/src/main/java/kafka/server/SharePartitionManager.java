@@ -19,6 +19,7 @@ package kafka.server;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.ShareSessionNotFoundException;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.Errors;
@@ -313,7 +314,7 @@ public class SharePartitionManager {
         ShareSessionKey key = shareSessionKey(groupId, memberId);
         ShareSession shareSession = cache.get(key);
         if (shareSession == null) {
-            return null;
+            throw new ShareSessionNotFoundException("Share session not found in cache");
         }
         List<TopicIdPartition> cachedTopicIdPartitions = new ArrayList<>();
         shareSession.partitionMap.forEach(cachedSharePartition -> cachedTopicIdPartitions.add(

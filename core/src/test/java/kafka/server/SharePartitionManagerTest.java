@@ -19,6 +19,7 @@ package kafka.server;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
+import org.apache.kafka.common.errors.ShareSessionNotFoundException;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -66,6 +67,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doAnswer;
@@ -1398,8 +1400,7 @@ public class SharePartitionManagerTest {
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
                 new MockTime(), cache);
 
-        List<TopicIdPartition> cachedTopicPartitions = sharePartitionManager.cachedTopicIdPartitionsInShareSession("grp", Uuid.randomUuid());
-        assertNull(cachedTopicPartitions);
+        assertThrows(ShareSessionNotFoundException.class, () -> sharePartitionManager.cachedTopicIdPartitionsInShareSession("grp", Uuid.randomUuid()));
     }
 
     @Test
@@ -1504,7 +1505,7 @@ public class SharePartitionManagerTest {
         ShareFetchResponse resp5 = context5.updateAndGenerateResponseData(groupId, reqMetadata1.memberId(), respData5);
         assertEquals(Errors.NONE, resp5.error());
 
-        assertNull(sharePartitionManager.cachedTopicIdPartitionsInShareSession(groupId, memberId1));
+        assertThrows(ShareSessionNotFoundException.class, () -> sharePartitionManager.cachedTopicIdPartitionsInShareSession(groupId, memberId1));
 
         // Continue the second share session .
         LinkedHashMap<TopicIdPartition, ShareFetchRequest.SharePartitionData> reqData6 = new LinkedHashMap<>();

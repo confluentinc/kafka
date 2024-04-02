@@ -605,7 +605,7 @@ public class SharePartition {
      * @return A future which is completed when the records are released.
      */
     public CompletableFuture<Optional<Throwable>> releaseAcquiredRecords(String memberId) {
-        log.trace("Release acquired records request for share partition: {}-{}", groupId, topicIdPartition);
+        log.trace("Release acquired records request for share partition: {}-{}-{}", groupId, memberId, topicIdPartition);
 
         Throwable throwable = null;
         lock.writeLock().lock();
