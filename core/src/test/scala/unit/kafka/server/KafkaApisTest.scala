@@ -5380,7 +5380,8 @@ class KafkaApisTest extends Logging {
     val responseData = response.data()
     val topicResponses = response.data().responses()
 
-    assertEquals(Errors.INVALID_RECORD_STATE.code(), responseData.errorCode())
+    // While releasing acquired records, we had an error for 1 topic partition, but we don't return it to the client
+    assertEquals(Errors.NONE.code(), responseData.errorCode())
     assertEquals(1, topicResponses.size())
     assertEquals(1, topicResponses.get(0).partitions().size())
     assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).acknowledgeErrorCode())
@@ -5398,24 +5399,13 @@ class KafkaApisTest extends Logging {
       any(),
       any(),
       any()
-    )).thenReturn(Errors.NONE)
+    )).thenReturn(Errors.SHARE_SESSION_NOT_FOUND)
     when(sharePartitionManager.newContext(any(), any(), any(), any(), any())).thenReturn(
-      new FinalContext(new mutable.HashMap[TopicIdPartition, ShareFetchRequest.SharePartitionData]().asJava)
+      new ShareSessionErrorContext(Errors.SHARE_SESSION_NOT_FOUND)
     )
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
-
-    when(sharePartitionManager.acknowledge(
-      anyString(),
-      anyString(),
-      any()
-    )).thenReturn(CompletableFuture.completedFuture(Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData](
-      new TopicIdPartition(topicId, new TopicPartition(topicName, 0)) ->
-        new ShareAcknowledgeResponseData.PartitionData()
-          .setPartitionIndex(0)
-          .setErrorCode(Errors.NONE.code())
-    ).asJava))
 
     when(sharePartitionManager.cachedTopicIdPartitionsInShareSession(
       anyString(),
@@ -5449,9 +5439,7 @@ class KafkaApisTest extends Logging {
     val topicResponses = response.data().responses()
 
     assertEquals(Errors.SHARE_SESSION_NOT_FOUND.code(), responseData.errorCode())
-    assertEquals(1, topicResponses.size())
-    assertEquals(1, topicResponses.get(0).partitions().size())
-    assertEquals(Errors.NONE.code(), topicResponses.get(0).partitions().get(0).acknowledgeErrorCode())
+    assertEquals(0, topicResponses.size())
   }
 
   @Test

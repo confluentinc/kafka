@@ -1671,28 +1671,18 @@ class KafkaApis(val requestChannel: RequestChannel,
         shareFetchResponse.data().responses().add(topicData)
       }
 
-      if (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) {
-        if (cachedTopicPartitions == null)
-          shareFetchResponse.data().setErrorCode(Errors.SHARE_SESSION_NOT_FOUND.code())
-        else {
-          sharePartitionManager.releaseAcquiredRecords(groupId,
-              memberId, cachedTopicPartitions).
-            whenComplete((releaseAcquiredRecordsData, throwable) => {
-              if (throwable != null) {
-                debug(s"Release acquired records on share session close with correlation from client $clientId  " +
-                  s"failed with error ${throwable.getMessage}")
-                requestHelper.handleError(request, throwable)
-              } else {
-                info(s"Release acquired records on share session close $releaseAcquiredRecordsData succeeded")
-                releaseAcquiredRecordsData.forEach((_, partitionData) => {
-                  if(partitionData.errorCode() != Errors.NONE.code()) {
-                    shareFetchResponse.data().setErrorCode(partitionData.errorCode())
-                    break()
-                  }
-                })
-              }
-            })
-        }
+      if (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH && cachedTopicPartitions != null) {
+        sharePartitionManager.releaseAcquiredRecords(groupId,
+            memberId, cachedTopicPartitions).
+          whenComplete((releaseAcquiredRecordsData, throwable) => {
+            if (throwable != null) {
+              debug(s"Release acquired records on share session close with correlation from client $clientId  " +
+                s"failed with error ${throwable.getMessage}")
+              requestHelper.handleError(request, throwable)
+            } else {
+              info(s"Release acquired records on share session close $releaseAcquiredRecordsData succeeded")
+            }
+          })
       }
       shareFetchResponse
     }
