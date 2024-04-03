@@ -174,7 +174,9 @@ public class SharePartition {
      */
     private long nextFetchOffset;
 
-    SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount) {
+    private final int recordLockDurationMs;
+
+    SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount, int recordLockDurationMs) {
         this.groupId = groupId;
         this.topicIdPartition = topicIdPartition;
         this.maxInFlightMessages = maxInFlightMessages;
@@ -189,6 +191,7 @@ public class SharePartition {
         assert this.maxInFlightMessages > 0;
         assert this.maxDeliveryCount > 0;
         this.fetchLock = new AtomicBoolean(false);
+        this.recordLockDurationMs = recordLockDurationMs;
     }
 
     /**

@@ -69,19 +69,22 @@ public class SharePartitionManager {
     private final ShareSessionCache cache;
     private final ConcurrentLinkedQueue<ShareFetchPartitionData> fetchQueue;
     private final AtomicBoolean processFetchQueueLock;
+    private final int recordLockDurationMs;
 
-    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache) {
-        this(replicaManager, time, cache, new ConcurrentHashMap<>());
+    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, int recordLockDurationMs) {
+        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs);
     }
 
     // Visible for testing
-    SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap) {
+    SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap,
+                          int recordLockDurationMs) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
         this.partitionCacheMap = partitionCacheMap;
         this.fetchQueue = new ConcurrentLinkedQueue<>();
         this.processFetchQueueLock = new AtomicBoolean(false);
+        this.recordLockDurationMs = recordLockDurationMs;
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -122,7 +125,7 @@ public class SharePartitionManager {
                 // TODO: Fetch inflight and delivery count from config.
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey(
                     shareFetchPartitionData.groupId, topicIdPartition),
-                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, 5));
+                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, 5, recordLockDurationMs));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.

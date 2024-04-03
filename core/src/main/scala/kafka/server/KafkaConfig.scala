@@ -1867,11 +1867,9 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val shareGroupHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupHeartbeatIntervalMsProp)
   val shareGroupMinHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupMinHeartbeatIntervalMsProp)
   val shareGroupMaxHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupMaxHeartbeatIntervalMsProp)
-  val ShareGroupRecordLockDurationMs = getInt(KafkaConfig.ShareGroupRecordLockDurationMsProp)
-  val ShareGroupMaxRecordLockDurationMs = getInt(KafkaConfig.ShareGroupMaxRecordLockDurationMsProp)
+  val shareGroupRecordLockDurationMs = getInt(KafkaConfig.ShareGroupRecordLockDurationMsProp)
+  val shareGroupMaxRecordLockDurationMs = getInt(KafkaConfig.ShareGroupMaxRecordLockDurationMsProp)
 
-
-  //TODO: Add require to test between lock duration and max lock duration
   /** ********* Offset management configuration ***********/
   val offsetMetadataMaxSize = getInt(KafkaConfig.OffsetMetadataMaxSizeProp)
   val offsetsLoadBufferSize = getInt(KafkaConfig.OffsetsLoadBufferSizeProp)
@@ -2385,6 +2383,10 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
     require(shareGroupSessionTimeoutMs <= shareGroupMaxSessionTimeoutMs,
       s"${KafkaConfig.ShareGroupSessionTimeoutMsProp} must be less than or equals " +
         s"to ${KafkaConfig.ShareGroupMaxSessionTimeoutMsProp}")
+
+    require(shareGroupMaxRecordLockDurationMs >= shareGroupRecordLockDurationMs,
+      s"${KafkaConfig.ShareGroupMaxRecordLockDurationMsProp} must be greater than or equals " +
+        s"to ${KafkaConfig.ShareGroupRecordLockDurationMsProp}")
   }
 
   /**
