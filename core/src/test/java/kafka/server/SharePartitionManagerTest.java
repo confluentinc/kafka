@@ -35,6 +35,9 @@ import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.server.util.timer.SystemTimer;
+import org.apache.kafka.server.util.timer.SystemTimerReaper;
+import org.apache.kafka.server.util.timer.Timer;
 import org.apache.kafka.storage.internals.log.FetchIsolation;
 import org.apache.kafka.storage.internals.log.FetchParams;
 import org.junit.jupiter.api.Test;
@@ -80,6 +83,8 @@ public class SharePartitionManagerTest {
 
     private static final int PARTITION_MAX_BYTES = 40000;
     static final int RECORD_LOCK_DURATION_MS = 30000;
+    static final Timer TIMER = new SystemTimerReaper("sharePartitionTestReaper",
+            new SystemTimer("sharePartitionTestTimer"));
 
     @Test
     public void testSharePartitionKey() {
@@ -1314,13 +1319,13 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-                k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_DURATION_MS));
+                k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-                k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_DURATION_MS));
+                k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp2),
-                k -> new SharePartition(groupId, tp2, 100, 5, RECORD_LOCK_DURATION_MS));
+                k -> new SharePartition(groupId, tp2, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp3),
-                k -> new SharePartition(groupId, tp3, 100, 5, RECORD_LOCK_DURATION_MS));
+                k -> new SharePartition(groupId, tp3, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(replicaManager, time,
                 new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap, RECORD_LOCK_DURATION_MS);
