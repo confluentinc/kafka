@@ -173,7 +173,10 @@ public class SharePartition {
      * for the share partition.
      */
     private long nextFetchOffset;
-
+    /**
+     * The record lock duration is used to limit the duration for which a consumer can acquire a record.
+     * Once this time period is elapsed, the record will be made available or archived depending on the delivery count.
+     */
     private final int recordLockDurationMs;
 
     SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount, int recordLockDurationMs) {
