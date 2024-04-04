@@ -89,7 +89,8 @@ public class SharePartitionManager {
         this.fetchQueue = new ConcurrentLinkedQueue<>();
         this.processFetchQueueLock = new AtomicBoolean(false);
         this.recordLockDurationMs = recordLockDurationMs;
-        this.timer = new SystemTimerReaper("sharePartitionReaper", new SystemTimer("sharePartitionTimer"));
+        this.timer = new SystemTimerReaper("share-group-lock-timeout-reaper",
+                new SystemTimer("share-group-lock-timeout"));
     }
 
     // TODO: Move some part in share session context and change method signature to accept share

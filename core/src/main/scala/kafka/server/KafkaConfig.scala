@@ -816,8 +816,8 @@ object KafkaConfig {
   val ShareGroupHeartbeatIntervalMsDoc = "The heartbeat interval given to the members of a share group."
   val ShareGroupMinHeartbeatIntervalMsDoc = "The minimum heartbeat interval for share group members."
   val ShareGroupMaxHeartbeatIntervalMsDoc = "The maximum heartbeat interval for share group members."
-  val ShareGroupRecordLockDurationMsDoc = "Share-group record acquisition lock duration in milliseconds."
-  val ShareGroupMaxRecordLockDurationMsDoc = "Share-group record acquisition lock maximum duration in milliseconds."
+  val ShareGroupRecordLockDurationMsDoc = "The record acquisition lock duration in milliseconds for share group."
+  val ShareGroupMaxRecordLockDurationMsDoc = "The record acquisition lock maximum duration in milliseconds for share group."
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeDoc = "The maximum size for a metadata entry associated with an offset commit."
