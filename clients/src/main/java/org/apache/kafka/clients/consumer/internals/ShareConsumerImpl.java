@@ -35,7 +35,7 @@ import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler
 import org.apache.kafka.clients.consumer.internals.events.CompletableApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ErrorBackgroundEvent;
 import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
-import org.apache.kafka.clients.consumer.internals.events.PollApplicationEvent;
+import org.apache.kafka.clients.consumer.internals.events.PollEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareSubscriptionChangeApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareUnsubscribeApplicationEvent;
@@ -451,7 +451,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
                 backgroundEventProcessor.process();
 
                 // Make sure the network thread can tell the application is actively polling
-                applicationEventHandler.add(new PollApplicationEvent(timer.currentTimeMs()));
+                applicationEventHandler.add(new PollEvent(timer.currentTimeMs()));
 
                 final ShareFetch<K, V> fetch = pollForFetches(timer);
                 if (!fetch.isEmpty()) {
@@ -644,7 +644,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
      */
     void prepareShutdown(final Timer timer, final AtomicReference<Throwable> firstException) {
         completeQuietly(
-            () -> applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(), timer),
+            () -> applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(timer), timer),
             "Failed to send leaveGroup heartbeat with a timeout(ms)=" + timer.timeoutMs(), firstException);
     }
 

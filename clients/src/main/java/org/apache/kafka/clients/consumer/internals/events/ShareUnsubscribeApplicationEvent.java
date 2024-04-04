@@ -17,6 +17,8 @@
 
 package org.apache.kafka.clients.consumer.internals.events;
 
+import org.apache.kafka.common.utils.Timer;
+
 /**
  * Application event triggered when a user calls the unsubscribe API. This will make the consumer
  * release all its assignments and send a heartbeat request to leave the share group.
@@ -26,6 +28,6 @@ package org.apache.kafka.clients.consumer.internals.events;
  */
 public class ShareUnsubscribeApplicationEvent extends CompletableApplicationEvent<Void> {
     public ShareUnsubscribeApplicationEvent() {
-        super(Type.SHARE_UNSUBSCRIBE);
+        super(Type.SHARE_UNSUBSCRIBE, new Timer());
     }
 }
