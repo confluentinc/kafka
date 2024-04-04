@@ -1404,7 +1404,7 @@ public class SharePartitionManagerTest {
     public void testCachedTopicPartitionsForInvalidShareSession() {
         SharePartitionManager.ShareSessionCache cache = new SharePartitionManager.ShareSessionCache(10, 1000);
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
-                new MockTime(), cache);
+                new MockTime(), cache, RECORD_LOCK_DURATION_MS);
 
         assertThrows(ShareSessionNotFoundException.class, () -> sharePartitionManager.cachedTopicIdPartitionsInShareSession("grp", Uuid.randomUuid()));
     }
@@ -1413,7 +1413,7 @@ public class SharePartitionManagerTest {
     public void testCachedTopicPartitionsForValidShareSessions() {
         SharePartitionManager.ShareSessionCache cache = new SharePartitionManager.ShareSessionCache(10, 1000);
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
-                new MockTime(), cache);
+                new MockTime(), cache, RECORD_LOCK_DURATION_MS);
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid tpId0 = Uuid.randomUuid();
         Uuid tpId1 = Uuid.randomUuid();
@@ -1547,7 +1547,7 @@ public class SharePartitionManagerTest {
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp2), sp2);
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
-                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap);
+                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap, RECORD_LOCK_DURATION_MS);
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.releaseAcquiredRecords(groupId, memberId, Arrays.asList(tp1, tp2, tp3));
         Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = resultFuture.join();
@@ -1577,7 +1577,7 @@ public class SharePartitionManagerTest {
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp1), sp1);
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
-                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap);
+                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap, RECORD_LOCK_DURATION_MS);
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.releaseAcquiredRecords("grp-2", memberId, Collections.singletonList(tp1));
         Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = resultFuture.join();
@@ -1605,7 +1605,7 @@ public class SharePartitionManagerTest {
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp2), sp2);
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
-                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap);
+                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap, RECORD_LOCK_DURATION_MS);
 
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.releaseAcquiredRecords(groupId, memberId, Arrays.asList(tp1, tp2));
@@ -1637,7 +1637,7 @@ public class SharePartitionManagerTest {
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp2), sp2);
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
-                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap);
+                new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000), partitionCacheMap, RECORD_LOCK_DURATION_MS);
 
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.releaseAcquiredRecords(groupId, memberId, Collections.emptyList());
