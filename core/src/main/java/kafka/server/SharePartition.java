@@ -813,9 +813,8 @@ public class SharePartition {
                             } else {
                                 localNextFetchOffset = Math.min(cachedStateEntry.getKey(), localNextFetchOffset);
                             }
-                        }
-                        else {
-                            log.trace("The batch is not acquired while release of acquisition lock on timeout, skipping, batch: {}"
+                        } else {
+                            log.trace("The batch is not in acquired state while release of acquisition lock on timeout, skipping, batch: {}"
                                             + " for the share group: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
                         }
                     } else { // Case when batch has a valid offset state map
@@ -832,7 +831,7 @@ public class SharePartition {
                             }
 
                             if (offsetState.getValue().state != RecordState.ACQUIRED) {
-                                log.trace("The offset is not acquired while release of acquisition lock on timeout, skipping, offset: {} batch: {}"
+                                log.trace("The offset is not in acquired state while release of acquisition lock on timeout, skipping, offset: {} batch: {}"
                                                 + " for the share group: {}-{}-{}", offsetState.getKey(), inFlightBatch,
                                         groupId, memberId, topicIdPartition);
                                 continue;
