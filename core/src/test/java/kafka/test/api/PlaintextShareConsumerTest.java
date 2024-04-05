@@ -849,7 +849,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals("key_2", new String(records1.iterator().next().key()));
         assertEquals("value_2", new String(records1.iterator().next().value()));
         // Allowing acquisition lock to expire.
-        Thread.sleep(8000);
+        Thread.sleep(12000);
         records2 = shareConsumer1.poll(Duration.ofMillis(2000));
         assertEquals(1, records2.count());
         assertEquals("key_2", new String(records2.iterator().next().key()));

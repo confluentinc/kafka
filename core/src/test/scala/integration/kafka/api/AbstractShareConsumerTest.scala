@@ -58,7 +58,7 @@ abstract class AbstractShareConsumerTest extends BaseRequestTest {
     properties.setProperty(KafkaConfig.GroupMinSessionTimeoutMsProp, "100") // set small enough session timeout
     properties.setProperty(KafkaConfig.GroupMaxSessionTimeoutMsProp, groupMaxSessionTimeoutMs.toString)
     properties.setProperty(KafkaConfig.GroupInitialRebalanceDelayMsProp, "10")
-    properties.setProperty(KafkaConfig.ShareGroupRecordLockDurationMsProp, "8000")
+    properties.setProperty(KafkaConfig.ShareGroupRecordLockDurationMsProp, "10000")
   }
 
   @BeforeEach
