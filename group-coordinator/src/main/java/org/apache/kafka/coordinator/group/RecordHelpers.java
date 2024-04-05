@@ -39,6 +39,8 @@ import org.apache.kafka.coordinator.group.generated.GroupMetadataValue;
 import org.apache.kafka.coordinator.group.generated.OffsetCommitKey;
 import org.apache.kafka.coordinator.group.generated.OffsetCommitValue;
 import org.apache.kafka.coordinator.group.classic.ClassicGroup;
+import org.apache.kafka.coordinator.group.generated.ShareGroupMemberMetadataKey;
+import org.apache.kafka.coordinator.group.generated.ShareGroupMemberMetadataValue;
 import org.apache.kafka.coordinator.group.share.ShareGroupMember;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
 import org.apache.kafka.server.common.MetadataVersion;
@@ -84,37 +86,6 @@ public class RecordHelpers {
                     .setSubscribedTopicNames(member.subscribedTopicNames())
                     .setSubscribedTopicRegex(member.subscribedTopicRegex())
                     .setServerAssignor(member.serverAssignorName().orElse(null))
-                    .setRebalanceTimeoutMs(member.rebalanceTimeoutMs()),
-                (short) 0
-            )
-        );
-    }
-
-    /**
-     * Creates a ConsumerGroupMemberMetadata record.
-     *
-     * @param groupId   The consumer group id.
-     * @param member    The consumer group member.
-     * @return The record.
-     */
-    public static Record newMemberSubscriptionRecord(
-        String groupId,
-        ShareGroupMember member
-    ) {
-        return new Record(
-            new ApiMessageAndVersion(
-                new ConsumerGroupMemberMetadataKey()
-                    .setGroupId(groupId)
-                    .setMemberId(member.memberId()),
-                (short) 5
-            ),
-            new ApiMessageAndVersion(
-                new ConsumerGroupMemberMetadataValue()
-                    .setRackId(member.rackId())
-                    .setInstanceId(member.instanceId())
-                    .setClientId(member.clientId())
-                    .setClientHost(member.clientHost())
-                    .setSubscribedTopicNames(member.subscribedTopicNames())
                     .setRebalanceTimeoutMs(member.rebalanceTimeoutMs()),
                 (short) 0
             )
@@ -242,7 +213,7 @@ public class RecordHelpers {
             new ApiMessageAndVersion(
                 new ConsumerGroupMetadataValue()
                     .setEpoch(newGroupEpoch)
-                    .setType(groupType.name()),
+                    .setType((byte) groupType.ordinal()),
                 (short) 1
             )
         );
@@ -419,8 +390,6 @@ public class RecordHelpers {
                     .setPreviousMemberEpoch(member.previousMemberEpoch())
                     .setTargetMemberEpoch(member.targetMemberEpoch())
                     .setAssignedPartitions(toTopicPartitions(member.assignedPartitions())),
-//                    .setPartitionsPendingRevocation(toTopicPartitions(member.partitionsPendingRevocation()))
-//                    .setPartitionsPendingAssignment(toTopicPartitions(member.partitionsPendingAssignment())),
                 (short) 0
             )
         );
@@ -617,6 +586,58 @@ public class RecordHelpers {
                 (short) 1
             ),
             null
+        );
+    }
+
+    /**
+     * Creates a ShareGroupMemberMetadata record.
+     *
+     * @param groupId   The consumer group id.
+     * @param member    The consumer group member.
+     * @return The record.
+     */
+    public static Record newShareMemberSubscriptionRecord(
+        String groupId,
+        ShareGroupMember member
+    ) {
+        return new Record(
+            new ApiMessageAndVersion(
+                new ShareGroupMemberMetadataKey()
+                    .setGroupId(groupId)
+                    .setMemberId(member.memberId()),
+                (short) 10
+            ),
+            new ApiMessageAndVersion(
+                new ShareGroupMemberMetadataValue()
+                    .setRackId(member.rackId())
+                    .setClientId(member.clientId())
+                    .setClientHost(member.clientHost())
+                    .setSubscribedTopicNames(member.subscribedTopicNames())
+                    .setRebalanceTimeoutMs(member.rebalanceTimeoutMs()),
+                (short) 0
+            )
+        );
+    }
+
+    /**
+     * Creates a ShareGroupMemberMetadata tombstone.
+     *
+     * @param groupId   The consumer group id.
+     * @param memberId  The consumer group member id.
+     * @return The record.
+     */
+    public static Record newShareMemberSubscriptionTombstoneRecord(
+        String groupId,
+        String memberId
+    ) {
+        return new Record(
+            new ApiMessageAndVersion(
+                new ShareGroupMemberMetadataKey()
+                    .setGroupId(groupId)
+                    .setMemberId(memberId),
+                (short) 10
+            ),
+            null // Tombstone.
         );
     }
 
