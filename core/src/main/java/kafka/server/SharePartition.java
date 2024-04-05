@@ -804,6 +804,7 @@ public class SharePartition {
                 try {
                     InFlightBatch inFlightBatch = cachedStateEntry.getValue();
                     long localNextFetchOffset = nextFetchOffset;
+                    // Case when the state of complete batch is valid
                     if (inFlightBatch.offsetState == null) {
                         if (inFlightBatch.batchState() == RecordState.ACQUIRED) {
                             InFlightState updateResult = inFlightBatch.tryUpdateBatchState(RecordState.AVAILABLE, false);
