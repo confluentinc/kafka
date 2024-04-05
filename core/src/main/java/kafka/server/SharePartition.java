@@ -817,7 +817,7 @@ public class SharePartition {
                             log.trace("The batch is not in acquired state while release of acquisition lock on timeout, skipping, batch: {}"
                                             + " for the share group: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
                         }
-                    } else { // Case when batch has a valid offset state map
+                    } else { // Case when batch has a valid offset state map.
                         for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
                             // For the first batch which might have offsets prior to the request base
                             // offset i.e. cached batch of 10-14 offsets and request batch of 12-13.

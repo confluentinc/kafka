@@ -841,9 +841,9 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
         producer.send(producerRecord2);
 
-        // Poll three times. The first poll acquires the lock and fetches the record. Before the second poll,
+        // Poll three times. The first poll puts the acquisition lock and fetches the record. Before the second poll,
         // acquisition lock times out and hence the consumer needs to fetch the record again. Since, the acquisition lock
-        // hasn't timed out this time, the third poll only acknowledges the record from the second poll and no more fetch.
+        // hasn't timed out before the third poll, the third poll only acknowledges the record from the second poll and no more fetch.
         records1 = shareConsumer1.poll(Duration.ofMillis(2000));
         assertEquals(1, records1.count());
         assertEquals("key_2", new String(records1.iterator().next().key()));
