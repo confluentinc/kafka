@@ -2043,18 +2043,6 @@ public class MembershipManagerImplTest {
         return topicPartitions;
     }
 
-    private static SortedSet<TopicPartition> topicPartitions(Map<Uuid, SortedSet<Integer>> topicIdMap, Map<Uuid, String> topicIdNames) {
-        SortedSet<TopicPartition> topicPartitions = new TreeSet<>(new Utils.TopicPartitionComparator());
-
-        for (Uuid topicId : topicIdMap.keySet()) {
-            for (int partition : topicIdMap.get(topicId)) {
-                topicPartitions.add(new TopicPartition(topicIdNames.get(topicId), partition));
-            }
-        }
-
-        return topicPartitions;
-    }
-
     private SortedSet<TopicPartition> topicPartitions(String topicName, int... partitions) {
         SortedSet<TopicPartition> topicPartitions = new TreeSet<>(new Utils.TopicPartitionComparator());
 
