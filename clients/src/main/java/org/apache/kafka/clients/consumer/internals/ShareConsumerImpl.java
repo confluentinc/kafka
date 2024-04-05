@@ -33,7 +33,7 @@ import org.apache.kafka.clients.consumer.internals.events.ApplicationEventProces
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.CompletableApplicationEvent;
-import org.apache.kafka.clients.consumer.internals.events.ErrorBackgroundEvent;
+import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
 import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
 import org.apache.kafka.clients.consumer.internals.events.PollEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseApplicationEvent;
@@ -121,7 +121,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
         /**
          * Process the events, if any, that were produced by the {@link ConsumerNetworkThread network thread}.
-         * It is possible that {@link org.apache.kafka.clients.consumer.internals.events.ErrorBackgroundEvent an error}
+         * It is possible that {@link org.apache.kafka.clients.consumer.internals.events.ErrorEvent an error}
          * could occur when processing the events. In such cases, the processor will take a reference to the first
          * error, continue to process the remaining events, and then throw the first error that occurred.
          */
@@ -150,13 +150,13 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         @Override
         public void process(final BackgroundEvent event) {
             if (event.type() == BackgroundEvent.Type.ERROR) {
-                process((ErrorBackgroundEvent) event);
+                process((ErrorEvent) event);
             } else {
                 throw new IllegalArgumentException("Background event type " + event.type() + " was not expected");
             }
         }
 
-        private void process(final ErrorBackgroundEvent event) {
+        private void process(final ErrorEvent event) {
             throw event.error();
         }
     }

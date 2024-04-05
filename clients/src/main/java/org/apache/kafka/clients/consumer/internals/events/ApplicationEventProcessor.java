@@ -336,7 +336,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
         ShareMembershipManager membershipManager = requestManagers.shareHeartbeatRequestManager.get().membershipManager();
         CompletableFuture<Void> future = membershipManager.leaveGroup();
         // The future will be completed on heartbeat sent
-        event.chain(future);
+        future.whenComplete(complete(event.future()));
     }
 
     private void process(final ShareLeaveOnCloseApplicationEvent event) {
@@ -352,7 +352,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
         log.debug("Leaving group before closing");
         CompletableFuture<Void> future = membershipManager.leaveGroup();
         // The future will be completed on heartbeat sent
-        event.chain(future);
+        future.whenComplete(complete(event.future()));
     }
 
     private <T> BiConsumer<? super T, ? super Throwable> complete(final CompletableFuture<T> b) {

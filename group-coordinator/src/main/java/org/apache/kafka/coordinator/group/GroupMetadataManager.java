@@ -65,10 +65,10 @@ import org.apache.kafka.coordinator.group.consumer.ConsumerGroup;
 import org.apache.kafka.coordinator.group.consumer.ConsumerGroupMember;
 import org.apache.kafka.coordinator.group.common.CurrentAssignmentBuilder;
 import org.apache.kafka.coordinator.group.common.TargetAssignmentBuilder;
-import org.apache.kafka.coordinator.group.consumer.CurrentAssignmentBuilder;
+import org.apache.kafka.coordinator.group.common.CurrentAssignmentBuilder;
 import org.apache.kafka.coordinator.group.consumer.MemberState;
-import org.apache.kafka.coordinator.group.consumer.TargetAssignmentBuilder;
-import org.apache.kafka.coordinator.group.consumer.TopicMetadata;
+import org.apache.kafka.coordinator.group.common.TargetAssignmentBuilder;
+import org.apache.kafka.coordinator.group.common.TopicMetadata;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentKey;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentValue;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupMemberMetadataKey;
@@ -2533,10 +2533,8 @@ public class GroupMetadataManager {
                     (ConsumerGroupMember) oldMember)
                     .setMemberEpoch(LEAVE_GROUP_MEMBER_EPOCH)
                     .setPreviousMemberEpoch(LEAVE_GROUP_MEMBER_EPOCH)
-                    .setTargetMemberEpoch(LEAVE_GROUP_MEMBER_EPOCH)
                     .setAssignedPartitions(Collections.emptyMap())
                     .setPartitionsPendingRevocation(Collections.emptyMap())
-                    .setPartitionsPendingAssignment(Collections.emptyMap())
                     .build();
                 group.updateMember(newMember);
             } else {

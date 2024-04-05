@@ -28,6 +28,6 @@ import org.apache.kafka.common.utils.Timer;
  */
 public class ShareUnsubscribeApplicationEvent extends CompletableApplicationEvent<Void> {
     public ShareUnsubscribeApplicationEvent() {
-        super(Type.SHARE_UNSUBSCRIBE, new Timer());
+        super(Type.SHARE_UNSUBSCRIBE, Integer.MAX_VALUE);
     }
 }
