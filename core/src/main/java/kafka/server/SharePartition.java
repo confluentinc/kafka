@@ -326,7 +326,7 @@ public class SharePartition {
                     groupId, topicIdPartition);
                 AcquiredRecords acquiredRecords = acquireNewBatchRecords(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(),
                         lastBatch.nextOffset());
-                applyAcquisitionLock(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(), cachedState.floorEntry(firstBatch.baseOffset()));
+                startAcquisitionLockTimer(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(), cachedState.floorEntry(firstBatch.baseOffset()));
                 return CompletableFuture.completedFuture(Collections.singletonList(acquiredRecords));
             }
 
@@ -365,7 +365,7 @@ public class SharePartition {
                     }
                     boolean atLeastOneAcquired = acquireSubsetBatchRecords(firstBatch.baseOffset(), lastBatch.lastOffset(), inFlightBatch, result);
                     if (atLeastOneAcquired)
-                        applyAcquisitionLock(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(), entry);
+                        startAcquisitionLockTimer(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(), entry);
                     continue;
                 }
 
@@ -382,7 +382,7 @@ public class SharePartition {
                         inFlightBatch, groupId, topicIdPartition);
                     continue;
                 }
-                applyAcquisitionLock(memberId, inFlightBatch.baseOffset(), inFlightBatch.lastOffset(), entry);
+                startAcquisitionLockTimer(memberId, inFlightBatch.baseOffset(), inFlightBatch.lastOffset(), entry);
 
                 findNextFetchOffset.set(true);
                 result.add(new AcquiredRecords()
@@ -397,7 +397,7 @@ public class SharePartition {
                 log.trace("There exists another batch which needs to be acquired as well");
                 result.add(acquireNewBatchRecords(memberId, subMap.lastEntry().getValue().lastOffset() + 1,
                     lastBatch.lastOffset(), lastBatch.nextOffset()));
-                applyAcquisitionLock(memberId, subMap.lastEntry().getValue().lastOffset() + 1, lastBatch.lastOffset(),
+                startAcquisitionLockTimer(memberId, subMap.lastEntry().getValue().lastOffset() + 1, lastBatch.lastOffset(),
                         cachedState.floorEntry(subMap.lastEntry().getValue().lastOffset() + 1));
             }
             return CompletableFuture.completedFuture(result);
@@ -796,8 +796,9 @@ public class SharePartition {
      * @param cachedStateEntry The cached state map entry for the acquired records which contains the entire batch
      *                         from base offset to last offset.
      */
-    public void applyAcquisitionLock(String memberId, long baseOffset, long lastOffset, Map.Entry<Long, InFlightBatch> cachedStateEntry) {
+    private void startAcquisitionLockTimer(String memberId, long baseOffset, long lastOffset, Map.Entry<Long, InFlightBatch> cachedStateEntry) {
         timer.add(new TimerTask(recordLockDurationMs) {
+            // Runs when the acquisition lock timer expires. We would then be releasing the acquired records.
             @Override
             public void run() {
                 lock.writeLock().lock();
