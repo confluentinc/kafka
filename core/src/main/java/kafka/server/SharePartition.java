@@ -605,7 +605,12 @@ public class SharePartition {
             } else {
                 log.trace("Acknowledgement batch request successful for share partition: {}-{}",
                     groupId, topicIdPartition);
-                updatedStates.forEach(state -> state.completeStateTransition(true));
+                updatedStates.forEach(state -> {
+                    state.completeStateTransition(true);
+                    // Cancel the acquisition lock timeout task for the state since it is acknowledged successfully.
+                    state.cancelAndClearAcquisitionLockTimeoutTask();
+                });
+
                 nextFetchOffset = localNextFetchOffset;
             }
         } finally {
@@ -692,7 +697,11 @@ public class SharePartition {
             } else {
                 log.trace("Release records from acquired state successful for share partition: {}-{}",
                         groupId, topicIdPartition);
-                updatedStates.forEach(state -> state.completeStateTransition(true));
+                updatedStates.forEach(state -> {
+                    state.completeStateTransition(true);
+                    // Cancel the acquisition lock timeout task for the state since it is released successfully.
+                    state.cancelAndClearAcquisitionLockTimeoutTask();
+                });
                 nextFetchOffset = localNextFetchOffset;
             }
         } finally {
@@ -879,7 +888,7 @@ public class SharePartition {
     /**
      * The InFlightBatch maintains the in-memory state of the fetched records i.e. in-flight records.
      */
-    static class InFlightBatch {
+    class InFlightBatch {
 
         // The member id of the client that is fetching the record.
         private final String memberId;
@@ -996,7 +1005,14 @@ public class SharePartition {
                         offsetState.put(offset, new InFlightState(RecordState.ARCHIVED, 0));
                         continue;
                     }
-                    offsetState.put(offset, new InFlightState(inFlightState.state, inFlightState.deliveryCount));
+                    // TODO: Relationship between timerTask and inFlightState.acquisitionLockTimeoutTask
+                    TimerTask timerTask = scheduleAcquisitionLockTimeout(memberId, offset, offset);
+                    offsetState.put(offset, new InFlightState(inFlightState.state, inFlightState.deliveryCount, timerTask));
+                    timer.add(timerTask);
+                }
+                // Cancel the acquisition lock timeout task for the batch as the offset state is maintained.
+                if (inFlightState.acquisitionLockTimeoutTask != null) {
+                    inFlightState.cancelAndClearAcquisitionLockTimeoutTask();
                 }
                 inFlightState = null;
             }
@@ -1068,6 +1084,11 @@ public class SharePartition {
 //               TODO: Throw new InvalidRequestException("The acquisition lock timeout task is already set for offset");
             }
             this.acquisitionLockTimeoutTask = acquisitionLockTimeoutTask;
+        }
+
+        void cancelAndClearAcquisitionLockTimeoutTask() {
+            acquisitionLockTimeoutTask.cancel();
+            acquisitionLockTimeoutTask = null;
         }
 
         /**
