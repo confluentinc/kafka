@@ -18,27 +18,26 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
-import org.apache.kafka.common.protocol.Errors;
 
 import java.util.stream.Collectors;
 
 public class WriteShareGroupStateParameters implements PersisterParameters {
-  private final GroupTopicPartitionData groupTopicPartitionData;
+  private final GroupTopicPartitionData<PartitionStateBatchData> groupTopicPartitionData;
 
-  private WriteShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData) {
+  private WriteShareGroupStateParameters(GroupTopicPartitionData<PartitionStateBatchData> groupTopicPartitionData) {
     this.groupTopicPartitionData = groupTopicPartitionData;
   }
 
-  public GroupTopicPartitionData groupTopicPartitionData() {
+  public GroupTopicPartitionData<PartitionStateBatchData> groupTopicPartitionData() {
     return groupTopicPartitionData;
   }
 
   public static WriteShareGroupStateParameters from(WriteShareGroupStateRequestData data) {
     return new Builder()
-        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topics().stream()
-            .map(writeStateData -> new TopicData(writeStateData.topicId(),
+        .setGroupTopicPartitionData(new GroupTopicPartitionData<>(data.groupId(), data.topics().stream()
+            .map(writeStateData -> new TopicData<>(writeStateData.topicId(),
                 writeStateData.partitions().stream()
-                    .map(partitionData -> new PartitionData(partitionData.partition(), partitionData.stateEpoch(), partitionData.startOffset(), Errors.NONE.code(),
+                    .map(partitionData -> PartitionFactory.newPartitionStateBatchData(partitionData.partition(), partitionData.stateEpoch(), partitionData.startOffset(),
                         partitionData.stateBatches().stream()
                             .map(PersisterStateBatch::from)
                             .collect(Collectors.toList())))
@@ -48,9 +47,9 @@ public class WriteShareGroupStateParameters implements PersisterParameters {
   }
 
   public static class Builder {
-    private GroupTopicPartitionData groupTopicPartitionData;
+    private GroupTopicPartitionData<PartitionStateBatchData> groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionStateBatchData> groupTopicPartitionData) {
       this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }

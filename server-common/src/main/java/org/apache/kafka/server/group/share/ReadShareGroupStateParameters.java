@@ -23,13 +23,13 @@ import java.util.stream.Collectors;
 
 public class ReadShareGroupStateParameters implements PersisterParameters {
 
-  private final GroupTopicPartitionData groupTopicPartitionData;
+  private final GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
 
-  private ReadShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData) {
+  private ReadShareGroupStateParameters(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
     this.groupTopicPartitionData = groupTopicPartitionData;
   }
 
-  public GroupTopicPartitionData groupTopicPartitionData() {
+  public GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData() {
     return groupTopicPartitionData;
   }
 
@@ -44,19 +44,19 @@ public class ReadShareGroupStateParameters implements PersisterParameters {
 //      ]
 //    }
     return new Builder()
-        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topics().stream()
-            .map(readStateData -> new TopicData(readStateData.topicId(),
+        .setGroupTopicPartitionData(new GroupTopicPartitionData<>(data.groupId(), data.topics().stream()
+            .map(readStateData -> new TopicData<>(readStateData.topicId(),
                 readStateData.partitions().stream()
-                    .map(partitionData -> new PartitionData(partitionData.partition(), -1, -1, (short) 0, null))
+                    .map(partitionData -> PartitionFactory.newPartitionIdData(partitionData.partition()))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList())))
         .build();
   }
 
   public static class Builder {
-    private GroupTopicPartitionData groupTopicPartitionData;
+    private GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
       this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }

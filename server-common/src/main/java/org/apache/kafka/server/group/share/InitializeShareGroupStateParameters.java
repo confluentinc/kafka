@@ -18,38 +18,36 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
-import org.apache.kafka.common.protocol.Errors;
 
 import java.util.stream.Collectors;
 
 public class InitializeShareGroupStateParameters implements PersisterParameters {
 
-  private final GroupTopicPartitionData groupTopicPartitionData;
+  private final GroupTopicPartitionData<PartitionStateData> groupTopicPartitionData;
 
-  private InitializeShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData) {
+  private InitializeShareGroupStateParameters(GroupTopicPartitionData<PartitionStateData> groupTopicPartitionData) {
     this.groupTopicPartitionData = groupTopicPartitionData;
   }
 
-  public GroupTopicPartitionData groupTopicPartitionData() {
+  public GroupTopicPartitionData<PartitionStateData> groupTopicPartitionData() {
     return groupTopicPartitionData;
   }
 
   public static InitializeShareGroupStateParameters from(InitializeShareGroupStateRequestData data) {
-
     return new Builder()
-        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topics().stream()
-            .map(readStateData -> new TopicData(readStateData.topicId(),
+        .setGroupTopicPartitionData(new GroupTopicPartitionData<>(data.groupId(), data.topics().stream()
+            .map(readStateData -> new TopicData<>(readStateData.topicId(),
                 readStateData.partitions().stream()
-                    .map(partitionData -> new PartitionData(partitionData.partition(), partitionData.stateEpoch(), partitionData.startOffset(), Errors.NONE.code(), null))
+                    .map(partitionData -> PartitionFactory.newPartitionStateData(partitionData.partition(), partitionData.stateEpoch(), partitionData.startOffset()))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList())))
         .build();
   }
 
   public static class Builder {
-    private GroupTopicPartitionData groupTopicPartitionData;
+    private GroupTopicPartitionData<PartitionStateData> groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionStateData> groupTopicPartitionData) {
       this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }

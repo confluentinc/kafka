@@ -23,31 +23,31 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class InitializeShareGroupStateResult implements PersisterResult {
-  private final List<TopicData> topicsData;
+  private final List<TopicData<PartitionErrorData>> topicsData;
 
-  private InitializeShareGroupStateResult(List<TopicData> topicsData) {
+  private InitializeShareGroupStateResult(List<TopicData<PartitionErrorData>> topicsData) {
     this.topicsData = topicsData;
   }
 
-  public List<TopicData> topicsData() {
+  public List<TopicData<PartitionErrorData>> topicsData() {
     return topicsData;
   }
 
   public static InitializeShareGroupStateResult from(InitializeShareGroupStateResponseData data) {
     return new Builder()
         .setTopicsData(data.results().stream()
-            .map(initializeStateResult -> new TopicData(initializeStateResult.topicId(),
+            .map(initializeStateResult -> new TopicData<>(initializeStateResult.topicId(),
                 initializeStateResult.partitions().stream()
-                    .map(partitionResult -> new PartitionData(partitionResult.partition(), -1, -1, partitionResult.errorCode(), null))
+                    .map(partitionResult -> PartitionFactory.newPartitionErrorData(partitionResult.partition(), partitionResult.errorCode()))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList()))
         .build();
   }
 
   public static class Builder {
-    private List<TopicData> topicsData;
+    private List<TopicData<PartitionErrorData>> topicsData;
 
-    public Builder setTopicsData(List<TopicData> topicsData) {
+    public Builder setTopicsData(List<TopicData<PartitionErrorData>> topicsData) {
       this.topicsData = topicsData;
       return this;
     }

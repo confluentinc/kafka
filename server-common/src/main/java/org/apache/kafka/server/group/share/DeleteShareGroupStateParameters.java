@@ -18,36 +18,35 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.DeleteShareGroupStateRequestData;
-import org.apache.kafka.common.protocol.Errors;
 
 import java.util.stream.Collectors;
 
 public class DeleteShareGroupStateParameters implements PersisterParameters {
 
-  private final GroupTopicPartitionData groupTopicPartitionData;
+  private final GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
 
-  private DeleteShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData) {
+  private DeleteShareGroupStateParameters(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
     this.groupTopicPartitionData = groupTopicPartitionData;
   }
 
   public static DeleteShareGroupStateParameters from(DeleteShareGroupStateRequestData data) {
     return new Builder()
-        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topics().stream()
-            .map(deleteStateData -> new TopicData(deleteStateData.topicId(), deleteStateData.partitions().stream()
-                .map(partitionData -> new PartitionData(partitionData.partition(), -1, -1, Errors.NONE.code(), null))
+        .setGroupTopicPartitionData(new GroupTopicPartitionData<>(data.groupId(), data.topics().stream()
+            .map(deleteStateData -> new TopicData<>(deleteStateData.topicId(), deleteStateData.partitions().stream()
+                .map(partitionData -> PartitionFactory.newPartitionIdData(partitionData.partition()))
                 .collect(Collectors.toList())))
             .collect(Collectors.toList())))
         .build();
   }
 
-  public GroupTopicPartitionData groupTopicPartitionData() {
+  public GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData() {
     return groupTopicPartitionData;
   }
 
   public static class Builder {
-    private GroupTopicPartitionData groupTopicPartitionData;
+    private GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
       this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }

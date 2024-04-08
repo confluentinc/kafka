@@ -20,7 +20,8 @@ package org.apache.kafka.server.group.share;
 import java.util.List;
 import java.util.Objects;
 
-public class PartitionData {
+public class PartitionData implements
+    PartitionIdData, PartitionStateData, PartitionErrorData, PartitionStateErrorData, PartitionStateBatchData, PartitionAllData {
   private final int partition;
   private final int stateEpoch;
   private final long startOffset;
