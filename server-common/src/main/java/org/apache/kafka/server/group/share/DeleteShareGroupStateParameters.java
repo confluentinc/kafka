@@ -18,6 +18,9 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.DeleteShareGroupStateRequestData;
+import org.apache.kafka.common.protocol.Errors;
+
+import java.util.stream.Collectors;
 
 public class DeleteShareGroupStateParameters implements PersisterParameters {
 
@@ -28,8 +31,12 @@ public class DeleteShareGroupStateParameters implements PersisterParameters {
   }
 
   public static DeleteShareGroupStateParameters from(DeleteShareGroupStateRequestData data) {
-    return new DeleteShareGroupStateParameters.Builder()
-        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topicId(), data.partition()))
+    return new Builder()
+        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topics().stream()
+            .map(deleteStateData -> new TopicData(deleteStateData.topicId(), deleteStateData.partitions().stream()
+                .map(partitionData -> new PartitionData(partitionData.partition(), -1, -1, Errors.NONE.code(), null))
+                .collect(Collectors.toList())))
+            .collect(Collectors.toList())))
         .build();
   }
 

@@ -19,6 +19,8 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 
+import java.util.stream.Collectors;
+
 public class ReadShareGroupStateParameters implements PersisterParameters {
 
   private final GroupTopicPartitionData groupTopicPartitionData;
@@ -32,8 +34,22 @@ public class ReadShareGroupStateParameters implements PersisterParameters {
   }
 
   public static ReadShareGroupStateParameters from(ReadShareGroupStateRequestData data) {
+//    {
+//      groupId,
+//      topics[
+//          topicId,
+//          partitions [
+//              partitionId
+//          ]
+//      ]
+//    }
     return new Builder()
-        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topicId(), data.partition()))
+        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topics().stream()
+            .map(readStateData -> new TopicData(readStateData.topicId(),
+                readStateData.partitions().stream()
+                    .map(partitionData -> new PartitionData(partitionData.partition(), -1, -1, (short) 0, null))
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList())))
         .build();
   }
 

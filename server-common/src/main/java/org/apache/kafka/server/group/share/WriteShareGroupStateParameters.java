@@ -18,78 +18,45 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.protocol.Errors;
 
-import java.util.List;
 import java.util.stream.Collectors;
 
 public class WriteShareGroupStateParameters implements PersisterParameters {
   private final GroupTopicPartitionData groupTopicPartitionData;
-  private final int stateEpoch;
-  private final long startOffset;
-  private final List<PersisterStateBatch> stateBatches;
 
-  private WriteShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData, int stateEpoch, long startOffset, List<PersisterStateBatch> stateBatches) {
+  private WriteShareGroupStateParameters(GroupTopicPartitionData groupTopicPartitionData) {
     this.groupTopicPartitionData = groupTopicPartitionData;
-    this.stateEpoch = stateEpoch;
-    this.startOffset = startOffset;
-    this.stateBatches = stateBatches;
   }
 
   public GroupTopicPartitionData groupTopicPartitionData() {
     return groupTopicPartitionData;
   }
 
-  public int stateEpoch() {
-    return stateEpoch;
-  }
-
-  public long startOffset() {
-    return startOffset;
-  }
-
-  public List<PersisterStateBatch> stateBatches() {
-    return stateBatches;
-  }
-
   public static WriteShareGroupStateParameters from(WriteShareGroupStateRequestData data) {
     return new Builder()
-        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topicId(), data.partition()))
-        .setStateEpoch(data.stateEpoch())
-        .setStartOffset(data.startOffset())
-        .setStateBatches(data.stateBatches().stream()
-            .map(PersisterStateBatch::from)
-            .collect(Collectors.toList()))
+        .setGroupTopicPartitionData(new GroupTopicPartitionData(data.groupId(), data.topics().stream()
+            .map(writeStateData -> new TopicData(writeStateData.topicId(),
+                writeStateData.partitions().stream()
+                    .map(partitionData -> new PartitionData(partitionData.partition(), partitionData.stateEpoch(), partitionData.startOffset(), Errors.NONE.code(),
+                        partitionData.stateBatches().stream()
+                            .map(PersisterStateBatch::from)
+                            .collect(Collectors.toList())))
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList())))
         .build();
   }
 
   public static class Builder {
     private GroupTopicPartitionData groupTopicPartitionData;
-    private int stateEpoch;
-    private long startOffset;
-    private List<PersisterStateBatch> stateBatches;
 
     public Builder setGroupTopicPartitionData(GroupTopicPartitionData groupTopicPartitionData) {
       this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }
 
-    public Builder setStateEpoch(int stateEpoch) {
-      this.stateEpoch = stateEpoch;
-      return this;
-    }
-
-    public Builder setStartOffset(long startOffset) {
-      this.startOffset = startOffset;
-      return this;
-    }
-
-    public Builder setStateBatches(List<PersisterStateBatch> stateBatches) {
-      this.stateBatches = stateBatches;
-      return this;
-    }
-
     public WriteShareGroupStateParameters build() {
-      return new WriteShareGroupStateParameters(groupTopicPartitionData, stateEpoch, startOffset, stateBatches);
+      return new WriteShareGroupStateParameters(groupTopicPartitionData);
     }
   }
 }

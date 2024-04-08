@@ -19,33 +19,41 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.message.InitializeShareGroupStateResponseData;
 
-public class InitializeShareGroupStateResult implements PersisterResult {
-  private final short errorCode;
+import java.util.List;
+import java.util.stream.Collectors;
 
-  private InitializeShareGroupStateResult(short errorCode) {
-    this.errorCode = errorCode;
+public class InitializeShareGroupStateResult implements PersisterResult {
+  private final List<TopicData> topicsData;
+
+  private InitializeShareGroupStateResult(List<TopicData> topicsData) {
+    this.topicsData = topicsData;
   }
 
-  public short errorCode() {
-    return errorCode;
+  public List<TopicData> topicsData() {
+    return topicsData;
   }
 
   public static InitializeShareGroupStateResult from(InitializeShareGroupStateResponseData data) {
     return new Builder()
-        .setErrorCode(data.errorCode())
+        .setTopicsData(data.results().stream()
+            .map(initializeStateResult -> new TopicData(initializeStateResult.topicId(),
+                initializeStateResult.partitions().stream()
+                    .map(partitionResult -> new PartitionData(partitionResult.partition(), -1, -1, partitionResult.errorCode(), null))
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList()))
         .build();
   }
 
   public static class Builder {
-    private short errorCode;
+    private List<TopicData> topicsData;
 
-    public Builder setErrorCode(short errorCode) {
-      this.errorCode = errorCode;
+    public Builder setTopicsData(List<TopicData> topicsData) {
+      this.topicsData = topicsData;
       return this;
     }
 
     public InitializeShareGroupStateResult build() {
-      return new InitializeShareGroupStateResult(errorCode);
+      return new InitializeShareGroupStateResult(topicsData);
     }
   }
 }
