@@ -382,7 +382,7 @@ public class SharePartition {
                 // Schedule acquisition lock timeout for the batch.
                 TimerTask acquisitionLockTimeoutTask = scheduleAcquisitionLockTimeout(memberId, inFlightBatch.baseOffset(), inFlightBatch.lastOffset());
                 // Set the acquisition lock timeout task for the batch.
-                inFlightBatch.acquisitionLockTimeoutForBatch(acquisitionLockTimeoutTask);
+                inFlightBatch.updateAcquisitionLockTimeout(acquisitionLockTimeoutTask);
 
                 findNextFetchOffset.set(true);
                 result.add(new AcquiredRecords()
@@ -799,6 +799,11 @@ public class SharePartition {
         return new ConcurrentSkipListMap<>(cachedState);
     }
 
+    // Visible for testing.
+    Timer timer() {
+        return timer;
+    }
+
     // TODO: maxDeliveryCount should be utilized here once it is implemented
     /**
      * Apply acquisition lock to acquired records.
@@ -1018,13 +1023,17 @@ public class SharePartition {
             }
         }
 
-        private void acquisitionLockTimeoutForBatch(TimerTask acquisitionLockTimeoutTask) {
+        // Visible for testing.
+        TimerTask acquisitionLockTimeoutTask() {
             if (inFlightState == null) {
                 throw new IllegalStateException("The batch state is not available as the offset state is maintained");
             }
-            if (inFlightState.acquisitionLockTimeoutTask != null) {
-                acquisitionLockTimeoutTask.cancel();
-//              TODO: Throw new InvalidRequestException("The acquisition lock timeout task is already set for batch");
+            return inFlightState.acquisitionLockTimeoutTask;
+        }
+
+        private void updateAcquisitionLockTimeout(TimerTask acquisitionLockTimeoutTask) {
+            if (inFlightState == null) {
+                throw new IllegalStateException("The batch state is not available as the offset state is maintained");
             }
             inFlightState.acquisitionLockTimeoutTask = acquisitionLockTimeoutTask;
         }
@@ -1078,11 +1087,12 @@ public class SharePartition {
             return deliveryCount;
         }
 
+        // Visible for testing.
+        TimerTask acquisitionLockTimeoutTask() {
+            return acquisitionLockTimeoutTask;
+        }
+
         void updateAcquisitionLockTimeoutTask(TimerTask acquisitionLockTimeoutTask) {
-            if (this.acquisitionLockTimeoutTask != null) {
-                this.acquisitionLockTimeoutTask.cancel();
-//               TODO: Throw new InvalidRequestException("The acquisition lock timeout task is already set for offset");
-            }
             this.acquisitionLockTimeoutTask = acquisitionLockTimeoutTask;
         }
 
