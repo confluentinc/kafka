@@ -88,8 +88,8 @@ public class SharePartition {
                 throw new IllegalStateException("The state transition is invalid from the current state: " + this);
             }
 
-            if (this == AVAILABLE && newState == ACKNOWLEDGED) {
-                throw new IllegalStateException("The state can only be transitioned to ACQUIRED or ARCHIVED, not ACKNOWLEDGED from AVAILABLE");
+            if (this == AVAILABLE && newState != ACQUIRED) {
+                throw new IllegalStateException("The state can only be transitioned to ACQUIRED from AVAILABLE");
             }
 
             // Either the transition is from Available -> Acquired or from Acquired -> Available/
@@ -546,9 +546,14 @@ public class SharePartition {
                                 throwable = new InvalidRecordStateException("Unable to acknowledge records for the batch");
                                 break;
                             }
+                            // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
+                            // This should not change the nextFetchOffset because the record is not available for acquisition
+                            if (updateResult.state == RecordState.ARCHIVED) {
+                                updateNextFetchOffset = false;
+                            }
                             // Successfully updated the state of the offset.
                             updatedStates.add(updateResult);
-                            if (updateNextFetchOffset && updateResult.state != RecordState.ARCHIVED) {
+                            if (updateNextFetchOffset) {
                                 localNextFetchOffset = Math.min(offsetState.getKey(), localNextFetchOffset);
                             }
                         }
@@ -576,7 +581,11 @@ public class SharePartition {
                         throwable = new InvalidRecordStateException("Unable to acknowledge records for the batch");
                         break;
                     }
-
+                    // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
+                    // This should not change the nextFetchOffset because the record is not available for acquisition
+                    if (updateResult.state == RecordState.ARCHIVED) {
+                        updateNextFetchOffset = false;
+                    }
                     // Add the gap offsets.
                     if (batch.gapOffsets != null && !batch.gapOffsets.isEmpty()) {
                         for (Long gapOffset : batch.gapOffsets) {
@@ -590,7 +599,7 @@ public class SharePartition {
 
                     // Successfully updated the state of the batch.
                     updatedStates.add(updateResult);
-                    if (updateNextFetchOffset && updateResult.state != RecordState.ARCHIVED) {
+                    if (updateNextFetchOffset) {
                         localNextFetchOffset = Math.min(inFlightBatch.baseOffset, localNextFetchOffset);
                     }
                 }
@@ -634,7 +643,6 @@ public class SharePartition {
         List<InFlightState> updatedStates = new ArrayList<>();
         try {
             long localNextFetchOffset = nextFetchOffset;
-            // TODO: recordState can be ARCHIVED as well, but that will involve maxDeliveryCount which is not implemented so far
             RecordState recordState = RecordState.AVAILABLE;
 
             // Iterate over multiple fetched batches. The state can vary per offset entry
@@ -666,7 +674,11 @@ public class SharePartition {
                             }
                             // Successfully updated the state of the offset.
                             updatedStates.add(updateResult);
-                            if (updateResult.state != RecordState.ARCHIVED) localNextFetchOffset = Math.min(offsetState.getKey(), localNextFetchOffset);
+                            // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
+                            // This should not change the nextFetchOffset because the record is not available for acquisition
+                            if (updateResult.state != RecordState.ARCHIVED) {
+                                localNextFetchOffset = Math.min(offsetState.getKey(), localNextFetchOffset);
+                            }
                         }
                     }
                     if (throwable != null)
@@ -692,7 +704,11 @@ public class SharePartition {
                     }
                     // Successfully updated the state of the batch.
                     updatedStates.add(updateResult);
-                    if (updateResult.state != RecordState.ARCHIVED) localNextFetchOffset = Math.min(inFlightBatch.baseOffset, localNextFetchOffset);
+                    // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
+                    // This should not change the nextFetchOffset because the record is not available for acquisition
+                    if (updateResult.state != RecordState.ARCHIVED) {
+                        localNextFetchOffset = Math.min(inFlightBatch.baseOffset, localNextFetchOffset);
+                    }
                 }
             }
 
@@ -992,7 +1008,7 @@ public class SharePartition {
         private InFlightState startStateTransition(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount) {
             try {
                 rollbackState = new InFlightState(state, deliveryCount);
-                if (newState == RecordState.AVAILABLE && deliveryCount == maxDeliveryCount) {
+                if (newState == RecordState.AVAILABLE && deliveryCount >= maxDeliveryCount) {
                     newState = RecordState.ARCHIVED;
                 }
                 state = state.validateTransition(newState);

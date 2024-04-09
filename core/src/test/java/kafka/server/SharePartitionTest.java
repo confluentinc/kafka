@@ -47,7 +47,6 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 
-import static kafka.server.SharePartitionManagerTest.MAX_DELIVERY_COUNT;
 import static kafka.server.SharePartitionManagerTest.RECORD_LOCK_DURATION_MS;
 import static kafka.server.SharePartitionManagerTest.TIMER;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -84,9 +83,8 @@ public class SharePartitionTest {
         assertThrows(IllegalStateException.class, () -> RecordState.ARCHIVED.validateTransition(RecordState.ARCHIVED));
         // Invalid state transition to any other state from Available state other than Acquired.
         assertThrows(IllegalStateException.class, () -> RecordState.AVAILABLE.validateTransition(RecordState.ACKNOWLEDGED));
+        assertThrows(IllegalStateException.class, () -> RecordState.AVAILABLE.validateTransition(RecordState.ARCHIVED));
 
-        // Successful transition from Available to Archived
-        assertEquals(RecordState.ARCHIVED, RecordState.AVAILABLE.validateTransition(RecordState.ARCHIVED));
         // Successful transition from Available to Acquired.
         assertEquals(RecordState.ACQUIRED, RecordState.AVAILABLE.validateTransition(RecordState.ACQUIRED));
         // Successful transition from Acquired to any state.
