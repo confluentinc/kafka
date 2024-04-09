@@ -529,6 +529,8 @@ public class SharePartition {
                                 // Force the state of the offset to Archived for the gap offset
                                 // irrespectively.
                                 offsetState.getValue().state = RecordState.ARCHIVED;
+                                // Cancel and clear the acquisition lock timeout task for the state since it is moved to ARCHIVED state.
+                                offsetState.getValue().cancelAndClearAcquisitionLockTimeoutTask();
                                 continue;
                             }
 
@@ -818,14 +820,30 @@ public class SharePartition {
     }
 
     private TimerTask acquisitionLockTimerTask(String memberId, long baseOffset, long lastOffset) {
-        TimerTask acquistionLockTimerTask = new TimerTask(recordLockDurationMs) {
-            // Runs when the acquisition lock timer expires. We would then be releasing the acquired records.
-            @Override
-            public void run() {
-                releaseAcquisitionLockOnTimeout(memberId, baseOffset, lastOffset);
-            }
-        };
-        return acquistionLockTimerTask;
+        return new AcquisitionLockTimerTask(recordLockDurationMs, memberId, baseOffset, lastOffset);
+    }
+
+    private final class AcquisitionLockTimerTask extends TimerTask {
+        private final long expirationMs;
+        private final String memberId;
+        private final long baseOffset, lastOffset;
+
+        AcquisitionLockTimerTask(long delayMs, String memberId, long baseOffset, long lastOffset) {
+            super(delayMs);
+            this.expirationMs = System.currentTimeMillis() + delayMs;
+            this.memberId = memberId;
+            this.baseOffset = baseOffset;
+            this.lastOffset = lastOffset;
+        }
+
+        long expirationMs() {
+            return expirationMs;
+        }
+
+        @Override
+        public void run() {
+            releaseAcquisitionLockOnTimeout(memberId, baseOffset, lastOffset);
+        }
     }
 
     private void releaseAcquisitionLockOnTimeout(String memberId, long baseOffset, long lastOffset) {
@@ -847,10 +865,12 @@ public class SharePartition {
                                 log.debug("Unable to release acquisition lock on timeout for the batch: {}"
                                         + " for the share partition: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
                             } else {
+                                // Update acquisition lock timeout task for the batch to null since it is completed now.
+                                updateResult.updateAcquisitionLockTimeoutTask(null);
                                 localNextFetchOffset = Math.min(entry.getKey(), localNextFetchOffset);
                             }
                         } else {
-                            log.trace("The batch is not in acquired state while release of acquisition lock on timeout, skipping, batch: {}"
+                            log.debug("The batch is not in acquired state while release of acquisition lock on timeout, skipping, batch: {}"
                                     + " for the share group: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
                         }
                     } else { // Case when batch has a valid offset state map.
@@ -867,7 +887,7 @@ public class SharePartition {
                             }
 
                             if (offsetState.getValue().state != RecordState.ACQUIRED) {
-                                log.trace("The offset is not in acquired state while release of acquisition lock on timeout, skipping, offset: {} batch: {}"
+                                log.debug("The offset is not in acquired state while release of acquisition lock on timeout, skipping, offset: {} batch: {}"
                                                 + " for the share group: {}-{}-{}", offsetState.getKey(), inFlightBatch,
                                         groupId, memberId, topicIdPartition);
                                 continue;
@@ -879,6 +899,8 @@ public class SharePartition {
                                         groupId, memberId, topicIdPartition);
                                 continue;
                             }
+                            // Update acquisition lock timeout task for the offset to null since it is completed now.
+                            updateResult.updateAcquisitionLockTimeoutTask(null);
                             localNextFetchOffset = Math.min(offsetState.getKey(), localNextFetchOffset);
                         }
                     }
@@ -1010,10 +1032,16 @@ public class SharePartition {
                         offsetState.put(offset, new InFlightState(RecordState.ARCHIVED, 0));
                         continue;
                     }
-                    // TODO: Relationship between timerTask and inFlightState.acquisitionLockTimeoutTask
-                    TimerTask timerTask = scheduleAcquisitionLockTimeout(memberId, offset, offset);
-                    offsetState.put(offset, new InFlightState(inFlightState.state, inFlightState.deliveryCount, timerTask));
-                    timer.add(timerTask);
+                    if (inFlightState.acquisitionLockTimeoutTask != null) {
+                        // The acquisition lock timeout task is already scheduled for the batch, hence we need to schedule
+                        // the acquisition lock timeout task for the offset as well.
+                        // TODO: Relationship between timerTask and inFlightState.acquisitionLockTimeoutTask
+                        TimerTask timerTask = scheduleAcquisitionLockTimeout(memberId, offset, offset);
+                        offsetState.put(offset, new InFlightState(inFlightState.state, inFlightState.deliveryCount, timerTask));
+                        timer.add(timerTask);
+                    } else {
+                        offsetState.put(offset, new InFlightState(inFlightState.state, inFlightState.deliveryCount));
+                    }
                 }
                 // Cancel the acquisition lock timeout task for the batch as the offset state is maintained.
                 if (inFlightState.acquisitionLockTimeoutTask != null) {
