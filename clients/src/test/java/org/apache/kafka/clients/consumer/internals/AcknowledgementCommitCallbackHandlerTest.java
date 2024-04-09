@@ -37,9 +37,9 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class AcknowledgeCommitCallbackHandlerTest {
+class AcknowledgementCommitCallbackHandlerTest {
 
-    private AcknowledgeCommitCallbackHandler acknowledgeCommitCallbackHandler;
+    private AcknowledgementCommitCallbackHandler acknowledgementCommitCallbackHandler;
     private Map<TopicPartitionAndOffset, Exception> exceptionMap;
     private final TopicPartition tp0 = new TopicPartition("test-topic", 0);
     private final TopicIdPartition tip0 = new TopicIdPartition(Uuid.randomUuid(), tp0);
@@ -58,7 +58,7 @@ class AcknowledgeCommitCallbackHandlerTest {
         acknowledgementsMap = new HashMap<>();
         exceptionMap = new LinkedHashMap<>();
         TestableAcknowledgeCommitCallBack callback = new TestableAcknowledgeCommitCallBack();
-        acknowledgeCommitCallbackHandler = new AcknowledgeCommitCallbackHandler(callback);
+        acknowledgementCommitCallbackHandler = new AcknowledgementCommitCallbackHandler(callback);
     }
 
     @Test
@@ -68,7 +68,7 @@ class AcknowledgeCommitCallbackHandlerTest {
         acknowledgements.add(1L, AcknowledgeType.REJECT);
         acknowledgementsMap.put(tip0, acknowledgements);
 
-        acknowledgeCommitCallbackHandler.onComplete(acknowledgementsMap);
+        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
 
         assertNull(exceptionMap.get(tpo00));
         assertNull(exceptionMap.get(tpo01));
@@ -82,7 +82,7 @@ class AcknowledgeCommitCallbackHandlerTest {
         acknowledgements.setAcknowledgeErrorCode(Errors.INVALID_RECORD_STATE);
         acknowledgementsMap.put(tip0, acknowledgements);
 
-        acknowledgeCommitCallbackHandler.onComplete(acknowledgementsMap);
+        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
         assertTrue(exceptionMap.get(tpo00) instanceof InvalidRecordStateException);
         assertTrue(exceptionMap.get(tpo01) instanceof InvalidRecordStateException);
     }
@@ -95,7 +95,7 @@ class AcknowledgeCommitCallbackHandlerTest {
         acknowledgements.setAcknowledgeErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED);
         acknowledgementsMap.put(tip0, acknowledgements);
 
-        acknowledgeCommitCallbackHandler.onComplete(acknowledgementsMap);
+        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
         assertTrue(exceptionMap.get(tpo00) instanceof TopicAuthorizationException);
         assertTrue(exceptionMap.get(tpo01) instanceof TopicAuthorizationException);
     }
@@ -117,7 +117,7 @@ class AcknowledgeCommitCallbackHandlerTest {
         acknowledgements2.add(0L, AcknowledgeType.ACCEPT);
         acknowledgementsMap.put(tip2, acknowledgements2);
 
-        acknowledgeCommitCallbackHandler.onComplete(acknowledgementsMap);
+        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
 
         assertTrue(exceptionMap.get(tpo00) instanceof TopicAuthorizationException);
         assertTrue(exceptionMap.get(tpo01) instanceof TopicAuthorizationException);

@@ -27,28 +27,28 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-public class AcknowledgeCommitCallbackHandler {
+public class AcknowledgementCommitCallbackHandler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AcknowledgeCommitCallbackHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AcknowledgementCommitCallbackHandler.class);
     private final AcknowledgementCommitCallback acknowledgementCommitCallback;
-    AcknowledgeCommitCallbackHandler(AcknowledgementCommitCallback acknowledgementCommitCallback) {
+    AcknowledgementCommitCallbackHandler(AcknowledgementCommitCallback acknowledgementCommitCallback) {
         this.acknowledgementCommitCallback = acknowledgementCommitCallback;
     }
 
     void onComplete(Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
-        try {
-            Set<OffsetAndMetadata> offsetAndMetadata = new HashSet<>();
-            acknowledgementsMap.forEach((partition, acknowledgements) -> {
-                Exception exception = null;
-                if (acknowledgements.getAcknowledgeErrorCode() != null) {
-                    exception = acknowledgements.getAcknowledgeErrorCode().exception();
-                }
-                Set<Long> offsets = acknowledgements.getAcknowledgements().keySet();
-                offsets.forEach(offset -> offsetAndMetadata.add(new OffsetAndMetadata(offset)));
+        Set<OffsetAndMetadata> offsetAndMetadata = new HashSet<>();
+        acknowledgementsMap.forEach((partition, acknowledgements) -> {
+            Exception exception = null;
+            if (acknowledgements.getAcknowledgeErrorCode() != null) {
+                exception = acknowledgements.getAcknowledgeErrorCode().exception();
+            }
+            Set<Long> offsets = acknowledgements.getAcknowledgementsTypeMap().keySet();
+            offsets.forEach(offset -> offsetAndMetadata.add(new OffsetAndMetadata(offset)));
+            try {
                 acknowledgementCommitCallback.onComplete(Collections.singletonMap(partition, offsetAndMetadata), exception);
-            });
-        } catch (Exception e) {
-            LOG.error(e.getMessage(), e);
-        }
+            } catch (Throwable e) {
+                LOG.error("Exception thrown by acknowledgement commit callback", e);
+            }
+        });
     }
 }

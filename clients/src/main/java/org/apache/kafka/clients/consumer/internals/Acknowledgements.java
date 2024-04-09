@@ -147,7 +147,7 @@ public class Acknowledgements {
     /**
      * Returns the Map of Acknowledgements for the offsets.
      */
-    public Map<Long, AcknowledgeType> getAcknowledgements() {
+    public Map<Long, AcknowledgeType> getAcknowledgementsTypeMap() {
         return acknowledgements;
     }
 
