@@ -22,6 +22,7 @@ import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.message.ShareFetchResponseData.AcquiredRecords;
 import org.apache.kafka.common.record.RecordBatch;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.util.timer.Timer;
 import org.apache.kafka.server.util.timer.TimerTask;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
@@ -185,9 +186,13 @@ public class SharePartition {
      * acquired to available/archived state upon timeout
      */
     private final Timer timer;
+    /**
+     * Time is used to get the currentTime.
+     */
+    private final Time time;
 
     SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount,
-                   int recordLockDurationMs, Timer timer) {
+                   int recordLockDurationMs, Timer timer, Time time) {
         this.groupId = groupId;
         this.topicIdPartition = topicIdPartition;
         this.maxInFlightMessages = maxInFlightMessages;
@@ -204,6 +209,7 @@ public class SharePartition {
         this.fetchLock = new AtomicBoolean(false);
         this.recordLockDurationMs = recordLockDurationMs;
         this.timer = timer;
+        this.time = time;
     }
 
     /**
@@ -806,6 +812,10 @@ public class SharePartition {
         return timer;
     }
 
+    private TimerTask scheduleAcquisitionLockTimeout(String memberId, long baseOffset, long lastOffset) {
+        return scheduleAcquisitionLockTimeout(memberId, baseOffset, lastOffset, recordLockDurationMs);
+    }
+
     // TODO: maxDeliveryCount should be utilized here once it is implemented
     /**
      * Apply acquisition lock to acquired records.
@@ -813,14 +823,14 @@ public class SharePartition {
      * @param baseOffset The base offset of the acquired records.
      * @param lastOffset The last offset of the acquired records.
      */
-    private TimerTask scheduleAcquisitionLockTimeout(String memberId, long baseOffset, long lastOffset) {
-        TimerTask acquistionLockTimerTask = acquisitionLockTimerTask(memberId, baseOffset, lastOffset);
+    private TimerTask scheduleAcquisitionLockTimeout(String memberId, long baseOffset, long lastOffset, long delayMs) {
+        TimerTask acquistionLockTimerTask = acquisitionLockTimerTask(memberId, baseOffset, lastOffset, delayMs);
         timer.add(acquistionLockTimerTask);
         return acquistionLockTimerTask;
     }
 
-    private TimerTask acquisitionLockTimerTask(String memberId, long baseOffset, long lastOffset) {
-        return new AcquisitionLockTimerTask(recordLockDurationMs, memberId, baseOffset, lastOffset);
+    private TimerTask acquisitionLockTimerTask(String memberId, long baseOffset, long lastOffset, long delayMs) {
+        return new AcquisitionLockTimerTask(delayMs, memberId, baseOffset, lastOffset);
     }
 
     private final class AcquisitionLockTimerTask extends TimerTask {
@@ -830,7 +840,7 @@ public class SharePartition {
 
         AcquisitionLockTimerTask(long delayMs, String memberId, long baseOffset, long lastOffset) {
             super(delayMs);
-            this.expirationMs = System.currentTimeMillis() + delayMs;
+            this.expirationMs = time.hiResClockMs() + delayMs;
             this.memberId = memberId;
             this.baseOffset = baseOffset;
             this.lastOffset = lastOffset;
@@ -840,6 +850,9 @@ public class SharePartition {
             return expirationMs;
         }
 
+        /**
+         * The task is executed when the acquisition lock timeout is reached. The task releases the acquired records.
+         */
         @Override
         public void run() {
             releaseAcquisitionLockOnTimeout(memberId, baseOffset, lastOffset);
@@ -1035,8 +1048,8 @@ public class SharePartition {
                     if (inFlightState.acquisitionLockTimeoutTask != null) {
                         // The acquisition lock timeout task is already scheduled for the batch, hence we need to schedule
                         // the acquisition lock timeout task for the offset as well.
-                        // TODO: Relationship between timerTask and inFlightState.acquisitionLockTimeoutTask
-                        TimerTask timerTask = scheduleAcquisitionLockTimeout(memberId, offset, offset);
+                        long delayMs = ((AcquisitionLockTimerTask) inFlightState.acquisitionLockTimeoutTask).expirationMs() - time.hiResClockMs();
+                        TimerTask timerTask = scheduleAcquisitionLockTimeout(memberId, offset, offset, delayMs);
                         offsetState.put(offset, new InFlightState(inFlightState.state, inFlightState.deliveryCount, timerTask));
                         timer.add(timerTask);
                     } else {
