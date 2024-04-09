@@ -450,31 +450,45 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         producer.send(record);
         producer.send(record);
         producer.send(record);
-        ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(5000));
-        ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
+        ConsumerRecords<byte[], byte[]> records1;
+        ConsumerRecords<byte[], byte[]> records2;
         // Both the consumers should read all the messages, because they are part of different share groups (both have different group IDs)
-        assertEquals(3, records1.count());
-        assertEquals(3, records2.count());
-
-        producer.send(record);
-        producer.send(record);
-        records1 = shareConsumer1.poll(Duration.ofMillis(5000));
-        assertEquals(2, records1.count());
-
-        producer.send(record);
-        producer.send(record);
-        producer.send(record);
-        int shareConsumer1records = 0, shareConsumer2records = 0;
-        while (shareConsumer1records < 3) {
+        int shareConsumer1Records = 0, shareConsumer2Records = 0;
+        while (shareConsumer1Records < 3) {
             records1 = shareConsumer1.poll(Duration.ofMillis(2000));
-            shareConsumer1records += records1.count();
+            shareConsumer1Records += records1.count();
         }
-        while (shareConsumer2records < 5) {
+        while (shareConsumer2Records < 3) {
             records2 = shareConsumer2.poll(Duration.ofMillis(2000));
-            shareConsumer2records += records2.count();
+            shareConsumer2Records += records2.count();
         }
-        assertEquals(3, shareConsumer1records);
-        assertEquals(5, shareConsumer2records);
+        assertEquals(3, shareConsumer1Records);
+        assertEquals(3, shareConsumer2Records);
+
+        producer.send(record);
+        producer.send(record);
+        shareConsumer1Records = 0;
+        while (shareConsumer1Records < 2) {
+            records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+            shareConsumer1Records += records1.count();
+        }
+        assertEquals(2, shareConsumer1Records);
+
+        producer.send(record);
+        producer.send(record);
+        producer.send(record);
+        shareConsumer1Records = 0;
+        shareConsumer2Records = 0;
+        while (shareConsumer1Records < 3) {
+            records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+            shareConsumer1Records += records1.count();
+        }
+        while (shareConsumer2Records < 5) {
+            records2 = shareConsumer2.poll(Duration.ofMillis(2000));
+            shareConsumer2Records += records2.count();
+        }
+        assertEquals(3, shareConsumer1Records);
+        assertEquals(5, shareConsumer2Records);
 
         shareConsumer1.close();
         shareConsumer2.close();
