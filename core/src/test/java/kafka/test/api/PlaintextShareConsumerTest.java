@@ -464,10 +464,17 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         producer.send(record);
         producer.send(record);
         producer.send(record);
-        records1 = shareConsumer1.poll(Duration.ofMillis(5000));
-        records2 = shareConsumer2.poll(Duration.ofMillis(5000));
-        assertEquals(3, records1.count());
-        assertEquals(5, records2.count());
+        int shareConsumer1records = 0, shareConsumer2records = 0;
+        while(shareConsumer1records < 3) {
+            records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+            shareConsumer1records += records1.count();
+        }
+        while(shareConsumer2records < 5) {
+            records2 = shareConsumer2.poll(Duration.ofMillis(2000));
+            shareConsumer2records += records2.count();
+        }
+        assertEquals(3, shareConsumer1records);
+        assertEquals(5, shareConsumer2records);
 
         shareConsumer1.close();
         shareConsumer2.close();
