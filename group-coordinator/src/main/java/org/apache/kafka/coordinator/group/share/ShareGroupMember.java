@@ -21,7 +21,7 @@ import org.apache.kafka.common.message.ShareGroupDescribeResponseData;
 import org.apache.kafka.coordinator.group.GroupMember;
 import org.apache.kafka.coordinator.group.Utils;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentValue;
-import org.apache.kafka.coordinator.group.generated.ConsumerGroupMemberMetadataValue;
+import org.apache.kafka.coordinator.group.generated.ShareGroupMemberMetadataValue;
 import org.apache.kafka.image.TopicsImage;
 
 import java.util.ArrayList;
@@ -139,7 +139,7 @@ public class ShareGroupMember extends GroupMember {
       return this;
     }
 
-    public Builder updateWith(ConsumerGroupMemberMetadataValue record) {
+    public Builder updateWith(ShareGroupMemberMetadataValue record) {
       setRackId(record.rackId());
       setClientId(record.clientId());
       setClientHost(record.clientHost());
@@ -293,7 +293,6 @@ public class ShareGroupMember extends GroupMember {
             .setTopicPartitions(topicPartitionsFromMap(assignedPartitions, topicsImage)))
         .setClientHost(clientHost)
         .setClientId(clientId)
-        .setInstanceId(instanceId)
         .setRackId(rackId)
         .setSubscribedTopicNames(subscribedTopicNames);
   }

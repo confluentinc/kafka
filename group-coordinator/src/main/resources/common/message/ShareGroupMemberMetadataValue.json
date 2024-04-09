@@ -14,29 +14,21 @@
 // limitations under the License.
 
 // KIP-932 is in development. This schema is subject to non-backwards-compatible changes.
-
 {
   "type": "data",
-  "name": "ShareGroupPartitionMetadataValue",
+  "name": "ShareGroupMemberMetadataValue",
   "validVersions": "0",
   "flexibleVersions": "0+",
   "fields": [
-    { "name": "Epoch", "versions": "0+", "type": "int32" },
-    { "name": "Topics", "versions": "0+", "type": "[]TopicMetadata" },
-    { "name": "InitializingTopics", "versions": "0+", "type": "[]TopicIndexMetadata" },
-    { "name": "DeletingTopics", "versions": "0+", "type": "[]TopicMetadata" }
-  ],
-  "commonStructs": [
-    { "name": "TopicMetadata", "versions": "0+", "fields": [
-      { "name": "TopicId", "type": "uuid", "versions": "0+",
-        "about": "The topic Id." },
-      { "name": "NumPartitions", "type": "int32", "versions": "0+",
-        "about": "The number of partitions." }
-    ]},
-    { "name": "TopicIndexMetadata", "versions": "0+", "fields": [
-      { "name": "TopicId", "versions": "0+", "type": "uuid" },
-      { "name": "StartPartitionIndex", "versions": "0+", "type": "int32" },
-      { "name": "EndPartitionIndex", "versions": "0+", "type": "int32" }
-    ]}
+    { "name": "RackId", "versions": "0+", "nullableVersions": "0+", "type": "string",
+      "about": "The (optional) rack id." },
+    { "name": "ClientId", "versions": "0+", "type": "string",
+      "about": "The client id." },
+    { "name": "ClientHost", "versions": "0+", "type": "string",
+      "about": "The client host." },
+    { "name": "SubscribedTopicNames", "versions": "0+", "type": "[]string",
+      "about": "The list of subscribed topic names." },
+    { "name": "RebalanceTimeoutMs", "type": "int32", "versions": "0+", "default": -1,
+      "about": "The rebalance timeout" }
   ]
 }
