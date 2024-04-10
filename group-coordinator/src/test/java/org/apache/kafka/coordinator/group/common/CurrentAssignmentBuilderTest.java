@@ -14,11 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.coordinator.group.consumer;
+package org.apache.kafka.coordinator.group.common;
 
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.FencedMemberEpochException;
 import org.apache.kafka.common.message.ConsumerGroupHeartbeatRequestData;
+import org.apache.kafka.coordinator.group.GroupMember;
+import org.apache.kafka.coordinator.group.consumer.ConsumerGroupMember;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -45,7 +47,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 4, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6))))
@@ -79,7 +81,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 4, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3, 4),
                 mkTopicAssignment(topicId2, 4, 5, 6, 7))))
@@ -113,7 +115,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 4, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 2, 3, 4),
                 mkTopicAssignment(topicId2, 5, 6, 7))))
@@ -150,7 +152,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 4, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3, 4),
                 mkTopicAssignment(topicId2, 4, 5, 6, 7))))
@@ -187,7 +189,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 4)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 2, 3),
                 mkTopicAssignment(topicId2, 5, 6))))
@@ -288,7 +290,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 4)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(12, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 3),
                 mkTopicAssignment(topicId2, 6))))
@@ -332,7 +334,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 2, 3, 4),
                 mkTopicAssignment(topicId2, 5, 6, 7))))
@@ -373,7 +375,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(12, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 2, 3),
                 mkTopicAssignment(topicId2, 5, 6))))
@@ -407,7 +409,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 2, 3, 4),
                 mkTopicAssignment(topicId2, 5, 6, 7))))
@@ -441,7 +443,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 2, 3, 4),
                 mkTopicAssignment(topicId2, 5, 6, 7))))
@@ -465,7 +467,7 @@ public class CurrentAssignmentBuilderTest {
                 mkTopicAssignment(topicId2, 5, 6)))
             .build();
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(12, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 3),
                 mkTopicAssignment(topicId2, 6))))
@@ -515,7 +517,7 @@ public class CurrentAssignmentBuilderTest {
             .build());
 
         // Then the member rejoins with no owned partitions.
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        GroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withTargetAssignment(12, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 3),
                 mkTopicAssignment(topicId2, 6))))

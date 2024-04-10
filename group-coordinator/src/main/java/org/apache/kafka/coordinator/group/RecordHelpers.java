@@ -388,7 +388,7 @@ public class RecordHelpers {
                 new ConsumerGroupCurrentMemberAssignmentValue()
                     .setMemberEpoch(member.memberEpoch())
                     .setPreviousMemberEpoch(member.previousMemberEpoch())
-                    .setTargetMemberEpoch(member.targetMemberEpoch())
+                    .setState(member.state().value())
                     .setAssignedPartitions(toTopicPartitions(member.assignedPartitions())),
                 (short) 0
             )

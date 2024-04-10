@@ -21,7 +21,6 @@ import org.apache.kafka.common.errors.FencedMemberEpochException;
 import org.apache.kafka.common.message.ConsumerGroupHeartbeatRequestData;
 import org.apache.kafka.coordinator.group.GroupMember;
 import org.apache.kafka.coordinator.group.consumer.ConsumerGroupMember;
-import org.apache.kafka.coordinator.group.consumer.MemberState;
 import org.apache.kafka.coordinator.group.share.ShareGroupMember;
 
 import java.util.Collections;
@@ -143,7 +142,7 @@ public class CurrentAssignmentBuilder {
      *
      * @return A new ConsumerGroupMember or the current one.
      */
-    public ConsumerGroupMember build() {
+    public ConsumerGroupMember buildConsumerGroupMember(ConsumerGroupMember member) {
         switch (member.state()) {
             case STABLE:
                 // When the member is in the STABLE state, we verify if a newer
@@ -221,6 +220,30 @@ public class CurrentAssignmentBuilder {
     }
 
     /**
+     * The state machine for share group has just one state: STABLE. This state means that the member
+     * has received all its assigned partitions. However, the member may still need to update its
+     * metadata to reflect the new target assignment.
+     *
+     * @param member The share group member to reconcile.
+     *
+     * @return A new ShareGroupMember.
+     */
+    private ShareGroupMember buildShareGroupMember(ShareGroupMember member) {
+        // A new target assignment has been installed, we need to restart
+        // the reconciliation loop from the beginning.
+        if (targetAssignmentEpoch != member.memberEpoch()) {
+            // We transition to the target epoch. The transition to the new state is done
+            // when the member is updated.
+            return new ShareGroupMember.Builder(member)
+                .setAssignedPartitions(targetAssignment.partitions())
+                .setMemberEpoch(targetAssignmentEpoch)
+                .build();
+        }
+
+        return member;
+    }
+
+    /**
      * Computes the next assignment.
      *
      * @param memberEpoch               The epoch of the member to use. This may be different
@@ -279,7 +302,7 @@ public class CurrentAssignmentBuilder {
             // epoch and requests the revocation of those partitions. It transitions to
             // the UNREVOKED_PARTITIONS state to wait until the client acknowledges the
             // revocation of the partitions.
-            return new ConsumerGroupMember.Builder(member)
+            return new ConsumerGroupMember.Builder((ConsumerGroupMember) member)
                 .setState(MemberState.UNREVOKED_PARTITIONS)
                 .updateMemberEpoch(memberEpoch)
                 .setAssignedPartitions(newAssignedPartitions)
@@ -295,7 +318,7 @@ public class CurrentAssignmentBuilder {
                 .computeIfAbsent(topicId, __ -> new HashSet<>())
                 .addAll(partitions));
             MemberState newState = hasUnreleasedPartitions ? MemberState.UNRELEASED_PARTITIONS : MemberState.STABLE;
-            return new ConsumerGroupMember.Builder(member)
+            return new ConsumerGroupMember.Builder((ConsumerGroupMember) member)
                 .setState(newState)
                 .updateMemberEpoch(targetAssignmentEpoch)
                 .setAssignedPartitions(newAssignedPartitions)
@@ -305,7 +328,7 @@ public class CurrentAssignmentBuilder {
             // If there are no partitions to be revoked nor to be assigned but some
             // partitions are not available yet, the member transitions to the target
             // epoch, to the UNRELEASED_PARTITIONS state and waits.
-            return new ConsumerGroupMember.Builder(member)
+            return new ConsumerGroupMember.Builder((ConsumerGroupMember) member)
                 .setState(MemberState.UNRELEASED_PARTITIONS)
                 .updateMemberEpoch(targetAssignmentEpoch)
                 .setAssignedPartitions(newAssignedPartitions)
@@ -314,7 +337,7 @@ public class CurrentAssignmentBuilder {
         } else {
             // Otherwise, the member transitions to the target epoch and to the
             // STABLE state.
-            return new ConsumerGroupMember.Builder(member)
+            return new ConsumerGroupMember.Builder((ConsumerGroupMember) member)
                 .setState(MemberState.STABLE)
                 .updateMemberEpoch(targetAssignmentEpoch)
                 .setAssignedPartitions(newAssignedPartitions)

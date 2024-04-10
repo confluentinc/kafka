@@ -65,10 +65,7 @@ import org.apache.kafka.coordinator.group.consumer.ConsumerGroup;
 import org.apache.kafka.coordinator.group.consumer.ConsumerGroupMember;
 import org.apache.kafka.coordinator.group.common.CurrentAssignmentBuilder;
 import org.apache.kafka.coordinator.group.common.TargetAssignmentBuilder;
-import org.apache.kafka.coordinator.group.common.CurrentAssignmentBuilder;
-import org.apache.kafka.coordinator.group.consumer.MemberState;
-import org.apache.kafka.coordinator.group.common.TargetAssignmentBuilder;
-import org.apache.kafka.coordinator.group.common.TopicMetadata;
+import org.apache.kafka.coordinator.group.common.MemberState;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentKey;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentValue;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupMemberMetadataKey;
@@ -765,7 +762,28 @@ public class GroupMetadataManager {
         String groupId,
         boolean createIfNotExists
     ) throws GroupIdNotFoundException {
-        return (ConsumerGroup) getOrMaybeCreateGroup(groupId, createIfNotExists, CONSUMER);
+        return (ConsumerGroup) getOrMaybeCreatePersistedGroup(groupId, createIfNotExists, CONSUMER);
+    }
+
+    /**
+     * The method should be called on the replay path.
+     * Gets or maybe creates a consumer group and updates the groups map if a new group is created.
+     *
+     * @param groupId           The group id.
+     * @param createIfNotExists A boolean indicating whether the group should be
+     *                          created if it does not exist.
+     *
+     * @return A ConsumerGroup.
+     * @throws IllegalStateException if the group does not exist and createIfNotExists is false or
+     *                               if the group is not a consumer group.
+     * Package private for testing.
+     */
+    AbstractGroup getOrMaybeCreatePersistedGroup(
+        String groupId,
+        boolean createIfNotExists,
+        GroupType groupType
+    ) throws GroupIdNotFoundException {
+        return getOrMaybeCreateGroup(groupId, createIfNotExists, groupType);
     }
 
     /**
@@ -807,7 +825,7 @@ public class GroupMetadataManager {
         Group group = groups.get(groupId);
 
         if (group == null && !createIfNotExists) {
-            throw new GroupIdNotFoundException(String.format("Group %s not found.", groupId));
+            throw new IllegalStateException(String.format("Group %s not found.", groupId));
         }
 
         if (group == null) {
@@ -890,31 +908,6 @@ public class GroupMetadataManager {
             // We don't support upgrading/downgrading between protocols at the moment so
             // we throw an exception if a group exists with the wrong type.
             throw new GroupIdNotFoundException(String.format("Group %s is not a classic group.",
-                groupId));
-        }
-    }
-
-    /**
-     * Gets a consumer group by committed offset.
-     *
-     * @param groupId           The group id.
-     * @param committedOffset   A specified committed offset corresponding to this shard.
-     *
-     * @return A ConsumerGroup.
-     * @throws GroupIdNotFoundException if the group does not exist or is not a consumer group.
-     */
-    public ConsumerGroup consumerGroup(
-        String groupId,
-        long committedOffset
-    ) throws GroupIdNotFoundException {
-        Group group = group(groupId, committedOffset);
-
-        if (group.type() == CONSUMER) {
-            return (ConsumerGroup) group;
-        } else {
-            // We don't support upgrading/downgrading between protocols at the moment so
-            // we throw an exception if a group exists with the wrong type.
-            throw new GroupIdNotFoundException(String.format("Group %s is not a consumer group.",
                 groupId));
         }
     }
@@ -1233,7 +1226,7 @@ public class GroupMetadataManager {
         }
     }
 
-    private ConsumerGroupHeartbeatResponseData.Assignment createConsumerGroupResponseAssignment(
+    private ConsumerGroupHeartbeatResponseData.Assignment createResponseAssignment(
         ConsumerGroupMember member
     ) {
         return new ConsumerGroupHeartbeatResponseData.Assignment()
@@ -1311,7 +1304,7 @@ public class GroupMetadataManager {
         // Get or create the consumer group.
         boolean createIfNotExists = memberEpoch == 0;
         final ConsumerGroup group = getOrMaybeCreateConsumerGroup(groupId, createIfNotExists, records);
-        throwIfConsumerGroupIsFull(group, memberId);
+        throwIfGroupIsFull(group, memberId);
 
         // Get or create the member.
         if (memberId.isEmpty()) memberId = Uuid.randomUuid().toString();
@@ -1523,7 +1516,7 @@ public class GroupMetadataManager {
             return member;
         }
 
-        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+        ConsumerGroupMember updatedMember = (ConsumerGroupMember) new CurrentAssignmentBuilder(member)
             .withTargetAssignment(targetAssignmentEpoch, targetAssignment)
             .withCurrentPartitionEpoch(currentPartitionEpoch)
             .withOwnedTopicPartitions(ownedTopicPartitions)
@@ -1677,7 +1670,7 @@ public class GroupMetadataManager {
         // 3. Reconcile the member's assignment with the target assignment. This is only required if
         // a new target assignment has been installed.
         boolean assignmentUpdated = false;
-        if (updatedMember.targetMemberEpoch() != targetAssignmentEpoch) {
+        if (!member.isReconciledTo(targetAssignmentEpoch)) {
             ShareGroupMember prevMember = updatedMember;
             updatedMember = (ShareGroupMember) new CurrentAssignmentBuilder(updatedMember)
                     .withTargetAssignment(targetAssignmentEpoch, targetAssignment)
@@ -2016,7 +2009,7 @@ public class GroupMetadataManager {
         int memberEpoch,
         int rebalanceTimeoutMs
     ) {
-        String key = consumerGroupRebalanceTimeoutKey(groupId, memberId);
+        String key = groupRebalanceTimeoutKey(groupId, memberId);
         timer.schedule(key, rebalanceTimeoutMs, TimeUnit.MILLISECONDS, true, () -> {
             try {
                 ConsumerGroup group = consumerGroup(groupId);
@@ -2054,7 +2047,7 @@ public class GroupMetadataManager {
         String groupId,
         String memberId
     ) {
-        timer.cancel(consumerGroupRebalanceTimeoutKey(groupId, memberId));
+        timer.cancel(groupRebalanceTimeoutKey(groupId, memberId));
     }
 
     /**
@@ -2190,7 +2183,7 @@ public class GroupMetadataManager {
         String groupId = key.groupId();
         String memberId = key.memberId();
 
-        ConsumerGroup group = getOrMaybeCreateConsumerGroup(groupId, value != null);
+        ConsumerGroup group = getOrMaybeCreatePersistedConsumerGroup(groupId, value != null);
         Set<String> oldSubscribedTopicNames = new HashSet<>(group.subscribedTopicNames());
 
         if (value != null) {
@@ -2315,7 +2308,7 @@ public class GroupMetadataManager {
             Group group = groups.get(groupId);
             if (group == null) {
                 // Safe check as tombstone record should be replayed after group creation.
-                throw new GroupIdNotFoundException(String.format("Group %s not found.", groupId));
+                throw new IllegalStateException(String.format("Group %s not found.", groupId));
             }
             // Group can either be share or consumer group only hence safe to cast.
             AbstractGroup abstractGroup = (AbstractGroup) group;
@@ -2410,7 +2403,7 @@ public class GroupMetadataManager {
     ) {
         String groupId = key.groupId();
         String memberId = key.memberId();
-        AbstractGroup group = getOrMaybeCreateGroup(groupId, false, groupType);
+        AbstractGroup group = getOrMaybeCreatePersistedGroup(groupId, false, groupType);
 
         if (value != null) {
             group.updateTargetAssignment(memberId, Assignment.fromRecord(value));
@@ -2449,7 +2442,7 @@ public class GroupMetadataManager {
         GroupType groupType
     ) {
         String groupId = key.groupId();
-        AbstractGroup group = getOrMaybeCreateGroup(groupId, false, groupType);
+        AbstractGroup group = getOrMaybeCreatePersistedGroup(groupId, false, groupType);
 
         if (value != null) {
             group.setTargetAssignmentEpoch(value.assignmentEpoch());
@@ -2521,7 +2514,6 @@ public class GroupMetadataManager {
                     (ShareGroupMember) oldMember)
                     .setMemberEpoch(LEAVE_GROUP_MEMBER_EPOCH)
                     .setPreviousMemberEpoch(LEAVE_GROUP_MEMBER_EPOCH)
-                    .setTargetMemberEpoch(LEAVE_GROUP_MEMBER_EPOCH)
                     .setAssignedPartitions(Collections.emptyMap())
                     .build();
                 group.updateMember(newMember);
@@ -2694,7 +2686,7 @@ public class GroupMetadataManager {
         return "session-timeout-" + groupId + "-" + memberId;
     }
 
-    public static String consumerGroupRebalanceTimeoutKey(String groupId, String memberId) {
+    public static String groupRebalanceTimeoutKey(String groupId, String memberId) {
         return "rebalance-timeout-" + groupId + "-" + memberId;
     }
 

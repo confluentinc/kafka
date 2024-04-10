@@ -21,6 +21,7 @@ import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
 import org.apache.kafka.coordinator.group.GroupMember;
 import org.apache.kafka.coordinator.group.Utils;
 import org.apache.kafka.coordinator.group.common.Assignment;
+import org.apache.kafka.coordinator.group.common.MemberState;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupCurrentMemberAssignmentValue;
 import org.apache.kafka.coordinator.group.generated.ConsumerGroupMemberMetadataValue;
 import org.apache.kafka.image.TopicsImage;
@@ -34,7 +35,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * ConsumerGroupMember contains all the information related to a member
@@ -233,55 +233,6 @@ public class ConsumerGroupMember extends GroupMember {
         }
     }
 
-    /**
-     * The member id.
-     */
-    private final String memberId;
-
-    /**
-     * The current member epoch.
-     */
-    private final int memberEpoch;
-
-    /**
-     * The previous member epoch.
-     */
-    private final int previousMemberEpoch;
-
-    /**
-     * The member state.
-     */
-    private final MemberState state;
-
-    /**
-     * The instance id provided by the member.
-     */
-    private final String instanceId;
-
-    /**
-     * The rack id provided by the member.
-     */
-    private final String rackId;
-
-    /**
-     * The rebalance timeout provided by the member.
-     */
-    private final int rebalanceTimeoutMs;
-
-    /**
-     * The client id reported by the member.
-     */
-    private final String clientId;
-
-    /**
-     * The host reported by the member.
-     */
-    private final String clientHost;
-
-    /**
-     * The list of subscriptions (topic names) configured by the member.
-     */
-    private final List<String> subscribedTopicNames;
 
     /**
      * The subscription pattern configured by the member.
@@ -336,69 +287,6 @@ public class ConsumerGroupMember extends GroupMember {
     }
 
     /**
-     * @return The member id.
-     */
-    public String memberId() {
-        return memberId;
-    }
-
-    /**
-     * @return The current member epoch.
-     */
-    public int memberEpoch() {
-        return memberEpoch;
-    }
-
-    /**
-     * @return The previous member epoch.
-     */
-    public int previousMemberEpoch() {
-        return previousMemberEpoch;
-    }
-
-    /**
-     * @return The instance id.
-     */
-    public String instanceId() {
-        return instanceId;
-    }
-
-    /**
-     * @return The rack id.
-     */
-    public String rackId() {
-        return rackId;
-    }
-
-    /**
-     * @return The rebalance timeout in millis.
-     */
-    public int rebalanceTimeoutMs() {
-        return rebalanceTimeoutMs;
-    }
-
-    /**
-     * @return The client id.
-     */
-    public String clientId() {
-        return clientId;
-    }
-
-    /**
-     * @return The client host.
-     */
-    public String clientHost() {
-        return clientHost;
-    }
-
-    /**
-     * @return The list of subscribed topic names.
-     */
-    public List<String> subscribedTopicNames() {
-        return subscribedTopicNames;
-    }
-
-    /**
      * @return The regular expression based subscription.
      */
     public String subscribedTopicRegex() {
@@ -410,20 +298,6 @@ public class ConsumerGroupMember extends GroupMember {
      */
     public Optional<String> serverAssignorName() {
         return Optional.ofNullable(serverAssignorName);
-    }
-
-    /**
-     * @return The current state.
-     */
-    public MemberState state() {
-        return state;
-    }
-
-    /**
-     * @return True if the member is in the Stable state and at the desired epoch.
-     */
-    public boolean isReconciledTo(int targetAssignmentEpoch) {
-        return state == MemberState.STABLE && memberEpoch == targetAssignmentEpoch;
     }
 
     /**
