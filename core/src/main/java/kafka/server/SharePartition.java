@@ -331,8 +331,8 @@ public class SharePartition {
                 log.trace("No cached data exists for the share partition for requested fetch batch: {}-{}",
                     groupId, topicIdPartition);
                 return CompletableFuture.completedFuture(Collections.singletonList(
-                        acquireNewBatchRecords(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(),
-                        lastBatch.nextOffset())));
+                            acquireNewBatchRecords(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(),
+                            lastBatch.nextOffset())));
             }
 
             log.trace("Overlap exists with in-flight records. Acquire the records if available for"
@@ -368,7 +368,7 @@ public class SharePartition {
                         // the offsets state in the in-flight batch.
                         inFlightBatch.maybeInitializeOffsetStateUpdate();
                     }
-                    acquireSubsetBatchRecords(firstBatch.baseOffset(), lastBatch.lastOffset(), inFlightBatch, result, memberId);
+                    acquireSubsetBatchRecords(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(), inFlightBatch, result);
                     continue;
                 }
 
@@ -742,8 +742,8 @@ public class SharePartition {
         }
     }
 
-    private void acquireSubsetBatchRecords(long requestBaseOffset, long requestLastOffset,
-        InFlightBatch inFlightBatch, List<AcquiredRecords> result, String memberId) {
+    private void acquireSubsetBatchRecords(String memberId, long requestBaseOffset, long requestLastOffset,
+        InFlightBatch inFlightBatch, List<AcquiredRecords> result) {
         lock.writeLock().lock();
         try {
             for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
