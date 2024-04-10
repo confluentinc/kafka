@@ -19,6 +19,7 @@ package kafka.server;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.ShareSessionNotFoundException;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.Errors;
@@ -28,6 +29,9 @@ import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.server.util.timer.SystemTimer;
+import org.apache.kafka.server.util.timer.SystemTimerReaper;
+import org.apache.kafka.server.util.timer.Timer;
 import org.apache.kafka.storage.internals.log.FetchParams;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
 import org.slf4j.Logger;
@@ -68,19 +72,25 @@ public class SharePartitionManager {
     private final ShareSessionCache cache;
     private final ConcurrentLinkedQueue<ShareFetchPartitionData> fetchQueue;
     private final AtomicBoolean processFetchQueueLock;
+    private final int recordLockDurationMs;
+    private final Timer timer;
 
-    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache) {
-        this(replicaManager, time, cache, new ConcurrentHashMap<>());
+    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, int recordLockDurationMs) {
+        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs);
     }
 
     // Visible for testing
-    SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap) {
+    SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap,
+                          int recordLockDurationMs) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
         this.partitionCacheMap = partitionCacheMap;
         this.fetchQueue = new ConcurrentLinkedQueue<>();
         this.processFetchQueueLock = new AtomicBoolean(false);
+        this.recordLockDurationMs = recordLockDurationMs;
+        this.timer = new SystemTimerReaper("share-group-lock-timeout-reaper",
+                new SystemTimer("share-group-lock-timeout"));
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -121,7 +131,8 @@ public class SharePartitionManager {
                 // TODO: Fetch inflight and delivery count from config.
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey(
                     shareFetchPartitionData.groupId, topicIdPartition),
-                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, 5));
+                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, 5,
+                            recordLockDurationMs, timer));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.
@@ -307,6 +318,52 @@ public class SharePartitionManager {
             }
             return Errors.NONE;
         }
+    }
+
+    public List<TopicIdPartition> cachedTopicIdPartitionsInShareSession(String groupId, Uuid memberId) {
+        ShareSessionKey key = shareSessionKey(groupId, memberId);
+        ShareSession shareSession = cache.get(key);
+        if (shareSession == null) {
+            throw new ShareSessionNotFoundException("Share session not found in cache");
+        }
+        List<TopicIdPartition> cachedTopicIdPartitions = new ArrayList<>();
+        shareSession.partitionMap.forEach(cachedSharePartition -> cachedTopicIdPartitions.add(
+                new TopicIdPartition(cachedSharePartition.topicId, new TopicPartition(cachedSharePartition.topic, cachedSharePartition.partition
+        ))));
+        return cachedTopicIdPartitions;
+    }
+
+    public CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> releaseAcquiredRecords(
+            String groupId, String memberId, List<TopicIdPartition> topicIdPartitions) {
+        Map<TopicIdPartition, CompletableFuture<Errors>> futures = new HashMap<>();
+        topicIdPartitions.forEach(topicIdPartition -> {
+            SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
+            if (sharePartition == null) {
+                log.debug("No share partition found for groupId {} topicPartition {} while releasing acquired topic partitions", groupId, topicIdPartition);
+                futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
+            } else {
+                synchronized (sharePartition) {
+                    CompletableFuture<Errors> future = sharePartition.releaseAcquiredRecords(memberId).thenApply(throwable -> {
+                        if (throwable.isPresent()) {
+                            return Errors.forException(throwable.get());
+                        } else {
+                            return Errors.NONE;
+                        }
+                    });
+                    futures.put(topicIdPartition, future);
+                }
+            }
+        });
+
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                futures.values().toArray(new CompletableFuture[futures.size()]));
+        return allFutures.thenApply(v -> {
+            Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = new HashMap<>();
+            futures.forEach((topicIdPartition, future) -> result.put(topicIdPartition, new ShareAcknowledgeResponseData.PartitionData()
+                    .setPartitionIndex(topicIdPartition.partition())
+                    .setErrorCode(future.join().code())));
+            return result;
+        });
     }
 
     public ShareFetchContext newContext(String groupId, Map<TopicIdPartition,
