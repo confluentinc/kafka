@@ -32,7 +32,6 @@ import org.apache.kafka.common.ShareGroupState;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.server.util.CommandLineUtils;
-import org.apache.kafka.timeline.TimelineHashMap;
 
 import java.io.IOException;
 import java.util.AbstractMap;
@@ -130,7 +129,7 @@ public class ShareGroupsCommand {
             ? Collections.emptySet()
             : shareGroupStatesFromString(stateValue);
         List<ShareGroupListing> listings = listShareGroupsWithState(states);
-        printGroupStates(listings.stream().map(e -> new AbstractMap.SimpleImmutableEntry<String, String>(e.groupId(), e.state().toString()) {}).collect(Collectors.toList()));
+        printGroupStates(listings.stream().map(e -> new AbstractMap.SimpleImmutableEntry<String, String>(e.groupId(), e.state().toString()) { }).collect(Collectors.toList()));
       } else
         listShareGroups().forEach(System.out::println);
     }

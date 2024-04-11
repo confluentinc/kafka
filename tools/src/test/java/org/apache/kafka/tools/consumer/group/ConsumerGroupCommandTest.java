@@ -17,7 +17,6 @@
 package org.apache.kafka.tools.consumer.group;
 
 import kafka.api.BaseConsumerTest;
-import kafka.admin.ConsumerGroupCommand;
 import kafka.server.KafkaConfig;
 import kafka.utils.TestUtils;
 import org.apache.kafka.clients.admin.AdminClientConfig;
