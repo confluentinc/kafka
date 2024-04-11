@@ -59,7 +59,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.consumer.internals.ConsumerProtocol;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.ConsumerGroupState;
-import org.apache.kafka.common.GroupType;
 import org.apache.kafka.common.ElectionType;
 import org.apache.kafka.common.GroupType;
 import org.apache.kafka.common.KafkaException;
