@@ -24,6 +24,7 @@ import kafka.log.LogManager
 import kafka.log.remote.RemoteLogManager
 import kafka.network.{DataPlaneAcceptor, SocketServer}
 import kafka.raft.KafkaRaftManager
+import kafka.server.SharePartitionManager.ShareSessionCache
 import kafka.server.metadata._
 import kafka.utils.CoreUtils
 import org.apache.kafka.common.config.ConfigException

@@ -30,6 +30,7 @@ import org.junit.jupiter.params.provider.{Arguments, MethodSource}
 import java.util
 import java.util.{Map, Properties}
 import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 /**
@@ -96,7 +97,7 @@ abstract class BaseConsumerTest extends AbstractConsumerTest {
     assertEquals(1, listener.callsToAssigned)
 
     // get metadata for the topic
-    var parts: Seq[PartitionInfo] = null
+    var parts: mutable.Buffer[PartitionInfo] = null
     while (parts == null)
       parts = consumer.partitionsFor(Topic.GROUP_METADATA_TOPIC_NAME).asScala
     assertEquals(1, parts.size)

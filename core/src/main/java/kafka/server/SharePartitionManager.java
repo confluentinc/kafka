@@ -36,7 +36,6 @@ import org.apache.kafka.storage.internals.log.FetchParams;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
 import org.slf4j.Logger;
 
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,7 +44,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
@@ -167,7 +165,7 @@ public class SharePartitionManager {
                 shareFetchPartitionData.fetchParams,
                 CollectionConverters.asScala(
                     topicPartitionData.entrySet().stream().map(entry ->
-                        new Tuple2(entry.getKey(), entry.getValue())).collect(Collectors.toList())
+                        new Tuple2<>(entry.getKey(), entry.getValue())).collect(Collectors.toList())
                 ),
                 QuotaFactory.UnboundedQuota$.MODULE$,
                 responsePartitionData -> {
@@ -554,11 +552,11 @@ public class SharePartitionManager {
 
     // Helper class to return the erroneous partitions and valid partition data
     public static class ErroneousAndValidPartitionData {
-        private final List<Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous;
-        private final List<Entry<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions;
+        private final List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous;
+        private final List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions;
 
-        public ErroneousAndValidPartitionData(List<Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous,
-                                              List<Entry<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions) {
+        public ErroneousAndValidPartitionData(List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous,
+                                              List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions) {
             this.erroneous = erroneous;
             this.validTopicIdPartitions = validTopicIdPartitions;
         }
@@ -568,18 +566,18 @@ public class SharePartitionManager {
             validTopicIdPartitions = new ArrayList<>();
             shareFetchData.forEach((topicIdPartition, sharePartitionData) -> {
                 if (topicIdPartition.topic() == null) {
-                    erroneous.add(new AbstractMap.SimpleImmutableEntry<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
+                    erroneous.add(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                 } else {
-                    validTopicIdPartitions.add(new AbstractMap.SimpleImmutableEntry<>(topicIdPartition, sharePartitionData));
+                    validTopicIdPartitions.add(new Tuple2<>(topicIdPartition, sharePartitionData));
                 }
             });
         }
 
-        public List<Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous() {
+        public List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous() {
             return erroneous;
         }
 
-        public List<Entry<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions() {
+        public List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> validTopicIdPartitions() {
             return validTopicIdPartitions;
         }
     }
@@ -815,8 +813,8 @@ public class SharePartitionManager {
             if (!isSubsequent) {
                 return new ErroneousAndValidPartitionData(shareFetchData);
             } else {
-                List<Entry<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayList<>();
-                List<Entry<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayList<>();
+                List<Tuple2<TopicIdPartition, ShareFetchResponseData.PartitionData>> erroneous = new ArrayList<>();
+                List<Tuple2<TopicIdPartition, ShareFetchRequest.SharePartitionData>> valid = new ArrayList<>();
                 // Take the session lock and iterate over all the cached partitions.
                 synchronized (session) {
                     session.partitionMap.forEach(cachedSharePartition -> {
@@ -824,9 +822,9 @@ public class SharePartitionManager {
                                 TopicPartition(cachedSharePartition.topic, cachedSharePartition.partition));
                         ShareFetchRequest.SharePartitionData reqData = cachedSharePartition.reqData();
                         if (topicIdPartition.topic() == null) {
-                            erroneous.add(new AbstractMap.SimpleImmutableEntry<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
+                            erroneous.add(new Tuple2<>(topicIdPartition, ShareFetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)));
                         } else {
-                            valid.add(new AbstractMap.SimpleImmutableEntry<>(topicIdPartition, reqData));
+                            valid.add(new Tuple2<>(topicIdPartition, reqData));
                         }
                     });
                     return new ErroneousAndValidPartitionData(erroneous, valid);

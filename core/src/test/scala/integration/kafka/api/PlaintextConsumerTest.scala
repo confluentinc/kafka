@@ -15,13 +15,9 @@ package kafka.api
 import java.time.Duration
 import java.util
 import java.util.Arrays.asList
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
-import java.util.regex.Pattern
-import java.util.{Locale, Optional, Properties}
+import java.util.{Locale, Properties}
 import kafka.api.BaseConsumerTest.SerializerImpl
 import kafka.api.BaseConsumerTest.DeserializerImpl
-import java.util.{Locale, Properties}
 import kafka.server.{KafkaBroker, QuotaType}
 import kafka.utils.{TestInfoUtils, TestUtils}
 import org.apache.kafka.clients.admin.{NewPartitions, NewTopic}
@@ -29,9 +25,7 @@ import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.producer.{ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.{KafkaException, MetricName, TopicPartition}
 import org.apache.kafka.common.config.TopicConfig
-import org.apache.kafka.common.errors.{InvalidGroupIdException, InvalidTopicException, UnsupportedAssignorException}
 import org.apache.kafka.common.errors.{InvalidGroupIdException, InvalidTopicException}
-import org.apache.kafka.common.header.Headers
 import org.apache.kafka.common.record.{CompressionType, TimestampType}
 import org.apache.kafka.common.serialization._
 import org.apache.kafka.test.{MockConsumerInterceptor, MockProducerInterceptor}
