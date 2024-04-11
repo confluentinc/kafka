@@ -1316,9 +1316,9 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
+            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
+            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
             new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000),
@@ -1382,9 +1382,9 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
+            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_DURATION_MS, TIMER));
+            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(Mockito.mock(ReplicaManager.class),
             new MockTime(), new SharePartitionManager.ShareSessionCache(10, 1000),

@@ -177,7 +177,7 @@ public class SharePartitionManager {
                         (result, throwable) -> {
                             if (throwable != null) {
                                 log.error("Error processing fetch response for share partitions", throwable);
-                                shareFetchPartitionData.future.complete(Collections.emptyMap());
+                                shareFetchPartitionData.future.completeExceptionally(throwable);
                             } else {
                                 shareFetchPartitionData.future.complete(result);
                             }
