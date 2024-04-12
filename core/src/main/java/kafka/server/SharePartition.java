@@ -491,7 +491,7 @@ public class SharePartition {
                     if (inFlightBatch.offsetState == null && !inFlightBatch.inFlightState.memberId().equals(memberId)) {
                         log.debug("Member {} is not the owner of batch record {} for share partition: {}-{}",
                             memberId, inFlightBatch, groupId, topicIdPartition);
-                        throwable = new InvalidRequestException("Member is not the owner of batch record");
+                        throwable = new InvalidRecordStateException("Member is not the owner of batch record");
                         break;
                     }
 
@@ -546,7 +546,7 @@ public class SharePartition {
                             if (!offsetState.getValue().memberId.equals(memberId)) {
                                 log.debug("Member {} is not the owner of offset: {} in batch: {} for the share"
                                         + " partition: {}-{}", memberId, offsetState.getKey(), inFlightBatch, groupId, topicIdPartition);
-                                throwable = new InvalidRequestException("Member is not the owner of offset");
+                                throwable = new InvalidRecordStateException("Member is not the owner of offset");
                                 break;
                             }
 

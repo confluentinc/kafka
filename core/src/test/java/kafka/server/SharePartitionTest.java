@@ -459,7 +459,7 @@ public class SharePartitionTest {
             Collections.singletonList(new AcknowledgementBatch(5, 9, null, AcknowledgeType.REJECT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
     }
 
     @Test
@@ -2042,7 +2042,7 @@ public class SharePartitionTest {
                 Collections.singletonList(new AcknowledgementBatch(9, 11, Collections.emptyList(), AcknowledgeType.ACCEPT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
     }
 
     @Test
@@ -2212,7 +2212,7 @@ public class SharePartitionTest {
                         new AcknowledgementBatch(15, 19, null, AcknowledgeType.ACCEPT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
 
         // State should be rolled back to the previous state for any changes.
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
@@ -2272,7 +2272,7 @@ public class SharePartitionTest {
                         new AcknowledgementBatch(16, 18, null, AcknowledgeType.ACCEPT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
 
         assertEquals(3, sharePartition.cachedState().size());
         // Check the state of the cache. State should be rolled back to the previous state for any changes.
