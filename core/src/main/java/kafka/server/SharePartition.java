@@ -488,6 +488,13 @@ public class SharePartition {
                 for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
                     InFlightBatch inFlightBatch = entry.getValue();
 
+                    if (inFlightBatch.offsetState == null && !inFlightBatch.inFlightState.memberId().equals(memberId)) {
+                        log.debug("Member {} is not the owner of batch record {} for share partition: {}-{}",
+                                memberId, inFlightBatch, groupId, topicIdPartition);
+                        throwable = new InvalidRequestException("Member is not the owner of batch record");
+                        break;
+                    }
+
                     boolean fullMatch = inFlightBatch.baseOffset() >= batch.baseOffset
                         && inFlightBatch.lastOffset() <= batch.lastOffset;
 
@@ -565,14 +572,6 @@ public class SharePartition {
                             }
                         }
                         continue;
-                    }
-
-                    // Check if member id is the owner of the batch.
-                    if (!inFlightBatch.inFlightState.memberId().equals(memberId)) {
-                        log.debug("Member {} is not the owner of batch record {} for share partition: {}-{}",
-                                memberId, inFlightBatch, groupId, topicIdPartition);
-                        throwable = new InvalidRequestException("Member is not the owner of batch record");
-                        break;
                     }
 
                     // The in-flight batch is a full match hence change the state of the complete.
