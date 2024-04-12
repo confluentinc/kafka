@@ -490,7 +490,7 @@ public class SharePartition {
 
                     if (inFlightBatch.offsetState == null && !inFlightBatch.inFlightState.memberId().equals(memberId)) {
                         log.debug("Member {} is not the owner of batch record {} for share partition: {}-{}",
-                                memberId, inFlightBatch, groupId, topicIdPartition);
+                            memberId, inFlightBatch, groupId, topicIdPartition);
                         throwable = new InvalidRequestException("Member is not the owner of batch record");
                         break;
                     }
