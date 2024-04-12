@@ -1238,7 +1238,7 @@ public class SharePartition {
             return "InFlightState(" +
                 " state=" + state.toString() +
                 ", deliveryCount=" + ((deliveryCount == 0) ? "" : ("(" + deliveryCount + ")")) +
-                " memberId=" + memberId +
+                ", memberId=" + memberId +
                 ")";
         }
     }
