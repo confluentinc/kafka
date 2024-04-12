@@ -667,7 +667,7 @@ public class SharePartition {
                     for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
                         // Check if member id is the owner of the offset.
                         if (!offsetState.getValue().memberId.equals(memberId)) {
-                            log.info("Member {} is not the owner of offset: {} in batch: {} for the share"
+                            log.debug("Member {} is not the owner of offset: {} in batch: {} for the share"
                                     + " partition: {}-{}", memberId, offsetState.getKey(), inFlightBatch, groupId, topicIdPartition);
                             continue;
                         }
@@ -692,7 +692,7 @@ public class SharePartition {
 
                 // Check if member id is the owner of the batch.
                 if (!inFlightBatch.inFlightState.memberId().equals(memberId)) {
-                    log.info("Member {} is not the owner of batch record {} for share partition: {}-{}",
+                    log.debug("Member {} is not the owner of batch record {} for share partition: {}-{}",
                             memberId, inFlightBatch, groupId, topicIdPartition);
                     continue;
                 }
@@ -1119,11 +1119,14 @@ public class SharePartition {
         private RecordState state;
         // The number of times the records has been delivered to the client.
         private int deliveryCount;
-        // The state of the records before the transition.
+        // The member id of the client that is fetching/acknowledging the record.
+        private String memberId;
+        // The state of the records before the transition. In case we need to revert an in-flight state, we revert the above
+        // attributes of InFlightState to this state, namely - state, deliveryCount and memberId.
         private InFlightState rollbackState;
         // The timer task for the acquisition lock timeout.
         private TimerTask acquisitionLockTimeoutTask;
-        private String memberId;
+
 
         InFlightState(RecordState state, int deliveryCount, String memberId) {
             this(state, deliveryCount, memberId, null);
@@ -1132,8 +1135,8 @@ public class SharePartition {
         InFlightState(RecordState state, int deliveryCount, String memberId, TimerTask acquisitionLockTimeoutTask) {
           this.state = state;
           this.deliveryCount = deliveryCount;
-          this.acquisitionLockTimeoutTask = acquisitionLockTimeoutTask;
           this.memberId = memberId;
+          this.acquisitionLockTimeoutTask = acquisitionLockTimeoutTask;
         }
 
         // Visible for testing.
