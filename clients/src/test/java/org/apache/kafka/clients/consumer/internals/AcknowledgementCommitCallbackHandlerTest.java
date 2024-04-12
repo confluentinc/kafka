@@ -18,7 +18,6 @@ package org.apache.kafka.clients.consumer.internals;
 
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.AcknowledgementCommitCallback;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
@@ -35,8 +34,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AcknowledgementCommitCallbackHandlerTest {
 
@@ -87,8 +86,8 @@ class AcknowledgementCommitCallbackHandlerTest {
 
         acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
         TestUtils.retryOnExceptionWithTimeout(() -> {
-            assertTrue(exceptionMap.get(tpo00) instanceof InvalidRecordStateException);
-            assertTrue(exceptionMap.get(tpo01) instanceof InvalidRecordStateException);
+            assertInstanceOf(InvalidRecordStateException.class, exceptionMap.get(tpo00));
+            assertInstanceOf(InvalidRecordStateException.class, exceptionMap.get(tpo01));
         });
 
     }
@@ -103,8 +102,8 @@ class AcknowledgementCommitCallbackHandlerTest {
 
         acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
         TestUtils.retryOnExceptionWithTimeout(() -> {
-            assertTrue(exceptionMap.get(tpo00) instanceof TopicAuthorizationException);
-            assertTrue(exceptionMap.get(tpo01) instanceof TopicAuthorizationException);
+            assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo00));
+            assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo01));
         });
     }
 
@@ -117,7 +116,7 @@ class AcknowledgementCommitCallbackHandlerTest {
         acknowledgementsMap.put(tip0, acknowledgements);
 
         Acknowledgements acknowledgements1 = Acknowledgements.empty();
-        acknowledgements.add(0L, AcknowledgeType.RELEASE);
+        acknowledgements1.add(0L, AcknowledgeType.RELEASE);
         acknowledgements1.setAcknowledgeErrorCode(Errors.INVALID_RECORD_STATE);
         acknowledgementsMap.put(tip1, acknowledgements1);
 
@@ -126,20 +125,19 @@ class AcknowledgementCommitCallbackHandlerTest {
         acknowledgementsMap.put(tip2, acknowledgements2);
 
         acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
-
         TestUtils.retryOnExceptionWithTimeout(() -> {
-            assertTrue(exceptionMap.get(tpo00) instanceof TopicAuthorizationException);
-            assertTrue(exceptionMap.get(tpo01) instanceof TopicAuthorizationException);
-            assertTrue(exceptionMap.get(tpo10) instanceof InvalidRecordStateException);
+            assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo00));
+            assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo01));
+            assertInstanceOf(InvalidRecordStateException.class, exceptionMap.get(tpo10));
             assertNull(exceptionMap.get(tpo20));
         });
     }
 
     private class TestableAcknowledgeCommitCallBack implements AcknowledgementCommitCallback {
         @Override
-        public void onComplete(Map<TopicIdPartition, Set<OffsetAndMetadata>> offsetsMap, Exception exception) {
-            offsetsMap.forEach((partition, offsetAndMetadata) -> offsetAndMetadata.forEach(offset -> {
-                TopicPartitionAndOffset tpo = new TopicPartitionAndOffset(partition, offset.offset());
+        public void onComplete(Map<TopicIdPartition, Set<Long>> offsetsMap, Exception exception) {
+            offsetsMap.forEach((partition, offsets) -> offsets.forEach(offset -> {
+                TopicPartitionAndOffset tpo = new TopicPartitionAndOffset(partition, offset);
                 exceptionMap.put(tpo, exception);
             }));
         }
