@@ -1239,7 +1239,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(0, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(0, sharePartition.cachedState().get(0L).baseOffset());
@@ -1277,7 +1277,7 @@ public class SharePartitionTest {
         assertNotNull(sharePartition.cachedState().get(10L).acquisitionLockTimeoutTask());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(10, sharePartition.cachedState().get(10L).baseOffset());
@@ -1323,7 +1323,7 @@ public class SharePartitionTest {
         assertEquals(2, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(0, sharePartition.nextFetchOffset());
         assertEquals(2, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(0L).batchState());
@@ -1351,7 +1351,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).batchState());
         assertEquals(0, sharePartition.timer().size());
@@ -1398,7 +1398,7 @@ public class SharePartitionTest {
         assertNull(sharePartition.cachedState().get(0L).offsetState());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(1, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(0L).batchState());
@@ -1439,7 +1439,7 @@ public class SharePartitionTest {
         assertEquals(0, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(15, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).batchState());
@@ -1507,7 +1507,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(1, sharePartition.nextFetchOffset());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(1L).batchState());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).batchState());
@@ -1539,7 +1539,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).batchState());
@@ -1576,7 +1576,7 @@ public class SharePartitionTest {
         assertEquals(3, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertNotNull(sharePartition.cachedState().get(10L).offsetState());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).offsetState().get(10L).state());
@@ -1687,7 +1687,7 @@ public class SharePartitionTest {
         assertEquals(new HashSet<>(Arrays.asList(12L, 13L, 15L, 17L)), sharePartition.cachedState().get(10L).gapOffsets());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         expectedOffsetStateMap = new HashMap<>();
@@ -1746,7 +1746,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
@@ -1801,7 +1801,7 @@ public class SharePartitionTest {
         assertEquals(0, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
@@ -1926,7 +1926,7 @@ public class SharePartitionTest {
         assertEquals(new HashSet<>(Arrays.asList(12L, 13L, 15L, 17L)), sharePartition.cachedState().get(10L).gapOffsets());
 
         // Allowing acquisition lock to expire. This won't change the state since the batches have been released.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         assertEquals(expectedOffsetStateMap1, sharePartition.cachedState().get(5L).offsetState());
@@ -1985,7 +1985,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         expectedOffsetStateMap = new HashMap<>();
