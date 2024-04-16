@@ -2495,6 +2495,7 @@ class KafkaApisTest extends Logging {
         responseCallback.capture(),
         any(),
         any(),
+        any(),
         any()
       )).thenAnswer(_ => responseCallback.getValue.apply(Map(tp -> new PartitionResponse(Errors.INVALID_PRODUCER_EPOCH))))
 
@@ -2554,6 +2555,7 @@ class KafkaApisTest extends Logging {
         any(),
         any(),
         responseCallback.capture(),
+        any(),
         any(),
         any(),
         any())
@@ -2620,6 +2622,7 @@ class KafkaApisTest extends Logging {
         responseCallback.capture(),
         any(),
         any(),
+        any(),
         any())
       ).thenAnswer(_ => responseCallback.getValue.apply(Map(tp -> new PartitionResponse(Errors.NOT_LEADER_OR_FOLLOWER))))
 
@@ -2681,6 +2684,7 @@ class KafkaApisTest extends Logging {
         any(),
         any(),
         responseCallback.capture(),
+        any(),
         any(),
         any(),
         any())
@@ -2746,6 +2750,7 @@ class KafkaApisTest extends Logging {
           anyShort,
           ArgumentMatchers.eq(false),
           ArgumentMatchers.eq(transactionalId),
+          any(),
           any(),
           any(),
           any(),
@@ -8743,7 +8748,7 @@ class KafkaApisTest extends Logging {
     when(clientRequestQuotaManager.maybeRecordAndGetThrottleTimeMs(any[RequestChannel.Request](),
       any[Long])).thenReturn(0)
 
-    when(txnCoordinator.handleListTransactions(Set.empty[Long], Set.empty[String]))
+    when(txnCoordinator.handleListTransactions(Set.empty[Long], Set.empty[String], -1L))
       .thenReturn(new ListTransactionsResponseData()
         .setErrorCode(Errors.COORDINATOR_LOAD_IN_PROGRESS.code))
     kafkaApis = createKafkaApis()
@@ -8773,7 +8778,7 @@ class KafkaApisTest extends Logging {
       .setProducerId(98765)
       .setTransactionState("PrepareAbort"))
 
-    when(txnCoordinator.handleListTransactions(Set.empty[Long], Set.empty[String]))
+    when(txnCoordinator.handleListTransactions(Set.empty[Long], Set.empty[String], -1L))
       .thenReturn(new ListTransactionsResponseData()
         .setErrorCode(Errors.NONE.code)
         .setTransactionStates(transactionStates))
