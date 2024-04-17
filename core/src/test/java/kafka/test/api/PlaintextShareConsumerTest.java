@@ -949,10 +949,11 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
         testCallToShareConsumerMethods = true;
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        // The second poll sends the acknowledgments implicitly.
         shareConsumer.poll(Duration.ofMillis(2000));
-        // Till now acknowledgement commit callback has not been called, so exception thrown yet.
+        // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
         assertFalse(isConcurrentAccessExceptionThrown);
-        // On 3rd poll, the acknowledgement commit callback will be called
+        // On 3rd poll, the acknowledgement commit callback will be called.
         shareConsumer.poll(Duration.ofMillis(2000));
         // Now the exception will be thrown as the callback tried to call a method of KafkaShareConsumer.
         assertTrue(isConcurrentAccessExceptionThrown);
