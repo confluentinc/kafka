@@ -60,7 +60,7 @@ import static org.apache.kafka.common.utils.Utils.propsToMap;
  * Membership in a share group is maintained dynamically: if a consumer fails, the partitions assigned to
  * it will be reassigned to other consumers in the same group. Similarly, if a new consumer joins the group,
  * the partition assignment is re-evaluated and partitions can be moved from existing consumers to the new one.
- * This is known as <i>rebalancing</i> the group and is discussed in more detail <a href="#failuredetection">below</a>.
+ * This is known as <i>rebalancing</i> the group and is discussed in more detail <a href="#failures">below</a>.
  * Group rebalancing is also used when new partitions are added to one of the subscribed topics. The group will
  * automatically detect the new partitions through periodic metadata refreshes and assign them to the members of the group.
  * <p>
@@ -68,7 +68,7 @@ import static org.apache.kafka.common.utils.Utils.propsToMap;
  * In fact, in other messaging systems, a share group is roughly equivalent to a <em>durable shared subscription</em>.
  * You can have multiple share groups and consumer groups independently consuming from the same topics.
  *
- * <h3><a name="failuredetection">Detecting Consumer Failures</a></h3>
+ * <h3><a name="failures">Detecting Consumer Failures</a></h3>
  * After subscribing to a set of topics, the consumer will automatically join the group when {@link #poll(Duration)} is
  * invoked. This method is designed to ensure consumer liveness. As long as you continue to call poll, the consumer
  * will stay in the group and continue to receive records from the partitions it was assigned. Under the covers,
