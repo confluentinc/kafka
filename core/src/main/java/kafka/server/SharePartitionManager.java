@@ -393,7 +393,7 @@ public class SharePartitionManager {
                         false, partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
 
                 context = new ShareSessionContext(time, cache, reqMetadata, shareFetchDataWithMaxBytes);
-                log.debug("Created a new ShareSessionContext with {} {}. A new share session will be started.",
+                log.debug("Created a new ShareSessionContext with {}. A new share session will be started.",
                         partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
             }
         } else {
@@ -435,10 +435,10 @@ public class SharePartitionManager {
 
         private final ShareSessionKey key;
         private final ImplicitLinkedHashCollection<CachedSharePartition> partitionMap;
-        // Visible for testing
-        public final long creationMs;
-        // Visible for testing
-        public long lastUsedMs;
+
+        private final long creationMs;
+
+        private long lastUsedMs;
 
         // visible for testing
         public int epoch;
@@ -509,6 +509,11 @@ public class SharePartitionManager {
             synchronized (this) {
                 return new LastUsedKey(key, lastUsedMs);
             }
+        }
+
+        // Visible for testing
+        public long creationMs() {
+            return creationMs;
         }
 
         // Update the cached partition data based on the request.
@@ -961,8 +966,13 @@ public class SharePartitionManager {
         private Map<ShareSessionKey, ShareSession> sessions = new HashMap<>();
 
         // Maps last used times to sessions.
+
+        private TreeMap<LastUsedKey, ShareSession> lastUsed = new TreeMap<>();
+
         // Visible for testing
-        public TreeMap<LastUsedKey, ShareSession> lastUsed = new TreeMap<>();
+        public TreeMap<LastUsedKey, ShareSession> lastUsed() {
+            return lastUsed;
+        }
 
         public ShareSessionCache(int maxEntries, long evictionMs) {
             this.maxEntries = maxEntries;

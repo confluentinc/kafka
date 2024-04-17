@@ -1201,19 +1201,19 @@ class KafkaApis(val requestChannel: RequestChannel,
     = getAcknowledgeBatchesFromShareFetchRequest()
 
     def validateAcknowledgementBatchesInFetchRequest() : Unit = {
-      val erroneousTopicIdPartitions: mutable.Seq[TopicIdPartition] = mutable.Seq.empty[TopicIdPartition]
+      val erroneousTopicIdPartitions: mutable.Set[TopicIdPartition] = mutable.Set.empty[TopicIdPartition]
       acknowledgementDataFromRequest.foreach{ case (tp : TopicIdPartition, acknowledgeBatches : util.List[SharePartition.AcknowledgementBatch]) => {
         var prevEndOffset = -1L
         breakable {
           acknowledgeBatches.forEach(batch => {
             if (batch.baseOffset() > batch.lastOffset()) {
               erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
-              erroneousTopicIdPartitions :+ tp
+              erroneousTopicIdPartitions.add(tp)
               break()
             }
             if (batch.baseOffset() < prevEndOffset) {
               erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
-              erroneousTopicIdPartitions :+ tp
+              erroneousTopicIdPartitions.add(tp)
               break()
             }
             var gapOffsetsValid = true
@@ -1221,7 +1221,7 @@ class KafkaApis(val requestChannel: RequestChannel,
               batch.gapOffsets().forEach(gapOffset => {
                 if (gapOffset < batch.baseOffset() || gapOffset > batch.lastOffset()) {
                   erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
-                  erroneousTopicIdPartitions :+ tp
+                  erroneousTopicIdPartitions.add(tp)
                   gapOffsetsValid = false
                   break()
                 }

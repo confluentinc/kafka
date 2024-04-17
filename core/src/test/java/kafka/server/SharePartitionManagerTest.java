@@ -747,27 +747,27 @@ public class SharePartitionManagerTest {
         cache.maybeCreateSession(groupId, memberId, now1, 0, new ImplicitLinkedHashCollection<>());
         SharePartitionManager.ShareSessionKey shareSessionKey = new SharePartitionManager.ShareSessionKey(groupId, memberId);
         assertEquals(1, cache.size());
-        assertEquals(now1, cache.get(shareSessionKey).creationMs);
-        assertEquals(now1, cache.get(shareSessionKey).lastUsedMs);
-        assertEquals(1, cache.lastUsed.size());
-        assertTrue(cache.lastUsed.containsKey(cache.get(shareSessionKey).lastUsedKey()));
+        assertEquals(now1, cache.get(shareSessionKey).creationMs());
+        assertEquals(now1, cache.get(shareSessionKey).lastUsedMs());
+        assertEquals(1, cache.lastUsed().size());
+        assertTrue(cache.lastUsed().containsKey(cache.get(shareSessionKey).lastUsedKey()));
 
         // Since request epoch is -1 (FINAL_EPOCH), nothing should be updated anywhere
         sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, -1);
         assertEquals(1, cache.size());
-        assertEquals(now1, cache.get(shareSessionKey).creationMs);
-        assertEquals(now1, cache.get(shareSessionKey).lastUsedMs);
-        assertEquals(1, cache.lastUsed.size());
-        assertTrue(cache.lastUsed.containsKey(cache.get(shareSessionKey).lastUsedKey()));
+        assertEquals(now1, cache.get(shareSessionKey).creationMs());
+        assertEquals(now1, cache.get(shareSessionKey).lastUsedMs());
+        assertEquals(1, cache.lastUsed().size());
+        assertTrue(cache.lastUsed().containsKey(cache.get(shareSessionKey).lastUsedKey()));
 
         // Testing if lastUsed time was successfully updated in acknowledgeShareSessionCacheUpdate
         time.sleep(100);
         sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, 1);
         assertEquals(1, cache.size());
-        assertEquals(now1, cache.get(shareSessionKey).creationMs);
-        assertNotEquals(now1, cache.get(shareSessionKey).lastUsedMs);
-        assertEquals(1, cache.lastUsed.size());
-        assertTrue(cache.lastUsed.containsKey(cache.get(shareSessionKey).lastUsedKey()));
+        assertEquals(now1, cache.get(shareSessionKey).creationMs());
+        assertNotEquals(now1, cache.get(shareSessionKey).lastUsedMs());
+        assertEquals(1, cache.lastUsed().size());
+        assertTrue(cache.lastUsed().containsKey(cache.get(shareSessionKey).lastUsedKey()));
 
         cache.remove(shareSessionKey);
         assertEquals(0, cache.size());
