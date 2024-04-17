@@ -44,7 +44,7 @@
     <suppress checks="CyclomaticComplexity" files="(SharePartition).java"/>
     <suppress checks="MethodLength|JavaNCSS|NPath"
               files="(KafkaClusterTestKit|SharePartition).java"/>
-    <suppress checks="JavaNCSS" files="(SharePartition).java"/>
+    <suppress checks="JavaNCSS" files="(SharePartition|SharePartitionTest).java"/>
     <suppress checks="ClassDataAbstractionCoupling"
               files="(SharePartitionManagerTest).java"/>
 

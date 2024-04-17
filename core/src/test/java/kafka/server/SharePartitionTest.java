@@ -71,6 +71,7 @@ public class SharePartitionTest {
     private static final TopicIdPartition TOPIC_ID_PARTITION = new TopicIdPartition(Uuid.randomUuid(), 0, "test-topic");
     private static Timer mockTimer;
     private static final Time MOCK_TIME = new MockTime();
+    private static final int ACQUISITION_LOCK_TIMEOUT_MS = 100;
 
     @BeforeEach
     public void setUp() {
@@ -124,8 +125,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquireSingleRecord() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(1);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -148,8 +148,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquireMultipleRecords() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(5, 10);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -172,8 +171,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquireMultipleRecordsWithOverlapAndNewBatch() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(5, 0);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -201,8 +199,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquireSameBatchAgain() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(5, 10);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -240,8 +237,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquireWithEmptyFetchRecords() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
             MEMBER_ID,
             new FetchPartitionData(Errors.NONE, 20, 3, MemoryRecords.EMPTY,
@@ -254,8 +250,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeSingleRecordBatch() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(1, 0);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -281,8 +276,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeMultipleRecordBatch() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(10, 5);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -308,8 +302,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeMultipleRecordBatchWithGapOffsets() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(5, 10);
@@ -352,8 +345,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeMultipleSubsetRecordBatchWithGapOffsets() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(2, 10);
@@ -395,22 +387,22 @@ public class SharePartitionTest {
 
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.ACQUIRED, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         assertNull(sharePartition.cachedState().get(5L).gapOffsets());
@@ -421,8 +413,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeOutOfRangeCachedData() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         // Acknowledge a batch when cache is empty.
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
@@ -452,8 +443,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeWithAnotherMember() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(5, 5);
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
             MEMBER_ID,
@@ -470,13 +460,12 @@ public class SharePartitionTest {
             Collections.singletonList(new AcknowledgementBatch(5, 9, null, AcknowledgeType.REJECT)));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
-        assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
     }
 
     @Test
     public void testAcknowledgeWhenOffsetNotAcquired() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(5, 5);
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
             MEMBER_ID,
@@ -527,8 +516,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeRollbackWithFullBatchError() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(5, 5);
         MemoryRecords records2 = memoryRecords(5, 10);
         MemoryRecords records3 = memoryRecords(5, 15);
@@ -576,8 +564,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeRollbackWithSubsetError() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(5, 5);
         MemoryRecords records2 = memoryRecords(5, 10);
         MemoryRecords records3 = memoryRecords(5, 15);
@@ -627,8 +614,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquireReleasedRecord() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(5, 10);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -653,11 +639,11 @@ public class SharePartitionTest {
         assertNull(sharePartition.cachedState().get(10L).gapOffsets());
 
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACQUIRED, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         // Send the same fetch request batch again but only 2 offsets should come as acquired.
@@ -674,8 +660,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquireReleasedRecordMultipleBatches() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         // First fetch request with 5 records starting from offset 10.
         MemoryRecords records1 = memoryRecords(5, 10);
         // Second fetch request with 5 records starting from offset 15.
@@ -748,19 +733,19 @@ public class SharePartitionTest {
         assertNotNull(sharePartition.cachedState().get(28L).offsetState());
 
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(28L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(29L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(30L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(31L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(32L, new InFlightState(RecordState.ACQUIRED, (short) 1));
+        expectedOffsetStateMap.put(28L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(29L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(30L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(31L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(32L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(28L).offsetState());
 
         // Send next batch from offset 12, only 3 records should be acquired.
@@ -832,8 +817,7 @@ public class SharePartitionTest {
 
     @Test
     public void testReleaseSingleRecordBatch() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(1, 0);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -857,8 +841,7 @@ public class SharePartitionTest {
 
     @Test
     public void testReleaseMultipleRecordBatch() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(10, 5);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -881,8 +864,7 @@ public class SharePartitionTest {
 
     @Test
     public void testReleaseMultipleAcknowledgedRecordBatch() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(5, 10);
@@ -938,8 +920,7 @@ public class SharePartitionTest {
 
     @Test
     public void testReleaseAcknowledgedMultipleSubsetRecordBatch() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(2, 10);
@@ -982,29 +963,28 @@ public class SharePartitionTest {
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
     }
 
     @Test
     public void testReleaseAcquiredRecordsWithAnotherMember() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(1, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(2, 10);
@@ -1050,17 +1030,17 @@ public class SharePartitionTest {
 
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         // Release acquired records for "member-2".
@@ -1070,26 +1050,26 @@ public class SharePartitionTest {
 
         assertEquals(5, sharePartition.nextFetchOffset());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-2", sharePartition.cachedState().get(5L).batchMemberId());
         // Check cached state.
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
     }
 
     @Test
     public void testReleaseAcquiredRecordsWithAnotherMemberAndSubsetAcknowledged() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(2, 10);
@@ -1135,17 +1115,17 @@ public class SharePartitionTest {
 
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         // Ack subset of records by "member-2".
@@ -1165,28 +1145,27 @@ public class SharePartitionTest {
 
         // Check cached state.
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, "member-2"));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1, "member-2"));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
     }
 
     @Test
     public void testReleaseAcquiredRecordsForEmptyCachedData() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         // Release a batch when cache is empty.
         CompletableFuture<Optional<Throwable>> releaseResult = sharePartition.releaseAcquiredRecords(MEMBER_ID);
         assertFalse(releaseResult.isCompletedExceptionally());
@@ -1197,8 +1176,7 @@ public class SharePartitionTest {
 
     @Test
     public void testReleaseAcquiredRecordsAfterDifferentAcknowledges() {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, MAX_DELIVERY_COUNT,
-                RECORD_LOCK_DURATION_MS, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition();
         MemoryRecords records = memoryRecords(5, 5);
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
                 MEMBER_ID,
@@ -1229,11 +1207,11 @@ public class SharePartitionTest {
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
     }
 
@@ -1336,19 +1314,19 @@ public class SharePartitionTest {
         assertNotNull(sharePartition.cachedState().get(10L).offsetState());
 
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(15L).offsetState());
 
         // Send next batch from offset 13, only 2 records should be acquired.
@@ -1389,19 +1367,19 @@ public class SharePartitionTest {
         assertNotNull(sharePartition.cachedState().get(10L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 2));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ARCHIVED, (short) 2));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 2));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ARCHIVED, (short) 2));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(15L).offsetState());
     }
 
@@ -1525,19 +1503,19 @@ public class SharePartitionTest {
         assertNull(sharePartition.cachedState().get(20L).offsetState());
 
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ARCHIVED, (short) 1));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(15L).offsetState());
 
         // Send next batch from offset 13, only 2 records should be acquired.
@@ -1586,63 +1564,25 @@ public class SharePartitionTest {
         assertNull(sharePartition.cachedState().get(20L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 2));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ARCHIVED, (short) 2));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 2));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ARCHIVED, (short) 2));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ARCHIVED, (short) 1));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ARCHIVED, (short) 2, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(15L).offsetState());
-    }
-
-    private MemoryRecords memoryRecords(int numOfRecords) {
-        return memoryRecords(numOfRecords, 0);
-    }
-
-    private MemoryRecords memoryRecords(int numOfRecords, long startOffset) {
-        return memoryRecordsBuilder(numOfRecords, startOffset).build();
-    }
-
-    private MemoryRecordsBuilder memoryRecordsBuilder(int numOfRecords, long startOffset) {
-        MemoryRecordsBuilder builder = MemoryRecords.builder(ByteBuffer.allocate(1024),
-            CompressionType.NONE, TimestampType.CREATE_TIME, startOffset);
-        for (int i = 0; i < numOfRecords; i++) {
-            builder.appendWithOffset(startOffset + i, 0L, TestUtils.randomString(10).getBytes(), TestUtils.randomString(10).getBytes());
-        }
-        return builder;
-    }
-
-    private List<AcquiredRecords> expectedAcquiredRecords(MemoryRecords memoryRecords, int deliveryCount) {
-        List<AcquiredRecords> acquiredRecordsList = new ArrayList<>();
-        memoryRecords.batches().forEach(batch -> acquiredRecordsList.add(new AcquiredRecords()
-            .setBaseOffset(batch.baseOffset())
-            .setLastOffset(batch.lastOffset())
-            .setDeliveryCount((short) deliveryCount)));
-        return acquiredRecordsList;
-    }
-
-    private List<AcquiredRecords> expectedAcquiredRecords(long baseOffset, long lastOffset, int deliveryCount) {
-        List<AcquiredRecords> acquiredRecordsList = new ArrayList<>();
-        for (long i = baseOffset; i <= lastOffset; i++) {
-            acquiredRecordsList.add(new AcquiredRecords()
-                .setBaseOffset(i)
-                .setLastOffset(i)
-                .setDeliveryCount((short) deliveryCount));
-        }
-        return acquiredRecordsList;
     }
 
     @Test
     public void testAcquisitionLockForAcquiringSingleRecord() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(1);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -1665,7 +1605,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(0, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(0, sharePartition.cachedState().get(0L).baseOffset());
@@ -1680,8 +1620,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockForAcquiringMultipleRecords() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(5, 10);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -1704,7 +1643,7 @@ public class SharePartitionTest {
         assertNotNull(sharePartition.cachedState().get(10L).acquisitionLockTimeoutTask());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(10, sharePartition.cachedState().get(10L).baseOffset());
@@ -1719,8 +1658,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockForAcquiringMultipleRecordsWithOverlapAndNewBatch() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(5, 0);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -1751,7 +1689,7 @@ public class SharePartitionTest {
         assertEquals(2, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(0, sharePartition.nextFetchOffset());
         assertEquals(2, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(0L).batchState());
@@ -1763,8 +1701,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockForAcquiringSameBatchAgain() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(5, 10);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -1780,7 +1717,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).batchState());
         assertEquals(0, sharePartition.timer().size());
@@ -1799,8 +1736,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockOnAcknowledgingSingleRecordBatch() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(1, 0);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -1828,7 +1764,7 @@ public class SharePartitionTest {
         assertNull(sharePartition.cachedState().get(0L).offsetState());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(1, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(0L).batchState());
@@ -1841,8 +1777,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockOnAcknowledgingMultipleRecordBatch() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(10, 5);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -1870,7 +1805,7 @@ public class SharePartitionTest {
         assertEquals(0, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(15, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).batchState());
@@ -1883,8 +1818,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockOnAcknowledgingMultipleRecordBatchWithGapOffsets() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(5, 10);
@@ -1939,7 +1873,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(1, sharePartition.nextFetchOffset());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(1L).batchState());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).batchState());
@@ -1953,8 +1887,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockForAcquiringSubsetBatchAgain() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(8, 10);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -1972,7 +1905,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).batchState());
@@ -2009,7 +1942,7 @@ public class SharePartitionTest {
         assertEquals(3, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertNotNull(sharePartition.cachedState().get(10L).offsetState());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).offsetState().get(10L).state());
@@ -2034,8 +1967,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockOnAcknowledgingMultipleSubsetRecordBatchWithGapOffsets() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(2, 10);
@@ -2081,25 +2013,25 @@ public class SharePartitionTest {
 
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
 
         assertNotNull(sharePartition.cachedState().get(5L).offsetState().get(5L).acquisitionLockTimeoutTask());
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(6L).acquisitionLockTimeoutTask());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.ACQUIRED, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         assertNull(sharePartition.cachedState().get(10L).offsetState().get(10L).acquisitionLockTimeoutTask());
@@ -2121,29 +2053,29 @@ public class SharePartitionTest {
         assertEquals(new HashSet<>(Arrays.asList(12L, 13L, 15L, 17L)), sharePartition.cachedState().get(10L).gapOffsets());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
 
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(5L).acquisitionLockTimeoutTask());
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(6L).acquisitionLockTimeoutTask());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         assertNull(sharePartition.cachedState().get(10L).offsetState().get(10L).acquisitionLockTimeoutTask());
@@ -2165,8 +2097,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcknowledgeAfterAcquisitionLockTimeout() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(5, 5);
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
                 MEMBER_ID,
@@ -2181,7 +2112,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
@@ -2211,8 +2142,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockOnReleasingMultipleRecordBatch() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(10, 5);
 
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
@@ -2237,7 +2167,7 @@ public class SharePartitionTest {
         assertEquals(0, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
@@ -2249,8 +2179,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockOnReleasingAcknowledgedMultipleSubsetRecordBatchWithGapOffsets() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records1 = memoryRecords(2, 5);
         // Untracked gap of 3 offsets from 7-9.
         MemoryRecordsBuilder recordsBuilder = memoryRecordsBuilder(2, 10);
@@ -2298,22 +2227,22 @@ public class SharePartitionTest {
 
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
 
         expectedOffsetStateMap.clear();
-        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
 
         assertNull(sharePartition.cachedState().get(5L).gapOffsets());
@@ -2324,22 +2253,22 @@ public class SharePartitionTest {
 
         // Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap1 = new HashMap<>();
-        expectedOffsetStateMap1.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap1.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap1.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap1.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap1, sharePartition.cachedState().get(5L).offsetState());
 
         Map<Long, InFlightState> expectedOffsetStateMap2 = new HashMap<>();
-        expectedOffsetStateMap2.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap2.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap2.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap2.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap2.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap2.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap2.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap2.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1));
-        expectedOffsetStateMap2.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap2.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap2.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1));
+        expectedOffsetStateMap2.put(10L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(11L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(15L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(16L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(17L, new InFlightState(RecordState.ARCHIVED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(18L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap2.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap2, sharePartition.cachedState().get(10L).offsetState());
 
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(5L).acquisitionLockTimeoutTask());
@@ -2363,7 +2292,7 @@ public class SharePartitionTest {
         assertEquals(new HashSet<>(Arrays.asList(12L, 13L, 15L, 17L)), sharePartition.cachedState().get(10L).gapOffsets());
 
         // Allowing acquisition lock to expire. This won't change the state since the batches have been released.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         assertEquals(expectedOffsetStateMap1, sharePartition.cachedState().get(5L).offsetState());
@@ -2373,8 +2302,7 @@ public class SharePartitionTest {
 
     @Test
     public void testAcquisitionLockAfterDifferentAcknowledges() throws InterruptedException {
-        SharePartition sharePartition = new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
-                100, mockTimer, MOCK_TIME);
+        SharePartition sharePartition = mockSharePartition(ACQUISITION_LOCK_TIMEOUT_MS);
         MemoryRecords records = memoryRecords(5, 5);
         CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
                 MEMBER_ID,
@@ -2408,11 +2336,11 @@ public class SharePartitionTest {
         assertFalse(ackResult.join().isPresent());
         //Check cached state.
         Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.ACQUIRED, (short) 1));
-        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
 
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(5L).acquisitionLockTimeoutTask());
@@ -2423,15 +2351,15 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.timer().size());
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(180);
+        Thread.sleep(200);
         assertEquals(5, sharePartition.nextFetchOffset());
         // Check cached state.
         expectedOffsetStateMap = new HashMap<>();
-        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.AVAILABLE, (short) 1));
-        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
-        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1));
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.AVAILABLE, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, MEMBER_ID));
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
 
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(5L).acquisitionLockTimeoutTask());
@@ -2440,5 +2368,334 @@ public class SharePartitionTest {
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(8L).acquisitionLockTimeoutTask());
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(9L).acquisitionLockTimeoutTask());
         assertEquals(0, sharePartition.timer().size());
+    }
+
+    @Test
+    public void testAcknowledgeSubsetWithAnotherMember() {
+        SharePartition sharePartition = mockSharePartition();
+        MemoryRecords records1 = memoryRecords(7, 5);
+
+        sharePartition.acquire("member-1",
+                new FetchPartitionData(Errors.NONE, 30, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(),
+                        OptionalInt.empty(), false));
+        assertEquals(12, sharePartition.nextFetchOffset());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge("member-1",
+                Collections.singletonList(new AcknowledgementBatch(5, 7, Collections.emptyList(), AcknowledgeType.ACCEPT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+        assertEquals(12, sharePartition.nextFetchOffset());
+        assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(5L).batchState());
+        assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(5L).batchMemberId());
+
+        // Check cached state.
+        Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
+
+        // Acknowledge subset with another member.
+        ackResult = sharePartition.acknowledge("member-2",
+                Collections.singletonList(new AcknowledgementBatch(9, 11, Collections.emptyList(), AcknowledgeType.ACCEPT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertTrue(ackResult.join().isPresent());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
+    }
+
+    @Test
+    public void testReleaseAcquiredRecordsSubsetWithAnotherMember() {
+        SharePartition sharePartition = mockSharePartition();
+        MemoryRecords records1 = memoryRecords(7, 5);
+
+        sharePartition.acquire("member-1",
+                new FetchPartitionData(Errors.NONE, 30, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(),
+                        OptionalInt.empty(), false));
+        assertEquals(12, sharePartition.nextFetchOffset());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge("member-1",
+                Collections.singletonList(new AcknowledgementBatch(5, 7, Collections.emptyList(), AcknowledgeType.ACCEPT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+        assertEquals(12, sharePartition.nextFetchOffset());
+        assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(5L).batchState());
+        assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(5L).batchMemberId());
+
+        // Check cached state.
+        Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
+        expectedOffsetStateMap.put(5L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(6L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(7L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(8L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(9L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
+
+        // Release acquired records subset with another member.
+        CompletableFuture<Optional<Throwable>> releaseResult = sharePartition.releaseAcquiredRecords("member-2");
+        assertFalse(releaseResult.isCompletedExceptionally());
+        assertFalse(releaseResult.join().isPresent());
+        // No change in the offset state map since the member id is different.
+        assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(5L).offsetState());
+    }
+
+    @Test
+    public void testReacquireSubsetWithAnotherMember() {
+        SharePartition sharePartition = mockSharePartition();
+        MemoryRecords records1 = memoryRecords(5, 5);
+        MemoryRecords records2 = memoryRecords(12, 10);
+
+        sharePartition.acquire("member-1",
+                new FetchPartitionData(Errors.NONE, 30, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(),
+                        OptionalInt.empty(), false));
+        assertEquals(10, sharePartition.nextFetchOffset());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+
+        sharePartition.acquire("member-1",
+                new FetchPartitionData(Errors.NONE, 30, 0, records2,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(),
+                        OptionalInt.empty(), false));
+        assertEquals(22, sharePartition.nextFetchOffset());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge("member-1",
+                Collections.singletonList(new AcknowledgementBatch(5, 15, Arrays.asList(12L, 13L), AcknowledgeType.RELEASE)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+        assertEquals(5, sharePartition.nextFetchOffset());
+
+        // Records 17-20 are released in the acknowledgement
+        ackResult = sharePartition.acknowledge("member-1",
+                Collections.singletonList(new AcknowledgementBatch(17, 20, Collections.emptyList(), AcknowledgeType.RELEASE)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+        assertEquals(5, sharePartition.nextFetchOffset());
+
+        // Reacquire with another member.
+        sharePartition.acquire("member-2",
+                new FetchPartitionData(Errors.NONE, 30, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(),
+                        OptionalInt.empty(), false));
+        assertEquals(10, sharePartition.nextFetchOffset());
+
+        // Reacquire with another member.
+        MemoryRecords records3 = memoryRecords(7, 10);
+        sharePartition.acquire("member-2",
+                new FetchPartitionData(Errors.NONE, 30, 0, records3,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(),
+                        OptionalInt.empty(), false));
+        assertEquals(17, sharePartition.nextFetchOffset());
+
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-2", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(2, sharePartition.cachedState().get(5L).batchDeliveryCount());
+
+        assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(10L).batchState());
+        assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(10L).batchMemberId());
+
+        // Check cached state.
+        Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
+        // Records 10-11, 14-15 were reacquired by member-2.
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 2, "member-2"));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 2, "member-2"));
+        // Records 12-13 were kept as gapOffsets, hence they are not reacquired and are kept in ARCHIVED state.
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ARCHIVED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ARCHIVED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACQUIRED, (short) 2, "member-2"));
+        expectedOffsetStateMap.put(15L, new InFlightState(RecordState.ACQUIRED, (short) 2, "member-2"));
+        // Record 16 was not released in the acknowledgements. It was included in the reacquire by member-2,
+        // still its ownership is with member-1 and delivery count is 1.
+        expectedOffsetStateMap.put(16L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(17L, new InFlightState(RecordState.AVAILABLE, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(18L, new InFlightState(RecordState.AVAILABLE, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(19L, new InFlightState(RecordState.AVAILABLE, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(20L, new InFlightState(RecordState.AVAILABLE, (short) 1, "member-1"));
+        expectedOffsetStateMap.put(21L, new InFlightState(RecordState.ACQUIRED, (short) 1, "member-1"));
+        assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
+    }
+
+    @Test
+    public void testAcknowledgeWithAnotherMemberRollbackBatchError() {
+        SharePartition sharePartition = mockSharePartition();
+        MemoryRecords records1 = memoryRecords(5, 5);
+        MemoryRecords records2 = memoryRecords(5, 10);
+        MemoryRecords records3 = memoryRecords(5, 15);
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                "member-1",
+                new FetchPartitionData(Errors.NONE, 20, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+
+        result = sharePartition.acquire(
+                "member-2",
+                new FetchPartitionData(Errors.NONE, 20, 0, records2,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertEquals("member-2", sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(10L).batchDeliveryCount());
+
+        result = sharePartition.acquire(
+                "member-1",
+                new FetchPartitionData(Errors.NONE, 20, 0, records3,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(3, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
+                "member-1",
+                Arrays.asList(
+                        new AcknowledgementBatch(5, 9, null, AcknowledgeType.RELEASE),
+                        // Acknowledging batch with another member will cause failure and rollback.
+                        new AcknowledgementBatch(10, 14, null, AcknowledgeType.ACCEPT),
+                        new AcknowledgementBatch(15, 19, null, AcknowledgeType.ACCEPT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertTrue(ackResult.join().isPresent());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
+
+        // State should be rolled back to the previous state for any changes.
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertEquals("member-2", sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(10L).batchDeliveryCount());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
+    }
+
+    @Test
+    public void testAcknowledgeWithAnotherMemberRollbackSubsetError() {
+        SharePartition sharePartition = mockSharePartition();
+        MemoryRecords records1 = memoryRecords(5, 5);
+        MemoryRecords records2 = memoryRecords(5, 10);
+        MemoryRecords records3 = memoryRecords(5, 15);
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                "member-1",
+                new FetchPartitionData(Errors.NONE, 20, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+
+        result = sharePartition.acquire(
+                "member-1",
+                new FetchPartitionData(Errors.NONE, 20, 0, records2,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(10L).batchDeliveryCount());
+
+        result = sharePartition.acquire(
+                "member-2",
+                new FetchPartitionData(Errors.NONE, 20, 0, records3,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(3, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
+        assertEquals("member-2", sharePartition.cachedState().get(15L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
+                "member-1",
+                Arrays.asList(
+                        new AcknowledgementBatch(5, 9, null, AcknowledgeType.RELEASE),
+                        new AcknowledgementBatch(10, 14, null, AcknowledgeType.ACCEPT),
+                        // Acknowledging subset with another member will cause failure and rollback.
+                        new AcknowledgementBatch(16, 18, null, AcknowledgeType.ACCEPT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertTrue(ackResult.join().isPresent());
+        assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
+
+        assertEquals(3, sharePartition.cachedState().size());
+        // Check the state of the cache. State should be rolled back to the previous state for any changes.
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertEquals("member-1", sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(10L).batchDeliveryCount());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
+        assertEquals("member-2", sharePartition.cachedState().get(15L).batchMemberId());
+        assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
+    }
+
+    private MemoryRecords memoryRecords(int numOfRecords) {
+        return memoryRecords(numOfRecords, 0);
+    }
+
+    private MemoryRecords memoryRecords(int numOfRecords, long startOffset) {
+        return memoryRecordsBuilder(numOfRecords, startOffset).build();
+    }
+
+    private MemoryRecordsBuilder memoryRecordsBuilder(int numOfRecords, long startOffset) {
+        MemoryRecordsBuilder builder = MemoryRecords.builder(ByteBuffer.allocate(1024),
+            CompressionType.NONE, TimestampType.CREATE_TIME, startOffset);
+        for (int i = 0; i < numOfRecords; i++) {
+            builder.appendWithOffset(startOffset + i, 0L, TestUtils.randomString(10).getBytes(), TestUtils.randomString(10).getBytes());
+        }
+        return builder;
+    }
+
+    private List<AcquiredRecords> expectedAcquiredRecords(MemoryRecords memoryRecords, int deliveryCount) {
+        List<AcquiredRecords> acquiredRecordsList = new ArrayList<>();
+        memoryRecords.batches().forEach(batch -> acquiredRecordsList.add(new AcquiredRecords()
+            .setBaseOffset(batch.baseOffset())
+            .setLastOffset(batch.lastOffset())
+            .setDeliveryCount((short) deliveryCount)));
+        return acquiredRecordsList;
+    }
+
+    private List<AcquiredRecords> expectedAcquiredRecords(long baseOffset, long lastOffset, int deliveryCount) {
+        List<AcquiredRecords> acquiredRecordsList = new ArrayList<>();
+        for (long i = baseOffset; i <= lastOffset; i++) {
+            acquiredRecordsList.add(new AcquiredRecords()
+                .setBaseOffset(i)
+                .setLastOffset(i)
+                .setDeliveryCount((short) deliveryCount));
+        }
+        return acquiredRecordsList;
+    }
+
+    private SharePartition mockSharePartition() {
+        return mockSharePartition(RECORD_LOCK_DURATION_MS);
+    }
+
+    private SharePartition mockSharePartition(int acquisitionLockTimeoutMs) {
+        return new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
+                acquisitionLockTimeoutMs, mockTimer, MOCK_TIME);
     }
 }
