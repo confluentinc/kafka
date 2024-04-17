@@ -515,6 +515,10 @@ public class SharePartition {
                             inFlightBatch.maybeInitializeOffsetStateUpdate();
                         }
                         for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
+
+                            // updateNextFetchOffset needs to be updated for every record iteration,
+                            // as any record in between could have max delivery count limit exceeded
+                            updateNextFetchOffset = batch.acknowledgeType == AcknowledgeType.RELEASE;
                             // For the first batch which might have offsets prior to the request base
                             // offset i.e. cached batch of 10-14 offsets and request batch of 12-13.
                             if (offsetState.getKey() < batch.baseOffset) {
