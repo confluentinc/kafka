@@ -117,7 +117,8 @@ import static org.apache.kafka.common.utils.Utils.propsToMap;
  *     <li>The application calls {@link #close()} which attempts to commit any pending acknowledgements and
  *     releases any remaining acquired records.</li>
  * </ul>
- * If the application does not call {@link #acknowledge(ConsumerRecord, AcknowledgeType)} for any record in the batch, it is using implicit acknowledgement. In this case:
+ * If the application does not call {@link #acknowledge(ConsumerRecord, AcknowledgeType)} for any record in the batch,
+ * it is using <em>implicit acknowledgement</em>. In this case:
  * <ul>
  *     <li>The application calls {@link #commitSync()} or {@link #commitAsync()} which implicitly acknowledges all of
  *     the delivered records as processed successfully and commits the acknowledgements to Kafka.</li>
