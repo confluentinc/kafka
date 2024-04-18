@@ -516,9 +516,6 @@ public class SharePartition {
                         }
                         for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
 
-                            // updateNextFetchOffset needs to be updated for every record iteration,
-                            // as any record in between could have max delivery count limit exceeded
-                            updateNextFetchOffset = batch.acknowledgeType == AcknowledgeType.RELEASE;
                             // For the first batch which might have offsets prior to the request base
                             // offset i.e. cached batch of 10-14 offsets and request batch of 12-13.
                             if (offsetState.getKey() < batch.baseOffset) {
@@ -570,12 +567,9 @@ public class SharePartition {
                             }
                             // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
                             // This should not change the nextFetchOffset because the record is not available for acquisition
-                            if (updateResult.state == RecordState.ARCHIVED) {
-                                updateNextFetchOffset = false;
-                            }
                             // Successfully updated the state of the offset.
                             updatedStates.add(updateResult);
-                            if (updateNextFetchOffset) {
+                            if (updateNextFetchOffset && updateResult.state != RecordState.ARCHIVED) {
                                 localNextFetchOffset = Math.min(offsetState.getKey(), localNextFetchOffset);
                             }
                         }
@@ -605,9 +599,6 @@ public class SharePartition {
                     }
                     // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
                     // This should not change the nextFetchOffset because the record is not available for acquisition
-                    if (updateResult.state == RecordState.ARCHIVED) {
-                        updateNextFetchOffset = false;
-                    }
                     // Add the gap offsets.
                     if (batch.gapOffsets != null && !batch.gapOffsets.isEmpty()) {
                         for (Long gapOffset : batch.gapOffsets) {
@@ -621,7 +612,7 @@ public class SharePartition {
 
                     // Successfully updated the state of the batch.
                     updatedStates.add(updateResult);
-                    if (updateNextFetchOffset) {
+                    if (updateNextFetchOffset && updateResult.state != RecordState.ARCHIVED) {
                         localNextFetchOffset = Math.min(inFlightBatch.baseOffset, localNextFetchOffset);
                     }
                 }
