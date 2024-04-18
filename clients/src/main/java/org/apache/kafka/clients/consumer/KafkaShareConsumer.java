@@ -31,7 +31,11 @@ import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.Deserializer;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
 
 import static org.apache.kafka.common.utils.Utils.propsToMap;
 
@@ -263,9 +267,9 @@ import static org.apache.kafka.common.utils.Utils.propsToMap;
  *
  * <h3><a name="multithreaded">Multithreaded Processing</a></h3>
  * The consumer is NOT thread-safe. It is the responsibility of the user to ensure that multithreaded access
- * is properly synchronized. Unsynchronized access will result in {@link ConcurrentModificationException}.
+ * is properly synchronized. Unsynchronized access will result in {@link java.util.ConcurrentModificationException}.
  * <p>
- * The only exception to this rule is {@link #wakeup()}, which can safely be used from an external thread to
+ * The only exception to this rule is {@link #wakeup()} which can safely be used from an external thread to
  * interrupt an active operation. In this case, a {@link org.apache.kafka.common.errors.WakeupException} will be
  * thrown from the thread blocking on the operation. This can be used to shut down the consumer from another thread.
  * The following snippet shows the typical pattern:
