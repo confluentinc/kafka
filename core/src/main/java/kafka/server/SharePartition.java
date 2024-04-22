@@ -166,10 +166,22 @@ public class SharePartition {
     private final int maxDeliveryCount;
 
     /**
+     * recordLockPartitionLimit stores the Share-group record lock limit per share-partition. This value is retrieved
+     * from the config group.share.record.lock.partition.limit
+     */
+    private final short recordLockPartitionLimit;
+
+    /**
      * The share partition end offset specifies the partition end offset from which the records
      * are already fetched.
      */
     private long endOffset;
+
+    /**
+     * The share partition start offset specifies the partition start offset from which the records
+     * are cached in the cachedState of the sharePartition.
+     */
+    private long startOffset;
 
     /**
      * The next fetch offset specifies the partition offset which should be fetched from the leader
@@ -192,20 +204,24 @@ public class SharePartition {
     private final Time time;
 
     SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount,
-                   int recordLockDurationMs, Timer timer, Time time) {
+                   short recordLockPartitionLimit, int recordLockDurationMs, Timer timer, Time time) {
         this.groupId = groupId;
         this.topicIdPartition = topicIdPartition;
         this.maxInFlightMessages = maxInFlightMessages;
         this.maxDeliveryCount = maxDeliveryCount;
+        this.recordLockPartitionLimit = recordLockPartitionLimit;
         this.cachedState = new ConcurrentSkipListMap<>();
         this.lock = new ReentrantReadWriteLock();
         // Should be initialized when the partition is loaded by reading state from the share persister.
         this.nextFetchOffset = 0;
-        this.endOffset = 0;
+        // If startOffset and endOffset are both -1, this means cachedState is empty
+        this.startOffset = -1;
+        this.endOffset = -1;
         this.findNextFetchOffset = new AtomicBoolean(false);
         // TODO: Just a placeholder for now.
         assert this.maxInFlightMessages > 0;
         assert this.maxDeliveryCount > 0;
+        assert this.recordLockPartitionLimit > 0;
         this.fetchLock = new AtomicBoolean(false);
         this.recordLockDurationMs = recordLockDurationMs;
         this.timer = timer;
@@ -428,6 +444,19 @@ public class SharePartition {
         Throwable throwable = null;
         lock.writeLock().lock();
         List<InFlightState> updatedStates = new ArrayList<>();
+        boolean canMoveStartOffset = false;
+        AcknowledgementBatch firstBatch = acknowledgementBatch.get(0);
+        // The Share Partition Start Offset can be moved after acknowledgement is complete when the following 3 conditions are true -
+        // 1. When the cachedState is not empty
+        // 2. When the acknowledge request includes the acknowledgement data for startOffset
+        // 3. When the acknowledgement type for the base offset is either ACCEPT or REJECT
+        if (!cachedState.isEmpty()) {
+            if (firstBatch.baseOffset == startOffset &&
+                    (firstBatch.acknowledgeType == AcknowledgeType.ACCEPT ||
+                            firstBatch.acknowledgeType == AcknowledgeType.REJECT)) {
+                canMoveStartOffset = true;
+            }
+        }
         try {
             long localNextFetchOffset = nextFetchOffset;
             // Avoided using enhanced for loop as need to check if the last batch have offsets
@@ -630,7 +659,91 @@ public class SharePartition {
             lock.writeLock().unlock();
         }
 
+        if (canMoveStartOffset) {
+            maybeUpdateCachedStateAndOffsets();
+        }
+
         return CompletableFuture.completedFuture(Optional.ofNullable(throwable));
+    }
+
+    // Visible for testing
+    public long startOffset() {
+        return this.startOffset;
+    }
+
+    // Visible for testing
+    public long endOffset() {
+        return this.endOffset;
+    }
+
+    public boolean canAcquireMore() {
+        long numRecords = this.endOffset - this.startOffset + 1;
+        return numRecords < recordLockPartitionLimit;
+    }
+
+    public void maybeUpdateCachedStateAndOffsets() {
+
+        long lastOffsetBeforeStartOffset = -1;
+        for (NavigableMap.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
+            InFlightBatch inFlightBatch = entry.getValue();
+            if (inFlightBatch.offsetState == null) {
+                if (inFlightBatch.inFlightState.state == RecordState.ACKNOWLEDGED ||
+                        inFlightBatch.inFlightState.state == RecordState.ARCHIVED) {
+                    lastOffsetBeforeStartOffset = inFlightBatch.lastOffset;
+                } else {
+                    break;
+                }
+            } else {
+                boolean toBreak = false;
+                for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
+                    if (offsetState.getValue().state == RecordState.ACKNOWLEDGED ||
+                            offsetState.getValue().state == RecordState.ARCHIVED) {
+                        lastOffsetBeforeStartOffset = offsetState.getKey();
+                    } else {
+                        toBreak = true;
+                        break;
+                    }
+                }
+                if (toBreak) break;
+            }
+        }
+
+        // If the acknowledgement failed, then we cannot move the startOffset
+        if (lastOffsetBeforeStartOffset == -1) {
+            return;
+        }
+
+        // This is true if all records in the cachedState have been acknowledged (either Accept or Reject).
+        if (lastOffsetBeforeStartOffset == cachedState.lastEntry().getValue().lastOffset()) {
+            startOffset = -1;
+            endOffset = -1;
+            cachedState.clear();
+        } else {
+            long firstKeyToRemoveFromCachedState = cachedState.firstKey();
+            long lastKeyToRemoveFromCachedState;
+            NavigableMap.Entry<Long, InFlightBatch> entry = cachedState.floorEntry(lastOffsetBeforeStartOffset);
+            if (lastOffsetBeforeStartOffset == entry.getValue().lastOffset) {
+                startOffset = cachedState.higherKey(lastOffsetBeforeStartOffset);
+                lastKeyToRemoveFromCachedState = entry.getKey();
+            } else {
+                startOffset = lastOffsetBeforeStartOffset + 1;
+                if (entry.getKey() == cachedState.firstKey()) {
+                    lastKeyToRemoveFromCachedState = -1;
+                } else {
+                    lastKeyToRemoveFromCachedState = cachedState.lowerKey(entry.getKey());
+                }
+            }
+
+            // This is true when the first batch in the cachedState contains some unacknowledged records
+            if (lastKeyToRemoveFromCachedState == -1) {
+                return;
+            } else {
+                NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(firstKeyToRemoveFromCachedState, true, lastKeyToRemoveFromCachedState, true);
+                for (Long key : subMap.keySet()) {
+                    cachedState.remove(key);
+                }
+            }
+        }
     }
 
     /**
@@ -742,6 +855,10 @@ public class SharePartition {
                 RecordState.ACQUIRED,
                 1,
                 timerTask));
+            // if the cachedState is empty, i.e. startOffset is -1, then startOffset needs to be updated
+            if (startOffset == -1)  {
+                startOffset = baseOffset;
+            }
             endOffset = lastOffset;
             nextFetchOffset = nextOffset;
             return new AcquiredRecords()
@@ -964,6 +1081,14 @@ public class SharePartition {
             this.baseOffset = baseOffset;
             this.lastOffset = lastOffset;
             this.inFlightState = new InFlightState(state, deliveryCount, memberId, acquisitionLockTimeoutTask);
+        }
+
+        InFlightBatch(long baseOffset, long lastOffset, InFlightState inFlightState, Set<Long> gapOffsets, NavigableMap<Long, InFlightState> offsetState) {
+            this.baseOffset = baseOffset;
+            this.lastOffset = lastOffset;
+            this.inFlightState = inFlightState;
+            this.gapOffsets = gapOffsets;
+            this.offsetState = offsetState;
         }
 
         // Visible for testing.

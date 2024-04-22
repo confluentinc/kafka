@@ -75,14 +75,21 @@ public class SharePartitionManager {
     private final AtomicBoolean processFetchQueueLock;
     private final int recordLockDurationMs;
     private final Timer timer;
+    private final short recordLockPartitionLimit;
 
-    public SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, int recordLockDurationMs) {
-        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs);
+    public SharePartitionManager(
+            ReplicaManager replicaManager,
+            Time time,
+            ShareSessionCache cache,
+            int recordLockDurationMs,
+            short recordLockPartitionLimit
+    ) {
+        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, recordLockPartitionLimit);
     }
 
     // Visible for testing
     SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap,
-                          int recordLockDurationMs) {
+                          int recordLockDurationMs, short recordLockPartitionLimit) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
@@ -92,6 +99,7 @@ public class SharePartitionManager {
         this.recordLockDurationMs = recordLockDurationMs;
         this.timer = new SystemTimerReaper("share-group-lock-timeout-reaper",
                 new SystemTimer("share-group-lock-timeout"));
+        this.recordLockPartitionLimit = recordLockPartitionLimit;
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -127,23 +135,29 @@ public class SharePartitionManager {
         Map<TopicIdPartition, FetchRequest.PartitionData> topicPartitionData = new LinkedHashMap<>();
         ShareFetchPartitionData shareFetchPartitionData = fetchQueue.poll();
         try {
-          assert shareFetchPartitionData != null;
-          shareFetchPartitionData.topicIdPartitions.forEach(topicIdPartition -> {
+            assert shareFetchPartitionData != null;
+            shareFetchPartitionData.topicIdPartitions.forEach(topicIdPartition -> {
+                SharePartitionKey sharePartitionKey = sharePartitionKey(
+                        shareFetchPartitionData.groupId, topicIdPartition);
                 // TODO: Fetch inflight and delivery count from config.
-                SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey(
-                    shareFetchPartitionData.groupId, topicIdPartition),
+                SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
                     k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, 5,
-                            recordLockDurationMs, timer, time));
+                            recordLockPartitionLimit, recordLockDurationMs, timer, time));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.
-                if (sharePartition.maybeAcquireFetchLock()) {
-                    topicPartitionData.put(topicIdPartition, new FetchRequest.PartitionData(
-                        topicIdPartition.topicId(),
-                        sharePartition.nextFetchOffset(),
-                        0,
-                        partitionMaxBytes,
-                        Optional.empty()));
+                if (sharePartition.canAcquireMore()) {
+                    if (sharePartition.maybeAcquireFetchLock()) {
+                        topicPartitionData.put(topicIdPartition, new FetchRequest.PartitionData(
+                                topicIdPartition.topicId(),
+                                sharePartition.nextFetchOffset(),
+                                0,
+                                partitionMaxBytes,
+                                Optional.empty()));
+                    }
+                } else {
+                    log.trace("record lock partition limit exceeded for SharePartition with key {}, " +
+                            "cannot acquire more records", sharePartitionKey);
                 }
             });
 
