@@ -141,7 +141,9 @@ public class SharePartitionManager implements AutoCloseable {
             assert shareFetchPartitionData != null;
             shareFetchPartitionData.topicIdPartitions.forEach(topicIdPartition -> {
                 SharePartitionKey sharePartitionKey = sharePartitionKey(
-                        shareFetchPartitionData.groupId, topicIdPartition);
+                        shareFetchPartitionData.groupId,
+                        topicIdPartition
+                );
                 // TODO: Fetch inflight and delivery count from config.
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
                     k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, maxDeliveryCount,

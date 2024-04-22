@@ -1123,14 +1123,6 @@ public class SharePartition {
             this.inFlightState = new InFlightState(state, deliveryCount, memberId, acquisitionLockTimeoutTask);
         }
 
-        InFlightBatch(long baseOffset, long lastOffset, InFlightState inFlightState, Set<Long> gapOffsets, NavigableMap<Long, InFlightState> offsetState) {
-            this.baseOffset = baseOffset;
-            this.lastOffset = lastOffset;
-            this.inFlightState = inFlightState;
-            this.gapOffsets = gapOffsets;
-            this.offsetState = offsetState;
-        }
-
         // Visible for testing.
         long baseOffset() {
             return baseOffset;
