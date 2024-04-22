@@ -62,7 +62,7 @@ import scala.runtime.BoxedUnit;
 
 import org.slf4j.LoggerFactory;
 
-public class SharePartitionManager {
+public class SharePartitionManager implements AutoCloseable {
 
     private final static Logger log = LoggerFactory.getLogger(SharePartitionManager.class);
 
@@ -76,20 +76,22 @@ public class SharePartitionManager {
     private final int recordLockDurationMs;
     private final Timer timer;
     private final short recordLockPartitionLimit;
+    private final int maxDeliveryCount;
 
     public SharePartitionManager(
             ReplicaManager replicaManager,
             Time time,
             ShareSessionCache cache,
             int recordLockDurationMs,
+            int maxDeliveryCount,
             short recordLockPartitionLimit
     ) {
-        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, recordLockPartitionLimit);
+        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, maxDeliveryCount, recordLockPartitionLimit);
     }
 
     // Visible for testing
     SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap,
-                          int recordLockDurationMs, short recordLockPartitionLimit) {
+                          int recordLockDurationMs, int maxDeliveryCount, short recordLockPartitionLimit) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
@@ -99,6 +101,7 @@ public class SharePartitionManager {
         this.recordLockDurationMs = recordLockDurationMs;
         this.timer = new SystemTimerReaper("share-group-lock-timeout-reaper",
                 new SystemTimer("share-group-lock-timeout"));
+        this.maxDeliveryCount = maxDeliveryCount;
         this.recordLockPartitionLimit = recordLockPartitionLimit;
     }
 
@@ -141,7 +144,7 @@ public class SharePartitionManager {
                         shareFetchPartitionData.groupId, topicIdPartition);
                 // TODO: Fetch inflight and delivery count from config.
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
-                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, 5,
+                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, maxDeliveryCount,
                             recordLockPartitionLimit, recordLockDurationMs, timer, time));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
@@ -443,6 +446,16 @@ public class SharePartitionManager {
 
     String partitionsToLogString(Collection<TopicIdPartition> partitions) {
         return FetchSession.partitionsToLogString(partitions, log.isTraceEnabled());
+    }
+
+    // Visible for testing.
+    Timer timer() {
+        return timer;
+    }
+
+    @Override
+    public void close() throws Exception {
+        timer.close();
     }
 
     public static class ShareSession {
@@ -1055,18 +1068,20 @@ public class SharePartitionManager {
          * @param now      The current time in milliseconds.
          */
         public void touch(ShareSession session, long now) {
-            synchronized (session) {
-                // Update the lastUsed map.
-                lastUsed.remove(session.lastUsedKey());
-                session.lastUsedMs = now;
-                lastUsed.put(session.lastUsedKey(), session);
+            synchronized (this) {
+                synchronized (session) {
+                    // Update the lastUsed map.
+                    lastUsed.remove(session.lastUsedKey());
+                    session.lastUsedMs = now;
+                    lastUsed.put(session.lastUsedKey(), session);
 
-                int oldSize = session.cachedSize;
-                if (oldSize != -1) {
-                    numPartitions = numPartitions - oldSize;
+                    int oldSize = session.cachedSize;
+                    if (oldSize != -1) {
+                        numPartitions = numPartitions - oldSize;
+                    }
+                    session.cachedSize = session.size();
+                    numPartitions = numPartitions + session.cachedSize;
                 }
-                session.cachedSize = session.size();
-                numPartitions = numPartitions + session.cachedSize;
             }
         }
 

@@ -42,9 +42,12 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.util.timer.SystemTimer;
 import org.apache.kafka.server.util.timer.SystemTimerReaper;
 import org.apache.kafka.server.util.timer.Timer;
+import org.apache.kafka.server.util.timer.TimerTask;
 import org.apache.kafka.storage.internals.log.FetchIsolation;
 import org.apache.kafka.storage.internals.log.FetchParams;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.junit.jupiter.api.Timeout;
@@ -93,8 +96,19 @@ public class SharePartitionManagerTest {
     private static final int PARTITION_MAX_BYTES = 40000;
     static final int RECORD_LOCK_DURATION_MS = 30000;
     private static final short RECORD_LOCK_PARTITION_LIMIT = 200;
-    static final Timer TIMER = new SystemTimerReaper("sharePartitionTestReaper",
-            new SystemTimer("sharePartitionTestTimer"));
+    static final int MAX_DELIVERY_COUNT = 5;
+    private static Timer mockTimer;
+
+    @BeforeEach
+    public void setUp() {
+        mockTimer = new SystemTimerReaper("sharePartitionTestReaper",
+                new SystemTimer("sharePartitionTestTimer"));
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        mockTimer.close();
+    }
 
     @Test
     public void testSharePartitionKey() {
@@ -126,6 +140,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -251,6 +266,7 @@ public class SharePartitionManagerTest {
                 time,
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Map<Uuid, String> topicNames = new HashMap<>();
@@ -400,6 +416,7 @@ public class SharePartitionManagerTest {
                 time,
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Map<Uuid, String> topicNames = new HashMap<>();
@@ -501,6 +518,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Map<Uuid, String> topicNames = new HashMap<>();
@@ -573,6 +591,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Map<Uuid, String> topicNames = new HashMap<>();
@@ -671,6 +690,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Uuid fooId = Uuid.randomUuid();
@@ -718,6 +738,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Uuid fooId = Uuid.randomUuid();
@@ -779,6 +800,7 @@ public class SharePartitionManagerTest {
                 time,
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         String groupId = "grp";
@@ -809,8 +831,45 @@ public class SharePartitionManagerTest {
         assertNotEquals(now1, cache.get(shareSessionKey).lastUsedMs());
         assertEquals(1, cache.lastUsed().size());
         assertTrue(cache.lastUsed().containsKey(cache.get(shareSessionKey).lastUsedKey()));
-
+//        assertEquals(Errors.NONE, sharePartitionManager.acknowledgeShareSessionCacheUpdate(groupId, memberId, -1, isAcknowledgementPiggybackedOnFetch));
         cache.remove(shareSessionKey);
+        assertEquals(0, cache.size());
+    }
+
+    @Test
+    public void testAcknowledgeShareSessionCacheUpdateForPiggybackedAcknowledgement() {
+        SharePartitionManager.ShareSessionCache cache = new SharePartitionManager.ShareSessionCache(10, 1000);
+        Time time = new MockTime();
+        SharePartitionManager sharePartitionManager = new SharePartitionManager(
+                Mockito.mock(ReplicaManager.class),
+                new MockTime(),
+                cache,
+                RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
+                RECORD_LOCK_PARTITION_LIMIT
+        );
+        String groupId = "grp";
+        Uuid memberId = Uuid.randomUuid();
+        boolean isAcknowledgementPiggybackedOnFetch = true;
+        long now1 = time.milliseconds();
+        cache.maybeCreateSession(groupId, memberId, now1, 0, new ImplicitLinkedHashCollection<>());
+        assertEquals(1, cache.size());
+        assertEquals(1, cache.size());
+
+        assertEquals(1, cache.size());
+        SharePartitionManager.ShareSession shareSession = cache.get(new SharePartitionManager.ShareSessionKey(groupId, memberId));
+        // manually increment the session epoch by 1 because this is taken care of in the newContext() function
+        shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
+        assertEquals(2, shareSession.epoch());
+
+        assertEquals(1, cache.size());
+        shareSession = cache.get(new SharePartitionManager.ShareSessionKey(groupId, memberId));
+        // manually increment the session epoch by 1 because this is taken care of in the newContext() function
+        shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
+        assertEquals(3, shareSession.epoch());
+
+        // manually remove the share session from the cache because this is taken care of in the newContext() function
+        cache.remove(new SharePartitionManager.ShareSessionKey(groupId, memberId));
         assertEquals(0, cache.size());
     }
 
@@ -837,6 +896,7 @@ public class SharePartitionManagerTest {
                 time,
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Map<Uuid, String> topicNames = new HashMap<>();
@@ -951,6 +1011,7 @@ public class SharePartitionManagerTest {
                 time,
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Map<Uuid, String> topicNames = new HashMap<>();
@@ -1075,6 +1136,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         acknowledgeTopics.put(tp1, Arrays.asList(
@@ -1132,6 +1194,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1190,6 +1253,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1235,6 +1299,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         acknowledgeTopics.put(tp, Arrays.asList(
@@ -1280,6 +1345,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1314,11 +1380,11 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-            k -> new SharePartition(groupId, tp0, 100, 5,
-                    RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
+            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-            k -> new SharePartition(groupId, tp1, 100, 5,
-                    RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
+            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(
                 Mockito.mock(ReplicaManager.class),
@@ -1326,6 +1392,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1387,11 +1454,11 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-            k -> new SharePartition(groupId, tp0, 100, 5,
-                    RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
+            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-            k -> new SharePartition(groupId, tp1, 100, 5,
-                    RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, new MockTime()));
+            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(
                 Mockito.mock(ReplicaManager.class),
@@ -1399,6 +1466,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1455,17 +1523,17 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-                k -> new SharePartition(groupId, tp0, 100, 5,
-                        RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, time));
+                k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                        RECORD_LOCK_DURATION_MS, mockTimer, time));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-                k -> new SharePartition(groupId, tp1, 100, 5,
-                        RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, time));
+                k -> new SharePartition(groupId, tp1, 100, 5,  RECORD_LOCK_PARTITION_LIMIT,
+                        RECORD_LOCK_DURATION_MS, mockTimer, time));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp2),
-                k -> new SharePartition(groupId, tp2, 100, 5,
-                        RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, time));
+                k -> new SharePartition(groupId, tp2, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                        RECORD_LOCK_DURATION_MS, mockTimer, time));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp3),
-                k -> new SharePartition(groupId, tp3, 100, 5,
-                        RECORD_LOCK_PARTITION_LIMIT, RECORD_LOCK_DURATION_MS, TIMER, time));
+                k -> new SharePartition(groupId, tp3, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                        RECORD_LOCK_DURATION_MS, mockTimer, time));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(
                 replicaManager,
@@ -1473,6 +1541,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1554,6 +1623,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1568,6 +1638,7 @@ public class SharePartitionManagerTest {
                 new MockTime(),
                 cache,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         Map<Uuid, String> topicNames = new HashMap<>();
@@ -1708,6 +1779,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
@@ -1744,6 +1816,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
@@ -1778,6 +1851,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1816,6 +1890,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
                 RECORD_LOCK_PARTITION_LIMIT
         );
 
@@ -1823,5 +1898,39 @@ public class SharePartitionManagerTest {
                 sharePartitionManager.releaseAcquiredRecords(groupId, memberId, Collections.emptyList());
         Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> result = resultFuture.join();
         assertEquals(0, result.size());
+    }
+
+    @Test
+    public void testCloseSharePartitionManager() throws Exception {
+        SharePartitionManager sharePartitionManager = new SharePartitionManager(
+                Mockito.mock(ReplicaManager.class),
+                new MockTime(),
+                new SharePartitionManager.ShareSessionCache(10, 1000),
+                new HashMap<>(),
+                RECORD_LOCK_DURATION_MS,
+                MAX_DELIVERY_COUNT,
+                RECORD_LOCK_PARTITION_LIMIT
+        );
+
+        List<Integer> mockList = new ArrayList<>();
+        sharePartitionManager.timer().add(createTimerTask(mockList));
+        // Allowing first timer task to expire. The timer task will add an element to mockList.
+        Thread.sleep(180);
+        assertEquals(1, mockList.size());
+        sharePartitionManager.timer().add(createTimerTask(mockList));
+        // Closing the sharePartitionManager closes timer object in sharePartitionManager.
+        sharePartitionManager.close();
+        // Allowing second timer task to expire. It won't be able to add an element to mockList.
+        Thread.sleep(180);
+        assertEquals(1, mockList.size());
+    }
+
+    private TimerTask createTimerTask(List<Integer> mockList) {
+        return new TimerTask(100) {
+            @Override
+            public void run() {
+                mockList.add(0);
+            }
+        };
     }
 }

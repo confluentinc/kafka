@@ -60,6 +60,7 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
+import org.slf4j.event.Level;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
@@ -90,6 +91,7 @@ import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createSu
 import static org.apache.kafka.common.utils.Utils.closeQuietly;
 import static org.apache.kafka.common.utils.Utils.isBlank;
 import static org.apache.kafka.common.utils.Utils.join;
+import static org.apache.kafka.common.utils.Utils.swallow;
 
 /**
  * This {@link ShareConsumer} implementation uses an {@link ApplicationEventHandler event handler} to process
@@ -444,8 +446,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
             do {
                 // We must not allow wake-ups between polling for fetches and returning the records.
-                // If the polled fetches are not empty the consumed position has already been updated in the polling
-                // of the fetches. A wakeup between returned fetches and returning records would lead to never
+                // A wake-up between returned fetches and returning records would lead to never
                 // returning the records in the fetches. Thus, we trigger a possible wake-up before we poll fetches.
                 wakeupTrigger.maybeTriggerWakeup();
 
@@ -631,6 +632,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         closeTimer.update();
         if (applicationEventHandler != null)
             closeQuietly(() -> applicationEventHandler.close(Duration.ofMillis(closeTimer.remainingMs())), "Failed shutting down network thread", firstException);
+        swallow(log, Level.ERROR, "Failed invoking acknowledgement commit callback.", this::handleCompletedAcknowledgements,
+                firstException);
         closeTimer.update();
         closeQuietly(kafkaConsumerMetrics, "kafka consumer metrics", firstException);
         closeQuietly(metrics, "consumer metrics", firstException);
@@ -650,7 +653,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
     /**
      * Prior to closing the network thread, we need to make sure the following operations happen in the right sequence:
-     * 1. send leave group
+     * 1. commit pending acknowledgements and close any share sessions (AKCORE-109 will implement this)
+     * 2. send leave group
      */
     void prepareShutdown(final Timer timer, final AtomicReference<Throwable> firstException) {
         completeQuietly(
@@ -695,8 +699,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
                     " otherThread(id: " + currentThread.get() + ")"
             );
         if (acknowledgementCommitCallbackHandler != null && acknowledgementCommitCallbackHandler.hasEnteredCallback()) {
-            throw new ConcurrentModificationException("KafkaShareConsumer methods are not accessible from user-defined" +
-                    "acknowledgement commit callback");
+            throw new IllegalStateException("KafkaShareConsumer methods are not accessible from user-defined " +
+                    "acknowledgement commit callback.");
         }
         refCount.incrementAndGet();
     }
@@ -721,18 +725,15 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
     }
 
     /**
-     * Handles any completed acknowledgements. This will be the integration point for the acknowledge
-     * commit callback when that is implemented.
-     *
-     * @return The completed Acknowledgements which will contain the acknowledgement error code for each
-     * topic-partition.
+     * Handles any completed acknowledgements. If there is an acknowledgement commit callback registered,
+     * call it. Otherwise, discard the completed acknowledgement information because the application is not
+     * interested.
      */
-    private Map<TopicIdPartition, Acknowledgements> handleCompletedAcknowledgements() {
-        Map<TopicIdPartition, Acknowledgements> completedAcks = fetchBuffer.getCompletedAcknowledgements();
-        if (acknowledgementCommitCallbackHandler != null) {
-            acknowledgementCommitCallbackHandler.onComplete(completedAcks);
+    private void handleCompletedAcknowledgements() {
+        Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
+        if (!completedAcknowledgements.isEmpty() && acknowledgementCommitCallbackHandler != null) {
+            acknowledgementCommitCallbackHandler.onComplete(completedAcknowledgements);
         }
-        return completedAcks;
     }
 
     /**
