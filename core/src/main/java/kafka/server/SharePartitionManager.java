@@ -75,7 +75,7 @@ public class SharePartitionManager implements AutoCloseable {
     private final AtomicBoolean processFetchQueueLock;
     private final int recordLockDurationMs;
     private final Timer timer;
-    private final short recordLockPartitionLimit;
+    private final int maxInFlightMessages;
     private final int maxDeliveryCount;
 
     public SharePartitionManager(
@@ -84,14 +84,14 @@ public class SharePartitionManager implements AutoCloseable {
             ShareSessionCache cache,
             int recordLockDurationMs,
             int maxDeliveryCount,
-            short recordLockPartitionLimit
+            int maxInFlightMessages
     ) {
-        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, maxDeliveryCount, recordLockPartitionLimit);
+        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, maxDeliveryCount, maxInFlightMessages);
     }
 
     // Visible for testing
     SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap,
-                          int recordLockDurationMs, int maxDeliveryCount, short recordLockPartitionLimit) {
+                          int recordLockDurationMs, int maxDeliveryCount, int maxInFlightMessages) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
@@ -102,7 +102,7 @@ public class SharePartitionManager implements AutoCloseable {
         this.timer = new SystemTimerReaper("share-group-lock-timeout-reaper",
                 new SystemTimer("share-group-lock-timeout"));
         this.maxDeliveryCount = maxDeliveryCount;
-        this.recordLockPartitionLimit = recordLockPartitionLimit;
+        this.maxInFlightMessages = maxInFlightMessages;
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -146,8 +146,8 @@ public class SharePartitionManager implements AutoCloseable {
                 );
                 // TODO: Fetch inflight and delivery count from config.
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
-                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, maxDeliveryCount,
-                            recordLockPartitionLimit, recordLockDurationMs, timer, time));
+                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxDeliveryCount,
+                            maxInFlightMessages, recordLockDurationMs, timer, time));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.

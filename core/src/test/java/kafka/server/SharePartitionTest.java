@@ -72,7 +72,7 @@ public class SharePartitionTest {
     private static Timer mockTimer;
     private static final Time MOCK_TIME = new MockTime();
     private static final int ACQUISITION_LOCK_TIMEOUT_MS = 100;
-    private static final short RECORD_LOCK_PARTITION_LIMIT = 200;
+    private static final short MAX_IN_FLIGHT_MESSAGES = 200;
 
     @BeforeEach
     public void setUp() {
@@ -86,11 +86,11 @@ public class SharePartitionTest {
     }
 
     private SharePartition mockSharePartition() {
-        return mockSharePartition(RECORD_LOCK_DURATION_MS, RECORD_LOCK_PARTITION_LIMIT);
+        return mockSharePartition(RECORD_LOCK_DURATION_MS, MAX_IN_FLIGHT_MESSAGES);
     }
 
     private SharePartition mockSharePartition(int acquisitionLockTimeoutMs) {
-        return mockSharePartition(acquisitionLockTimeoutMs, RECORD_LOCK_PARTITION_LIMIT);
+        return mockSharePartition(acquisitionLockTimeoutMs, MAX_IN_FLIGHT_MESSAGES);
     }
 
     private SharePartition mockSharePartition(short recordLockPartitionLimit) {
@@ -98,7 +98,7 @@ public class SharePartitionTest {
     }
 
     private SharePartition mockSharePartition(int acquisitionLockTimeoutMs, short recordLockPartitionLimit) {
-        return new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, 100, 5,
+        return new SharePartition(GROUP_ID, TOPIC_ID_PARTITION, MAX_DELIVERY_COUNT,
                 recordLockPartitionLimit, acquisitionLockTimeoutMs, mockTimer, MOCK_TIME);
     }
 
@@ -1291,9 +1291,8 @@ public class SharePartitionTest {
         SharePartition sharePartition = new SharePartition(
                 GROUP_ID,
                 TOPIC_ID_PARTITION,
-                100,
                 maxDeliveryCount,
-                RECORD_LOCK_PARTITION_LIMIT,
+                MAX_IN_FLIGHT_MESSAGES,
                 RECORD_LOCK_DURATION_MS,
                 mockTimer,
                 MOCK_TIME
@@ -1346,8 +1345,8 @@ public class SharePartitionTest {
         int maxDeliveryCount = 2;
         SharePartition sharePartition = new SharePartition(
                 GROUP_ID, TOPIC_ID_PARTITION,
-                100, maxDeliveryCount,
-                RECORD_LOCK_PARTITION_LIMIT,
+                maxDeliveryCount,
+                MAX_IN_FLIGHT_MESSAGES,
                 RECORD_LOCK_DURATION_MS,
                 mockTimer,
                 MOCK_TIME
@@ -1473,9 +1472,8 @@ public class SharePartitionTest {
         SharePartition sharePartition = new SharePartition(
                 GROUP_ID,
                 TOPIC_ID_PARTITION,
-                100,
                 maxDeliveryCount,
-                RECORD_LOCK_PARTITION_LIMIT,
+                MAX_IN_FLIGHT_MESSAGES,
                 RECORD_LOCK_DURATION_MS,
                 mockTimer,
                 MOCK_TIME
@@ -1564,9 +1562,8 @@ public class SharePartitionTest {
         SharePartition sharePartition = new SharePartition(
                 GROUP_ID,
                 TOPIC_ID_PARTITION,
-                100,
                 maxDeliveryCount,
-                RECORD_LOCK_PARTITION_LIMIT,
+                MAX_IN_FLIGHT_MESSAGES,
                 RECORD_LOCK_DURATION_MS,
                 mockTimer,
                 MOCK_TIME
@@ -1625,9 +1622,8 @@ public class SharePartitionTest {
         SharePartition sharePartition = new SharePartition(
                 GROUP_ID,
                 TOPIC_ID_PARTITION,
-                100,
                 maxDeliveryCount,
-                RECORD_LOCK_PARTITION_LIMIT,
+                MAX_IN_FLIGHT_MESSAGES,
                 RECORD_LOCK_DURATION_MS,
                 mockTimer,
                 MOCK_TIME

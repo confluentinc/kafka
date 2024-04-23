@@ -95,7 +95,7 @@ public class SharePartitionManagerTest {
 
     private static final int PARTITION_MAX_BYTES = 40000;
     static final int RECORD_LOCK_DURATION_MS = 30000;
-    private static final short RECORD_LOCK_PARTITION_LIMIT = 200;
+    private static final short MAX_IN_FLIGHT_MESSAGES = 200;
     static final int MAX_DELIVERY_COUNT = 5;
     private static Timer mockTimer;
 
@@ -141,7 +141,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         ShareFetchMetadata newReqMetadata = new ShareFetchMetadata(Uuid.ZERO_UUID, -1);
@@ -267,7 +267,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid tpId0 = Uuid.randomUuid();
@@ -417,7 +417,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid fooId = Uuid.randomUuid();
@@ -519,7 +519,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid fooId = Uuid.randomUuid();
@@ -592,7 +592,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid fooId = Uuid.randomUuid();
@@ -691,7 +691,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Uuid fooId = Uuid.randomUuid();
         Uuid barId = Uuid.randomUuid();
@@ -739,7 +739,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Uuid fooId = Uuid.randomUuid();
         Uuid barId = Uuid.randomUuid();
@@ -801,7 +801,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         String groupId = "grp";
         Uuid memberId = Uuid.randomUuid();
@@ -846,7 +846,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         String groupId = "grp";
         Uuid memberId = Uuid.randomUuid();
@@ -897,7 +897,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid tpId0 = Uuid.randomUuid();
@@ -1012,7 +1012,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid tpId0 = Uuid.randomUuid();
@@ -1137,7 +1137,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         acknowledgeTopics.put(tp1, Arrays.asList(
                 new SharePartition.AcknowledgementBatch(12, 20, new ArrayList<>(), AcknowledgeType.ACCEPT),
@@ -1195,7 +1195,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         acknowledgeTopics.put(tp1, Arrays.asList(
@@ -1254,7 +1254,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         acknowledgeTopics.put(tp1, Arrays.asList(
@@ -1300,7 +1300,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         acknowledgeTopics.put(tp, Arrays.asList(
                 new SharePartition.AcknowledgementBatch(78, 90, new ArrayList<>(), AcknowledgeType.RELEASE),
@@ -1346,7 +1346,7 @@ public class SharePartitionManagerTest {
                 new SharePartitionManager.ShareSessionCache(10, 1000),
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         doAnswer(invocation -> {
@@ -1380,10 +1380,10 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+            k -> new SharePartition(groupId, tp0, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
                     RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+            k -> new SharePartition(groupId, tp1, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
                     RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(
@@ -1393,7 +1393,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future = new CompletableFuture<>();
@@ -1454,10 +1454,10 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-            k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+            k -> new SharePartition(groupId, tp0, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
                     RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-            k -> new SharePartition(groupId, tp1, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+            k -> new SharePartition(groupId, tp1, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
                     RECORD_LOCK_DURATION_MS, mockTimer, new MockTime()));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(
@@ -1467,7 +1467,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         CompletableFuture<Map<TopicIdPartition, ShareFetchResponseData.PartitionData>> future = new CompletableFuture<>();
@@ -1523,16 +1523,16 @@ public class SharePartitionManagerTest {
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
-                k -> new SharePartition(groupId, tp0, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                k -> new SharePartition(groupId, tp0, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
                         RECORD_LOCK_DURATION_MS, mockTimer, time));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
-                k -> new SharePartition(groupId, tp1, 100, 5,  RECORD_LOCK_PARTITION_LIMIT,
+                k -> new SharePartition(groupId, tp1, MAX_DELIVERY_COUNT,  MAX_IN_FLIGHT_MESSAGES,
                         RECORD_LOCK_DURATION_MS, mockTimer, time));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp2),
-                k -> new SharePartition(groupId, tp2, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                k -> new SharePartition(groupId, tp2, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
                         RECORD_LOCK_DURATION_MS, mockTimer, time));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp3),
-                k -> new SharePartition(groupId, tp3, 100, 5, RECORD_LOCK_PARTITION_LIMIT,
+                k -> new SharePartition(groupId, tp3, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
                         RECORD_LOCK_DURATION_MS, mockTimer, time));
 
         SharePartitionManager sharePartitionManager = new SharePartitionManager(
@@ -1542,7 +1542,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         SharePartition sp0 = Mockito.mock(SharePartition.class);
@@ -1624,7 +1624,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         assertThrows(ShareSessionNotFoundException.class, () -> sharePartitionManager.cachedTopicIdPartitionsInShareSession("grp", Uuid.randomUuid()));
@@ -1639,7 +1639,7 @@ public class SharePartitionManagerTest {
                 cache,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         Map<Uuid, String> topicNames = new HashMap<>();
         Uuid tpId0 = Uuid.randomUuid();
@@ -1780,7 +1780,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.releaseAcquiredRecords(groupId, memberId, Arrays.asList(tp1, tp2, tp3));
@@ -1817,7 +1817,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.releaseAcquiredRecords("grp-2", memberId, Collections.singletonList(tp1));
@@ -1852,7 +1852,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
@@ -1891,7 +1891,7 @@ public class SharePartitionManagerTest {
                 partitionCacheMap,
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
@@ -1909,7 +1909,7 @@ public class SharePartitionManagerTest {
                 new HashMap<>(),
                 RECORD_LOCK_DURATION_MS,
                 MAX_DELIVERY_COUNT,
-                RECORD_LOCK_PARTITION_LIMIT
+                MAX_IN_FLIGHT_MESSAGES
         );
 
         List<Integer> mockList = new ArrayList<>();

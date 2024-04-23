@@ -401,7 +401,7 @@ class BrokerServer(
         shareFetchSessionCache,
         config.shareGroupRecordLockDurationMs,
         config.shareGroupDeliveryCountLimit,
-        config.shareGroupRecordLockPartitionLimit
+        config.shareGroupPartitionMaxRecordLocks
       )
 
       // Create the request processor objects.
