@@ -19,7 +19,6 @@ package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.common.annotation.InterfaceStability;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
