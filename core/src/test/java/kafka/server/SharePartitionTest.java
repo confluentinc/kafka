@@ -131,7 +131,7 @@ public class SharePartitionTest {
     }
 
     @Test
-    public void testInitialize() throws InterruptedException {
+    public void testInitialize() {
         Persister persister = Mockito.mock(Persister.class);
         ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
@@ -142,7 +142,6 @@ public class SharePartitionTest {
                         new PersisterStateBatch(11L, 15L, RecordState.ARCHIVED.id, (short) 3)))))));
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
         SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-        TestUtils.waitForCondition(sharePartition::isReady, "Share partition should be ready");
 
         assertFalse(sharePartition.cachedState().isEmpty());
         assertEquals(5, sharePartition.startOffset());
@@ -168,7 +167,7 @@ public class SharePartitionTest {
     }
 
     @Test
-    public void testInitializeWithEmptyStateBatches() throws InterruptedException {
+    public void testInitializeWithEmptyStateBatches() {
         Persister persister = Mockito.mock(Persister.class);
         ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
@@ -177,7 +176,6 @@ public class SharePartitionTest {
         );
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
         SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-        TestUtils.waitForCondition(sharePartition::isReady, "Share partition should be ready");
 
         assertTrue(sharePartition.cachedState().isEmpty());
         assertEquals(10, sharePartition.startOffset());
@@ -197,10 +195,7 @@ public class SharePartitionTest {
                         new PersisterStateBatch(5L, 10L, RecordState.AVAILABLE.id, (short) 2),
                         new PersisterStateBatch(11L, 15L, RecordState.ARCHIVED.id, (short) 3)))))));
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
-        SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-
-        assertTrue(sharePartition.cachedState().isEmpty());
-        assertFalse(sharePartition.isReady());
+        assertThrows(IllegalStateException.class, () -> sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister));
     }
 
     @Test
@@ -214,10 +209,7 @@ public class SharePartitionTest {
                         new PersisterStateBatch(5L, 10L, RecordState.AVAILABLE.id, (short) 2),
                         new PersisterStateBatch(11L, 15L, RecordState.ARCHIVED.id, (short) 3)))))));
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
-        SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-
-        assertTrue(sharePartition.cachedState().isEmpty());
-        assertFalse(sharePartition.isReady());
+        assertThrows(IllegalStateException.class, () -> sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister));
     }
 
     @Test
@@ -231,10 +223,7 @@ public class SharePartitionTest {
                         new PersisterStateBatch(5L, 10L, RecordState.AVAILABLE.id, (short) 2),
                         new PersisterStateBatch(11L, 15L, RecordState.ARCHIVED.id, (short) 3)))))));
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
-        SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-
-        assertTrue(sharePartition.cachedState().isEmpty());
-        assertFalse(sharePartition.isReady());
+        assertThrows(IllegalStateException.class, () -> sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister));
     }
 
     @Test
@@ -246,21 +235,13 @@ public class SharePartitionTest {
         assertEquals(0, sharePartition.endOffset());
         assertEquals(0, sharePartition.stateEpoch());
         assertEquals(0, sharePartition.nextFetchOffset());
-        assertTrue(sharePartition.isReady());
     }
 
     @Test
     public void testInitializeWithNullResponse() {
         Persister persister = Mockito.mock(Persister.class);
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(null));
-        SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-
-        assertTrue(sharePartition.cachedState().isEmpty());
-        assertEquals(0, sharePartition.startOffset());
-        assertEquals(0, sharePartition.endOffset());
-        assertEquals(0, sharePartition.stateEpoch());
-        assertEquals(0, sharePartition.nextFetchOffset());
-        assertFalse(sharePartition.isReady());
+        assertThrows(IllegalStateException.class, () -> sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister));
     }
 
     @Test
@@ -269,14 +250,7 @@ public class SharePartitionTest {
         ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(null);
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
-        SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-
-        assertTrue(sharePartition.cachedState().isEmpty());
-        assertEquals(0, sharePartition.startOffset());
-        assertEquals(0, sharePartition.endOffset());
-        assertEquals(0, sharePartition.stateEpoch());
-        assertEquals(0, sharePartition.nextFetchOffset());
-        assertFalse(sharePartition.isReady());
+        assertThrows(IllegalStateException.class, () -> sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister));
     }
 
     @Test
@@ -285,28 +259,14 @@ public class SharePartitionTest {
         ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(Collections.emptyList());
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
-        SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-
-        assertTrue(sharePartition.cachedState().isEmpty());
-        assertEquals(0, sharePartition.startOffset());
-        assertEquals(0, sharePartition.endOffset());
-        assertEquals(0, sharePartition.stateEpoch());
-        assertEquals(0, sharePartition.nextFetchOffset());
-        assertFalse(sharePartition.isReady());
+        assertThrows(IllegalStateException.class, () -> sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister));
     }
 
     @Test
     public void testInitializeWithReadException() {
         Persister persister = Mockito.mock(Persister.class);
         Mockito.when(persister.readState(Mockito.any())).thenReturn(FutureUtils.failedFuture(new RuntimeException("Read exception")));
-        SharePartition sharePartition = sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister);
-
-        assertTrue(sharePartition.cachedState().isEmpty());
-        assertEquals(0, sharePartition.startOffset());
-        assertEquals(0, sharePartition.endOffset());
-        assertEquals(0, sharePartition.stateEpoch());
-        assertEquals(0, sharePartition.nextFetchOffset());
-        assertFalse(sharePartition.isReady());
+        assertThrows(IllegalStateException.class, () -> sharePartition(RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, persister));
     }
 
     @Test
