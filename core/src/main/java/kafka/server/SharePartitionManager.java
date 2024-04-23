@@ -151,18 +151,19 @@ public class SharePartitionManager implements AutoCloseable {
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.
-                if (sharePartition.canAcquireMore()) {
-                    if (sharePartition.maybeAcquireFetchLock()) {
+                if (sharePartition.maybeAcquireFetchLock()) {
+                    if (sharePartition.canAcquireMore()) {
                         topicPartitionData.put(topicIdPartition, new FetchRequest.PartitionData(
                                 topicIdPartition.topicId(),
                                 sharePartition.nextFetchOffset(),
                                 0,
                                 partitionMaxBytes,
                                 Optional.empty()));
+                    } else {
+                        sharePartition.releaseFetchLock();
+                        log.trace("record lock partition limit exceeded for SharePartition with key {}, " +
+                                "cannot acquire more records", sharePartitionKey);
                     }
-                } else {
-                    log.trace("record lock partition limit exceeded for SharePartition with key {}, " +
-                            "cannot acquire more records", sharePartitionKey);
                 }
             });
 

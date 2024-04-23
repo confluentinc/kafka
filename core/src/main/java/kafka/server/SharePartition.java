@@ -704,7 +704,6 @@ public class SharePartition {
     }
 
     public void maybeUpdateCachedStateAndOffsets() {
-
         lock.writeLock().lock();
         long lastOffsetBeforeStartOffset = -1;
         for (NavigableMap.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
@@ -733,6 +732,7 @@ public class SharePartition {
 
         // If the acknowledgement failed, then we cannot move the startOffset
         if (lastOffsetBeforeStartOffset == -1) {
+            lock.writeLock().unlock();
             return;
         }
 
@@ -750,7 +750,7 @@ public class SharePartition {
                 lastKeyToRemoveFromCachedState = entry.getKey();
             } else {
                 startOffset = lastOffsetBeforeStartOffset + 1;
-                if (entry.getKey() == cachedState.firstKey()) {
+                if (entry.getKey().equals(cachedState.firstKey())) {
                     lastKeyToRemoveFromCachedState = -1;
                 } else {
                     lastKeyToRemoveFromCachedState = cachedState.lowerKey(entry.getKey());
@@ -759,6 +759,7 @@ public class SharePartition {
 
             // This is true when the first batch in the cachedState contains some unacknowledged records
             if (lastKeyToRemoveFromCachedState == -1) {
+                lock.writeLock().unlock();
                 return;
             } else {
                 NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(firstKeyToRemoveFromCachedState, true, lastKeyToRemoveFromCachedState, true);
