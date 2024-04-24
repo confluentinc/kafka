@@ -32,7 +32,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -182,20 +181,24 @@ public class SharePartition {
      * The next fetch offset specifies the partition offset which should be fetched from the leader
      * for the share partition.
      */
+
     private long nextFetchOffset;
     /**
      * The record lock duration is used to limit the duration for which a consumer can acquire a record.
      * Once this time period is elapsed, the record will be made available or archived depending on the delivery count.
      */
+
     private final int recordLockDurationMs;
     /**
      * Timer is used to implement acquisition lock on records that guarantees the movement of records from
      * acquired to available/archived state upon timeout
      */
+
     private final Timer timer;
     /**
      * Time is used to get the currentTime.
      */
+
     private final Time time;
 
     SharePartition(
@@ -215,9 +218,8 @@ public class SharePartition {
         this.lock = new ReentrantReadWriteLock();
         // Should be initialized when the partition is loaded by reading state from the share persister.
         this.nextFetchOffset = 0;
-        // If startOffset and endOffset are both -1, this means cachedState is empty
-        this.startOffset = -1;
-        this.endOffset = -1;
+        this.startOffset = 0;
+        this.endOffset = 0;
         this.findNextFetchOffset = new AtomicBoolean(false);
         // TODO: Just a placeholder for now.
         assert this.maxInFlightMessages > 0;
@@ -252,8 +254,8 @@ public class SharePartition {
                 NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(baseOffset, true, endOffset, true);
                 if (subMap.isEmpty()) {
                     // The in-flight batches are removed, might be due to the start offset move. Hence,
-                    // the next fetch offset should be the partition end offset + 1.
-                    nextFetchOffset = endOffset + 1;
+                    // the next fetch offset should be the partition end offset.
+                    nextFetchOffset = endOffset;
                 } else {
                     boolean updated = false;
                     for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
@@ -444,20 +446,6 @@ public class SharePartition {
         Throwable throwable = null;
         lock.writeLock().lock();
         List<InFlightState> updatedStates = new ArrayList<>();
-        boolean canMoveStartOffset = false;
-        Iterator<AcknowledgementBatch> iterator = acknowledgementBatch.iterator();
-        AcknowledgementBatch firstBatch = iterator.next();
-        // The Share Partition Start Offset can be moved after acknowledgement is complete when the following 3 conditions are true -
-        // 1. When the cachedState is not empty
-        // 2. When the acknowledge request includes the acknowledgement data for startOffset
-        // 3. When the acknowledgement type for the base offset is either ACCEPT or REJECT
-        if (!cachedState.isEmpty()) {
-            if (firstBatch.baseOffset == startOffset &&
-                    (firstBatch.acknowledgeType == AcknowledgeType.ACCEPT ||
-                            firstBatch.acknowledgeType == AcknowledgeType.REJECT)) {
-                canMoveStartOffset = true;
-            }
-        }
         try {
             long localNextFetchOffset = nextFetchOffset;
             // Avoided using enhanced for loop as need to check if the last batch have offsets
@@ -667,98 +655,34 @@ public class SharePartition {
                 });
 
                 nextFetchOffset = localNextFetchOffset;
+
+                maybeUpdateCachedStateAndOffsets();
             }
         } finally {
             lock.writeLock().unlock();
-        }
-
-        if (canMoveStartOffset) {
-            maybeUpdateCachedStateAndOffsets();
         }
 
         return CompletableFuture.completedFuture(Optional.ofNullable(throwable));
     }
 
-    // Visible for testing
-    public long startOffset() {
-        return this.startOffset;
-    }
-
-    // Visible for testing
-    public long endOffset() {
-        return this.endOffset;
-    }
-
+    /**
+     * Checks if the number of records between startOffset and endOffset does not exceed the record lock partition limit
+     *
+     * @return A boolean which indicates whether more records can be acquired or not
+     */
     public boolean canAcquireMore() {
         lock.readLock().lock();
-        long numRecords = this.endOffset - this.startOffset + 1;
-        lock.readLock().unlock();
-        return numRecords < maxInFlightMessages;
-    }
-
-    public void maybeUpdateCachedStateAndOffsets() {
-        lock.writeLock().lock();
+        long numRecords;
         try {
-            long lastOffsetBeforeStartOffset = -1;
-            for (NavigableMap.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
-                InFlightBatch inFlightBatch = entry.getValue();
-                if (inFlightBatch.offsetState == null) {
-                    if (inFlightBatch.inFlightState.state == RecordState.ACKNOWLEDGED ||
-                            inFlightBatch.inFlightState.state == RecordState.ARCHIVED) {
-                        lastOffsetBeforeStartOffset = inFlightBatch.lastOffset;
-                    } else {
-                        break;
-                    }
-                } else {
-                    boolean toBreak = false;
-                    for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
-                        if (offsetState.getValue().state == RecordState.ACKNOWLEDGED ||
-                                offsetState.getValue().state == RecordState.ARCHIVED) {
-                            lastOffsetBeforeStartOffset = offsetState.getKey();
-                        } else {
-                            toBreak = true;
-                            break;
-                        }
-                    }
-                    if (toBreak) break;
-                }
-            }
-
-            // If the acknowledgement failed, then we cannot move the startOffset
-            if (lastOffsetBeforeStartOffset != -1) {
-                // This is true if all records in the cachedState have been acknowledged (either Accept or Reject).
-                if (lastOffsetBeforeStartOffset == cachedState.lastEntry().getValue().lastOffset()) {
-                    startOffset = -1;
-                    endOffset = -1;
-                    cachedState.clear();
-                } else {
-                    long firstKeyToRemoveFromCachedState = cachedState.firstKey();
-                    long lastKeyToRemoveFromCachedState;
-                    NavigableMap.Entry<Long, InFlightBatch> entry = cachedState.floorEntry(lastOffsetBeforeStartOffset);
-                    if (lastOffsetBeforeStartOffset == entry.getValue().lastOffset) {
-                        startOffset = cachedState.higherKey(lastOffsetBeforeStartOffset);
-                        lastKeyToRemoveFromCachedState = entry.getKey();
-                    } else {
-                        startOffset = lastOffsetBeforeStartOffset + 1;
-                        if (entry.getKey().equals(cachedState.firstKey())) {
-                            lastKeyToRemoveFromCachedState = -1;
-                        } else {
-                            lastKeyToRemoveFromCachedState = cachedState.lowerKey(entry.getKey());
-                        }
-                    }
-
-                    // This is true when the first batch in the cachedState contains some unacknowledged records
-                    if (lastKeyToRemoveFromCachedState != -1) {
-                        NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(firstKeyToRemoveFromCachedState, true, lastKeyToRemoveFromCachedState, true);
-                        for (Long key : subMap.keySet()) {
-                            cachedState.remove(key);
-                        }
-                    }
-                }
+            if (cachedState.isEmpty()) {
+                numRecords = 0;
+            } else {
+                numRecords = this.endOffset - this.startOffset + 1;
             }
         } finally {
-            lock.writeLock().unlock();
+            lock.readLock().unlock();
         }
+        return numRecords < maxInFlightMessages;
     }
 
     /**
@@ -872,12 +796,105 @@ public class SharePartition {
         return CompletableFuture.completedFuture(Optional.ofNullable(throwable));
     }
 
+    private void maybeUpdateCachedStateAndOffsets() {
+        lock.writeLock().lock();
+        try {
+            boolean canMoveStartOffset = false;
+            // The Share Partition Start Offset can be moved after acknowledgement is complete when the following 2 conditions are true -
+            // 1. When the cachedState is not empty
+            // 2. When the acknowledgement type for the startOffset is either ACCEPT or REJECT
+            if (!cachedState.isEmpty()) {
+                RecordState startOffsetState = cachedState.floorEntry(startOffset).getValue().offsetState == null ?
+                        cachedState.floorEntry(startOffset).getValue().inFlightState.state :
+                        cachedState.floorEntry(startOffset).getValue().offsetState.get(startOffset).state;
+                if (startOffsetState == RecordState.ACKNOWLEDGED || startOffsetState == RecordState.ARCHIVED) {
+                    canMoveStartOffset = true;
+                }
+            }
+            if (canMoveStartOffset) {
+                // This will help to find the next position for the startOffset.
+                // The new position of startOffset will be lastOffsetAcknowledged + 1
+                long lastOffsetAcknowledged = -1;
+                for (NavigableMap.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
+                    InFlightBatch inFlightBatch = entry.getValue();
+                    if (inFlightBatch.offsetState == null) {
+                        if (inFlightBatch.inFlightState.state == RecordState.ACKNOWLEDGED ||
+                                inFlightBatch.inFlightState.state == RecordState.ARCHIVED) {
+                            lastOffsetAcknowledged = inFlightBatch.lastOffset;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        boolean toBreak = false;
+                        for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
+                            if (offsetState.getValue().state == RecordState.ACKNOWLEDGED ||
+                                    offsetState.getValue().state == RecordState.ARCHIVED) {
+                                lastOffsetAcknowledged = offsetState.getKey();
+                            } else {
+                                toBreak = true;
+                                break;
+                            }
+                        }
+                        if (toBreak) break;
+                    }
+                }
+
+                // If lastOffsetAcknowledged is -1, this means we cannot move out startOffset ahead
+                if (lastOffsetAcknowledged != -1) {
+                    // This is true if all records in the cachedState have been acknowledged (either Accept or Reject).
+                    // The resulting action should be to empty the cachedState altogether
+                    if (lastOffsetAcknowledged == cachedState.lastEntry().getValue().lastOffset()) {
+                        startOffset = cachedState.lastEntry().getValue().lastOffset() + 1; // The next offset that will be fetched and acquired in the share partition
+                        endOffset = cachedState.lastEntry().getValue().lastOffset() + 1;
+                        cachedState.clear();
+                    } else {
+                        // If the code arrives in this else block, then the cachedState contains some records that are
+                        // yet to be acknowledged, and thus should not be removed. Only a subMap will be removed from the
+                        // cachedState. The logic to remove batches from cachedState is as follows -
+                        //    Only full batches can be removed from the cachedState, For example if there is batch (0-99)
+                        //    and 0-49 records are acknowledged (ACCEPT or REJECT), the first 50 records will not be removed
+                        //    from the cachedState. Instead, the startOffset will be moved to 50, but the batch will only
+                        //    be removed once all the messages (0-99) are acknowledged (ACCEPT or REJECT)
+
+                        // Since only a subMap will be removed, we need to find the first and last keys of that subMap
+                        long firstKeyToRemove = cachedState.firstKey();
+                        long lastKeyToRemove;
+                        NavigableMap.Entry<Long, InFlightBatch> entry = cachedState.floorEntry(lastOffsetAcknowledged);
+                        if (lastOffsetAcknowledged == entry.getValue().lastOffset) {
+                            startOffset = cachedState.higherKey(lastOffsetAcknowledged);
+                            lastKeyToRemove = entry.getKey();
+                        } else {
+                            startOffset = lastOffsetAcknowledged + 1;
+                            if (entry.getKey().equals(cachedState.firstKey())) {
+                                // If the first batch in cachedState has some records yet to be acknowledged,
+                                // then nothing should be removed from cachedState
+                                lastKeyToRemove = -1;
+                            } else {
+                                lastKeyToRemove = cachedState.lowerKey(entry.getKey());
+                            }
+                        }
+
+                        if (lastKeyToRemove != -1) {
+                            NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(firstKeyToRemove, true, lastKeyToRemove, true);
+                            for (Long key : subMap.keySet()) {
+                                cachedState.remove(key);
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     private AcquiredRecords acquireNewBatchRecords(String memberId, long baseOffset, long lastOffset, long nextOffset) {
         lock.writeLock().lock();
         try {
             // Schedule acquisition lock timeout for the batch.
             TimerTask timerTask = scheduleAcquisitionLockTimeout(memberId, baseOffset, lastOffset);
             // Add the new batch to the in-flight records along with the acquisition lock timeout task for the batch.
+            boolean isCachedStateEmpty = cachedState.isEmpty();
             cachedState.put(baseOffset, new InFlightBatch(
                 memberId,
                 baseOffset,
@@ -885,8 +902,8 @@ public class SharePartition {
                 RecordState.ACQUIRED,
                 1,
                 timerTask));
-            // if the cachedState is empty, i.e. startOffset is -1, then startOffset needs to be updated
-            if (startOffset == -1)  {
+            // if the cachedState was empty before acquiring the new batches then startOffset needs to be updated
+            if (isCachedStateEmpty)  {
                 startOffset = baseOffset;
             }
             endOffset = lastOffset;
@@ -960,16 +977,6 @@ public class SharePartition {
             default:
                 throw new IllegalArgumentException("Invalid acknowledge type: " + acknowledgeType);
         }
-    }
-
-    // Visible for testing. Should only be used for testing purposes.
-    NavigableMap<Long, InFlightBatch> cachedState() {
-        return new ConcurrentSkipListMap<>(cachedState);
-    }
-
-    // Visible for testing.
-    Timer timer() {
-        return timer;
     }
 
     private TimerTask scheduleAcquisitionLockTimeout(String memberId, long baseOffset, long lastOffset) {
@@ -1083,6 +1090,26 @@ public class SharePartition {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    // Visible for testing. Should only be used for testing purposes.
+    NavigableMap<Long, InFlightBatch> cachedState() {
+        return new ConcurrentSkipListMap<>(cachedState);
+    }
+
+    // Visible for testing.
+    Timer timer() {
+        return timer;
+    }
+
+    // Visible for testing
+    long startOffset() {
+        return this.startOffset;
+    }
+
+    // Visible for testing
+    long endOffset() {
+        return this.endOffset;
     }
 
     /**

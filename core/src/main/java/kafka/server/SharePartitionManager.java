@@ -161,7 +161,7 @@ public class SharePartitionManager implements AutoCloseable {
                                 Optional.empty()));
                     } else {
                         sharePartition.releaseFetchLock();
-                        log.trace("record lock partition limit exceeded for SharePartition with key {}, " +
+                        log.info("Record lock partition limit exceeded for SharePartition with key {}, " +
                                 "cannot acquire more records", sharePartitionKey);
                     }
                 }
