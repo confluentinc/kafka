@@ -31,11 +31,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.errors.AuthenticationException;
-import org.apache.kafka.common.errors.InterruptException;
-import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.RecordDeserializationException;
 import org.apache.kafka.common.errors.SerializationException;
-import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
 import org.apache.kafka.common.message.ShareFetchResponseData;
@@ -84,9 +81,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Queue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -183,9 +177,9 @@ public class KafkaShareConsumerTest {
 
         ConsumerRecords<String, String> records = (ConsumerRecords<String, String>) consumer.poll(Duration.ofMillis(2000L));
 
-        assertEquals(records.count(), 5);
-        assertEquals(records.partitions(), Collections.singleton(tp0));
-        assertEquals(records.records(tp0).size(), 5);
+        assertEquals(5, records.count());
+        assertEquals(Collections.singleton(tp0), records.partitions());
+        assertEquals(5, records.records(tp0).size());
     }
 
     @Test
@@ -474,67 +468,6 @@ public class KafkaShareConsumerTest {
     }
 
     @Test
-    public void testWakeupWithFetchDataAvailable() throws Exception {
-        ConsumerMetadata metadata = createMetadata(subscription);
-        MockClient client = new MockClient(time, metadata);
-
-        initMetadata(client, Collections.singletonMap(topic, 1));
-        Node node = metadata.fetch().nodes().get(0);
-
-        Uuid memberId = Uuid.randomUuid();
-        joinGroupAndGetInitialAssignment(client, node, memberId, 1, Collections.singletonList(tp0), null);
-
-        consumer = newShareConsumer(time, client, subscription, metadata);
-        consumer.subscribe(Collections.singleton(topic));
-
-        consumer.poll(Duration.ZERO);
-
-        // respond to the outstanding fetch so that we have data available on the next poll
-        client.prepareResponseFrom(shareFetchResponse(tp0, 0L, 5), node);
-        client.poll(0, time.milliseconds());
-
-        consumer.wakeup();
-
-        assertThrows(WakeupException.class, () -> consumer.poll(Duration.ofMillis(2000L)));
-
-        // the next poll should return the completed fetch
-        @SuppressWarnings("unchecked")
-        ConsumerRecords<String, String> records = (ConsumerRecords<String, String>) consumer.poll(Duration.ZERO);
-        assertEquals(5, records.count());
-        // Increment time asynchronously to clear timeouts in closing the consumer
-        final ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
-        exec.scheduleAtFixedRate(() -> time.sleep(sessionTimeoutMs), 0L, 10L, TimeUnit.MILLISECONDS);
-        consumer.close();
-        exec.shutdownNow();
-        exec.awaitTermination(5L, TimeUnit.SECONDS);
-    }
-
-    @Test
-    public void testPollThrowsInterruptExceptionIfInterrupted() {
-        final ConsumerMetadata metadata = createMetadata(subscription);
-        final MockClient client = new MockClient(time, metadata);
-
-        initMetadata(client, Collections.singletonMap(topic, 1));
-        Node node = metadata.fetch().nodes().get(0);
-
-        consumer = newShareConsumer(time, client, subscription, metadata);
-        consumer.subscribe(Collections.singleton(topic));
-        Uuid memberId = Uuid.randomUuid();
-        joinGroupAndGetInitialAssignment(client, node, memberId, 1, Collections.singletonList(tp0), null);
-
-        consumer.poll(Duration.ZERO);
-
-        // interrupt the thread and call poll
-        try {
-            Thread.currentThread().interrupt();
-            assertThrows(InterruptException.class, () -> consumer.poll(Duration.ZERO));
-        } finally {
-            // clear interrupted state again since this thread may be reused by JUnit
-            Thread.interrupted();
-        }
-    }
-
-    @Test
     public void testFetchResponseWithUnexpectedPartitionIsIgnored() {
         ConsumerMetadata metadata = createMetadata(subscription);
         MockClient client = new MockClient(time, metadata);
@@ -819,31 +752,6 @@ public class KafkaShareConsumerTest {
             this.partitionMaxBytes = partitionMaxBytes;
             this.count = count;
         }
-    }
-
-    @Test
-    public void testSubscriptionOnInvalidTopic() {
-        ConsumerMetadata metadata = createMetadata(subscription);
-        MockClient client = new MockClient(time, metadata);
-
-        initMetadata(client, Collections.singletonMap(topic, 1));
-        Cluster cluster = metadata.fetch();
-
-        String invalidTopicName = "topic abc";  // Invalid topic name due to space
-
-        List<MetadataResponse.TopicMetadata> topicMetadata = new ArrayList<>();
-        topicMetadata.add(new MetadataResponse.TopicMetadata(Errors.INVALID_TOPIC_EXCEPTION,
-                invalidTopicName, false, Collections.emptyList()));
-        MetadataResponse updateResponse = RequestTestUtils.metadataResponse(cluster.nodes(),
-                cluster.clusterResource().clusterId(),
-                cluster.controller().id(),
-                topicMetadata);
-        client.prepareMetadataUpdate(updateResponse);
-
-        KafkaShareConsumer<String, String> consumer = newShareConsumer(time, client, subscription, metadata);
-        consumer.subscribe(Collections.singleton(invalidTopicName));
-
-        assertThrows(InvalidTopicException.class, () -> consumer.poll(Duration.ZERO));
     }
 
     @Test

@@ -546,6 +546,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                     return new ConsumerRecords<>(fetch.records());
                 }
 
+                metadata.maybeThrowAnyException();
+
                 // We will wait for retryBackoffMs
             } while (timer.notExpired());
 
