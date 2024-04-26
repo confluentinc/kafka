@@ -166,6 +166,23 @@ public class SharePartition {
     private final int maxDeliveryCount;
 
     /**
+     * The record lock duration is used to limit the duration for which a consumer can acquire a record.
+     * Once this time period is elapsed, the record will be made available or archived depending on the delivery count.
+     */
+    private final int recordLockDurationMs;
+
+    /**
+     * Timer is used to implement acquisition lock on records that guarantees the movement of records from
+     * acquired to available/archived state upon timeout
+     */
+    private final Timer timer;
+
+    /**
+     * Time is used to get the currentTime.
+     */
+    private final Time time;
+
+    /**
      * The share partition start offset specifies the partition start offset from which the records
      * are cached in the cachedState of the sharePartition.
      */
@@ -181,25 +198,7 @@ public class SharePartition {
      * The next fetch offset specifies the partition offset which should be fetched from the leader
      * for the share partition.
      */
-
     private long nextFetchOffset;
-    /**
-     * The record lock duration is used to limit the duration for which a consumer can acquire a record.
-     * Once this time period is elapsed, the record will be made available or archived depending on the delivery count.
-     */
-
-    private final int recordLockDurationMs;
-    /**
-     * Timer is used to implement acquisition lock on records that guarantees the movement of records from
-     * acquired to available/archived state upon timeout
-     */
-
-    private final Timer timer;
-    /**
-     * Time is used to get the currentTime.
-     */
-
-    private final Time time;
 
     SharePartition(
             String groupId,
@@ -894,7 +893,6 @@ public class SharePartition {
             // Schedule acquisition lock timeout for the batch.
             TimerTask timerTask = scheduleAcquisitionLockTimeout(memberId, baseOffset, lastOffset);
             // Add the new batch to the in-flight records along with the acquisition lock timeout task for the batch.
-            boolean isCachedStateEmpty = cachedState.isEmpty();
             cachedState.put(baseOffset, new InFlightBatch(
                 memberId,
                 baseOffset,
@@ -903,7 +901,7 @@ public class SharePartition {
                 1,
                 timerTask));
             // if the cachedState was empty before acquiring the new batches then startOffset needs to be updated
-            if (isCachedStateEmpty)  {
+            if (cachedState.firstKey() == baseOffset)  {
                 startOffset = baseOffset;
             }
             endOffset = lastOffset;
