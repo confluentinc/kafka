@@ -266,8 +266,11 @@ public class SharePartitionManager implements AutoCloseable {
     // Visible for testing.
     SharePartition sharePartition(ShareFetchPartitionData shareFetchPartitionData, TopicIdPartition topicIdPartition) {
         try {
+            Persister persister = null;
+            if (!shareGroupPersisterClassName.isEmpty())
+                persister = Utils.newInstance(shareGroupPersisterClassName, Persister.class);
             return new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, maxDeliveryCount,
-                    recordLockDurationMs, timer, time, Utils.newInstance(shareGroupPersisterClassName, Persister.class));
+                    recordLockDurationMs, timer, time, persister);
         } catch (ClassNotFoundException e) {
             throw new ConfigException("Could not instantiate class share partition " + e.getMessage());
         } catch (RuntimeException e) {

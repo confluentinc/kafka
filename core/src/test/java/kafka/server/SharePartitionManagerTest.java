@@ -42,7 +42,6 @@ import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.server.group.share.Persister;
 import org.apache.kafka.server.util.timer.SystemTimer;
 import org.apache.kafka.server.util.timer.SystemTimerReaper;
 import org.apache.kafka.server.util.timer.Timer;
@@ -104,16 +103,20 @@ public class SharePartitionManagerTest {
     static final int MAX_DELIVERY_COUNT = 5;
     private static Timer mockTimer;
     private static final String SHARE_GROUP_PERSISTER_CLASS_NAME = "MockShareGroupPersisterClassPath";
+    private static MockedStatic<Utils> mockUtils;
 
     @BeforeEach
     public void setUp() {
         mockTimer = new SystemTimerReaper("sharePartitionTestReaper",
                 new SystemTimer("sharePartitionTestTimer"));
+        // For mocking Utils.newInstance() function.
+        mockUtils = Mockito.mockStatic(Utils.class);
     }
 
     @AfterEach
     public void tearDown() throws Exception {
         mockTimer.close();
+        mockUtils.close();
     }
 
     @Test
@@ -1241,10 +1244,7 @@ public class SharePartitionManagerTest {
             return null;
         }).when(replicaManager).fetchMessages(any(), any(), any(ReplicaQuota.class), any());
 
-        // Mocking Utils.newInstance() to return a mock Persister object.
-        MockedStatic<Utils> mockUtils;
-        mockUtils = Mockito.mockStatic(Utils.class);
-        mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenReturn(Mockito.mock(Persister.class));
+        mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenReturn(null);
 
         sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp0, tp1, tp2, tp3), partitionMaxBytes);
         Mockito.verify(replicaManager, times(1)).fetchMessages(
@@ -1257,8 +1257,6 @@ public class SharePartitionManagerTest {
         sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp5, tp6), partitionMaxBytes);
         Mockito.verify(replicaManager, times(3)).fetchMessages(
                 any(), any(), any(ReplicaQuota.class), any());
-
-        mockUtils.close();
     }
 
     @Test
@@ -1726,16 +1724,7 @@ public class SharePartitionManagerTest {
 
     @Test
     public void testCloseSharePartitionManager() throws Exception {
-        SharePartitionManager sharePartitionManager = new SharePartitionManager(
-                Mockito.mock(ReplicaManager.class),
-                new MockTime(),
-                new SharePartitionManager.ShareSessionCache(10, 1000),
-                new HashMap<>(),
-                RECORD_LOCK_DURATION_MS,
-                MAX_DELIVERY_COUNT,
-                MAX_IN_FLIGHT_MESSAGES,
-                SHARE_GROUP_PERSISTER_CLASS_NAME
-        );
+        SharePartitionManager sharePartitionManager = sharePartitionManager();
 
         List<Integer> mockList = new ArrayList<>();
         sharePartitionManager.timer().add(createTimerTask(mockList));
@@ -1775,10 +1764,6 @@ public class SharePartitionManagerTest {
 
         SharePartitionManager sharePartitionManager = sharePartitionManager();
 
-        // Mocking Utils.newInstance() function.
-        MockedStatic<Utils> mockUtils;
-        mockUtils = Mockito.mockStatic(Utils.class);
-
         mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenThrow(new
                 RuntimeException("Persister object creation failed"));
         assertThrows(KafkaException.class, () -> sharePartitionManager.sharePartition(shareFetchPartitionData, tp0));
@@ -1786,8 +1771,6 @@ public class SharePartitionManagerTest {
         mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenThrow(new
                 ClassNotFoundException("Persister object creation failed"));
         assertThrows(ConfigException.class, () -> sharePartitionManager.sharePartition(shareFetchPartitionData, tp0));
-
-        mockUtils.close();
     }
 
     private SharePartitionManager sharePartitionManager() {

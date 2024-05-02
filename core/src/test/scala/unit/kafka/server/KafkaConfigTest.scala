@@ -1049,6 +1049,7 @@ class KafkaConfigTest {
         case KafkaConfig.ShareGroupMinHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number", 0, -1)
         case KafkaConfig.ShareGroupMaxHeartbeatIntervalMsProp => assertPropertyInvalid(baseProperties, name, "not_a_number", 0, -1)
         case KafkaConfig.ShareGroupPersisterClassNameProp => //ignore string
+        case KafkaConfig.ShareGroupAssignorsProp => //ignore string
 
         case _ => assertPropertyInvalid(baseProperties, name, "not_a_number", "-1")
       }
