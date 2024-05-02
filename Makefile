@@ -21,8 +21,7 @@
 
 SHELL := /bin/bash -e
 
-DEPENDENTS := kafka-rest confluent-cloud-plugins
-ALL := kafka kafka-rest kafka-http-server $(DEPENDENTS)
+ALL := kafka
 
 BRANCH ?= $$(git rev-parse --abbrev-ref HEAD)
 SRC := $(CURDIR)/.src
@@ -46,11 +45,10 @@ TARGET_TEST := $(addprefix test/, $(ALL))
 TARGET_CLEAN :=  $(addprefix clean/, $(ALL))
 TARGET_CLONE :=  $(addprefix clone/, $(ALL))
 TARGET_COMPILE := $(addprefix compile/, $(ALL))
-TARGET_DEPENDENT := $(addsuffix /target,$(addprefix $(SRC)/,$(DEPENDENTS)))
+TARGET_DEPENDENT := $(addsuffix /target,)
 TARGET_DESCRIBE :=  $(addprefix describe/, $(ALL))
 TARGET_DOCKER := $(SRC)/.docker
 TARGET_KAFKA := $(SRC)/kafka/core/build/distributions
-TARGET_KAFKA_HTTP := $(addsuffix /target,$(addprefix $(SRC)/,kafka-rest kafka-http-server))
 TARGET_PULL := $(addprefix pull/, $(ALL))
 TARGET_SRC := $(addprefix $(SRC)/,$(ALL))
 
@@ -208,19 +206,10 @@ $(TARGET_COMPILE):
 $(TARGET_KAFKA): | $(SRC)/kafka
 	cd $(SRC)/kafka && $(COMPILE)
 
-# Creates second-tier compile targets.
-# Ignores update to source code to avoid spurious rebuilds.
-# Pins to locally built kafka
-$(TARGET_KAFKA_HTTP): $(TARGET_KAFKA) | $(SRC)/kafka-rest $(SRC)/kafka-http-server
-	version=$$($(MAKE) -s kafka-cp-version); \
-		echo "Building against kafka version $${version}"; \
-		cd $(subst /target,,$@); \
-		$(call COMPILE, $${version})
-
 # Creates bottom-tier compile targets
 # Ignores update to source code to avoid spurious rebuilds.
 # Pins to locally built kafka
-$(TARGET_DEPENDENT): $(TARGET_KAFKA) $(TARGET_KAFKA_HTTP) | $(TARGET_SRC)
+$(TARGET_DEPENDENT): $(TARGET_KAFKA) | $(TARGET_SRC)
 	version=$$($(MAKE) -s kafka-cp-version); \
 		echo "Building against kafka version $${version}"; \
 		cd $(subst /target,,$@); \
@@ -339,4 +328,3 @@ clean:
 
 .PHONY: distclean
 distclean:
-
