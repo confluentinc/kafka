@@ -17,314 +17,279 @@
 
 # Below targets are used during kafka packaging for debian.
 
-.SECONDEXPANSION:
+### BEGIN MK-INCLUDE UPDATE ###
+CURL ?= curl
+FIND ?= find
+TAR ?= tar
 
-SHELL := /bin/bash -e
+# Mount netrc so curl can work from inside a container
+DOCKER_NETRC_MOUNT ?= 1
 
-ALL := kafka
+GITHUB_API = api.github.com
+GITHUB_MK_INCLUDE_OWNER := confluentinc
+GITHUB_MK_INCLUDE_REPO := cc-mk-include
+GITHUB_API_CC_MK_INCLUDE := https://$(GITHUB_API)/repos/$(GITHUB_MK_INCLUDE_OWNER)/$(GITHUB_MK_INCLUDE_REPO)
+GITHUB_API_CC_MK_INCLUDE_TARBALL := $(GITHUB_API_CC_MK_INCLUDE)/tarball
+GITHUB_API_CC_MK_INCLUDE_VERSION ?= $(GITHUB_API_CC_MK_INCLUDE_TARBALL)/$(MK_INCLUDE_VERSION)
 
-BRANCH ?= $$(git rev-parse --abbrev-ref HEAD)
-SRC := $(CURDIR)/.src
+MK_INCLUDE_DIR := mk-include
+MK_INCLUDE_LOCKFILE := .mk-include-lockfile
+MK_INCLUDE_TIMESTAMP_FILE := .mk-include-timestamp
+# For optimum performance, you should override MK_INCLUDE_TIMEOUT_MINS above the managed section headers to be
+# a little longer than the worst case cold build time for this repo.
+MK_INCLUDE_TIMEOUT_MINS ?= 240
+# If this latest validated release is breaking you, please file a ticket with DevProd describing the issue, and
+# if necessary you can temporarily override MK_INCLUDE_VERSION above the managed section headers until the bad
+# release is yanked.
+MK_INCLUDE_VERSION ?= v0.955.0
 
-GITHUB_REPO := confluentinc
+# Make sure we always have a copy of the latest cc-mk-include release less than $(MK_INCLUDE_TIMEOUT_MINS) old:
+./$(MK_INCLUDE_DIR)/%.mk: .mk-include-check-FORCE
+	@trap "rm -f $(MK_INCLUDE_LOCKFILE); exit" 0 2 3 15; \
+	waitlock=0; while ! ( set -o noclobber; echo > $(MK_INCLUDE_LOCKFILE) ); do \
+	   sleep $$waitlock; waitlock=`expr $$waitlock + 1`; \
+	   test 14 -lt $$waitlock && { \
+	      echo 'stealing stale lock after 105s' >&2; \
+	      break; \
+	   } \
+	done; \
+	test -s $(MK_INCLUDE_TIMESTAMP_FILE) || rm -f $(MK_INCLUDE_TIMESTAMP_FILE); \
+	test -z "`$(FIND) $(MK_INCLUDE_TIMESTAMP_FILE) -mmin +$(MK_INCLUDE_TIMEOUT_MINS) 2>&1`" || { \
+	   grep -q 'machine $(GITHUB_API)' ~/.netrc 2>/dev/null || { \
+	      echo 'error: follow https://confluentinc.atlassian.net/l/cp/0WXXRLDh to fix your ~/.netrc'; \
+	      exit 1; \
+	   }; \
+	   $(CURL) --fail --silent --netrc --location "$(GITHUB_API_CC_MK_INCLUDE_VERSION)" --output $(MK_INCLUDE_TIMESTAMP_FILE)T --write-out '$(GITHUB_API_CC_MK_INCLUDE_VERSION): %{errormsg}\n' >&2 \
+	   && $(TAR) zxf $(MK_INCLUDE_TIMESTAMP_FILE)T \
+	   && rm -rf $(MK_INCLUDE_DIR) \
+	   && mv $(GITHUB_MK_INCLUDE_OWNER)-$(GITHUB_MK_INCLUDE_REPO)-* $(MK_INCLUDE_DIR) \
+	   && mv -f $(MK_INCLUDE_TIMESTAMP_FILE)T $(MK_INCLUDE_TIMESTAMP_FILE) \
+	   && echo 'installed cc-mk-include-$(MK_INCLUDE_VERSION) from $(GITHUB_MK_INCLUDE_REPO)' \
+	   ; \
+	} || { \
+	   rm -f $(MK_INCLUDE_TIMESTAMP_FILE)T; \
+	   if test -f $(MK_INCLUDE_TIMESTAMP_FILE); then \
+	      touch $(MK_INCLUDE_TIMESTAMP_FILE); \
+	      echo 'unable to access $(GITHUB_MK_INCLUDE_REPO) fetch API to check for latest release; next try in $(MK_INCLUDE_TIMEOUT_MINS) minutes' >&2; \
+	   else \
+	      echo 'unable to access $(GITHUB_MK_INCLUDE_REPO) fetch API to bootstrap mk-include subdirectory' >&2 && false; \
+	   fi; \
+	}
 
-QEMU_INIT_SCRIPT=$(CURDIR)/scripts/init-docker-builder.sh
-DOCKER_BUILDER = buildx-builder
+.PHONY: .mk-include-check-FORCE
+.mk-include-check-FORCE:
+	@test -z "`git ls-files $(MK_INCLUDE_DIR)`" || { \
+		echo 'fatal: checked in $(MK_INCLUDE_DIR)/ directory is preventing make from fetching recent cc-mk-include releases for CI' >&2; \
+		exit 1; \
+	}
+### END MK-INCLUDE UPDATE ###
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-# Set to default registry/repo for development/cpd. Override for other envs.
-DOCKER_IMAGE_REGISTRY ?= 519856050701.dkr.ecr.us-west-2.amazonaws.com
-DOCKER_IMAGE_REPO ?= docker/dev/confluentinc
-DOCKER_IMAGE_NAME := kafka
-DOCKER_IMAGE_VERSION ?= $(subst v0,v1,$(subst master,latest,$(BRANCH)))
-DOCKER_IMAGE_TAG := $(DOCKER_IMAGE_REPO)/$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION)
-DOCKER_UPSTREAM_IMAGE_TAG ?= $(DOCKER_IMAGE_REGISTRY)/$(DOCKER_IMAGE_TAG)
+IMAGE_NAME := ce-kafka
+MASTER_BRANCH := master
+KAFKA_VERSION := $(shell awk 'sub(/.*version=/,""){print $1}' ./gradle.properties)
+VERSION_POST := -$(KAFKA_VERSION)
+DOCKER_BUILD_PRE  += copy-gradle-properties
+DOCKER_BUILD_POST += clean-gradle-properties
+UPDATE_MK_INCLUDE := false
+UPDATE_MK_INCLUDE_AUTO_MERGE := false
 
-TARGET_CHECKOUT := $(addprefix checkout/, $(ALL))
-TARGET_TRACK := $(addprefix track/, $(ALL))
-TARGET_TEST := $(addprefix test/, $(ALL))
-TARGET_CLEAN :=  $(addprefix clean/, $(ALL))
-TARGET_CLONE :=  $(addprefix clone/, $(ALL))
-TARGET_COMPILE := $(addprefix compile/, $(ALL))
-TARGET_DEPENDENT := $(addsuffix /target,)
-TARGET_DESCRIBE :=  $(addprefix describe/, $(ALL))
-TARGET_DOCKER := $(SRC)/.docker
-TARGET_KAFKA := $(SRC)/kafka/core/build/distributions
-TARGET_PULL := $(addprefix pull/, $(ALL))
-TARGET_SRC := $(addprefix $(SRC)/,$(ALL))
-
-IMAGE_SIGNING_URL ?= 'https://imagesigning.prod.cire.aws.internal.confluent.cloud/v1/oidc/sign' 
-
-#### Macro Options ####
-SKIP_TESTS ?= true
-ifeq ($(SKIP_TESTS),true)
-	MVN_OPTS += -DskipTests=true -Ddependency.check.skip=true
-	GRADLE_OPTS += -x test
-else
-	MVN_OPTS += -DKAFKA_REST_CLOUD_SMOKE_TESTS=true
+DOCKER_BUILD_MULTIARCH := true
+# enable intermediate build stage unless on CI
+# since we pass --no-cache in CI which prevents
+# use of intermediate docker build stage
+ifneq ($(CI),true)
+DOCKER_SHARED_TARGET := kafka-builder
 endif
-# Populate $1 with additional maven options in compile recipes
-MVN_OPTS += $(1)
 
-CREATE_BRANCH_IF_NOT_FOUND ?= false
-ifeq ($(CREATE_BRANCH_IF_NOT_FOUND),true)
-	CHECKOUT = git fetch --all >/dev/null; git checkout $(BRANCH) >/dev/null || git checkout -b $(BRANCH);  > /dev/null
+RELEASE_POSTCOMMIT += push-docker sox-log-docker-sha-ce-kafka
+VERSION_REFS := 'v0.*'
+
+ifeq ($(CONFLUENT_PLATFORM_PACKAGING),)
+include ./mk-include/cc-begin.mk
+include ./mk-include/cc-testbreak.mk
+include ./mk-include/cc-vault.mk
+include ./mk-include/cc-semver.mk
+include ./mk-include/cc-docker.mk
+include ./mk-include/cc-end.mk
 else
-	CHECKOUT = git fetch --all >/dev/null; git checkout $(BRANCH) &> /dev/null
-endif
-
-#### MACROS ####
-# Project build command
-MVN = mvn install $(MVN_OPTS) -Pjenkins -Dmaven.test.failure.ignore=true
-GRADLE = ./gradlew install releaseTarGz $(GRADLE_OPTS) -PpackageMetricsReporter=true -PscalaOptimizerMode=inline-scala -x javadoc -x scaladoc
-
-# Invoke appropriate build tool for project
-COMPILE = rm -f $(TARGET_DOCKER); test -f "pom.xml" && $(MVN) || $(GRADLE)
-CLEAN = test -f "pom.xml" && mvn clean || ./gradlew clean
-
-# Silence common commands
-PUSHD = pushd $(1) > /dev/null
-POPD = popd > /dev/null
-
-#### RECIPES ####
-# Clones github recipe into $(SRC) creating a new clone target.
-$(TARGET_SRC):
-	target=$(subst $(SRC)/,,$@); \
-	git clone git@github.com:$(GITHUB_REPO)/$$target $(@); \
-	$(PUSHD) $(@); \
-		git fetch --all;\
-	$(POPD);\
-	$(MAKE) checkout/$$target
-
-# User-friendly clone target; example: make clone/kafka
-$(TARGET_CLONE): $$(subst clone,$$(SRC),$$@)
-
-# Pseudo-target to invoke all clone recipes.
-clone: $(TARGET_SRC)
-
-# Checks out git branch $(BRANCH) for clone target; creates clone target if needed. example: make checkout/kafka
-# Set CREATE_BRANCH_IF_NOT_FOUND=true to create the branch when it doesn't exist.
-$(TARGET_CHECKOUT): $$(subst checkout, $$(SRC), $$@)
-	@ echo "Running ${CHECKOUT}"
-	target=$(subst checkout/,,$@); \
-	$(MAKE) -s clean/$$target > /dev/null; \
-	$(PUSHD) $(SRC)/$$target; \
-		$(CHECKOUT); \
-    $(POPD);\
-
-# Sets upstream tracking for current state of cloned repository
-$(TARGET_TRACK): $$(subst track, $$(SRC), $$@)
-	target=$(subst track/,,$@); \
-	$(PUSHD) $(SRC)/$$target; \
-		git push --set-upstream origin $$(git branch --show-current);\
-    $(POPD);\
-	$(MAKE) -s describe/$$target
-
-# Sets upstream tracking for current state of cloned repository
-$(TARGET_TEST): $$(subst test, $$(SRC), $$@)
-	target=$(subst test/,,$@); \
-	$(PUSHD) $(SRC)/$$target; \
-		if [ -f "pom.xml" ]; then \
-			mvn -Dmaven.test.failure.ignore=true test; \
-		else \
-			./gradlew unitTest integrationTest \
-				--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed \
-				-PmaxParallelForks=4 -PignoreFailures=true;\
-		fi; \
-    $(POPD); \
-
-# Pulls latest revisions on $(BRANCH) for clone target;
-# Recompiles code to avoid packaging stale artifacts.
-$(TARGET_PULL): $$(subst pull, $$(SRC), $$@)
-	target=$(subst pull/,,$@); \
-	version=$$($(MAKE) -s kafka-cp-version); \
-	$(PUSHD) $(SRC)/$$target; \
-		$(CHECKOUT); \
-		$(call COMPILE, $${version}); \
-    $(POPD);\
-	$(MAKE) -s describe/$$target
-
-# Pseudo-target to invoke all checkout recipes.
-# Set CREATE_BRANCH_IF_NOT_FOUND=true to create the branch when it doesn't exist.
-checkout:
-	for target in $$($(MAKE) -s show-projects); do \
-		$(MAKE) checkout/$$target; \
-    done
-
-# Displays TAG "nearest" HEAD; example: make describe/kafka
-# see https://git-scm.com/docs/git-describe#_search_strategy for an explanation of nearest.
-$(TARGET_DESCRIBE): $$(subst describe,$$(SRC),$$@)
-	@ target=$(subst describe/,,$@); \
-	cd $(SRC)/$$target; \
-	echo "$$target=$$(git describe --tags --always --dirty --match 'v[0-9]*.[0-9]*.[0-9]*')"
-
-# Pseudo-target to invoke all known describe recipes; does not create targets.
-describe:
-	@ test -d $(SRC) && \
-		for target in $$(ls -d $(SRC)/*); do \
-				$(MAKE) -s describe/"$${target#$(SRC)/}"; \
-		done \
-	|| echo "make: Nothing to be done for $@."
-
-# Pseudo-target to print local image tag.
-describe/docker:
-	@ echo $(DOCKER_IMAGE_TAG)
-
-kafka-cp-version:
-	@version=$$($(MAKE) -s describe/kafka); \
-		echo "-Dce.kafka.version=$$(echo $${version} | sed 's/.*=v[^-]*-//' | sed 's/ce-.*/ce/')"
-
-# Cleans compile target; example: make clean/kafka.
-# Note: Source code remains intact
-$(TARGET_CLEAN):
-	export target=$(subst clean,$(SRC),$@); \
-	if [[ -d "$$target" ]]; then \
-		cd $(subst clean,$(SRC),$@); $(CLEAN); \
-	else \
-		echo "make: Nothing to be done for $@."; \
-	fi
-
-# Pseudo-target clean target for docker image.
-clean/docker :
-	 rm -f $(TARGET_DOCKER) && docker rmi -f $$($(MAKE) -s describe/docker)
-
-clean:
-	#mvn dependency:purge-local-repository
-	$(MAKE) -s clean/docker
-	rm -rf $(SRC)
-
-# Invokes all compile recipes.
-$(TARGET_COMPILE):
-	export target=$(subst compile/,,$@); \
-	if [[ "$$target" = "kafka" ]]; then \
-		$(MAKE) $(TARGET_KAFKA); \
-	else \
-		$(MAKE) $(SRC)/$$target/target; \
-	fi
-
-# Creates kafka compile target.
-# Ignores update to source code to avoid spurious rebuilds.
-$(TARGET_KAFKA): | $(SRC)/kafka
-	cd $(SRC)/kafka && $(COMPILE)
-
-# Creates bottom-tier compile targets
-# Ignores update to source code to avoid spurious rebuilds.
-# Pins to locally built kafka
-$(TARGET_DEPENDENT): $(TARGET_KAFKA) | $(TARGET_SRC)
-	version=$$($(MAKE) -s kafka-cp-version); \
-		echo "Building against kafka version $${version}"; \
-		cd $(subst /target,,$@); \
-		$(call COMPILE, $${version})
-
-# Pseudo compile target to invoke all compile recipes.
-compile: $(TARGET_DEPENDENT)
-
-# Create docker package target.
-# Adds an empty file to avoid spurious rebuilds.
-$(TARGET_DOCKER): install-qemu-static $(TARGET_DEPENDENT)
-	CC_RELEASE="$$(cd $(SRC)/kafka && git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*')"; \
-	for version in $$($(MAKE) -s describe); do label_args+=(--label "$$version"); done; \
-	cd $(CURDIR); \
-	docker buildx build \
-		--platform linux/arm64 \
-		--build-arg PREFIX=$(subst $(CURDIR),,$(SRC)) \
-		--build-arg RELEASE=$${CC_RELEASE#*=} \
-		--load \
-		$${label_args[@]} \
-		-t "$$($(MAKE) -s describe/docker)-arm64" . ; \
-	docker buildx build \
-		--platform linux/amd64 \
-		--build-arg PREFIX=$(subst $(CURDIR),,$(SRC)) \
-		--build-arg RELEASE=$${CC_RELEASE#*=} \
-		--load \
-		$${label_args[@]} \
-		-t "$$($(MAKE) -s describe/docker)-amd64" .
-	touch $(TARGET_DOCKER)
-
-install-qemu-static:
-	$(QEMU_INIT_SCRIPT) $(DOCKER_BUILDER)
-
-show-projects:
-	@echo $(ALL)
-
-#  https://www.cmcrossroads.com/article/dumping-every-makefile-variable
-debug:
-	$(foreach V,$(sort $(.VARIABLES)),\
-	  $(if $(filter-out environment% default automatic, \
-	  	$(origin $V)),$(warning $V=$($V) ($(value $V)))))
-
-show-branch:
-	test -d $(SRC) && \
-		for target in $$(ls -d $(SRC)/*); do \
-			$(PUSHD) $$target; \
-				echo "$${target#$(SRC)/}:$$(git rev-parse --abbrev-ref HEAD)"; \
-			$(POPD); \
-		done \
-	|| echo "make: Nothing to be done for $@."
-
-package/docker: | $(TARGET_DOCKER)
-
-clean/test: test/shared/results
-	rm -rf test/shared/results/*
-
-test: package/docker
-	 RESULTS_DIR=/test/shared/results/$$(date +%s); \
-	 BRANCH=$(BRANCH) docker-compose -f ./test/docker-compose.yml up -d --build; \
-	 echo "Test results can be found in $${RESULTS_DIR}"
-
-# tag and push the arch-specific images
-# then create the manifest which contains a reference to each arch-specific image
-deploy/docker: $(TARGET_DOCKER)
-	# `docker manifest create` doesn't replace an existing manifest the way tagging an image does, so try and delete any existing manifest if it exists locally
-	IMAGE_TAG=$$($(MAKE) -s describe/docker); \
-	echo "upstream image tag ${DOCKER_UPSTREAM_IMAGE_TAG}"; \
-	docker tag $${IMAGE_TAG}-arm64 ${DOCKER_UPSTREAM_IMAGE_TAG}-arm64; \
-	docker push ${DOCKER_UPSTREAM_IMAGE_TAG}-arm64; \
-	echo "pushed ${DOCKER_UPSTREAM_IMAGE_TAG}-arm64"; \
-	docker tag $${IMAGE_TAG}-amd64 ${DOCKER_UPSTREAM_IMAGE_TAG}-amd64; \
-	docker push ${DOCKER_UPSTREAM_IMAGE_TAG}-amd64; \
-	echo "pushed ${DOCKER_UPSTREAM_IMAGE_TAG}-amd64"; \
-	docker manifest rm ${DOCKER_UPSTREAM_IMAGE_TAG} 2&> /dev/null || true; \
-	docker manifest create ${DOCKER_UPSTREAM_IMAGE_TAG} ${DOCKER_UPSTREAM_IMAGE_TAG}-arm64 ${DOCKER_UPSTREAM_IMAGE_TAG}-amd64; \
-	echo "pushed ${DOCKER_UPSTREAM_IMAGE_TAG}"; \
-	docker manifest push ${DOCKER_UPSTREAM_IMAGE_TAG}
-
-.PHONY: sign/docker
-sign/docker:
-	$(eval IMAGE_DIGEST_ARM := $(shell docker inspect --format="{{index .RepoDigests 0}}" "${DOCKER_UPSTREAM_IMAGE_TAG}-arm64" | cut -d'@' -f2))
-	$(eval IMAGE_DIGEST_AMD := $(shell docker inspect --format="{{index .RepoDigests 0}}" "${DOCKER_UPSTREAM_IMAGE_TAG}-amd64" | cut -d'@' -f2))
-	@curl -X POST \
-		-w "%{http_code}\n" \
-		$(IMAGE_SIGNING_URL) \
-		-H "Authorization: Bearer ${OIDC_TOKEN}" \
-		-H "Content-Type: application/json" \
-		-d '{"images": [{"uri": "$(DOCKER_IMAGE_REGISTRY)/$(DOCKER_IMAGE_REPO)/$(DOCKER_IMAGE_NAME)@$(IMAGE_DIGEST_AMD)"}]}' \
-		| cat | sed '/^2/q ; /^\([0,1,3,4,5,6,7,8,9]\)/{s//Error, please link this log in slack channel image-signing-service-help\n\1/ ; q1}'
-	@curl -X POST \
-		-w "%{http_code}\n" \
-		$(IMAGE_SIGNING_URL) \
-		-H "Authorization: Bearer ${OIDC_TOKEN}" \
-		-H "Content-Type: application/json" \
-		-d '{"images": [{"uri": "$(DOCKER_IMAGE_REGISTRY)/$(DOCKER_IMAGE_REPO)/$(DOCKER_IMAGE_NAME)@$(IMAGE_DIGEST_ARM)"}]}' \
-		| cat | sed '/^2/q ; /^\([0,1,3,4,5,6,7,8,9]\)/{s//Error, please link this log in slack channel image-signing-service-help\n\1/ ; q1}'
-	@curl -X POST \
-		-w "%{http_code}\n" \
-		$(IMAGE_SIGNING_URL) \
-		-H "Authorization: Bearer ${OIDC_TOKEN}" \
-		-H "Content-Type: application/json" \
-		-d '{"images": [{"uri": "$(DOCKER_IMAGE_REGISTRY)/$(DOCKER_IMAGE_REPO)/$(DOCKER_IMAGE_NAME)@$(shell docker manifest push $(DOCKER_UPSTREAM_IMAGE_TAG))"}]}' \
-		| cat | sed '/^2/q ; /^\([0,1,3,4,5,6,7,8,9]\)/{s//Error, please link this log in slack channel image-signing-service-help\n\1/ ; q1}'
-
-.PHONY: print-branch-info
-print-branch-info:
-	@echo "Branch variable: $(BRANCH)"
-	@echo "Current git branch: $$(git rev-parse --abbrev-ref HEAD)"
-	@echo "Docker image version: $(DOCKER_IMAGE_VERSION)"
-	@echo "Docker image tag: $(DOCKER_IMAGE_TAG)"
-	@echo "Modified branch name: $(subst v0,v1,$(subst master,latest,$(BRANCH)))"
-
-
 .PHONY: clean
 clean:
 
 .PHONY: distclean
 distclean:
+
+%:
+	$(MAKE) -f debian/Makefile $@
+endif
+
+# Custom docker targets
+.PHONY: show-docker-all
+show-docker-all:
+	@echo
+	@echo ========================
+	@echo "Docker info for ce-kafka:"
+	@make VERSION=$(VERSION) show-docker
+	@echo
+	@echo ========================
+	@echo "Docker info for cc-zookeeper"
+	@make VERSION=$(VERSION) -C cc-zookeeper show-docker
+	@echo
+	@echo ========================
+	@echo "Docker info for soak_cluster"
+	@make VERSION=$(VERSION) -C cc-services/soak_cluster show-docker
+	@echo
+	@echo ========================
+	@echo "Docker info for trogdor"
+	@make VERSION=$(VERSION) -C cc-services/trogdor show-docker
+	@echo
+	@echo ========================
+	@echo "Docker info for tier-validator-services"
+	@make VERSION=$(VERSION) -C cc-services/tier_validator show-docker
+
+.PHONY: build-docker-cc-services
+build-docker-cc-services:
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-services/soak_cluster build-docker
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-services/trogdor build-docker
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-services/tier_validator build-docker
+
+.PHONY: push-docker-cc-services
+push-docker-cc-services:
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-services/soak_cluster push-docker
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-services/trogdor push-docker
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-services/tier_validator push-docker
+
+.PHONY: build-docker-cc-zookeeper
+build-docker-cc-zookeeper:
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-zookeeper build-docker
+
+.PHONY: push-docker-cc-zookeeper
+push-docker-cc-zookeeper:
+	make VERSION=$(VERSION) BASE_IMAGE=$(IMAGE_REPO)/$(IMAGE_NAME) BASE_VERSION=$(IMAGE_VERSION) -C cc-zookeeper push-docker sign-image
+
+GRADLE_TEMP = ./tmp/gradle/
+.PHONY: copy-gradle-properties
+copy-gradle-properties:
+	mkdir -p $(GRADLE_TEMP)
+	cp ~/.gradle/gradle.properties $(GRADLE_TEMP)
+
+.PHONY: clean-gradle-properties
+clean-gradle-properties:
+	rm -rf $(GRADLE_TEMP)
+
+# alias to prevent breaking developer and automated workflows
+# we previously used build-docker-developer to generate S3 credentials
+# required for apt to fetch packages
+build-docker-developer: build-docker
+
+.PHONY: push-docker-pr
+ifeq ($(CI),true)
+ifneq (,$(findstring pr-image, $(SEMAPHORE_GIT_PR_NAME)))
+push-docker-pr: push-docker-version
+endif
+endif
+
+# Log for the master image. Requires images to be pushed before this step.
+.PHONY: sox-log-docker-sha-ce-kafka
+sox-log-docker-sha-ce-kafka:
+ifeq ($(CI),true)
+ifneq ($(RELEASE_BRANCH),$(_empty))
+	pip3 install confluent-ci-tools
+	# amd64 image
+	$(eval IMAGE_SHA := $(shell docker inspect --format="{{index .RepoDigests 0}}" "$(DOCKER_REPO)/confluentinc/ce-kafka:$(BUMPED_VERSION)-amd64"))
+	@echo "Reporting docker image information event for $(DOCKER_REPO)/confluentinc/ce-kafka:$(BUMPED_VERSION)-amd64, image sha: $(IMAGE_SHA)"
+	# pushing the $(BUMPED_VERSION)-amd64 version as canonical version since that's what we're running in prod until arm64 lands
+	ci-docker-image-semaphore-event --topic 'sox-sdlc-audit-automation' --version-tag $(BUMPED_VERSION) --sha256 $(IMAGE_SHA) --config-file $(HOME)/.sox-semaphore-build-info.ini
+	ci-docker-image-semaphore-event --topic 'sox-sdlc-audit-automation' --version-tag $(BUMPED_VERSION)-amd64 --sha256 $(IMAGE_SHA) --config-file $(HOME)/.sox-semaphore-build-info.ini
+	# arm64 image
+	$(eval IMAGE_SHA := $(shell docker inspect --format="{{index .RepoDigests 0}}" "$(DOCKER_REPO)/confluentinc/ce-kafka:$(BUMPED_VERSION)-arm64"))
+	@echo "Reporting docker image information event for $(DOCKER_REPO)/confluentinc/ce-kafka:$(BUMPED_VERSION)-arm64, image sha: $(IMAGE_SHA)"
+	ci-docker-image-semaphore-event --topic 'sox-sdlc-audit-automation' --version-tag $(BUMPED_VERSION)-arm64 --sha256 $(IMAGE_SHA) --config-file $(HOME)/.sox-semaphore-build-info.ini
+endif
+endif
+
+# Log for cc-zookeeper image. Requires images to be pushed before this step.
+.PHONY: sox-log-docker-sha-cc-zookeeper
+sox-log-docker-sha-cc-zookeeper:
+ifeq ($(CI),true)
+ifneq ($(RELEASE_BRANCH),$(_empty))
+	pip3 install confluent-ci-tools
+	$(eval IMAGE_SHA := $(shell docker inspect --format="{{index .RepoDigests 0}}" "$(DOCKER_REPO)/confluentinc/cc-zookeeper:$(BUMPED_BASE_VERSION)-amd64"))
+	@echo "Reporting docker image information event for $(DOCKER_REPO)/confluentinc/cc-zookeeper:$(BUMPED_BASE_VERSION)-amd64, image sha: $(IMAGE_SHA)"
+	# pushing the $(BUMPED_VERSION)-amd64 version as canonical version since that's what we're running in prod until arm64 lands
+	ci-docker-image-semaphore-event --topic 'sox-sdlc-audit-automation' --version-tag $(BUMPED_BASE_VERSION) --sha256 $(IMAGE_SHA) --config-file $(HOME)/.sox-semaphore-build-info.ini
+	ci-docker-image-semaphore-event --topic 'sox-sdlc-audit-automation' --version-tag $(BUMPED_BASE_VERSION)-amd64 --sha256 $(IMAGE_SHA) --config-file $(HOME)/.sox-semaphore-build-info.ini
+	# arm64
+	$(eval IMAGE_SHA := $(shell docker inspect --format="{{index .RepoDigests 0}}" "$(DOCKER_REPO)/confluentinc/cc-zookeeper:$(BUMPED_BASE_VERSION)-arm64"))
+	@echo "Reporting docker image information event for $(DOCKER_REPO)/confluentinc/cc-zookeeper:$(BUMPED_BASE_VERSION)-arm64, image sha: $(IMAGE_SHA)"
+	# pushing the $(BUMPED_VERSION)-arm64 version as latest since that's what we're running in prod until arm64 lands
+	ci-docker-image-semaphore-event --topic 'sox-sdlc-audit-automation' --version-tag $(BUMPED_BASE_VERSION)-arm64 --sha256 $(IMAGE_SHA) --config-file $(HOME)/.sox-semaphore-build-info.ini
+endif
+endif
+
+#Runs the compile and checkstyle error check
+.PHONY: compile-validate
+compile-validate:
+	./retry_zinc ./gradlew --build-cache clean assemble publishToMavenLocal check -x test -PkeepAliveMode=session --stacktrace 2>&1 | tee build.log
+	@error_count=$$(grep -c -E "(ERROR|error:|\[Error\])" build.log); \
+	echo "Compile, checkstyle or spotbugs error found"; \
+	grep -E "(ERROR|error:|\[Error\])" build.log | while read -r line; do \
+		echo "$$line"; \
+	done; \
+	echo "Number of compile, checkstyle and spotbug errors: $$error_count"; \
+	exit $$error_count
+
+
+#Check compilation compatibility with Scala 2.12
+.PHONY: check-scala-compatibility
+check-scala-compatibility:
+	./retry_zinc ./gradlew clean assemble -PscalaVersion=2.12 -PkeepAliveMode=session --stacktrace 2>&1 | tee build.log
+	@error_count=$$(grep -c -E "(ERROR|error:|\[Error\])" build.log); \
+  	grep -E "(ERROR|error:|\[Error\])" build.log | while read -r line; do \
+		echo "$$line"; \
+	done; \
+	echo "Number of compile, checkstyle and spotbug errors: $$error_count"; \
+	exit $$error_count
+
+
+###Test task
+.PHONY: test-task
+test-task:
+	$(GIT_ROOT)/scripts/run_all_tests.sh $(partition) $(node) $(NO_OF_TEST_WORKER_NODES) $(MAX_TEST_RETRY_FAILURES_PER_NODE) $(is_semaphore_run) $(destination) "$(GIT_ROOT)" "$(GIT_ROOT)/build" "$(GIT_ROOT)/scripts" $(timeout)
+
+.PHONY: testbreak-after-kafka
+testbreak-after-kafka:
+	@PREV_BRANCH_NAME=$(BRANCH_NAME); \
+	export BRANCH_NAME=$$PREV_BRANCH_NAME-${ARCH}; \
+	echo "Current BRANCH_NAME is set to: $$BRANCH_NAME"; \
+	TESTBREAK_REPORTING_BRANCHES_WITH_ARCH=$$(echo $(TESTBREAK_REPORTING_BRANCHES) | sed "s/\b\w*\b/&-${ARCH}/g"); \
+	if [ "$(TESTBREAK_SKIP)" = "true" ]; then \
+		echo "Skipping testbreak after, TESTBREAK_SKIP is set to true."; \
+	elif echo "$$TESTBREAK_REPORTING_BRANCHES_WITH_ARCH" | grep -q -w "$$BRANCH_NAME"; then \
+		echo "Reporting to testbreak at url: https://testbreak.confluent.io/kiosk/branch/$$BRANCH_NAME/job_result/$(SEMAPHORE_PROJECT_NAME), branch \"$$BRANCH_NAME\" is whitelisted."; \
+		ci-kafka-event --start-time $(START_TIME) --duration $(DURATION_IN_MILLIS) --build-log build.log --test-results "$(BUILD_DIR)/**/*TEST*xml" --s3;  # report to testbreak \
+	else \
+		echo "Not reporting to testbreak, branch \"$$BRANCH_NAME\" not whitelisted in [$$TESTBREAK_REPORTING_BRANCHES_WITH_ARCH]."; \
+	fi; \
+	export BRANCH_NAME=$$PREV_BRANCH_NAME
+
+
+
+
+# Enable Thread Leak Listener
+.PHONY: enable-thread-leak-listener
+enable-thread-leak-listener:
+	echo "org.apache.kafka.test.ThreadLeakListener" > clients/src/test/resources/META-INF/services/org.junit.platform.launcher.TestExecutionListener
