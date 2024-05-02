@@ -285,7 +285,7 @@ public class SharePartitionTest {
         assertArrayEquals(expectedAcquiredRecords(records, 1).toArray(), acquiredRecordsList.toArray());
         assertEquals(1, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
-        assertEquals(0, sharePartition.cachedState().get(0L).baseOffset());
+        assertEquals(0, sharePartition.cachedState().get(0L).firstOffset());
         assertEquals(0, sharePartition.cachedState().get(0L).lastOffset());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
@@ -308,7 +308,7 @@ public class SharePartitionTest {
         assertArrayEquals(expectedAcquiredRecords(records, 1).toArray(), acquiredRecordsList.toArray());
         assertEquals(15, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
-        assertEquals(10, sharePartition.cachedState().get(10L).baseOffset());
+        assertEquals(10, sharePartition.cachedState().get(10L).firstOffset());
         assertEquals(14, sharePartition.cachedState().get(10L).lastOffset());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
         assertEquals(1, sharePartition.cachedState().get(10L).batchDeliveryCount());
@@ -1830,7 +1830,7 @@ public class SharePartitionTest {
         assertArrayEquals(expectedAcquiredRecords(records, 1).toArray(), acquiredRecordsList.toArray());
         assertEquals(1, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
-        assertEquals(0, sharePartition.cachedState().get(0L).baseOffset());
+        assertEquals(0, sharePartition.cachedState().get(0L).firstOffset());
         assertEquals(0, sharePartition.cachedState().get(0L).lastOffset());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
@@ -1843,7 +1843,7 @@ public class SharePartitionTest {
         Thread.sleep(200);
         assertEquals(0, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
-        assertEquals(0, sharePartition.cachedState().get(0L).baseOffset());
+        assertEquals(0, sharePartition.cachedState().get(0L).firstOffset());
         assertEquals(0, sharePartition.cachedState().get(0L).lastOffset());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(0L).batchState());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
@@ -1868,7 +1868,7 @@ public class SharePartitionTest {
         assertArrayEquals(expectedAcquiredRecords(records, 1).toArray(), acquiredRecordsList.toArray());
         assertEquals(15, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
-        assertEquals(10, sharePartition.cachedState().get(10L).baseOffset());
+        assertEquals(10, sharePartition.cachedState().get(10L).firstOffset());
         assertEquals(14, sharePartition.cachedState().get(10L).lastOffset());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
         assertEquals(1, sharePartition.cachedState().get(10L).batchDeliveryCount());
@@ -1881,7 +1881,7 @@ public class SharePartitionTest {
         Thread.sleep(200);
         assertEquals(10, sharePartition.nextFetchOffset());
         assertEquals(1, sharePartition.cachedState().size());
-        assertEquals(10, sharePartition.cachedState().get(10L).baseOffset());
+        assertEquals(10, sharePartition.cachedState().get(10L).firstOffset());
         assertEquals(14, sharePartition.cachedState().get(10L).lastOffset());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).batchState());
         assertEquals(1, sharePartition.cachedState().get(10L).batchDeliveryCount());
@@ -3245,7 +3245,7 @@ public class SharePartitionTest {
         assertEquals(2, sharePartition.cachedState().size());
         assertTrue(sharePartition.cachedState().containsKey(0L));
         assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(0L).batchState());
-        assertEquals(0, sharePartition.cachedState().get(0L).baseOffset());
+        assertEquals(0, sharePartition.cachedState().get(0L).firstOffset());
         assertEquals(14, sharePartition.cachedState().get(0L).lastOffset());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(0L).offsetState().get(12L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).offsetState().get(13L).state());
@@ -3373,7 +3373,7 @@ public class SharePartitionTest {
         assertEquals(2, sharePartition.cachedState().size());
         assertTrue(sharePartition.cachedState().containsKey(0L));
         assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(0L).batchState());
-        assertEquals(0, sharePartition.cachedState().get(0L).baseOffset());
+        assertEquals(0, sharePartition.cachedState().get(0L).firstOffset());
         assertEquals(14, sharePartition.cachedState().get(0L).lastOffset());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).offsetState().get(9L).state());
         assertEquals(RecordState.ARCHIVED, sharePartition.cachedState().get(0L).offsetState().get(10L).state());
@@ -3569,7 +3569,7 @@ public class SharePartitionTest {
         assertEquals(2, sharePartition.cachedState().size());
 
         assertThrows(IllegalStateException.class, () -> sharePartition.cachedState().get(40L).batchState());
-        assertEquals(40, sharePartition.cachedState().get(40L).baseOffset());
+        assertEquals(40, sharePartition.cachedState().get(40L).firstOffset());
         assertEquals(59, sharePartition.cachedState().get(40L).lastOffset());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(40L).offsetState().get(49L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(40L).offsetState().get(50L).state());
@@ -3651,7 +3651,7 @@ public class SharePartitionTest {
     private List<AcquiredRecords> expectedAcquiredRecords(MemoryRecords memoryRecords, int deliveryCount) {
         List<AcquiredRecords> acquiredRecordsList = new ArrayList<>();
         memoryRecords.batches().forEach(batch -> acquiredRecordsList.add(new AcquiredRecords()
-            .setBaseOffset(batch.baseOffset())
+            .setFirstOffset(batch.baseOffset())
             .setLastOffset(batch.lastOffset())
             .setDeliveryCount((short) deliveryCount)));
         return acquiredRecordsList;
@@ -3661,7 +3661,7 @@ public class SharePartitionTest {
         List<AcquiredRecords> acquiredRecordsList = new ArrayList<>();
         for (long i = baseOffset; i <= lastOffset; i++) {
             acquiredRecordsList.add(new AcquiredRecords()
-                .setBaseOffset(i)
+                .setFirstOffset(i)
                 .setLastOffset(i)
                 .setDeliveryCount((short) deliveryCount));
         }
@@ -3694,7 +3694,7 @@ public class SharePartitionTest {
             this.persister = persister;
             return this;
         }
-        
+
         public static SharePartitionBuilder builder() {
             return new SharePartitionBuilder();
         }
