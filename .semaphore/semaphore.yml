@@ -1,0 +1,94 @@
+version: v1.0
+name: build-test-release
+agent:
+  machine:
+    type: s1-prod-ubuntu20-04-amd64-5
+
+auto_cancel:
+  queued:
+    when: "branch = 'master'"
+
+fail_fast:
+  cancel:
+    when: "true"
+
+execution_time_limit:
+  hours: 4
+
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+      - source .semaphore/ci-config.sh
+      - |
+        . vault-setup
+        TWISTLOCK_USER=$(vault kv get -field=username v1/ci/kv/semaphore2/twistcli-creds)
+        export TWISTLOCK_USER
+        TWISTLOCK_PASSWORD=$(vault kv get -field=password v1/ci/kv/semaphore2/twistcli-creds)
+        export TWISTLOCK_PASSWORD
+
+blocks:
+  - name: Build and Publish docker artifacts
+    task:
+      jobs:
+        - name: Build and Publish docker artifacts
+          commands:
+            - .semaphore/scripts/build_and_publish.sh
+
+      epilogue:
+        always:
+          commands:
+            - . publish-test-results
+            - artifact push workflow target/test-results
+            # Upload the updated version artifact to Semaphore project artifacts. this is only for old jenkins branches
+            - artifact push project "${SEMAPHORE_GIT_BRANCH}_build_number.txt" --force || true
+            - |
+              FILES_TO_PACKAGE=""
+              cd $HOME_OUTPUT_DIR
+              if [[ -f .release_tag ]]; then
+                FILES_TO_PACKAGE+=".release_tag "
+              fi
+              if [[ -f .ce-kafka-v0-version ]]; then
+                FILES_TO_PACKAGE+=".ce-kafka-v0-version"
+              fi
+              if [[ -n $FILES_TO_PACKAGE ]]; then
+                tar -cvzf release_info.tar.gz $FILES_TO_PACKAGE
+                artifact push workflow release_info.tar.gz
+              else
+                echo "No files found to package."
+              fi
+
+
+after_pipeline:
+  task:
+    agent:
+      machine:
+        type: s1-prod-ubuntu20-04-arm64-0
+    jobs:
+      - name: Metrics
+        commands:
+          - emit-ci-metrics -p -a test-results
+      - name: Publish Test Results
+        commands:
+          - test-results gen-pipeline-report
+      - name: SonarQube
+        commands:
+          - checkout
+          - sem-version java 11
+          - emit-sonarqube-data -a test-results
+      - name: Release info summary
+        commands:
+          - |
+            artifact pull workflow release_info.tar.gz
+            tar -xvzf release_info.tar.gz
+            echo "Displaying Release and ce-kafka Version Information:"
+            if [[ -f .release_tag ]]; then
+              echo "Release Tag: $(cat .release_tag)"
+            else
+              echo "Release Tag file not found."
+            fi
+            if [[ -f .ce-kafka-v0-version ]]; then
+              echo "ce-kafka Version: $(cat .ce-kafka-v0-version)"
+            else
+              echo "ce-kafka Version file not found."
+            fi
