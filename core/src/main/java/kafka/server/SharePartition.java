@@ -49,6 +49,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -872,7 +873,7 @@ public class SharePartition {
             } else {
                 endOffset = partitionData.startOffset();
             }
-      } catch (Exception e) {
+      } catch (InterruptedException | ExecutionException e) {
           log.error("Failed to initialize the share partition: {}-{}", groupId, topicIdPartition, e);
           throw new IllegalStateException(String.format("Failed to initialize the share partition %s-%s", groupId, topicIdPartition), e);
       }
