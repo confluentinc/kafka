@@ -1,0 +1,33 @@
+version: v1.0
+name: helm-chart-release
+agent:
+  machine:
+    type: s1-prod-ubuntu20-04-amd64-1
+blocks:
+  - name: "Release helm charts"
+    task:
+      prologue:
+        commands:
+          - echo $SEMAPHORE_WORKFLOW_ID
+          - checkout
+          - . vault-setup
+          - . vault-sem-get-secret testbreak-reporting
+          - . vault-sem-get-secret ci-reporting
+          - . vault-sem-get-secret cpd_gcloud
+          - . vault-sem-get-secret gradle_properties
+          - . vault-sem-get-secret sox-semaphore-build-info
+          - make init-ci
+          - sem-version java 17
+          - sem-version go 1.16.15
+          - git config --global url."git@github.com:".insteadOf "https://github.com/"
+          - export SEMAPHORE_CACHE_DIR=/home/semaphore
+          - make testbreak-setup
+          - make show-version
+      jobs:
+        - name: Release helm chart for cc-soak-clients
+          commands:
+            - CHART_NAME=cc-soak-clients make -C cc-services/soak_cluster show-helm
+            - CHART_NAME=cc-soak-clients make -C cc-services/soak_cluster helm-release
+      epilogue:
+        commands:
+          - make testbreak-after

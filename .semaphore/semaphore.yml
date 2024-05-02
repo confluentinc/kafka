@@ -1,0 +1,269 @@
+version: v1.0
+name: kafka
+agent:
+  machine:
+    type: s1-prod-ubuntu20-04-amd64-3
+auto_cancel:
+  queued:
+    when: "branch = 'master' OR pull_request =~ '.*'"
+execution_time_limit:
+  minutes: 210
+global_job_config:
+  env_vars:
+    - name: NO_OF_TEST_WORKER_NODES
+      value: "2"
+    - name: MAX_TEST_RETRY_FAILURES_PER_NODE
+      value: "8"
+    - name: TEST_TIMEOUT_IN_MINUTES
+      value: "180"
+    - name: ENABLE_THREAD_LEAK_LISTENER
+      value: "true"
+  prologue:
+    commands:
+      - echo $SEMAPHORE_WORKFLOW_ID
+      - checkout
+      - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
+      - . vault-setup
+      - . vault-sem-get-secret testbreak-reporting
+      - . vault-sem-get-secret ci-reporting
+      - . vault-sem-get-secret cpd_gcloud
+      - . vault-sem-get-secret gradle_properties
+      - . vault-sem-get-secret sox-semaphore-build-info
+      - make init-ci
+      - sem-version java 21
+      - sem-version go 1.16.15
+      - git config --global url."git@github.com:".insteadOf "https://github.com/"
+      - export SEMAPHORE_CACHE_DIR=/home/semaphore
+      - make show-version
+
+blocks:
+  - name: "Build x86"
+    dependencies: []
+    task:
+      jobs:
+        - name: Build, Compile, Validations
+          commands:
+            - make compile-validate
+            - make check-scala-compatibility
+            - artifact push workflow ./build-cache --destination build-output-directory-$SEMAPHORE_WORKFLOW_ID --force
+      epilogue:
+        commands:
+          - artifact push workflow build.log --destination build-log-$SEMAPHORE_WORKFLOW_ID --force || true
+          - |
+            echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))" ;
+            echo "Current time: $(date +%s%3N)" ;
+            echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt ;
+            artifact push workflow duration.txt --destination build-duration-$SEMAPHORE_WORKFLOW_ID || true
+
+  - name: "Build arm64"
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-arm64-2
+      jobs:
+        - name: Build, Compile, Validations
+          commands:
+            - make compile-validate
+            - make check-scala-compatibility
+            - artifact push workflow ./build-cache --destination arm64-build-output-directory-$SEMAPHORE_WORKFLOW_ID --force
+      epilogue:
+        commands:
+          - artifact push workflow build.log --destination arm64-build-log-$SEMAPHORE_WORKFLOW_ID --force
+          - |
+            echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))" ;
+            echo "Current time: $(date +%s%3N)" ;
+            echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt ;
+            artifact push workflow duration.txt --destination arm64-build-duration-$SEMAPHORE_WORKFLOW_ID || true
+
+  - name: "Docker Build and Release"
+    dependencies: ["Build x86", "Build arm64"]
+    task:
+      jobs:
+        - name: Setup, build, release
+          commands:
+            - DOCKER_BUILDKIT=1 make build
+            - make push-docker-pr
+            - make release-ci
+      epilogue:
+        commands:
+          - artifact push workflow build.log --destination build-log-$SEMAPHORE_WORKFLOW_ID --force || true
+          - |
+            echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))" ;
+            echo "Current time: $(date +%s%3N)" ;
+            echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt ;
+            artifact push workflow duration.txt --destination docker-build-duration-$SEMAPHORE_WORKFLOW_ID || true
+
+  - name: x86 Test
+    dependencies: ["Build x86"]
+    task:
+      prologue:
+        commands:
+          - make testbreak-setup
+          # add cache restore commands here
+          - artifact pull workflow build-output-directory-$SEMAPHORE_WORKFLOW_ID --destination ./build-cache
+          - sudo bash -c "ulimit -v 8388608" # Set virtual memory size limit to 8 GB
+          - sudo bash -c "ulimit -s 8192"    # Set stack size limit to 8 MB
+          - sudo bash -c "ulimit -d 8388608" # Set data segment size limit to 8 GB
+          - sudo bash -c "ulimit -n 2048"    # Set open file descriptors limit to 2048
+          - sudo sysctl -w vm.max_map_count=262144
+          - sysctl -a
+          - ulimit -a
+          - sudo pip3 install junitparser
+      jobs:
+        - name: x86 Test Partitions
+          parallelism: 2
+          commands:
+            - echo Job $SEMAPHORE_JOB_INDEX out of $SEMAPHORE_JOB_COUNT
+            - make test-task node=$SEMAPHORE_JOB_INDEX partition="partition-$SEMAPHORE_JOB_INDEX" is_semaphore_run=true destination=partition-$SEMAPHORE_JOB_INDEX-test-results-$SEMAPHORE_WORKFLOW_ID timeout=$TEST_TIMEOUT_IN_MINUTES
+          execution_time_limit:
+            minutes: 180
+
+      epilogue:
+        commands:
+          - shopt -s globstar && test-results publish --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
+          - |
+            echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
+            echo "Current time: $(date +%s%3N)"
+            echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt
+            artifact push workflow duration.txt --destination $SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID || true
+
+
+  - name: arm64 Test
+    dependencies: ["Build arm64"]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-arm64-2
+      prologue:
+        commands:
+          - make testbreak-setup
+          # add cache restore commands here
+          - artifact pull workflow arm64-build-output-directory-$SEMAPHORE_WORKFLOW_ID --destination ./build-cache
+          - sudo bash -c "ulimit -v 8388608" # Set virtual memory size limit to 8 GB
+          - sudo bash -c "ulimit -s 8192"    # Set stack size limit to 8 MB
+          - sudo bash -c "ulimit -d 8388608" # Set data segment size limit to 8 GB
+          - sudo bash -c "ulimit -n 2048"    # Set open file descriptors limit to 2048
+          - sudo sysctl -w vm.max_map_count=262144
+          - sysctl -a
+          - ulimit -a
+          - sudo pip3 install junitparser
+      jobs:
+        - name: arm 64 Test Partitions
+          parallelism: 2
+          commands:
+            - echo Job $SEMAPHORE_JOB_INDEX out of $SEMAPHORE_JOB_COUNT
+            - make test-task node=$SEMAPHORE_JOB_INDEX partition="partition-$SEMAPHORE_JOB_INDEX" is_semaphore_run=true destination=arm64-partition-$SEMAPHORE_JOB_INDEX-test-results-$SEMAPHORE_WORKFLOW_ID timeout=$TEST_TIMEOUT_IN_MINUTES
+          execution_time_limit:
+            minutes: 180
+
+      epilogue:
+        commands:
+          - shopt -s globstar && test-results publish --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
+          - |
+            echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
+            echo "Current time: $(date +%s%3N)"
+            echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt
+            artifact push workflow duration.txt --destination arm64-$SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID || true
+
+  - name: "Promotions"
+    dependencies: ["Build x86", "Build arm64", "Docker Build and Release"]
+    skip:
+      when: "branch != 'master'"
+    task:
+      jobs:
+        - name: "Build, Release Trogdor image"
+          commands:
+            - PUSH_DOCKER_OVERRIDE=push-docker-version-to-release DOCKER_REPO=519856050701.dkr.ecr.us-west-2.amazonaws.com/docker/prod make -C cc-services/trogdor build-docker push-docker sign-image
+
+        - name: "Build, Release ZK image"
+          commands:
+            - make init-ci
+            - DOCKER_BUILDKIT=1 make build-docker-cc-zookeeper
+            - make push-docker-cc-zookeeper
+            - make sox-log-docker-sha-cc-zookeeper
+
+        - name: "Release helm chart for cc-soak-clients"
+          commands:
+            - CHART_NAME=cc-soak-clients make -C cc-services/soak_cluster show-helm
+            - CHART_NAME=cc-soak-clients make -C cc-services/soak_cluster helm-release
+
+after_pipeline:
+  task:
+    env_vars:
+      - name: TESTBREAK_REPORTING_BRANCHES
+        # value: master master-x86 master-arm64
+        value: master
+    prologue:
+      commands:
+        - echo $SEMAPHORE_WORKFLOW_ID
+        - checkout
+        - sudo pip3 install junitparser
+        - . vault-setup
+        - . vault-sem-get-secret testbreak-reporting
+        - make testbreak-setup
+        - artifact pull workflow partition-1-test-results-$SEMAPHORE_WORKFLOW_ID --destination cached_test_results_node1 || echo "Artifact node 1 test results not found, continuing..."
+        - artifact pull workflow partition-2-test-results-$SEMAPHORE_WORKFLOW_ID --destination cached_test_results_node2 || echo "Artifact node 2 test results not found, continuing..."
+        - artifact pull workflow arm64-partition-1-test-results-$SEMAPHORE_WORKFLOW_ID --destination arm64_cached_test_results_node1 || echo "Artifact arm node 1 test results not found, continuing..."
+        - artifact pull workflow arm64-partition-2-test-results-$SEMAPHORE_WORKFLOW_ID --destination arm64_cached_test_results_node2 || echo "Artifact arm node 2 test results not found, continuing..."
+        - artifact pull workflow build-log-$SEMAPHORE_WORKFLOW_ID --destination ./build.log.x86 || echo "x86 build log not found, continuing..."
+        - artifact pull workflow arm64-build-log-$SEMAPHORE_WORKFLOW_ID --destination ./build.log.arm64 || echo "arm64 build log not found, continuing..."
+        #Pull the durations of each build and test stage
+        - artifact pull workflow build-duration-$SEMAPHORE_WORKFLOW_ID --destination ./build-duration.txt.x86 || echo "x86 build duration not found, continuing..."
+        - artifact pull workflow arm64-build-duration-$SEMAPHORE_WORKFLOW_ID --destination ./build-duration.txt.arm64 || echo "arm64 build duration not found, continuing..."
+        #The numbers 1 and 2 are the test partitions
+        - artifact pull workflow 1-test-duration-$SEMAPHORE_WORKFLOW_ID --destination ./1-test-duration.txt.x86 || echo "x86 test duration not found, continuing..."
+        - artifact pull workflow 2-test-duration-$SEMAPHORE_WORKFLOW_ID --destination ./2-test-duration.txt.x86 || echo "x86 test duration not found, continuing..."
+        - artifact pull workflow arm64-1-test-duration-$SEMAPHORE_WORKFLOW_ID --destination ./1-test-duration.txt.arm64 || echo "arm64 test duration not found, continuing..."
+        - artifact pull workflow arm64-1-test-duration-$SEMAPHORE_WORKFLOW_ID --destination ./2-test-duration.txt.arm64 || echo "arm64 test duration not found, continuing..."
+
+    jobs:
+      - name: Flaky test report
+        commands:
+          - sudo python3 scripts/extract_test_results.py
+          - mkdir -p thread-leak-tests
+          - mv leaked_tests_summary.txt thread-leak-tests/
+          - find . -path "*/thread-reports/**" -name "leakedTestStackDump-*.log" -not -path "thread-leak-tests/*" -exec mv {} thread-leak-tests/ \;
+          - artifact push workflow thread-leak-tests
+          - mkdir -p build-hang-files
+          - find . -type f -name "build-timeout-java-thread-dump-*.log" -not -path "build-hang-files/*" -exec mv {} build-hang-files/ \;
+          - artifact push workflow build-hang-files
+
+      - name: Publish Aggregated Tests
+        commands:
+          - test-results gen-pipeline-report || true
+          # reporting x86 and arm64 runs seperately to test break
+          - |
+            for arch in x86 arm64; do
+              rm -rf build build.log
+              mkdir -p build
+              if [ "${arch}" == "arm64" ]; then
+                cp -r arm64_cached_test_results_node1 build/
+                cp -r arm64_cached_test_results_node2 build/
+                cp build.log.arm64 build.log
+              else
+                cp -r cached_test_results_node1 build/
+                cp -r cached_test_results_node2 build/
+                cp build.log.x86 build.log
+              fi
+              build_duration=$(cat build-duration.txt.${arch})
+              test_duration_1=$(cat 1-test-duration.txt.${arch})
+              test_duration_2=$(cat 2-test-duration.txt.${arch})
+              echo "Build duration for ${arch}: ${build_duration}"
+              echo "Test duration 1 for ${arch}: ${test_duration_1}"
+              echo "Test duration 2 for ${arch}: ${test_duration_2}"
+              max_test_duration=$(echo -e "${test_duration_1}\n${test_duration_2}" | sort -nr | head -n1)
+              total_duration=$((build_duration + max_test_duration))
+              make testbreak-after-kafka DURATION_IN_MILLIS=$total_duration START_TIME=$(($SEMAPHORE_PIPELINE_STARTED_AT * 1000)) ARCH=${arch}
+            done
+
+promotions:
+  - name: Create ZK image
+    pipeline_file: create-zk-image.yml
+    auto_promote:
+      when: "result = 'passed' and branch != 'master' and pull_request !~ '.*'"
+# Commenting the below promotions as these have been pulled into the pipeline now until the tests are stable enough.
+#  - name: Release helm charts
+#    pipeline_file: helm-chart-release.yml
+#    auto_promote:
+#      when: "result = 'passed' and branch = 'master'"
