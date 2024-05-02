@@ -14,7 +14,6 @@ spec:
     url: git@github.com:confluentinc/kafka.git
     run_on:
     - branches
-    - tags
     - pull_requests
     pipeline_file: .semaphore/semaphore.yml
     integration_type: github_app
@@ -25,9 +24,11 @@ spec:
     whitelist:
       branches:
       - master
-      - main
-      - /^v\d+\.\d+\.x$/
-      - /^gh-readonly-queue.*/
+      - /v0\..*/
+      - semaphore_migration
+      - bazel_build
+      - semaphore_migration_scala_validation
+      - /^\d+\.\d+\.x$/
   custom_permissions: true
   debug_permissions:
   - empty
