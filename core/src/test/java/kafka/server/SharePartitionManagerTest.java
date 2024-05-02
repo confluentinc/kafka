@@ -42,6 +42,11 @@ import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.server.group.share.PartitionFactory;
+import org.apache.kafka.server.group.share.Persister;
+import org.apache.kafka.server.group.share.PersisterStateBatch;
+import org.apache.kafka.server.group.share.ReadShareGroupStateResult;
+import org.apache.kafka.server.group.share.TopicData;
 import org.apache.kafka.server.util.timer.SystemTimer;
 import org.apache.kafka.server.util.timer.SystemTimerReaper;
 import org.apache.kafka.server.util.timer.Timer;
@@ -80,6 +85,7 @@ import java.util.stream.Collectors;
 
 import scala.Tuple2;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -1793,6 +1799,38 @@ public class SharePartitionManagerTest {
         mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenThrow(new
                 ClassNotFoundException("Persister object creation failed"));
         assertThrows(ConfigException.class, () -> sharePartitionManager.sharePartition(shareFetchPartitionData, tp0));
+    }
+
+    @Test
+    public void testSharePersisterObjectCreationSuccess() {
+        Uuid fooId = Uuid.randomUuid();
+        TopicIdPartition tp0 = new TopicIdPartition(fooId, new TopicPartition("foo", 0));
+        TopicIdPartition tp1 = new TopicIdPartition(fooId, new TopicPartition("foo", 1));
+        Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
+        partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
+        partitionMaxBytes.put(tp1, PARTITION_MAX_BYTES);
+        SharePartitionManager.ShareFetchPartitionData shareFetchPartitionData = new SharePartitionManager.ShareFetchPartitionData(
+                new FetchParams(ApiKeys.SHARE_FETCH.latestVersion(), FetchRequest.ORDINARY_CONSUMER_ID, -1, 0,
+                        1, 1024 * 1024, FetchIsolation.HIGH_WATERMARK, Optional.empty()),
+                "grp", Uuid.randomUuid().toString(), Arrays.asList(tp0, tp1), new CompletableFuture<>(),
+                partitionMaxBytes);
+
+        SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder().build();
+
+        // Mocking the Persister object creation. We also need to mock readState() method to return a valid result since
+        // it is called during SharePartition object creation.
+        Persister persister = Mockito.mock(Persister.class);
+        ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
+        Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
+                new TopicData<>(tp0.topicId(), Collections.singletonList(
+                        PartitionFactory.newPartitionAllData(0, 3, 5L, Errors.NONE.code(),
+                                Arrays.asList(
+                                        new PersisterStateBatch(5L, 10L, SharePartition.RecordState.AVAILABLE.id, (short) 2),
+                                        new PersisterStateBatch(11L, 15L, SharePartition.RecordState.ARCHIVED.id, (short) 3)))))));
+        Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
+
+        mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenReturn(persister);
+        assertDoesNotThrow(() -> sharePartitionManager.sharePartition(shareFetchPartitionData, tp0));
     }
 
     private static class SharePartitionManagerBuilder {
