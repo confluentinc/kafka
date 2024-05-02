@@ -1,0 +1,48 @@
+version: v1.0
+name: build-test-release
+agent:
+  machine:
+    type: s1-prod-ubuntu20-04-arm64-1
+fail_fast:
+  cancel:
+    when: "true"
+execution_time_limit:
+  hours: 1
+queue:
+  - when: "branch != 'master' and branch !~ '[0-9]+\\.[0-9]+\\.x'"
+    processing: parallel
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+blocks:
+  - name: Test
+    task:
+      jobs:
+        - name: Test
+          commands:
+            - <your commands>
+            - ...
+      epilogue:
+        # only needed if your job is java based
+        always:
+          commands:
+            - . publish-test-results
+            - artifact push workflow target/test-results
+after_pipeline:
+  task:
+    agent:
+      machine:
+        type: s1-prod-ubuntu20-04-arm64-0
+    jobs:
+      - name: Metrics
+        commands:
+          - emit-ci-metrics -p -a test-results
+      - name: Publish Test Results
+        commands:
+          - test-results gen-pipeline-report
+      - name: SonarQube
+        commands:
+          - checkout
+          - sem-version java 11
+          - emit-sonarqube-data -a test-results
