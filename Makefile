@@ -328,3 +328,6 @@ clean:
 
 .PHONY: distclean
 distclean:
+
+%:
+	$(MAKE) -f debian/Makefile $@
