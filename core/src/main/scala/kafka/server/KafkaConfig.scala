@@ -1771,7 +1771,7 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val shareGroupMaxHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupMaxHeartbeatIntervalMsProp)
   val shareGroupRecordLockDurationMs = getInt(KafkaConfig.ShareGroupRecordLockDurationMsProp)
   val shareGroupMaxRecordLockDurationMs = getInt(KafkaConfig.ShareGroupMaxRecordLockDurationMsProp)
-  val ShareGroupPersisterClassName = getString(KafkaConfig.ShareGroupPersisterClassNameProp)
+  val shareGroupPersisterClassName = getString(KafkaConfig.ShareGroupPersisterClassNameProp)
 
   /** ********* Offset management configuration ***********/
   val offsetMetadataMaxSize = getInt(KafkaConfig.OffsetMetadataMaxSizeProp)

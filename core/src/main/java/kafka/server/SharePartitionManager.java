@@ -151,7 +151,6 @@ public class SharePartitionManager implements AutoCloseable {
                         shareFetchPartitionData.groupId,
                         topicIdPartition
                 );
-                // TODO: Fetch inflight and delivery count from config.
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
                     k -> sharePartition(shareFetchPartitionData, topicIdPartition));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
@@ -269,7 +268,7 @@ public class SharePartitionManager implements AutoCloseable {
             Persister persister = null;
             if (!shareGroupPersisterClassName.isEmpty())
                 persister = Utils.newInstance(shareGroupPersisterClassName, Persister.class);
-            return new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, 100, maxDeliveryCount,
+            return new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
                     recordLockDurationMs, timer, time, persister);
         } catch (ClassNotFoundException e) {
             throw new ConfigException("Could not instantiate class share partition " + e.getMessage());

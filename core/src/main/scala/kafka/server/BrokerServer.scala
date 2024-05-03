@@ -402,7 +402,7 @@ class BrokerServer(
         config.shareGroupRecordLockDurationMs,
         config.shareGroupDeliveryCountLimit,
         config.shareGroupPartitionMaxRecordLocks,
-        config.ShareGroupPersisterClassName
+        config.shareGroupPersisterClassName
       )
 
       // Create the request processor objects.
