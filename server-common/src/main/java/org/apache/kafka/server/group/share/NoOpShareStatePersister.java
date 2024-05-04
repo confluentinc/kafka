@@ -17,10 +17,15 @@
 
 package org.apache.kafka.server.group.share;
 
+import org.apache.kafka.common.protocol.Errors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class NoOpShareStatePersister implements Persister {
 
@@ -30,31 +35,55 @@ public class NoOpShareStatePersister implements Persister {
   @Override
   public CompletableFuture<InitializeShareGroupStateResult> initializeState(InitializeShareGroupStateParameters request) {
     banner("initializeState");
-    return CompletableFuture.completedFuture(null);
+    GroupTopicPartitionData<PartitionStateData> reqData = request.groupTopicPartitionData();
+    List<TopicData<PartitionErrorData>> resultArgs = new ArrayList<>();
+    for (TopicData<PartitionStateData> topicData : reqData.topicsData()) {
+      resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream()
+          .map(partStateData -> PartitionFactory.newPartitionErrorData(partStateData.partition(), Errors.NONE.code()))
+          .collect(Collectors.toList())));
+    }
+    return CompletableFuture.completedFuture(new InitializeShareGroupStateResult.Builder().setTopicsData(resultArgs).build());
   }
 
   @Override
   public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) {
     banner("readState");
-    return CompletableFuture.completedFuture(null);
+    // return empty list
+    return CompletableFuture.completedFuture(new ReadShareGroupStateResult.Builder().setTopicsData(Collections.emptyList()).build());
   }
 
   @Override
   public CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters request) {
     banner("writeState");
-    return CompletableFuture.completedFuture(null);
+    GroupTopicPartitionData<PartitionStateBatchData> reqData = request.groupTopicPartitionData();
+    List<TopicData<PartitionErrorData>> resultArgs = new ArrayList<>();
+    for (TopicData<PartitionStateBatchData> topicData : reqData.topicsData()) {
+      resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream()
+          .map(batch -> PartitionFactory.newPartitionErrorData(batch.partition(), Errors.NONE.code()))
+          .collect(Collectors.toList())));
+    }
+    return CompletableFuture.completedFuture(new WriteShareGroupStateResult.Builder().setTopicsData(resultArgs).build());
   }
 
   @Override
   public CompletableFuture<DeleteShareGroupStateResult> deleteState(DeleteShareGroupStateParameters request) {
     banner("deleteState");
-    return CompletableFuture.completedFuture(null);
+    GroupTopicPartitionData<PartitionIdData> reqData = request.groupTopicPartitionData();
+    List<TopicData<PartitionErrorData>> resultArgs = new ArrayList<>();
+    for (TopicData<PartitionIdData> topicData : reqData.topicsData()) {
+      resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream()
+          .map(batch -> PartitionFactory.newPartitionErrorData(batch.partition(), Errors.NONE.code()))
+          .collect(Collectors.toList())));
+    }
+    return CompletableFuture.completedFuture(new DeleteShareGroupStateResult.Builder().setTopicsData(resultArgs).build());
   }
 
   @Override
   public CompletableFuture<ReadShareGroupOffsetsStateResult> readOffsets(ReadShareGroupOffsetsStateParameters request) {
     banner("readOffsets");
-    return CompletableFuture.completedFuture(null);
+    List<TopicData<PartitionStateErrorData>> resultArgs = new ArrayList<>();
+    // empty list
+    return CompletableFuture.completedFuture(new ReadShareGroupOffsetsStateResult.Builder().setTopicsData(Collections.emptyList()).build());
   }
 
   private static void banner(String method) {
