@@ -1375,7 +1375,6 @@ public class RequestResponseTest {
                 .setGroupId("group")
                 .setMemberId("memberid")
                 .setMemberEpoch(10)
-                .setRebalanceTimeoutMs(60000)
                 .setRackId("rackid")
                 .setSubscribedTopicNames(Arrays.asList("foo", "bar"));
         return new ShareGroupHeartbeatRequest.Builder(data).build(version);
@@ -1440,7 +1439,7 @@ public class RequestResponseTest {
                 .setErrorCode(Errors.NONE.code())
                 .setRecords(records)
                 .setAcquiredRecords(singletonList(new ShareFetchResponseData.AcquiredRecords()
-                        .setBaseOffset(0)
+                        .setFirstOffset(0)
                         .setLastOffset(0)
                         .setDeliveryCount((short) 1)));
         ShareFetchResponseData.ShareFetchableTopicResponse response = new ShareFetchResponseData.ShareFetchableTopicResponse()
@@ -1461,7 +1460,7 @@ public class RequestResponseTest {
                         .setPartitions(singletonList(new ShareAcknowledgeRequestData.AcknowledgePartition()
                                 .setPartitionIndex(0)
                                 .setAcknowledgementBatches(singletonList(new ShareAcknowledgeRequestData.AcknowledgementBatch()
-                                        .setBaseOffset(0)
+                                        .setFirstOffset(0)
                                         .setLastOffset(0)
                                         .setAcknowledgeType((byte) 0)))))));
         return new ShareAcknowledgeRequest.Builder(data).build(version);
@@ -3864,9 +3863,9 @@ public class RequestResponseTest {
                     .setStateEpoch(0)
                     .setStartOffset(0)
                     .setStateBatches(Collections.singletonList(new ReadShareGroupStateResponseData.StateBatch()
-                        .setBaseOffset(0)
+                        .setFirstOffset(0)
                         .setLastOffset(0)
-                        .setState((byte) 0x0)
+                        .setDeliveryState((byte) 0x0)
                         .setDeliveryCount((short) 0)))))));
         return new ReadShareGroupStateResponse(data);
     }
@@ -3881,9 +3880,9 @@ public class RequestResponseTest {
                     .setStateEpoch(0)
                     .setStartOffset(0)
                     .setStateBatches(singletonList(new WriteShareGroupStateRequestData.StateBatch()
-                        .setBaseOffset(0)
+                        .setFirstOffset(0)
                         .setLastOffset(0)
-                        .setState((byte) 0x0)
+                        .setDeliveryState((byte) 0x0)
                         .setDeliveryCount((short) 0)))))));
         return new WriteShareGroupStateRequest.Builder(data).build(version);
     }

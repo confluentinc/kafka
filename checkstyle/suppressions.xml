@@ -43,9 +43,9 @@
     <suppress checks="ClassFanOutComplexity" files="RemoteLogManagerTest.java"/>
     <suppress checks="CyclomaticComplexity" files="(SharePartition).java"/>
     <suppress checks="MethodLength|JavaNCSS|NPath"
-              files="(KafkaClusterTestKit|SharePartition).java"/>
+              files="(KafkaClusterTestKit|SharePartition|SharePartitionTest).java"/>
     <suppress checks="JavaNCSS" files="(SharePartition|SharePartitionTest).java"/>
-    <suppress checks="ClassDataAbstractionCoupling"
+    <suppress checks="ClassDataAbstractionCoupling|ClassFanOutComplexity"
               files="(SharePartitionManagerTest).java"/>
 
     <!-- server tests -->
@@ -118,10 +118,10 @@
 
     <!-- Clients tests -->
     <suppress checks="ClassDataAbstractionCoupling"
-              files="(Sender|Fetcher|FetchRequestManager|OffsetFetcher|KafkaConsumer|Metrics|RequestResponse|TransactionManager|KafkaAdminClient|Message|KafkaProducer)Test.java"/>
+              files="(Sender|Fetcher|FetchRequestManager|OffsetFetcher|KafkaConsumer|KafkaShareConsumer|Metrics|RequestResponse|TransactionManager|KafkaAdminClient|Message|KafkaProducer)Test.java"/>
 
     <suppress checks="ClassFanOutComplexity"
-              files="(ConsumerCoordinator|KafkaConsumer|RequestResponse|Fetcher|FetchRequestManager|KafkaAdminClient|Message|KafkaProducer)Test.java"/>
+              files="(ConsumerCoordinator|KafkaConsumer|KafkaShareConsumer|RequestResponse|Fetcher|FetchRequestManager|KafkaAdminClient|Message|KafkaProducer)Test.java"/>
 
     <suppress checks="ClassFanOutComplexity"
               files="MockAdminClient.java"/>

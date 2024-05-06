@@ -90,7 +90,7 @@ public class ShareCompletedFetch {
     private List<OffsetAndDeliveryCount> buildAcquiredRecordList(List<ShareFetchResponseData.AcquiredRecords> partitionAcquiredRecords) {
         List<OffsetAndDeliveryCount> acquiredRecordList = new LinkedList<>();
         partitionAcquiredRecords.forEach(acquiredRecords -> {
-            for (long offset = acquiredRecords.baseOffset(); offset <= acquiredRecords.lastOffset(); offset++) {
+            for (long offset = acquiredRecords.firstOffset(); offset <= acquiredRecords.lastOffset(); offset++) {
                 acquiredRecordList.add(new OffsetAndDeliveryCount(offset, acquiredRecords.deliveryCount()));
             }
         });
@@ -152,9 +152,7 @@ public class ShareCompletedFetch {
 
         if (cachedRecordException != null) {
             inFlightBatch.addAcknowledgement(lastRecord.offset(), AcknowledgeType.RELEASE);
-            inFlightBatch.setException(
-                    new KafkaException("Received exception when fetching the next record from " + partition +
-                            ". The record has been released.", cachedRecordException));
+            inFlightBatch.setException(cachedRecordException);
             cachedRecordException = null;
             return inFlightBatch;
         }
@@ -207,6 +205,7 @@ public class ShareCompletedFetch {
                 inFlightBatch.setException(se);
             } else {
                 cachedRecordException = se;
+                inFlightBatch.setHasCachedException(true);
             }
         } catch (CorruptRecordException e) {
             if (inFlightBatch.isEmpty()) {
@@ -215,6 +214,7 @@ public class ShareCompletedFetch {
                 inFlightBatch.setException(e);
             } else {
                 cachedBatchException = e;
+                inFlightBatch.setHasCachedException(true);
             }
         }
 

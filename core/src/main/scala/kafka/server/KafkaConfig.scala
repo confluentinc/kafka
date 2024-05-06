@@ -254,7 +254,7 @@ object KafkaConfig {
 
   /** Share Group Configurations **/
   val ShareGroupEnableProp = "group.share.enable"
-  val ShareGroupRecordLockPartitionLimitProp = "group.share.record.lock.partition.limit"
+  val ShareGroupPartitionMaxRecordLocksProp = "group.share.partition.max.record.locks"
   val ShareGroupDeliveryCountLimitProp = "group.share.delivery.count.limit"
   val ShareGroupMaxGroupsProp = "group.share.max.groups"
   val ShareGroupMaxSizeProp = "group.share.max.size"
@@ -265,7 +265,10 @@ object KafkaConfig {
   val ShareGroupMinHeartbeatIntervalMsProp = "group.share.min.heartbeat.interval.ms"
   val ShareGroupMaxHeartbeatIntervalMsProp = "group.share.max.heartbeat.interval.ms"
   val ShareGroupRecordLockDurationMsProp = "group.share.record.lock.duration.ms"
-  val ShareGroupMaxRecordLockDurationMsProp = "group.share.record.lock.duration.max.ms"
+  val ShareGroupMinRecordLockDurationMsProp = "group.share.min.record.lock.duration.ms"
+  val ShareGroupMaxRecordLockDurationMsProp = "group.share.max.record.lock.duration.ms"
+  val ShareGroupAssignorsProp = "group.share.assignors"
+  val ShareGroupPersisterClassNameProp = "group.share.persister.class.name"
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeProp = "offset.metadata.max.bytes"
@@ -691,11 +694,11 @@ object KafkaConfig {
   val ConsumerGroupMinHeartbeatIntervalMsDoc = "The minimum heartbeat interval for registered consumers."
   val ConsumerGroupMaxHeartbeatIntervalMsDoc = "The maximum heartbeat interval for registered consumers."
   val ConsumerGroupMaxSizeDoc = "The maximum number of consumers that a single consumer group can accommodate."
-  val ConsumerGroupAssignorsDoc = "The server side assignors as a list of full class names. The first one in the list is considered as the default assignor to be used in the case where the consumer does not specify an assignor."
+  val ConsumerGroupAssignorsDoc = "The server-side assignors as a list of full class names. The first one in the list is considered as the default assignor to be used in the case where the consumer does not specify an assignor."
 
   /** Share Group Configurations */
   val ShareGroupEnableDoc = "Enable share groups on the broker."
-  val ShareGroupRecordLockPartitionLimitDoc = "Share-group record lock limit per share-partition."
+  val ShareGroupPartitionMaxRecordLocksDoc = "Share-group record lock limit per share-partition."
   val ShareGroupDeliveryCountLimitDoc = "The maximum number of delivery attempts for a record delivered to a share group."
   val ShareGroupMaxGroupsDoc = "The maximum number of share groups."
   val ShareGroupMaxSizeDoc = "The maximum number of consumers that a single share group can accommodate."
@@ -705,8 +708,12 @@ object KafkaConfig {
   val ShareGroupHeartbeatIntervalMsDoc = "The heartbeat interval given to the members of a share group."
   val ShareGroupMinHeartbeatIntervalMsDoc = "The minimum heartbeat interval for share group members."
   val ShareGroupMaxHeartbeatIntervalMsDoc = "The maximum heartbeat interval for share group members."
-  val ShareGroupRecordLockDurationMsDoc = "The record acquisition lock duration in milliseconds for share group."
-  val ShareGroupMaxRecordLockDurationMsDoc = "The record acquisition lock maximum duration in milliseconds for share group."
+  val ShareGroupRecordLockDurationMsDoc = "The record acquisition lock duration in milliseconds for share groups."
+  val ShareGroupMinRecordLockDurationMsDoc = "The record acquisition lock minimum duration in milliseconds for share groups."
+  val ShareGroupMaxRecordLockDurationMsDoc = "The record acquisition lock maximum duration in milliseconds for share groups."
+  val ShareGroupAssignorsDoc = "The server-side assignors as a list of full class names. The first one in the list is considered as the default assignor to be used in the case where the share group does not specify an assignor."
+  val ShareGroupPersisterClassNameDoc = "The class name of share persister for share group. The class should implement " +
+    "the <code>org.apache.kafka.server.group.share.Persister</code> interface."
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeDoc = "The maximum size for a metadata entry associated with an offset commit."
@@ -1078,19 +1085,23 @@ object KafkaConfig {
       .define(ConsumerGroupAssignorsProp, LIST, Defaults.CONSUMER_GROUP_ASSIGNORS, null, MEDIUM, ConsumerGroupAssignorsDoc)
 
       /** Share Group Configurations **/
-      .define(ShareGroupEnableProp, BOOLEAN, Defaults.SHARE_GROUP_ENABLE, null, MEDIUM, ShareGroupEnableDoc)
-      .define(ShareGroupRecordLockPartitionLimitProp, SHORT, Defaults.SHARE_GROUP_RECORD_LOCK_PARTITION_LIMIT, between(100, 10000), MEDIUM, ShareGroupRecordLockPartitionLimitDoc)
+      // Internal configuration used by integration and system tests.
+      .defineInternal(ShareGroupEnableProp, BOOLEAN, Defaults.SHARE_GROUP_ENABLE, null, MEDIUM, ShareGroupEnableDoc)
       .define(ShareGroupDeliveryCountLimitProp, INT, Defaults.SHARE_GROUP_DELIVERY_COUNT_LIMIT, between(2, 10), MEDIUM, ShareGroupDeliveryCountLimitDoc)
-      .define(ShareGroupMaxGroupsProp, SHORT, Defaults.SHARE_GROUP_MAX_GROUPS, between(1, 100), MEDIUM, ShareGroupMaxGroupsDoc)
-      .define(ShareGroupMaxSizeProp, SHORT, Defaults.SHARE_GROUP_MAX_SIZE, between(10, 1000), MEDIUM, ShareGroupMaxSizeDoc)
+      .define(ShareGroupRecordLockDurationMsProp, INT, Defaults.SHARE_GROUP_RECORD_LOCK_DURATION_MS, between(1000, 60000), MEDIUM, ShareGroupRecordLockDurationMsDoc)
+      .define(ShareGroupMinRecordLockDurationMsProp, INT, Defaults.SHARE_GROUP_MIN_RECORD_LOCK_DURATION_MS, between(1000, 30000), MEDIUM, ShareGroupMinRecordLockDurationMsDoc)
+      .define(ShareGroupMaxRecordLockDurationMsProp, INT, Defaults.SHARE_GROUP_MAX_RECORD_LOCK_DURATION_MS, between(30000, 3600000), MEDIUM, ShareGroupMaxRecordLockDurationMsDoc)
+      .define(ShareGroupPartitionMaxRecordLocksProp, INT, Defaults.SHARE_GROUP_PARTITION_MAX_RECORD_LOCKS, between(100, 10000), MEDIUM, ShareGroupPartitionMaxRecordLocksDoc)
       .define(ShareGroupSessionTimeoutMsProp, INT, Defaults.SHARE_GROUP_SESSION_TIMEOUT_MS, atLeast(1), MEDIUM, ShareGroupSessionTimeoutMsDoc)
       .define(ShareGroupMinSessionTimeoutMsProp, INT, Defaults.SHARE_GROUP_MIN_SESSION_TIMEOUT_MS, atLeast(1), MEDIUM, ShareGroupMinSessionTimeoutMsDoc)
       .define(ShareGroupMaxSessionTimeoutMsProp, INT, Defaults.SHARE_GROUP_MAX_SESSION_TIMEOUT_MS, atLeast(1), MEDIUM, ShareGroupMaxSessionTimeoutMsDoc)
       .define(ShareGroupHeartbeatIntervalMsProp, INT, Defaults.SHARE_GROUP_HEARTBEAT_INTERVAL_MS, atLeast(1), MEDIUM, ShareGroupHeartbeatIntervalMsDoc)
       .define(ShareGroupMinHeartbeatIntervalMsProp, INT, Defaults.SHARE_GROUP_MIN_HEARTBEAT_INTERVAL_MS, atLeast(1), MEDIUM, ShareGroupMinHeartbeatIntervalMsDoc)
       .define(ShareGroupMaxHeartbeatIntervalMsProp, INT, Defaults.SHARE_GROUP_MAX_HEARTBEAT_INTERVAL_MS, atLeast(1), MEDIUM, ShareGroupMaxHeartbeatIntervalMsDoc)
-      .define(ShareGroupRecordLockDurationMsProp, INT, Defaults.SHARE_GROUP_RECORD_LOCK_DURATION_MS, between(1000, 60000), MEDIUM, ShareGroupRecordLockDurationMsDoc)
-      .define(ShareGroupMaxRecordLockDurationMsProp, INT, Defaults.SHARE_GROUP_MAX_RECORD_LOCK_DURATION_MS, between(1000, 3600000), MEDIUM, ShareGroupMaxRecordLockDurationMsDoc)
+      .define(ShareGroupMaxGroupsProp, SHORT, Defaults.SHARE_GROUP_MAX_GROUPS, between(1, 100), MEDIUM, ShareGroupMaxGroupsDoc)
+      .define(ShareGroupMaxSizeProp, SHORT, Defaults.SHARE_GROUP_MAX_SIZE, between(10, 1000), MEDIUM, ShareGroupMaxSizeDoc)
+      .define(ShareGroupAssignorsProp, LIST, Defaults.SHARE_GROUP_ASSIGNORS, null, MEDIUM, ShareGroupAssignorsDoc)
+      .defineInternal(ShareGroupPersisterClassNameProp, STRING, Defaults.SHARE_GROUP_PERSISTER_CLASS_NAME, new ConfigDef.NonNullValidator(), MEDIUM, ShareGroupPersisterClassNameDoc)
 
       /** ********* Offset management configuration ***********/
       .define(OffsetMetadataMaxSizeProp, INT, Defaults.OFFSET_METADATA_MAX_SIZE, HIGH, OffsetMetadataMaxSizeDoc)
@@ -1748,7 +1759,7 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
 
   /** Share Group Configurations **/
   val isShareGroupEnabled = getBoolean(KafkaConfig.ShareGroupEnableProp)
-  val shareGroupRecordLockPartitionLimit = getShort(KafkaConfig.ShareGroupRecordLockPartitionLimitProp)
+  val shareGroupPartitionMaxRecordLocks = getInt(KafkaConfig.ShareGroupPartitionMaxRecordLocksProp)
   val shareGroupDeliveryCountLimit = getInt(KafkaConfig.ShareGroupDeliveryCountLimitProp)
   val shareGroupMaxGroups = getShort(KafkaConfig.ShareGroupMaxGroupsProp)
   val shareGroupMaxSize = getShort(KafkaConfig.ShareGroupMaxSizeProp)
@@ -1760,6 +1771,7 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val shareGroupMaxHeartbeatIntervalMs = getInt(KafkaConfig.ShareGroupMaxHeartbeatIntervalMsProp)
   val shareGroupRecordLockDurationMs = getInt(KafkaConfig.ShareGroupRecordLockDurationMsProp)
   val shareGroupMaxRecordLockDurationMs = getInt(KafkaConfig.ShareGroupMaxRecordLockDurationMsProp)
+  val shareGroupPersisterClassName = getString(KafkaConfig.ShareGroupPersisterClassNameProp)
 
   /** ********* Offset management configuration ***********/
   val offsetMetadataMaxSize = getInt(KafkaConfig.OffsetMetadataMaxSizeProp)

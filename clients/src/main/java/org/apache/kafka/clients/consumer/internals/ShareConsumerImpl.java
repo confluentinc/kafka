@@ -20,6 +20,7 @@ import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.ClientUtils;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.GroupRebalanceConfig;
+import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.AcknowledgementCommitCallback;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -39,7 +40,7 @@ import org.apache.kafka.clients.consumer.internals.events.PollEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareSubscriptionChangeApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareUnsubscribeApplicationEvent;
-import org.apache.kafka.clients.consumer.internals.metrics.KafkaConsumerMetrics;
+import org.apache.kafka.clients.consumer.internals.metrics.KafkaShareConsumerMetrics;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
@@ -85,6 +86,7 @@ import java.util.function.Supplier;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_JMX_PREFIX;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_METRIC_GROUP_PREFIX;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.DEFAULT_CLOSE_TIMEOUT_MS;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.SHARE_CONSUMER_METRIC_GROUP_PREFIX;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createSubscriptionState;
@@ -98,8 +100,8 @@ import static org.apache.kafka.common.utils.Utils.swallow;
  * {@link ApplicationEvent application events} so that the network I/O can be processed in a dedicated
  * {@link ConsumerNetworkThread network thread}.
  */
-@SuppressWarnings("ClassFanOutComplexity")
-public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
+@SuppressWarnings({"ClassFanOutComplexity", "ClassDataAbstractionCoupling"})
+public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
 
     private static final long NO_CURRENT_THREAD = -1L;
 
@@ -165,7 +167,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
     private final ApplicationEventHandler applicationEventHandler;
     private final Time time;
-    private final KafkaConsumerMetrics kafkaConsumerMetrics;
+    private final KafkaShareConsumerMetrics kafkaShareConsumerMetrics;
     private Logger log;
     private final String clientId;
     private final String groupId;
@@ -186,7 +188,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         IMPLICIT
     }
 
-    private AcknowledgementMode acknowledgementMode;
+    private AcknowledgementMode acknowledgementMode = AcknowledgementMode.UNKNOWN;
 
     /**
      * A thread-safe {@link ShareFetchBuffer fetch buffer} for the results that are populated in the
@@ -242,7 +244,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
             maybeThrowInvalidGroupIdException();
             LogContext logContext = createLogContext(clientId, groupId);
             this.log = logContext.logger(getClass());
-            this.acknowledgementMode = AcknowledgementMode.UNKNOWN;
 
             log.debug("Initializing the Kafka share consumer");
             this.time = time;
@@ -320,7 +321,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
                     new FetchConfig(config),
                     deserializers);
 
-            this.kafkaConsumerMetrics = new KafkaConsumerMetrics(metrics, CONSUMER_METRIC_GROUP_PREFIX);
+            this.kafkaShareConsumerMetrics = new KafkaShareConsumerMetrics(metrics, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
 
             config.logUnused();
             AppInfoParser.registerAppInfo(CONSUMER_JMX_PREFIX, clientId, metrics, time.milliseconds());
@@ -334,6 +335,89 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
             // Now propagate the exception
             throw new KafkaException("Failed to construct Kafka share consumer", t);
         }
+    }
+
+    // Visible for testing
+    ShareConsumerImpl(final LogContext logContext,
+                      final String clientId,
+                      final String groupId,
+                      final ConsumerConfig config,
+                      final Deserializer<K> keyDeserializer,
+                      final Deserializer<V> valueDeserializer,
+                      final Time time,
+                      final KafkaClient client,
+                      final SubscriptionState subscriptions,
+                      final ConsumerMetadata metadata) {
+        this.clientId = clientId;
+        this.groupId = groupId;
+        this.log = logContext.logger(getClass());
+        this.time = time;
+        this.metrics = new Metrics(time);
+        this.clientTelemetryReporter = Optional.empty();
+        this.deserializers = new Deserializers<>(config, keyDeserializer, valueDeserializer);
+        this.subscriptions = subscriptions;
+        this.metadata = metadata;
+        this.fetchBuffer = new ShareFetchBuffer(logContext);
+
+        ConsumerMetrics metricsRegistry = new ConsumerMetrics(CONSUMER_METRIC_GROUP_PREFIX);
+        FetchMetricsManager fetchMetricsManager = new FetchMetricsManager(metrics, metricsRegistry.fetcherMetrics);
+        this.fetchCollector = new ShareFetchCollector<>(
+                logContext,
+                metadata,
+                subscriptions,
+                new FetchConfig(config),
+                deserializers);
+        this.kafkaShareConsumerMetrics = new KafkaShareConsumerMetrics(metrics, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+
+        final BlockingQueue<ApplicationEvent> applicationEventQueue = new LinkedBlockingQueue<>();
+        final BlockingQueue<BackgroundEvent> backgroundEventQueue = new LinkedBlockingQueue<>();
+        final BackgroundEventHandler backgroundEventHandler = new BackgroundEventHandler(
+                logContext,
+                backgroundEventQueue
+        );
+
+        final Supplier<NetworkClientDelegate> networkClientDelegateSupplier =
+                () -> new NetworkClientDelegate(time, config, logContext, client);
+
+        GroupRebalanceConfig groupRebalanceConfig = new GroupRebalanceConfig(
+                config,
+                GroupRebalanceConfig.ProtocolType.SHARE);
+        final Supplier<RequestManagers> requestManagersSupplier = RequestManagers.supplier(
+                time,
+                logContext,
+                backgroundEventHandler,
+                metadata,
+                subscriptions,
+                fetchBuffer,
+                config,
+                groupRebalanceConfig,
+                networkClientDelegateSupplier,
+                fetchMetricsManager,
+                clientTelemetryReporter,
+                metrics
+        );
+
+        final Supplier<ApplicationEventProcessor> applicationEventProcessorSupplier = ApplicationEventProcessor.supplier(
+                logContext,
+                metadata,
+                applicationEventQueue,
+                requestManagersSupplier
+        );
+
+        this.applicationEventHandler = new ApplicationEventHandler(
+                logContext,
+                time,
+                applicationEventQueue,
+                applicationEventProcessorSupplier,
+                networkClientDelegateSupplier,
+                requestManagersSupplier);
+
+        this.backgroundEventProcessor = new BackgroundEventProcessor(
+                logContext,
+                backgroundEventQueue);
+
+        config.logUnused();
+        AppInfoParser.registerAppInfo(CONSUMER_JMX_PREFIX, clientId, metrics, time.milliseconds());
     }
 
     // auxiliary interface for testing
@@ -438,7 +522,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
             // If using implicit acknowledgement, acknowledge the previously fetched records
             maybeSendAcknowledgements();
 
-            kafkaConsumerMetrics.recordPollStart(timer.currentTimeMs());
+            kafkaShareConsumerMetrics.recordPollStart(timer.currentTimeMs());
 
             if (subscriptions.hasNoSubscriptionOrUserAssignment()) {
                 throw new IllegalStateException("Consumer is not subscribed to any topics.");
@@ -452,6 +536,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
                 backgroundEventProcessor.process();
 
+                metadata.maybeThrowAnyException();
+
                 // Make sure the network thread can tell the application is actively polling
                 applicationEventHandler.add(new PollEvent(timer.currentTimeMs()));
 
@@ -461,12 +547,14 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
                     return new ConsumerRecords<>(fetch.records());
                 }
 
+                metadata.maybeThrowAnyException();
+
                 // We will wait for retryBackoffMs
             } while (timer.notExpired());
 
             return ConsumerRecords.empty();
         } finally {
-            kafkaConsumerMetrics.recordPollEnd(timer.currentTimeMs());
+            kafkaShareConsumerMetrics.recordPollEnd(timer.currentTimeMs());
             wakeupTrigger.clearTask();
             release();
         }
@@ -487,6 +575,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
             fetchBuffer.awaitNotEmpty(pollTimer);
         } catch (InterruptException e) {
             log.trace("Timeout during fetch", e);
+            throw e;
         } finally {
             timer.update(pollTimer.currentTimeMs());
         }
@@ -624,9 +713,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         clientTelemetryReporter.ifPresent(reporter -> reporter.initiateClose(timeout.toMillis()));
         closeTimer.update();
 
-        // Send any outstanding acknowledgements and release any acquired records
-        maybeSendAcknowledgementsOnClose();
-
         // Prepare shutting down the network thread
         prepareShutdown(closeTimer, firstException);
         closeTimer.update();
@@ -635,7 +721,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         swallow(log, Level.ERROR, "Failed invoking acknowledgement commit callback.", this::handleCompletedAcknowledgements,
                 firstException);
         closeTimer.update();
-        closeQuietly(kafkaConsumerMetrics, "kafka consumer metrics", firstException);
+        closeQuietly(kafkaShareConsumerMetrics, "kafka share consumer metrics", firstException);
         closeQuietly(metrics, "consumer metrics", firstException);
         closeQuietly(deserializers, "consumer deserializers", firstException);
         clientTelemetryReporter.ifPresent(reporter -> closeQuietly(reporter, "consumer telemetry reporter", firstException));
@@ -653,12 +739,15 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
 
     /**
      * Prior to closing the network thread, we need to make sure the following operations happen in the right sequence:
-     * 1. commit pending acknowledgements and close any share sessions (AKCORE-109 will implement this)
+     * 1. commit pending acknowledgements and close any share sessions
      * 2. send leave group
      */
     void prepareShutdown(final Timer timer, final AtomicReference<Throwable> firstException) {
         completeQuietly(
-            () -> applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(timer), timer),
+            () -> {
+                maybeSendAcknowledgementsOnClose();
+                applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(timer), timer);
+            },
             "Failed to send leaveGroup heartbeat with a timeout(ms)=" + timer.timeoutMs(), firstException);
     }
 
@@ -730,9 +819,11 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
      * interested.
      */
     private void handleCompletedAcknowledgements() {
-        Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
-        if (!completedAcknowledgements.isEmpty() && acknowledgementCommitCallbackHandler != null) {
-            acknowledgementCommitCallbackHandler.onComplete(completedAcknowledgements);
+        if (fetchBuffer != null) {
+            Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
+            if (!completedAcknowledgements.isEmpty() && acknowledgementCommitCallbackHandler != null) {
+                acknowledgementCommitCallbackHandler.onComplete(completedAcknowledgements);
+            }
         }
     }
 
@@ -859,5 +950,20 @@ public class ShareConsumerImpl<K, V> implements ShareConsumer<K, V> {
         } catch (Exception e) {
             firstException.compareAndSet(null, e);
         }
+    }
+
+    @Override
+    public String clientId() {
+        return clientId;
+    }
+
+    @Override
+    public Metrics metricsRegistry() {
+        return metrics;
+    }
+
+    @Override
+    public KafkaShareConsumerMetrics kafkaShareConsumerMetrics() {
+        return kafkaShareConsumerMetrics;
     }
 }
