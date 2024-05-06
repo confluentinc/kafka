@@ -1117,7 +1117,7 @@ class KafkaApis(val requestChannel: RequestChannel,
               }
             })
           }
-          if(!exceptionThrown) {
+          if(!exceptionThrown && acknowledgeBatches.size() > 0) {
             acknowledgeBatchesMap += topicIdPartition -> acknowledgeBatches
           }
         })
@@ -1127,14 +1127,14 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   def handleAcknowledgements (
-                                             request: RequestChannel.Request,
-                                             topicNames : util.Map[Uuid, String],
-                                             sharePartitionManager : SharePartitionManager,
-                                             authorizedTopics: Set[String],
-                                             groupId : String,
-                                             memberId: String,
-                                             areAcknowledgementsPiggyBacked : Boolean,
-                                           ) : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData] = {
+                               request: RequestChannel.Request,
+                               topicNames : util.Map[Uuid, String],
+                               sharePartitionManager : SharePartitionManager,
+                               authorizedTopics: Set[String],
+                               groupId : String,
+                               memberId: String,
+                               areAcknowledgementsPiggyBacked : Boolean,
+                             ) : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData] = {
 
     val requestData : AbstractRequest = if (areAcknowledgementsPiggyBacked) {
       request.body[ShareFetchRequest]
@@ -1438,13 +1438,15 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     val shareFetchData = shareFetchRequest.shareFetchData(topicNames)
     val forgottenTopics = shareFetchRequest.forgottenTopics(topicNames)
+    var cachedTopicPartitions : util.List[TopicIdPartition] = null
 
-    var cachedTopicPartitions : util.List[TopicIdPartition] = new util.ArrayList[TopicIdPartition]
-    try {
-      cachedTopicPartitions = sharePartitionManager.cachedTopicIdPartitionsInShareSession(groupId, Uuid.fromString(memberId))
-    } catch {
+    if (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH) {
+      try {
+        cachedTopicPartitions = sharePartitionManager.cachedTopicIdPartitionsInShareSession(groupId, Uuid.fromString(memberId))
+      } catch {
         // Exception handling is needed when this value is being utilized on receiving FINAL_EPOCH.
         case _: ShareSessionNotFoundException => cachedTopicPartitions = null
+      }
     }
 
     def isAcknowledgeDataPresentInFetchRequest() : Boolean = {
@@ -4644,12 +4646,14 @@ class KafkaApis(val requestChannel: RequestChannel,
       return
     }
 
-    var cachedTopicPartitions : util.List[TopicIdPartition] = new util.ArrayList[TopicIdPartition]
-    try {
-      cachedTopicPartitions = sharePartitionManager.cachedTopicIdPartitionsInShareSession(groupId, Uuid.fromString(memberId))
-    } catch {
-      // Exception handling is needed when this value is being utilized on receiving FINAL_EPOCH.
-      case _: ShareSessionNotFoundException => cachedTopicPartitions = null
+    var cachedTopicPartitions : util.List[TopicIdPartition] = null
+    if (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH)  {
+      try {
+        cachedTopicPartitions = sharePartitionManager.cachedTopicIdPartitionsInShareSession(groupId, Uuid.fromString(memberId))
+      } catch {
+        // Exception handling is needed when this value is being utilized on receiving FINAL_EPOCH.
+        case _: ShareSessionNotFoundException => cachedTopicPartitions = null
+      }
     }
 
     var shareAcknowledgeResponse : ShareAcknowledgeResponse = null
