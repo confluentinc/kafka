@@ -4992,7 +4992,7 @@ class KafkaApisTest extends Logging {
                 setFirstOffset(0).
                 setLastOffset(9).
                 setAcknowledgeType(1).
-                setAcknowledgeTypes(List[java.lang.Byte](1).asJava)).asJava)).asJava)).asJava)
+                setAcknowledgeTypes(List[java.lang.Byte](1.toByte).asJava)).asJava)).asJava)).asJava)
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
@@ -5031,7 +5031,7 @@ class KafkaApisTest extends Logging {
                 setFirstOffset(10).
                 setLastOffset(19).
                 setAcknowledgeType(1).
-                setAcknowledgeTypes(List[java.lang.Byte](1).asJava)).asJava)).asJava)).asJava)
+                setAcknowledgeTypes(List[java.lang.Byte](1.toByte).asJava)).asJava)).asJava)).asJava)
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
