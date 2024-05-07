@@ -18,6 +18,7 @@ package kafka.server;
 
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.message.ShareFetchResponseData.AcquiredRecords;
@@ -62,6 +63,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class SharePartition {
 
     private final static Logger log = LoggerFactory.getLogger(SharePartition.class);
+    /**
+     * invalid member id used to indicate when a record is not acquired by any member.
+     */
+    private final String INVALID_MEMBER_ID = Uuid.ZERO_UUID.toString();
 
     /**
      * The RecordState is used to track the state of a record that has been fetched from the leader.
@@ -509,6 +514,13 @@ public class SharePartition {
                 // the fetched batch in case of subset.
                 for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
                     InFlightBatch inFlightBatch = entry.getValue();
+
+                    if (inFlightBatch.offsetState == null && inFlightBatch.batchMemberId().equals(INVALID_MEMBER_ID)) {
+                        log.debug("The batch is not in the acquired state: {} for share partition: {}-{}",
+                                inFlightBatch, groupId, topicIdPartition);
+                        throwable = new InvalidRecordStateException("The batch cannot be acknowledged. The subset batch is not in the acquired state.");
+                        break;
+                    }
 
                     if (inFlightBatch.offsetState == null && !inFlightBatch.inFlightState.memberId().equals(memberId)) {
                         log.debug("Member {} is not the owner of batch record {} for share partition: {}-{}",
