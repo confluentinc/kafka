@@ -226,8 +226,17 @@ public class SharePartition {
      * The state epoch is used to track the version of the state of the share partition.
      */
     private int stateEpoch;
+    /**
+     * the retry backoff is used to determine the backoff time between retries for write share group state to persister.
+     */
     private final ExponentialBackoff retryBackoff;
+    /**
+     * The max retries is used to determine the maximum number of retries for write share group state to persister.
+     */
     private final int maxRetries;
+    /**
+     * The attempts is used to track the number of retry attempts for write share group state to persister.
+     */
     private int attempts;
 
     SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount,
@@ -1218,7 +1227,7 @@ public class SharePartition {
                     .setGroupId(this.groupId)
                     .setTopicsData(Collections.singletonList(new TopicData<>(topicIdPartition.topicId(),
                         Collections.singletonList(PartitionFactory.newPartitionStateBatchData(
-                            topicIdPartition.partition(), stateEpoch, startOffset, stateBatches))))
+                            topicIdPartition.partition(), ++stateEpoch, startOffset, stateBatches))))
                     ).build()).build()).get();
 
             if (response == null || response.topicsData() == null || response.topicsData().size() != 1) {
