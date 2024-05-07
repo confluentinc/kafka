@@ -76,6 +76,7 @@ import org.apache.kafka.common._
 import org.apache.kafka.common.message.ShareFetchRequestData.{AcknowledgementBatch, ForgottenTopic}
 import org.apache.kafka.common.message.ShareFetchResponseData.{AcquiredRecords, PartitionData, ShareFetchableTopicResponse}
 import org.apache.kafka.coordinator.group.GroupCoordinator
+import org.apache.kafka.coordinator.group.share.ShareCoordinator
 import org.apache.kafka.server.ClientMetricsManager
 import org.apache.kafka.server.authorizer.{Action, AuthorizationResult, Authorizer}
 import org.apache.kafka.server.common.MetadataVersion.{IBP_0_10_2_IV0, IBP_2_2_IV1}
@@ -206,6 +207,7 @@ class KafkaApisTest extends Logging {
       () => new Features(MetadataVersion.latestTesting(), Collections.emptyMap[String, java.lang.Short], 0, raftSupport))
 
     val clientMetricsManagerOpt = if (raftSupport) Some(clientMetricsManager) else None
+    val shareCoordinator: ShareCoordinator = if (raftSupport) mock(classOf[ShareCoordinator]) else null
 
     new KafkaApis(
       requestChannel = requestChannel,
@@ -213,6 +215,7 @@ class KafkaApisTest extends Logging {
       replicaManager = replicaManager,
       groupCoordinator = groupCoordinator,
       txnCoordinator = txnCoordinator,
+      shareCoordinator = shareCoordinator,
       autoTopicCreationManager = autoTopicCreationManager,
       brokerId = brokerId,
       config = config,
@@ -9747,6 +9750,25 @@ class KafkaApisTest extends Logging {
       .setErrorCode(Errors.UNSUPPORTED_VERSION.code)
     val response = verifyNoThrottling[ShareFetchResponse](requestChannelRequest)
     assertEquals(expectedShareFetchResponse, response.data)
+  }
+
+  @Test
+  def testFindShareCoordinatorWithKraft(): Unit = {
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
+    kafkaApis = createKafkaApis(raftSupport = true)
+    val (groupId, topicId, partition) = ("group", Uuid.randomUuid(), 0)
+    val findCoordinatorRequestBuilder =
+      new FindCoordinatorRequest.Builder(
+        new FindCoordinatorRequestData()
+          .setKeyType(CoordinatorType.SHARE.id())
+          .setCoordinatorKeys(asList(groupId + ":" + topicId + ":" + partition)))
+
+    val requestHeader = new RequestHeader(ApiKeys.FIND_COORDINATOR, ApiKeys.FIND_COORDINATOR.latestVersion, clientId, 0)
+    val request = buildRequest(findCoordinatorRequestBuilder.build(requestHeader.apiVersion))
+    kafkaApis.handleFindCoordinatorRequest(request)
+    val response = verifyNoThrottling[FindCoordinatorResponse](request)
+    assertEquals(Errors.COORDINATOR_NOT_AVAILABLE.code, response.data.coordinators.get(0).errorCode)
+    assertEquals(groupId + ":" + topicId + ":" + partition, response.data.coordinators.get(0).key)
   }
 
 //  @Test
