@@ -3644,7 +3644,6 @@ public class SharePartitionTest {
 
         Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(null));
         assertThrows(IllegalStateException.class, () -> sharePartition.isWriteShareGroupStateSuccessful(stateBatches));
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3660,7 +3659,6 @@ public class SharePartitionTest {
         Mockito.when(writeShareGroupStateResult.topicsData()).thenReturn(null);
         Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
         assertThrows(IllegalStateException.class, () -> sharePartition.isWriteShareGroupStateSuccessful(stateBatches));
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3712,7 +3710,6 @@ public class SharePartitionTest {
                         PartitionFactory.newPartitionErrorData(1, Errors.NONE.code())))));
         Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
         assertThrows(IllegalStateException.class, () -> sharePartition.isWriteShareGroupStateSuccessful(stateBatches));
-        assertEquals(6, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3726,7 +3723,6 @@ public class SharePartitionTest {
                 new PersisterStateBatch(11L, 15L, RecordState.ARCHIVED.id, (short) 3));
         Mockito.when(persister.writeState(Mockito.any())).thenReturn(FutureUtils.failedFuture(new RuntimeException("Write exception")));
         assertThrows(IllegalStateException.class, () -> sharePartition.isWriteShareGroupStateSuccessful(stateBatches));
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3744,7 +3740,6 @@ public class SharePartitionTest {
                         PartitionFactory.newPartitionErrorData(0, Errors.NONE.code())))));
         Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
         assertTrue(sharePartition.isWriteShareGroupStateSuccessful(stateBatches));
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3762,7 +3757,6 @@ public class SharePartitionTest {
                         PartitionFactory.newPartitionErrorData(0, Errors.NOT_COORDINATOR.code())))));
         Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
         assertFalse(sharePartition.isWriteShareGroupStateSuccessful(stateBatches));
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3797,8 +3791,6 @@ public class SharePartitionTest {
         // Due to failure in writeShareGroupState, the cached state should not be updated.
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
-
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3838,8 +3830,6 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
-
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3872,8 +3862,6 @@ public class SharePartitionTest {
         // Due to failure in writeShareGroupState, the cached state should not be updated.
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
-
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3932,8 +3920,6 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
-
-        assertEquals(2, sharePartition.stateEpoch());
     }
 
     @Test
@@ -3970,8 +3956,6 @@ public class SharePartitionTest {
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
         assertEquals(0, sharePartition.timer().size());
         assertNull(sharePartition.cachedState().get(5L).acquisitionLockTimeoutTask());
-
-        assertEquals(1, sharePartition.stateEpoch());
     }
 
     @Test

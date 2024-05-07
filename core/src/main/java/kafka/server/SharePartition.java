@@ -1209,7 +1209,7 @@ public class SharePartition {
                     .setGroupId(this.groupId)
                     .setTopicsData(Collections.singletonList(new TopicData<>(topicIdPartition.topicId(),
                         Collections.singletonList(PartitionFactory.newPartitionStateBatchData(
-                            topicIdPartition.partition(), ++stateEpoch, startOffset, stateBatches))))
+                            topicIdPartition.partition(), stateEpoch, startOffset, stateBatches))))
                     ).build()).build()).get();
 
             if (response == null || response.topicsData() == null || response.topicsData().size() != 1) {
