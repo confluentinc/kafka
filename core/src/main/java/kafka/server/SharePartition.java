@@ -69,9 +69,9 @@ public class SharePartition {
 
     private final static Logger log = LoggerFactory.getLogger(SharePartition.class);
     /**
-     * invalid member id used to indicate when a record is not acquired by any member.
+     * empty member id used to indicate when a record is not acquired by any member.
      */
-    private final String INVALID_MEMBER_ID = Uuid.ZERO_UUID.toString();
+    final static String EMPTY_MEMBER_ID = Uuid.ZERO_UUID.toString();
 
     /**
      * The RecordState is used to track the state of a record that has been fetched from the leader.
@@ -537,10 +537,10 @@ public class SharePartition {
                 for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
                     InFlightBatch inFlightBatch = entry.getValue();
 
-                    if (inFlightBatch.offsetState == null && inFlightBatch.batchMemberId().equals(INVALID_MEMBER_ID)) {
+                    if (inFlightBatch.offsetState == null && inFlightBatch.batchMemberId().equals(EMPTY_MEMBER_ID)) {
                         log.debug("The batch is not in the acquired state: {} for share partition: {}-{}",
                                 inFlightBatch, groupId, topicIdPartition);
-                        throwable = new InvalidRecordStateException("The batch cannot be acknowledged. The subset batch is not in the acquired state.");
+                        throwable = new InvalidRecordStateException("The batch cannot be acknowledged. The batch is not in the acquired state.");
                         break;
                     }
 
@@ -594,9 +594,17 @@ public class SharePartition {
                                 // Force the state of the offset to Archived for the gap offset
                                 // irrespectively.
                                 offsetState.getValue().state = RecordState.ARCHIVED;
+                                offsetState.getValue().memberId = EMPTY_MEMBER_ID;
                                 // Cancel and clear the acquisition lock timeout task for the state since it is moved to ARCHIVED state.
                                 offsetState.getValue().cancelAndClearAcquisitionLockTimeoutTask();
                                 continue;
+                            }
+
+                            if (offsetState.getValue().state != RecordState.ACQUIRED) {
+                                log.debug("The offset is not acquired, offset: {} batch: {} for the share"
+                                        + " partition: {}-{}", offsetState.getKey(), inFlightBatch, groupId, topicIdPartition);
+                                throwable = new InvalidRecordStateException("The batch cannot be acknowledged. The offset is not acquired.");
+                                break;
                             }
 
                             // Check if member id is the owner of the offset.
@@ -607,17 +615,11 @@ public class SharePartition {
                                 break;
                             }
 
-                            if (offsetState.getValue().state != RecordState.ACQUIRED) {
-                                log.debug("The offset is not acquired, offset: {} batch: {} for the share"
-                                    + " partition: {}-{}", offsetState.getKey(), inFlightBatch, groupId, topicIdPartition);
-                                throwable = new InvalidRecordStateException("The batch cannot be acknowledged. The offset is not acquired.");
-                                break;
-                            }
-
                             InFlightState updateResult =  offsetState.getValue().startStateTransition(
                                     recordState,
                                     false,
-                                    this.maxDeliveryCount
+                                    this.maxDeliveryCount,
+                                    EMPTY_MEMBER_ID
                             );
                             if (updateResult == null) {
                                 log.debug("Unable to acknowledge records for the offset: {} in batch: {}"
@@ -652,7 +654,8 @@ public class SharePartition {
                     InFlightState updateResult = inFlightBatch.startBatchStateTransition(
                             recordState,
                             false,
-                            this.maxDeliveryCount
+                            this.maxDeliveryCount,
+                            EMPTY_MEMBER_ID
                     );
                     if (updateResult == null) {
                         log.debug("Unable to acknowledge records for the batch: {} with state: {}"
@@ -760,7 +763,7 @@ public class SharePartition {
                             groupId, topicIdPartition);
                     for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
                         // Check if member id is the owner of the offset.
-                        if (!offsetState.getValue().memberId.equals(memberId)) {
+                        if (!offsetState.getValue().memberId.equals(memberId) && !offsetState.getValue().memberId.equals(EMPTY_MEMBER_ID)) {
                             log.debug("Member {} is not the owner of offset: {} in batch: {} for the share"
                                     + " partition: {}-{}", memberId, offsetState.getKey(), inFlightBatch, groupId, topicIdPartition);
                             continue;
@@ -769,7 +772,8 @@ public class SharePartition {
                             InFlightState updateResult = offsetState.getValue().startStateTransition(
                                     recordState,
                                     false,
-                                    this.maxDeliveryCount
+                                    this.maxDeliveryCount,
+                                    EMPTY_MEMBER_ID
                             );
                             if (updateResult == null) {
                                 log.debug("Unable to release records from acquired state for the offset: {} in batch: {}"
@@ -795,7 +799,7 @@ public class SharePartition {
                 }
 
                 // Check if member id is the owner of the batch.
-                if (!inFlightBatch.inFlightState.memberId().equals(memberId)) {
+                if (!inFlightBatch.inFlightState.memberId().equals(memberId) && !inFlightBatch.inFlightState.memberId.equals(EMPTY_MEMBER_ID)) {
                     log.debug("Member {} is not the owner of batch record {} for share partition: {}-{}",
                             memberId, inFlightBatch, groupId, topicIdPartition);
                     continue;
@@ -808,7 +812,8 @@ public class SharePartition {
                     InFlightState updateResult = inFlightBatch.startBatchStateTransition(
                             recordState,
                             false,
-                            this.maxDeliveryCount
+                            this.maxDeliveryCount,
+                            EMPTY_MEMBER_ID
                     );
                     if (updateResult == null) {
                         log.debug("Unable to release records from acquired state for the batch: {}"
@@ -1365,11 +1370,12 @@ public class SharePartition {
             return inFlightState.tryUpdateState(newState, incrementDeliveryCount);
         }
 
-        private InFlightState startBatchStateTransition(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount) {
+        private InFlightState startBatchStateTransition(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount,
+                                                        String newMemberId) {
             if (inFlightState == null) {
                 throw new IllegalStateException("The batch state update is not available as the offset state is maintained");
             }
-            return inFlightState.startStateTransition(newState, incrementDeliveryCount, maxDeliveryCount);
+            return inFlightState.startStateTransition(newState, incrementDeliveryCount, maxDeliveryCount, newMemberId);
         }
 
         private void addGapOffsets(Long gapOffset) {
@@ -1534,7 +1540,8 @@ public class SharePartition {
             }
         }
 
-        private InFlightState startStateTransition(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount) {
+        private InFlightState startStateTransition(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount,
+                                                   String newMemberId) {
             try {
                 rollbackState = new InFlightState(state, deliveryCount, memberId, acquisitionLockTimeoutTask);
                 if (newState == RecordState.AVAILABLE && deliveryCount >= maxDeliveryCount) {
@@ -1544,6 +1551,7 @@ public class SharePartition {
                 if (incrementDeliveryCount && newState != RecordState.ARCHIVED) {
                     deliveryCount++;
                 }
+                memberId = newMemberId;
                 return this;
             } catch (IllegalStateException e) {
                 log.info("Failed to start state transition of the records", e);
