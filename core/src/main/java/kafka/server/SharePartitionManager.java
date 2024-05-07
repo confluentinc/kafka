@@ -163,16 +163,16 @@ public class SharePartitionManager implements AutoCloseable {
                     // 2. If condition 1 is not true, then that means we will be fetching new records which haven't been cached before.
                     //    In this case it is necessary to check if the partition limit for in flight messages has been reached.
                     if (sharePartition.nextFetchOffset() != (sharePartition.endOffset() + 1) || sharePartition.canAcquireMore()) {
-                    topicPartitionData.put(
-                        topicIdPartition,
-                        new FetchRequest.PartitionData(
-                                topicIdPartition.topicId(),
-                                sharePartition.nextFetchOffset(),
-                                0,
-                                partitionMaxBytes,
-                                Optional.empty()
-                        )
-                    );
+                        topicPartitionData.put(
+                            topicIdPartition,
+                            new FetchRequest.PartitionData(
+                                    topicIdPartition.topicId(),
+                                    sharePartition.nextFetchOffset(),
+                                    0,
+                                    partitionMaxBytes,
+                                    Optional.empty()
+                            )
+                        );
                     } else {
                         sharePartition.releaseFetchLock();
                         log.info("Record lock partition limit exceeded for SharePartition with key {}, " +
