@@ -727,6 +727,7 @@ public class SharePartition {
         Throwable throwable = null;
         lock.writeLock().lock();
         List<InFlightState> updatedStates = new ArrayList<>();
+        List<PersisterStateBatch> stateBatches = new ArrayList<>();
         try {
             long localNextFetchOffset = nextFetchOffset;
             RecordState recordState = RecordState.AVAILABLE;
@@ -760,6 +761,8 @@ public class SharePartition {
                             }
                             // Successfully updated the state of the offset.
                             updatedStates.add(updateResult);
+                            stateBatches.add(new PersisterStateBatch(offsetState.getKey(), offsetState.getKey(),
+                                    updateResult.state.id, (short) updateResult.deliveryCount));
                             // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
                             // This should not change the nextFetchOffset because the record is not available for acquisition
                             if (updateResult.state != RecordState.ARCHIVED) {
@@ -796,6 +799,8 @@ public class SharePartition {
                     }
                     // Successfully updated the state of the batch.
                     updatedStates.add(updateResult);
+                    stateBatches.add(new PersisterStateBatch(inFlightBatch.firstOffset, inFlightBatch.lastOffset,
+                            updateResult.state.id, (short) updateResult.deliveryCount));
                     // If the maxDeliveryCount limit has been exceeded, the record will be transitioned to ARCHIVED state.
                     // This should not change the nextFetchOffset because the record is not available for acquisition
                     if (updateResult.state != RecordState.ARCHIVED) {
@@ -804,7 +809,7 @@ public class SharePartition {
                 }
             }
 
-            if (throwable != null) {
+            if (throwable != null || !isWriteShareGroupStateSuccessful(stateBatches)) {
                 log.debug("Release records from acquired state failed for share partition, rollback any changed state"
                         + " for the share partition: {}-{}", groupId, topicIdPartition);
                 updatedStates.forEach(state -> state.completeStateTransition(false));
@@ -1146,6 +1151,10 @@ public class SharePartition {
                                 log.debug("Unable to release acquisition lock on timeout for the batch: {}"
                                         + " for the share partition: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
                             } else {
+                                // TODO: In case of failure to write share group state, how should the acquisition lock behave needs to be decided
+                                isWriteShareGroupStateSuccessful(Collections.singletonList(
+                                    new PersisterStateBatch(inFlightBatch.firstOffset(), inFlightBatch.lastOffset(),
+                                        updateResult.state.id, (short) updateResult.deliveryCount)));
                                 // Update acquisition lock timeout task for the batch to null since it is completed now.
                                 updateResult.updateAcquisitionLockTimeoutTask(null);
                                 localNextFetchOffset = Math.min(entry.getKey(), localNextFetchOffset);
@@ -1180,6 +1189,10 @@ public class SharePartition {
                                         groupId, memberId, topicIdPartition);
                                 continue;
                             }
+                            // TODO: In case of failure to write share group state, how should the acquisition lock behave needs to be decided
+                            isWriteShareGroupStateSuccessful(Collections.singletonList(
+                                new PersisterStateBatch(offsetState.getKey(), offsetState.getKey(),
+                                    updateResult.state.id, (short) updateResult.deliveryCount)));
                             // Update acquisition lock timeout task for the offset to null since it is completed now.
                             updateResult.updateAcquisitionLockTimeoutTask(null);
                             localNextFetchOffset = Math.min(offsetState.getKey(), localNextFetchOffset);
@@ -1196,7 +1209,6 @@ public class SharePartition {
 
     // Visible for testing
      boolean isWriteShareGroupStateSuccessful(List<PersisterStateBatch> stateBatches) {
-        boolean isWriteSuccessful = false;
         try {
             // Persister class can be null during active development and shall be driven by temporary config.
             if (persister == null)
@@ -1244,15 +1256,14 @@ public class SharePartition {
                     log.error("Failed to write the share group state for share partition: {}-{} due to non-retryable exception",
                             groupId, topicIdPartition, exception);
                 }
-                return isWriteSuccessful;
+                return false;
             }
-            isWriteSuccessful = true;
+            return true;
         } catch (InterruptedException | ExecutionException e) {
             log.error("Failed to write the share group state for share partition: {}-{}", groupId, topicIdPartition, e);
             throw new IllegalStateException(String.format("Failed to write the share group state for share partition %s-%s",
                     groupId, topicIdPartition), e);
         }
-        return isWriteSuccessful;
     }
 
     // Visible for testing.

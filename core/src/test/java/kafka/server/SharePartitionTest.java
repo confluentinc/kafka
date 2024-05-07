@@ -3818,6 +3818,169 @@ public class SharePartitionTest {
         assertEquals(0, sharePartition.attempts());
     }
 
+    @Test
+    public void testAcknowledgeBatchWithWriteShareGroupStateFailure() {
+        Persister persister = Mockito.mock(Persister.class);
+        mockPersisterReadStateMethod(persister);
+        SharePartition sharePartition = SharePartitionBuilder.builder().withPersister(persister).build();
+
+        // Mock persister writeState method so that sharePartition.isWriteShareGroupStateSuccessful() returns false.
+        WriteShareGroupStateResult writeShareGroupStateResult = Mockito.mock(WriteShareGroupStateResult.class);
+        Mockito.when(writeShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
+                new TopicData<>(TOPIC_ID_PARTITION.topicId(), Collections.singletonList(
+                        PartitionFactory.newPartitionErrorData(0, Errors.GROUP_ID_NOT_FOUND.code())))));
+        Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
+
+        MemoryRecords records = memoryRecords(10, 5);
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
+                MEMBER_ID,
+                Collections.singletonList(new AcknowledgementBatch(5, 14, null, AcknowledgeType.ACCEPT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        // Due to failure in writeShareGroupState, the cached state should not be updated.
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+    }
+
+    @Test
+    public void testAcknowledgeOffsetWithWriteShareGroupStateFailure() {
+        Persister persister = Mockito.mock(Persister.class);
+        mockPersisterReadStateMethod(persister);
+        SharePartition sharePartition = SharePartitionBuilder.builder().withPersister(persister).build();
+
+        // Mock persister writeState method so that sharePartition.isWriteShareGroupStateSuccessful() returns false.
+        WriteShareGroupStateResult writeShareGroupStateResult = Mockito.mock(WriteShareGroupStateResult.class);
+        Mockito.when(writeShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
+                new TopicData<>(TOPIC_ID_PARTITION.topicId(), Collections.singletonList(
+                        PartitionFactory.newPartitionErrorData(0, Errors.GROUP_ID_NOT_FOUND.code())))));
+        Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
+
+        MemoryRecords records = memoryRecords(6, 5);
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
+                MEMBER_ID,
+                Collections.singletonList(new AcknowledgementBatch(8, 10, null, AcknowledgeType.REJECT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        // Due to failure in writeShareGroupState, the cached state should not be updated.
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(5L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(6L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(7L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
+    }
+
+    @Test
+    public void testReleaseBatchWithWriteShareGroupStateFailure() {
+        Persister persister = Mockito.mock(Persister.class);
+        mockPersisterReadStateMethod(persister);
+        SharePartition sharePartition = SharePartitionBuilder.builder().withPersister(persister).build();
+
+        // Mock persister writeState method so that sharePartition.isWriteShareGroupStateSuccessful() returns false.
+        WriteShareGroupStateResult writeShareGroupStateResult = Mockito.mock(WriteShareGroupStateResult.class);
+        Mockito.when(writeShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
+                new TopicData<>(TOPIC_ID_PARTITION.topicId(), Collections.singletonList(
+                        PartitionFactory.newPartitionErrorData(0, Errors.GROUP_ID_NOT_FOUND.code())))));
+        Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
+
+        MemoryRecords records = memoryRecords(10, 5);
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+
+        CompletableFuture<Optional<Throwable>> releaseResult = sharePartition.releaseAcquiredRecords(MEMBER_ID);
+        assertFalse(releaseResult.isCompletedExceptionally());
+        assertFalse(releaseResult.join().isPresent());
+
+        // Due to failure in writeShareGroupState, the cached state should not be updated.
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+    }
+
+    @Test
+    public void testReleaseOffsetWithWriteShareGroupStateFailure() {
+        Persister persister = Mockito.mock(Persister.class);
+        mockPersisterReadStateMethod(persister);
+        SharePartition sharePartition = SharePartitionBuilder.builder().withPersister(persister).build();
+
+        // Mock persister writeState method so that sharePartition.isWriteShareGroupStateSuccessful() returns true for acknowledge to pass.
+        WriteShareGroupStateResult writeShareGroupStateResult = Mockito.mock(WriteShareGroupStateResult.class);
+        Mockito.when(writeShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
+                new TopicData<>(TOPIC_ID_PARTITION.topicId(), Collections.singletonList(
+                        PartitionFactory.newPartitionErrorData(0, Errors.NONE.code())))));
+        Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
+
+        MemoryRecords records = memoryRecords(6, 5);
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
+                MEMBER_ID,
+                Collections.singletonList(new AcknowledgementBatch(8, 9, null, AcknowledgeType.ACCEPT)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        // Acknowledging the records succeeded.
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(5L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(6L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(7L).state());
+        assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
+        assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
+
+        // Mock persister writeState method so that sharePartition.isWriteShareGroupStateSuccessful() returns false.
+        Mockito.when(writeShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
+                new TopicData<>(TOPIC_ID_PARTITION.topicId(), Collections.singletonList(
+                        PartitionFactory.newPartitionErrorData(0, Errors.GROUP_ID_NOT_FOUND.code())))));
+        Mockito.when(persister.writeState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(writeShareGroupStateResult));
+
+        CompletableFuture<Optional<Throwable>> releaseResult = sharePartition.releaseAcquiredRecords(MEMBER_ID);
+        assertFalse(releaseResult.isCompletedExceptionally());
+        assertFalse(releaseResult.join().isPresent());
+
+        // Due to failure in writeShareGroupState, the cached state should not be updated.
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(5L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(6L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(7L).state());
+        assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
+        assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
+    }
+
     private MemoryRecords memoryRecords(int numOfRecords) {
         return memoryRecords(numOfRecords, 0);
     }
