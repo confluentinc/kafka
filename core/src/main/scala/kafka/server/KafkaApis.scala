@@ -1467,8 +1467,14 @@ class KafkaApis(val requestChannel: RequestChannel,
   def handleShareFetchRequest(request: RequestChannel.Request): Unit = {
     val shareFetchRequest = request.body[ShareFetchRequest]
 
-    if (!config.isShareGroupEnabled) {
-      // The API is not supported when the configuration `group.share.enable` has not been set
+    if (!config.isNewGroupCoordinatorEnabled) {
+      // The API is not supported by the "old" group coordinator (the default). If the
+      // new one is not enabled, we fail directly here.
+      requestHelper.sendMaybeThrottle(request, shareFetchRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
+      CompletableFuture.completedFuture[Unit](())
+      return
+    } else if (!config.isShareGroupEnabled) {
+      // The API is not supported when the "share" rebalance protocol has not been set explicitly
       requestHelper.sendMaybeThrottle(request, shareFetchRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
       return
@@ -4436,8 +4442,13 @@ class KafkaApis(val requestChannel: RequestChannel,
   def handleShareGroupHeartbeat(request: RequestChannel.Request): CompletableFuture[Unit] = {
     val shareGroupHeartbeatRequest = request.body[ShareGroupHeartbeatRequest]
 
-    if (!config.isShareGroupEnabled) {
-      // The API is not supported when the configuration `group.share.enable` has not been set explicitly
+    if (!config.isNewGroupCoordinatorEnabled) {
+      // The API is not supported by the "old" group coordinator (the default). If the
+      // new one is not enabled, we fail directly here.
+      requestHelper.sendMaybeThrottle(request, shareGroupHeartbeatRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
+      CompletableFuture.completedFuture[Unit](())
+    } else if (!config.isShareGroupEnabled) {
+      // The API is not supported when the "share" rebalance protocol has not been set explicitly
       requestHelper.sendMaybeThrottle(request, shareGroupHeartbeatRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
     } else if (!authHelper.authorize(request.context, READ, GROUP, shareGroupHeartbeatRequest.data.groupId)) {
@@ -4509,10 +4520,10 @@ class KafkaApis(val requestChannel: RequestChannel,
     if (!config.isNewGroupCoordinatorEnabled) {
       // The API is not supported by the "old" group coordinator (the default). If the
       // new one is not enabled, we fail directly here. (KIP-848)
-      requestHelper.sendMaybeThrottle(request, request.body[ShareGroupDescribeRequest].getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
+      requestHelper.sendMaybeThrottle(request, shareGroupDescribeRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
     } else if (!config.isShareGroupEnabled) {
-      // The API is not supported when the configuration `group.share.enable` has not been set explicitly
+      // The API is not supported when the "share" rebalance protocol has not been set explicitly
       requestHelper.sendMaybeThrottle(request, shareGroupDescribeRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
     } else {
@@ -4549,7 +4560,6 @@ class KafkaApis(val requestChannel: RequestChannel,
         }
       }
     }
-
   }
 
   // TODO: Release acquired record functionality (which is added in share fetch request handling) should be added. Can't add it
@@ -4557,8 +4567,14 @@ class KafkaApis(val requestChannel: RequestChannel,
   def handleShareAcknowledgeRequest(request: RequestChannel.Request): Unit = {
     val shareAcknowledgeRequest = request.body[ShareAcknowledgeRequest]
 
-    if (!config.isShareGroupEnabled) {
-      // The API is not supported when the configuration `group.share.enable` has not been set
+    if (!config.isNewGroupCoordinatorEnabled) {
+      // The API is not supported by the "old" group coordinator (the default). If the
+      // new one is not enabled, we fail directly here. (KIP-848)
+      requestHelper.sendMaybeThrottle(request, shareAcknowledgeRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
+      CompletableFuture.completedFuture[Unit](())
+      return
+    } else if (!config.isShareGroupEnabled) {
+      // The API is not supported when the "share" rebalance protocol has not been set explicitly
       requestHelper.sendMaybeThrottle(request, shareAcknowledgeRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       CompletableFuture.completedFuture[Unit](())
       return
