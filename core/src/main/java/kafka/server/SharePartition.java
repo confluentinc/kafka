@@ -20,11 +20,9 @@ import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
-import org.apache.kafka.common.errors.RetriableException;
 import org.apache.kafka.common.message.ShareFetchResponseData.AcquiredRecords;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.RecordBatch;
-import org.apache.kafka.common.utils.ExponentialBackoff;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.group.share.GroupTopicPartitionData;
 import org.apache.kafka.server.group.share.PartitionAllData;
@@ -226,18 +224,6 @@ public class SharePartition {
      * The state epoch is used to track the version of the state of the share partition.
      */
     private int stateEpoch;
-    /**
-     * the retry backoff is used to determine the backoff time between retries for write share group state to persister.
-     */
-    private final ExponentialBackoff retryBackoff;
-    /**
-     * The max retries is used to determine the maximum number of retries for write share group state to persister.
-     */
-    private final int maxRetries;
-    /**
-     * The attempts is used to track the number of retry attempts for write share group state to persister.
-     */
-    private int attempts;
 
     SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount,
                    int recordLockDurationMs, Timer timer, Time time, Persister persister) {
@@ -255,10 +241,6 @@ public class SharePartition {
         this.persister = persister;
         // Initialize the partition.
         initialize();
-        // TODO: Initialize the retry backoff and max retries with configs coming from BrokerServer.
-        this.retryBackoff = new ExponentialBackoff(100L, 2, 1000L, 0.2);
-        this.maxRetries = 10;
-        this.attempts = 0;
     }
 
     /**
@@ -1160,7 +1142,7 @@ public class SharePartition {
                                 log.debug("Unable to release acquisition lock on timeout for the batch: {}"
                                         + " for the share partition: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
                             } else {
-                                // TODO: In case of failure to write share group state, how should the acquisition lock behave needs to be decided
+                                // Even if write share group state RPC call fails, we will still go ahead with the state transition.
                                 isWriteShareGroupStateSuccessful(Collections.singletonList(
                                     new PersisterStateBatch(inFlightBatch.firstOffset(), inFlightBatch.lastOffset(),
                                         updateResult.state.id, (short) updateResult.deliveryCount)));
@@ -1198,7 +1180,7 @@ public class SharePartition {
                                         groupId, memberId, topicIdPartition);
                                 continue;
                             }
-                            // TODO: In case of failure to write share group state, how should the acquisition lock behave needs to be decided
+                            // Even if write share group state RPC call fails, we will still go ahead with the state transition.
                             isWriteShareGroupStateSuccessful(Collections.singletonList(
                                 new PersisterStateBatch(offsetState.getKey(), offsetState.getKey(),
                                     updateResult.state.id, (short) updateResult.deliveryCount)));
@@ -1248,23 +1230,9 @@ public class SharePartition {
 
             PartitionErrorData partitionData = state.partitions().get(0);
             if (partitionData.errorCode() != Errors.NONE.code()) {
-                log.debug("Failed to write the share group state for share partition: {}-{}. Error code: {}",
-                        groupId, topicIdPartition, partitionData.errorCode());
                 Exception exception = Errors.forCode(partitionData.errorCode()).exception();
-                if (exception instanceof RetriableException) {
-                    if (attempts < maxRetries) {
-                        log.debug("Retrying to write the share group state for share partition, {}-{}, attempt: {}", groupId, topicIdPartition,
-                                ++attempts);
-                        time.sleep(retryBackoff.backoff(attempts));
-                        return isWriteShareGroupStateSuccessful(stateBatches);
-                    } else {
-                        log.error("Failed to write the share group state for share partition: {}-{} after reaching max retries: {} for exception",
-                                groupId, topicIdPartition, attempts, exception);
-                    }
-                } else {
-                    log.error("Failed to write the share group state for share partition: {}-{} due to non-retryable exception",
-                            groupId, topicIdPartition, exception);
-                }
+                log.error("Failed to write the share group state for share partition: {}-{} due to exception",
+                        groupId, topicIdPartition, exception);
                 return false;
             }
             return true;
@@ -1273,11 +1241,6 @@ public class SharePartition {
             throw new IllegalStateException(String.format("Failed to write the share group state for share partition %s-%s",
                     groupId, topicIdPartition), e);
         }
-    }
-
-    // Visible for testing.
-    int attempts() {
-        return attempts;
     }
 
     // Visible for testing. Should only be used for testing purposes.
