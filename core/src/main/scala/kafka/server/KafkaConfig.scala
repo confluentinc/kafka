@@ -1739,6 +1739,14 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
       warn(s"The new '${GroupType.CONSUMER}' rebalance protocol is enabled along with the new group coordinator. " +
         "This is part of the early access of KIP-848 and MUST NOT be used in production.")
     }
+    if (protocols.contains(GroupType.SHARE)) {
+      // Once the new group coordinator is always there, this requirement will disappear.
+      if (!protocols.contains(GroupType.CONSUMER)) {
+        throw new ConfigException(s"Enabling the '${GroupType.SHARE}' rebalance protocol requires '${GroupType.CONSUMER}' to be enabled also.")
+      }
+      warn(s"Share groups and the new '${GroupType.SHARE}' rebalance protocol are enabled. " +
+        "This is part of the early access of KIP-932 and MUST NOT be use in production.")
+    }
     protocols
   }
   // The new group coordinator is enabled in two cases: 1) The internal configuration to enable
@@ -1757,8 +1765,11 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val consumerGroupMaxSize = getInt(KafkaConfig.ConsumerGroupMaxSizeProp)
   val consumerGroupAssignors = getConfiguredInstances(KafkaConfig.ConsumerGroupAssignorsProp, classOf[ConsumerGroupPartitionAssignor])
 
-  /** Share Group Configurations **/
-  val isShareGroupEnabled = getBoolean(KafkaConfig.ShareGroupEnableProp)
+  /** Share group configuration **/
+  // Share groups are enabled in two cases: 1) The internal configuration to enable it is
+  // explicitly set; or 2) the share rebalance protocol is enabled.
+  val isShareGroupEnabled = getBoolean(KafkaConfig.ShareGroupEnableProp) ||
+    groupCoordinatorRebalanceProtocols.contains(GroupType.SHARE)
   val shareGroupPartitionMaxRecordLocks = getInt(KafkaConfig.ShareGroupPartitionMaxRecordLocksProp)
   val shareGroupDeliveryCountLimit = getInt(KafkaConfig.ShareGroupDeliveryCountLimitProp)
   val shareGroupMaxGroups = getShort(KafkaConfig.ShareGroupMaxGroupsProp)
