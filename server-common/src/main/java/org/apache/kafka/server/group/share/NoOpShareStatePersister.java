@@ -17,7 +17,6 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.protocol.Errors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +38,7 @@ public class NoOpShareStatePersister implements Persister {
     List<TopicData<PartitionErrorData>> resultArgs = new ArrayList<>();
     for (TopicData<PartitionStateData> topicData : reqData.topicsData()) {
       resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream()
-          .map(partStateData -> PartitionFactory.newPartitionErrorData(partStateData.partition(), Errors.NONE.code()))
+          .map(partStateData -> PartitionFactory.newPartitionErrorData(partStateData.partition(), PartitionFactory.DEFAULT_ERROR_CODE))
           .collect(Collectors.toList())));
     }
     return CompletableFuture.completedFuture(new InitializeShareGroupStateResult.Builder().setTopicsData(resultArgs).build());
@@ -48,8 +47,18 @@ public class NoOpShareStatePersister implements Persister {
   @Override
   public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) {
     banner("readState");
-    // return empty list
-    return CompletableFuture.completedFuture(new ReadShareGroupStateResult.Builder().setTopicsData(Collections.emptyList()).build());
+    GroupTopicPartitionData<PartitionIdData> reqData = request.groupTopicPartitionData();
+    List<TopicData<PartitionAllData>> resultArgs = new ArrayList<>();
+    // we will fetch topic and partition info from the request and
+    // return valid but default response (keep partition id and topic from request but initialize other
+    // values as default).
+    for (TopicData<PartitionIdData> topicData : reqData.topicsData()) {
+      resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream().
+          map(partitionIdData -> PartitionFactory.newPartitionAllData(
+              partitionIdData.partition(), PartitionFactory.DEFAULT_STATE_EPOCH, PartitionFactory.DEFAULT_START_OFFSET, PartitionFactory.DEFAULT_ERROR_CODE, Collections.emptyList()))
+          .collect(Collectors.toList())));
+    }
+    return CompletableFuture.completedFuture(new ReadShareGroupStateResult.Builder().setTopicsData(resultArgs).build());
   }
 
   @Override
@@ -59,7 +68,7 @@ public class NoOpShareStatePersister implements Persister {
     List<TopicData<PartitionErrorData>> resultArgs = new ArrayList<>();
     for (TopicData<PartitionStateBatchData> topicData : reqData.topicsData()) {
       resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream()
-          .map(batch -> PartitionFactory.newPartitionErrorData(batch.partition(), Errors.NONE.code()))
+          .map(batch -> PartitionFactory.newPartitionErrorData(batch.partition(), PartitionFactory.DEFAULT_ERROR_CODE))
           .collect(Collectors.toList())));
     }
     return CompletableFuture.completedFuture(new WriteShareGroupStateResult.Builder().setTopicsData(resultArgs).build());
@@ -72,7 +81,7 @@ public class NoOpShareStatePersister implements Persister {
     List<TopicData<PartitionErrorData>> resultArgs = new ArrayList<>();
     for (TopicData<PartitionIdData> topicData : reqData.topicsData()) {
       resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream()
-          .map(batch -> PartitionFactory.newPartitionErrorData(batch.partition(), Errors.NONE.code()))
+          .map(batch -> PartitionFactory.newPartitionErrorData(batch.partition(), PartitionFactory.DEFAULT_ERROR_CODE))
           .collect(Collectors.toList())));
     }
     return CompletableFuture.completedFuture(new DeleteShareGroupStateResult.Builder().setTopicsData(resultArgs).build());
@@ -81,9 +90,18 @@ public class NoOpShareStatePersister implements Persister {
   @Override
   public CompletableFuture<ReadShareGroupOffsetsStateResult> readOffsets(ReadShareGroupOffsetsStateParameters request) {
     banner("readOffsets");
+    GroupTopicPartitionData<PartitionIdData> reqData = request.groupTopicPartitionData();
     List<TopicData<PartitionStateErrorData>> resultArgs = new ArrayList<>();
-    // empty list
-    return CompletableFuture.completedFuture(new ReadShareGroupOffsetsStateResult.Builder().setTopicsData(Collections.emptyList()).build());
+    // we will fetch topic and partition info from the request and
+    // return valid but default response (keep partition id and topic from request but initialize other
+    // values as default).
+    for (TopicData<PartitionIdData> topicData : reqData.topicsData()) {
+      resultArgs.add(new TopicData<>(topicData.topicId(), topicData.partitions().stream().
+          map(partitionIdData -> PartitionFactory.newPartitionStateErrorData(
+              partitionIdData.partition(), PartitionFactory.DEFAULT_STATE_EPOCH, PartitionFactory.DEFAULT_START_OFFSET, PartitionFactory.DEFAULT_ERROR_CODE))
+          .collect(Collectors.toList())));
+    }
+    return CompletableFuture.completedFuture(new ReadShareGroupOffsetsStateResult.Builder().setTopicsData(resultArgs).build());
   }
 
   private static void banner(String method) {
