@@ -82,7 +82,7 @@ public class ShareHeartbeatRequestManagerTest {
     private final int maxPollIntervalMs = DEFAULT_MAX_POLL_INTERVAL_MS;
     private final long retryBackoffMaxMs = DEFAULT_RETRY_BACKOFF_MAX_MS;
     private static final String DEFAULT_GROUP_ID = "groupId";
-    private static final String CONSUMER_COORDINATOR_METRICS = "consumer-coordinator-metrics";
+    private static final String SHARE_CONSUMER_COORDINATOR_METRICS = "share-consumer-coordinator-metrics";
 
     private ShareConsumerTestBuilder testBuilder;
     private Time time;
@@ -774,7 +774,7 @@ public class ShareHeartbeatRequestManagerTest {
     }
 
     private KafkaMetric getMetric(final String name) {
-        return metrics.metrics().get(metrics.metricName(name, CONSUMER_COORDINATOR_METRICS));
+        return metrics.metrics().get(metrics.metricName(name, SHARE_CONSUMER_COORDINATOR_METRICS));
     }
 
     private ShareHeartbeatRequestManager createHeartbeatRequestManager(
