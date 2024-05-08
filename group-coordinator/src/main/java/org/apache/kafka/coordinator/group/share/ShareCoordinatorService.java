@@ -24,10 +24,11 @@ import org.apache.kafka.server.record.BrokerCompressionType;
 import java.util.Properties;
 
 public class ShareCoordinatorService implements ShareCoordinator {
-  private final int numPartitions = 50;
+  private final int numPartitions;
   private final ShareCoordinatorConfig config;
 
   public ShareCoordinatorService(ShareCoordinatorConfig config) {
+    this.numPartitions = 50;  //todo smjn: this should be configurable
     this.config = config;
   }
 
