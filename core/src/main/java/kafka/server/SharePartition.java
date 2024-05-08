@@ -1361,11 +1361,11 @@ public class SharePartition {
         @Override
         public String toString() {
             return "InFlightBatch(" +
-                ", firstOffset=" + firstOffset +
+                " firstOffset=" + firstOffset +
                 ", lastOffset=" + lastOffset +
                 ", inFlightState=" + inFlightState +
-                ", gapOffsets=" + ((gapOffsets == null) ? "" : gapOffsets) +
-                ", offsetState=" + ((offsetState == null) ? "" : offsetState) +
+                ", gapOffsets=" + ((gapOffsets == null) ? "null" : gapOffsets) +
+                ", offsetState=" + ((offsetState == null) ? "null" : offsetState) +
                 ")";
         }
     }
@@ -1502,7 +1502,7 @@ public class SharePartition {
         public String toString() {
             return "InFlightState(" +
                 " state=" + state.toString() +
-                ", deliveryCount=" + ((deliveryCount == 0) ? "" : ("(" + deliveryCount + ")")) +
+                ", deliveryCount=" + deliveryCount +
                 ", memberId=" + memberId +
                 ")";
         }
