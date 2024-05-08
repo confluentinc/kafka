@@ -269,6 +269,10 @@ object KafkaConfig {
   val ShareGroupMaxRecordLockDurationMsProp = "group.share.max.record.lock.duration.ms"
   val ShareGroupAssignorsProp = "group.share.assignors"
   val ShareGroupPersisterClassNameProp = "group.share.persister.class.name"
+  val ShareGroupStateTopicPartitionsProp = "group.share.state.topic.num.partitions"
+  val ShareGroupStateTopicReplicationFactorProp = "group.share.state.topic.replication.factor"
+  val ShareGroupStateTopicSegmentBytesProp = "group.share.state.topic.segment.bytes"
+
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeProp = "offset.metadata.max.bytes"
@@ -714,6 +718,9 @@ object KafkaConfig {
   val ShareGroupAssignorsDoc = "The server-side assignors as a list of full class names. The first one in the list is considered as the default assignor to be used in the case where the share group does not specify an assignor."
   val ShareGroupPersisterClassNameDoc = "The class name of share persister for share group. The class should implement " +
     "the <code>org.apache.kafka.server.group.share.Persister</code> interface."
+  val ShareGroupStateTopicPartitionsDoc = "Number of partitions for the internal share group state topic."
+  val ShareGroupStateTopicReplicationFactorDoc = "Replication factor for the share group state internal topic."
+  val ShareGroupStateTopicSegmentBytesDoc = "The share group state topic segment bytes should be kept relatively small in order to facilitate faster log compaction and cache loads."
 
   /** ********* Offset management configuration ***********/
   val OffsetMetadataMaxSizeDoc = "The maximum size for a metadata entry associated with an offset commit."
@@ -1102,6 +1109,9 @@ object KafkaConfig {
       .define(ShareGroupMaxSizeProp, SHORT, Defaults.SHARE_GROUP_MAX_SIZE, between(10, 1000), MEDIUM, ShareGroupMaxSizeDoc)
       .define(ShareGroupAssignorsProp, LIST, Defaults.SHARE_GROUP_ASSIGNORS, null, MEDIUM, ShareGroupAssignorsDoc)
       .defineInternal(ShareGroupPersisterClassNameProp, STRING, Defaults.SHARE_GROUP_PERSISTER_CLASS_NAME, new ConfigDef.NonNullValidator(), MEDIUM, ShareGroupPersisterClassNameDoc)
+      .defineInternal(ShareGroupStateTopicReplicationFactorProp, SHORT, Defaults.SHARE_GROUP_STATE_TOPIC_REPLICATION_FACTOR, atLeast(1), HIGH, ShareGroupStateTopicReplicationFactorDoc)
+      .defineInternal(ShareGroupStateTopicPartitionsProp, INT, Defaults.SHARE_GROUP_STATE_TOPIC_PARTITIONS, atLeast(1), HIGH, ShareGroupStateTopicPartitionsDoc)
+      .defineInternal(ShareGroupStateTopicSegmentBytesProp, INT, Defaults.SHARE_GROUP_STATE_TOPIC_SEGMENT_BYTES, atLeast(1), HIGH, ShareGroupStateTopicPartitionsDoc)
 
       /** ********* Offset management configuration ***********/
       .define(OffsetMetadataMaxSizeProp, INT, Defaults.OFFSET_METADATA_MAX_SIZE, HIGH, OffsetMetadataMaxSizeDoc)
@@ -1772,6 +1782,9 @@ class KafkaConfig private(doLog: Boolean, val props: java.util.Map[_, _], dynami
   val shareGroupRecordLockDurationMs = getInt(KafkaConfig.ShareGroupRecordLockDurationMsProp)
   val shareGroupMaxRecordLockDurationMs = getInt(KafkaConfig.ShareGroupMaxRecordLockDurationMsProp)
   val shareGroupPersisterClassName = getString(KafkaConfig.ShareGroupPersisterClassNameProp)
+  val shareGroupStateTopicPartitions = getInt(KafkaConfig.ShareGroupStateTopicPartitionsProp)
+  val shareGroupStateReplicationFactor = getShort(KafkaConfig.ShareGroupStateTopicReplicationFactorProp)
+  val shareGroupStateSegmentBytes = getInt(KafkaConfig.ShareGroupStateTopicSegmentBytesProp)
 
   /** ********* Offset management configuration ***********/
   val offsetMetadataMaxSize = getInt(KafkaConfig.OffsetMetadataMaxSizeProp)
