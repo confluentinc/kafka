@@ -77,8 +77,7 @@ abstract class IntegrationTestHarness extends KafkaServerTestHarness {
     }
 
     if (isShareGroupEnabled()) {
-      cfgs.foreach(_.setProperty(KafkaConfig.ShareGroupEnableProp, "true"))
-      cfgs.foreach(_.setProperty(KafkaConfig.GroupCoordinatorRebalanceProtocolsProp, "classic,consumer"))
+      cfgs.foreach(_.setProperty(KafkaConfig.GroupCoordinatorRebalanceProtocolsProp, "classic,consumer,share"))
       cfgs.foreach(_.setProperty(KafkaConfig.UnstableApiVersionsEnableProp, "true"))
     }
 
