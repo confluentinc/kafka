@@ -869,11 +869,6 @@ public class SharePartition {
 
             List<PersisterStateBatch> stateBatches = partitionData.stateBatches();
             for (PersisterStateBatch stateBatch : stateBatches) {
-                // TODO: Fix memberId passed as when messages are released then the member id should be
-                //  either null or blank. Though to prevent NPE passed blank, maybe keep memberId
-                //  as Optional<String> in the InFlightState. Also the check in acknowledgment
-                //  happens for memberId prior state hence in Available state with blank/null
-                //  memberId the error could be incorrect. Similar change required for timerTask.
                 if (stateBatch.firstOffset() < startOffset) {
                     log.error("Invalid state batch found for the share partition: {}-{}. The base offset: {}"
                                 + " is less than the start offset: {}.", groupId, topicIdPartition,
