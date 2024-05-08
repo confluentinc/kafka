@@ -16,12 +16,13 @@
  */
 package org.apache.kafka.clients.consumer.internals;
 
-import org.apache.kafka.clients.consumer.internals.metrics.RebalanceMetricsManager;
+import org.apache.kafka.clients.consumer.internals.metrics.ShareRebalanceMetricsManager;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ShareGroupHeartbeatResponseData;
 import org.apache.kafka.common.message.ShareGroupHeartbeatResponseData.Assignment;
+import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.ConsumerGroupHeartbeatRequest;
@@ -83,7 +84,8 @@ public class ShareMembershipManagerTest {
 
     private ShareConsumerTestBuilder testBuilder;
     private Time time;
-    private RebalanceMetricsManager rebalanceMetricsManager;
+    private ShareRebalanceMetricsManager shareRebalanceMetricsManager;
+    private Metrics metrics;
 
     @BeforeEach
     public void setup() {
@@ -91,8 +93,8 @@ public class ShareMembershipManagerTest {
         metadata = testBuilder.metadata;
         subscriptionState = testBuilder.subscriptions;
         time = testBuilder.time;
-        Metrics metrics = new Metrics(time);
-        rebalanceMetricsManager = new RebalanceMetricsManager(metrics);
+        metrics = new Metrics(time);
+        shareRebalanceMetricsManager = new ShareRebalanceMetricsManager(metrics);
     }
 
     @AfterEach
@@ -105,7 +107,7 @@ public class ShareMembershipManagerTest {
     private ShareMembershipManager createMembershipManagerJoiningGroup() {
         ShareMembershipManager manager = spy(new ShareMembershipManager(
                 logContext, GROUP_ID, RACK_ID, subscriptionState, metadata,
-                Optional.empty(), time, rebalanceMetricsManager));
+                Optional.empty(), time, shareRebalanceMetricsManager));
         manager.transitionToJoining();
         return manager;
     }
@@ -115,7 +117,7 @@ public class ShareMembershipManagerTest {
         // First join should register to get metadata updates
         ShareMembershipManager manager = new ShareMembershipManager(
                 logContext, GROUP_ID, RACK_ID, subscriptionState, metadata,
-                Optional.empty(), time, rebalanceMetricsManager);
+                Optional.empty(), time, shareRebalanceMetricsManager);
         manager.transitionToJoining();
         clearInvocations(metadata);
 
@@ -189,7 +191,7 @@ public class ShareMembershipManagerTest {
     public void testTransitionToFailedWhenTryingToJoin() {
         ShareMembershipManager membershipManager = new ShareMembershipManager(
                 logContext, GROUP_ID, RACK_ID, subscriptionState, metadata,
-                Optional.empty(), time, rebalanceMetricsManager);
+                Optional.empty(), time, shareRebalanceMetricsManager);
         assertEquals(MemberState.UNSUBSCRIBED, membershipManager.state());
         membershipManager.transitionToJoining();
 
@@ -652,6 +654,8 @@ public class ShareMembershipManagerTest {
         when(metadata.topicNames()).thenReturn(Collections.singletonMap(topicId, topicName));
         when(subscriptionState.hasAutoAssignedPartitions()).thenReturn(true);
 
+        assertEquals(0.0d, getMetric("rebalance-total").metricValue());
+        assertEquals(0.0d, getMetric("rebalance-rate-per-hour").metricValue());
         membershipManager.poll(time.milliseconds());
 
         // Assignment should have been reconciled.
@@ -659,6 +663,8 @@ public class ShareMembershipManagerTest {
         verify(subscriptionState).assignFromSubscribed(expectedAssignment);
         assertEquals(MemberState.ACKNOWLEDGING, membershipManager.state());
         assertTrue(membershipManager.topicsAwaitingReconciliation().isEmpty());
+        assertEquals(1.0d, getMetric("rebalance-total").metricValue());
+        assertEquals(120.d, (double) getMetric("rebalance-rate-per-hour").metricValue(), 0.2d);
     }
 
     /**
@@ -1254,5 +1260,9 @@ public class ShareMembershipManagerTest {
                                 .setTopicId(topic2)
                                 .setPartitions(Arrays.asList(3, 4, 5))
                 ));
+    }
+
+    private KafkaMetric getMetric(final String name) {
+        return metrics.metrics().get(metrics.metricName(name, "share-consumer-coordinator-metrics"));
     }
 }

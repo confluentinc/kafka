@@ -45,6 +45,8 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_METRIC_GROUP_PREFIX;
+
 /**
  * <p>Manages the request creation and response handling for the heartbeat. The module creates a
  * {@link ConsumerGroupHeartbeatRequest} using the state stored in the {@link MembershipManager} and enqueue it to
@@ -136,7 +138,7 @@ public class HeartbeatRequestManager implements RequestManager {
         this.heartbeatRequestState = new HeartbeatRequestState(logContext, time, 0, retryBackoffMs,
             retryBackoffMaxMs, maxPollIntervalMs);
         this.pollTimer = time.timer(maxPollIntervalMs);
-        this.metricsManager = new HeartbeatMetricsManager(metrics);
+        this.metricsManager = new HeartbeatMetricsManager(metrics, CONSUMER_METRIC_GROUP_PREFIX);
     }
 
     // Visible for testing
@@ -158,7 +160,7 @@ public class HeartbeatRequestManager implements RequestManager {
         this.membershipManager = membershipManager;
         this.backgroundEventHandler = backgroundEventHandler;
         this.pollTimer = timer;
-        this.metricsManager = new HeartbeatMetricsManager(metrics);
+        this.metricsManager = new HeartbeatMetricsManager(metrics, CONSUMER_METRIC_GROUP_PREFIX);
     }
 
     /**
