@@ -3787,6 +3787,7 @@ public class SharePartitionTest {
         assertEquals(1, result.join().size());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
@@ -3797,6 +3798,7 @@ public class SharePartitionTest {
         // Due to failure in writeShareGroupState, the cached state should not be updated.
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
     }
 
     @Test
@@ -3821,6 +3823,7 @@ public class SharePartitionTest {
         assertEquals(1, result.join().size());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
@@ -3836,6 +3839,13 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(5L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(6L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(7L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(8L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(9L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(10L).memberId());
     }
 
     @Test
@@ -3860,6 +3870,7 @@ public class SharePartitionTest {
         assertEquals(1, result.join().size());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
 
         CompletableFuture<Optional<Throwable>> releaseResult = sharePartition.releaseAcquiredRecords(MEMBER_ID);
         assertFalse(releaseResult.isCompletedExceptionally());
@@ -3868,6 +3879,7 @@ public class SharePartitionTest {
         // Due to failure in writeShareGroupState, the cached state should not be updated.
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
     }
 
     @Test
@@ -3908,6 +3920,13 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
 
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(5L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(6L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(7L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(8L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(9L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(10L).memberId());
+
         // Mock persister writeState method so that sharePartition.isWriteShareGroupStateSuccessful() returns false.
         Mockito.when(writeShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
                 new TopicData<>(TOPIC_ID_PARTITION.topicId(), Collections.singletonList(
@@ -3926,6 +3945,13 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(5L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(6L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(7L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(8L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(9L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(10L).memberId());
     }
 
     @Test
@@ -3952,6 +3978,7 @@ public class SharePartitionTest {
         assertEquals(1, result.join().size());
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).batchState());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
         assertEquals(1, sharePartition.timer().size());
         assertNotNull(sharePartition.cachedState().get(5L).acquisitionLockTimeoutTask());
 
@@ -3960,6 +3987,7 @@ public class SharePartitionTest {
 
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
         assertEquals(0, sharePartition.timer().size());
         assertNull(sharePartition.cachedState().get(5L).acquisitionLockTimeoutTask());
     }
@@ -4006,6 +4034,13 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
 
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(5L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(6L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(7L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(8L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(9L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(10L).memberId());
+
         assertEquals(4, sharePartition.timer().size());
         assertNotNull(sharePartition.cachedState().get(5L).offsetState().get(5L).acquisitionLockTimeoutTask());
         assertNotNull(sharePartition.cachedState().get(5L).offsetState().get(6L).acquisitionLockTimeoutTask());
@@ -4030,6 +4065,13 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(8L).state());
         assertEquals(RecordState.ACKNOWLEDGED, sharePartition.cachedState().get(5L).offsetState().get(9L).state());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).offsetState().get(10L).state());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(5L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(6L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(7L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(8L).memberId());
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(9L).memberId());
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(5L).offsetState().get(10L).memberId());
 
         assertEquals(0, sharePartition.timer().size());
         assertNull(sharePartition.cachedState().get(5L).offsetState().get(5L).acquisitionLockTimeoutTask());
