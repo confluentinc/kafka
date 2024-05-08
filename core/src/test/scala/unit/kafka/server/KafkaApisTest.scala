@@ -4405,7 +4405,7 @@ class KafkaApisTest extends Logging {
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
-    val memberId : Uuid = Uuid.ZERO_UUID
+    val memberId : Uuid = Uuid.randomUuid()
 
     val records1 = memoryRecords(10, 0)
     val records2 = memoryRecords(10, 10)
@@ -4910,7 +4910,7 @@ class KafkaApisTest extends Logging {
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
-    val memberId: Uuid = Uuid.ZERO_UUID
+    val memberId: Uuid = Uuid.randomUuid()
 
     val records1 = memoryRecords(10, 0)
     val records2 = memoryRecords(10, 10)
