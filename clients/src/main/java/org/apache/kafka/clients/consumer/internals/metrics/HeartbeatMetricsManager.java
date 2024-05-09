@@ -26,7 +26,6 @@ import org.apache.kafka.common.metrics.stats.WindowedCount;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_METRIC_GROUP_PREFIX;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.COORDINATOR_METRICS_SUFFIX;
 
 public class HeartbeatMetricsManager {
@@ -38,8 +37,8 @@ public class HeartbeatMetricsManager {
     private final Sensor heartbeatSensor;
     private long lastHeartbeatMs = -1L;
 
-    public HeartbeatMetricsManager(Metrics metrics) {
-        final String metricGroupName = CONSUMER_METRIC_GROUP_PREFIX + COORDINATOR_METRICS_SUFFIX;
+    public HeartbeatMetricsManager(Metrics metrics, String metricGrpPrefix) {
+        final String metricGroupName = metricGrpPrefix + COORDINATOR_METRICS_SUFFIX;
         heartbeatSensor = metrics.sensor("heartbeat-latency");
         heartbeatResponseTimeMax = metrics.metricName("heartbeat-response-time-max",
             metricGroupName,

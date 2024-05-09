@@ -4385,7 +4385,7 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
@@ -4444,7 +4444,7 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4480,7 +4480,7 @@ class KafkaApisTest extends Logging {
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4530,7 +4530,7 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4564,7 +4564,7 @@ class KafkaApisTest extends Logging {
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4616,7 +4616,7 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4652,7 +4652,7 @@ class KafkaApisTest extends Logging {
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4695,7 +4695,7 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
@@ -4748,7 +4748,7 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4780,7 +4780,7 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4802,7 +4802,7 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4846,7 +4846,7 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4875,7 +4875,7 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4958,8 +4958,9 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
+
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4979,16 +4980,26 @@ class KafkaApisTest extends Logging {
       topicResponses.get(0).partitions().get(0)
     )
 
-    //Not sending any topic partitions list in the subsequent share fetch request
     shareFetchRequestData = new ShareFetchRequestData().
       setGroupId("group").
       setMemberId(memberId.toString).
-      setShareSessionEpoch(1)
+      setShareSessionEpoch(1).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition().
+            setPartitionIndex(0).
+            setPartitionMaxBytes(40000).
+            setAcknowledgementBatches(List(
+              new ShareFetchRequestData.AcknowledgementBatch().
+                setFirstOffset(0).
+                setLastOffset(9).
+                setAcknowledgeType(1).
+                setAcknowledgeTypes(List[java.lang.Byte](1.toByte).asJava)).asJava)).asJava)).asJava)
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5008,17 +5019,26 @@ class KafkaApisTest extends Logging {
       topicResponses.get(0).partitions().get(0)
     )
 
-
-    //Not sending any topic partitions list in the subsequent share fetch request
     shareFetchRequestData = new ShareFetchRequestData().
       setGroupId("group").
       setMemberId(memberId.toString).
-      setShareSessionEpoch(2)
+      setShareSessionEpoch(2).
+      setTopics(List(new ShareFetchRequestData.FetchTopic().
+        setTopicId(topicId).
+        setPartitions(List(
+          new ShareFetchRequestData.FetchPartition().
+            setPartitionIndex(0).
+            setPartitionMaxBytes(40000).
+            setAcknowledgementBatches(List(
+              new ShareFetchRequestData.AcknowledgementBatch().
+                setFirstOffset(10).
+                setLastOffset(19).
+                setAcknowledgeType(1).
+                setAcknowledgeTypes(List[java.lang.Byte](1.toByte).asJava)).asJava)).asJava)).asJava)
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5134,7 +5154,7 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -5219,7 +5239,7 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5264,7 +5284,7 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5381,7 +5401,7 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5502,7 +5522,7 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -5674,7 +5694,7 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -5799,7 +5819,7 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(
-      overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+      overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
       sharePartitionManager = sharePartitionManagerMock
     )
 
@@ -5932,7 +5952,7 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -6125,7 +6145,7 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -6301,7 +6321,7 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -6447,7 +6467,7 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -6561,7 +6581,7 @@ class KafkaApisTest extends Logging {
     ).asJava))
 
     val shareFetchRequest = buildRequest(new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion))
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
       sharePartitionManager = sharePartitionManagerMock)
 
     val shareAcknowledgeResponse = kafkaApis.handleAcknowledgements(
@@ -9569,7 +9589,7 @@ class KafkaApisTest extends Logging {
     )).thenReturn(future)
     metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     kafkaApis = createKafkaApis(
-      overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+      overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
       raftSupport = true
     )
     kafkaApis.handle(requestChannelRequest, RequestLocal.NoCaching)
@@ -9593,7 +9613,7 @@ class KafkaApisTest extends Logging {
       .thenReturn(Seq(AuthorizationResult.DENIED).asJava)
     metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     kafkaApis = createKafkaApis(
-      overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+      overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
       authorizer = Some(authorizer),
       raftSupport = true
     )
@@ -9616,7 +9636,7 @@ class KafkaApisTest extends Logging {
     )).thenReturn(future)
     metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     kafkaApis = createKafkaApis(
-      overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+      overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
       raftSupport = true
     )
     kafkaApis.handle(requestChannelRequest, RequestLocal.NoCaching)

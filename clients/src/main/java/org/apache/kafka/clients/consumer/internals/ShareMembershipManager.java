@@ -21,7 +21,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.internals.NetworkClientDelegate.PollResult;
 import org.apache.kafka.clients.consumer.internals.Utils.TopicIdPartitionComparator;
 import org.apache.kafka.clients.consumer.internals.Utils.TopicPartitionComparator;
-import org.apache.kafka.clients.consumer.internals.metrics.RebalanceMetricsManager;
+import org.apache.kafka.clients.consumer.internals.metrics.ShareRebalanceMetricsManager;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
@@ -208,7 +208,7 @@ public class ShareMembershipManager implements RequestManager {
     /**
      * Measures successful rebalance latency and number of failed rebalances.
      */
-    private final RebalanceMetricsManager metricsManager;
+    private final ShareRebalanceMetricsManager metricsManager;
 
     private final Time time;
 
@@ -235,7 +235,7 @@ public class ShareMembershipManager implements RequestManager {
                 metadata,
                 clientTelemetryReporter,
                 time,
-                new RebalanceMetricsManager(metrics));
+                new ShareRebalanceMetricsManager(metrics));
     }
 
     // Visible for testing
@@ -246,7 +246,7 @@ public class ShareMembershipManager implements RequestManager {
                            ConsumerMetadata metadata,
                            Optional<ClientTelemetryReporter> clientTelemetryReporter,
                            Time time,
-                           RebalanceMetricsManager metricsManager) {
+                           ShareRebalanceMetricsManager metricsManager) {
         this.log = logContext.logger(ShareMembershipManager.class);
         this.groupId = groupId;
         this.rackId = rackId;
@@ -371,10 +371,6 @@ public class ShareMembershipManager implements RequestManager {
             }
             processAssignmentReceived(assignment);
         }
-    }
-
-    public void onHeartbeatFailure() {
-        metricsManager.maybeRecordRebalanceFailed();
     }
 
     /**
