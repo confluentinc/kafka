@@ -79,6 +79,18 @@ MK_INCLUDE_VERSION ?= v0.1038.0
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+IMAGE_NAME := kafka
+MASTER_BRANCH := master
+KAFKA_VERSION := $(shell awk 'sub(/.*version=/,""){print $1}' ./gradle.properties)
+VERSION_POST := -$(KAFKA_VERSION)
+
+include ./mk-include/cc-begin.mk
+include ./mk-include/cc-testbreak.mk
+include ./mk-include/cc-vault.mk
+include ./mk-include/cc-semver.mk
+include ./mk-include/cc-docker.mk
+include ./mk-include/cc-end.mk
+
 # Below targets are used during kafka packaging for debian.
 
 .PHONY: clean
