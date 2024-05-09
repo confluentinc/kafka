@@ -33,10 +33,6 @@ global_job_config:
 blocks:
   - name: Run tests
     task:
-      # prologue:
-      #   commands:
-      #     # - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
-      #     - make init-ci
       jobs:
         - name: Check, Compile and Test
           commands:
@@ -47,8 +43,8 @@ blocks:
             # - echo Running unit and integration tests
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
             - . vault-setup
-            - . ci-tools ci-update-version
-            - . ci-tools ci-push-tag
+            # - . ci-tools ci-update-version
+            # - . ci-tools ci-push-tag
             - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
             - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives
       # epilogue:
