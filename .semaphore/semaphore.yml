@@ -33,10 +33,10 @@ global_job_config:
 blocks:
   - name: Run tests
     task:
-      # prologue:
-      #   commands:
-      #     # - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
-      #     - make init-ci
+      prologue:
+        commands:
+          # - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
+          - make init-ci
       jobs:
         - name: Check, Compile and Test
           commands:
@@ -50,7 +50,7 @@ blocks:
             - . ci-tools ci-update-version
             # - . ci-tools ci-push-tag
             - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
-            - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives -y --stacktrace --info --scan
+            - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives --stacktrace --info --scan
       # epilogue:
       #   # only needed if your job is java based
       #   always:
