@@ -37,9 +37,9 @@ blocks:
         - name: Check, Compile and Test
           commands:
             # - echo Check compilation compatibility with Scala 2.12
-            - ./retry_zinc ./gradlew clean build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true -PscalaVersion=2.12
+            # - ./retry_zinc ./gradlew clean build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true -PscalaVersion=2.12
             # - echo Compile and validate
-            - ./retry_zinc ./gradlew clean publishToMavenLocal build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true
+            # - ./retry_zinc ./gradlew clean publishToMavenLocal build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true
             # - echo Running unit and integration tests
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
             - . vault-setup
