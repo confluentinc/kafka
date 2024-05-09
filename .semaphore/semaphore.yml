@@ -46,7 +46,7 @@ blocks:
             - . ci-tools ci-update-version
             # - . ci-tools ci-push-tag
             - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
-            - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives
+            - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives --stacktrace --info --scan
       # epilogue:
       #   # only needed if your job is java based
       #   always:
