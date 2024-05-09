@@ -43,9 +43,9 @@ blocks:
             # - echo Running unit and integration tests
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
             - . vault-setup
-            # - . ci-tools ci-update-version
+            - . ci-tools ci-update-version
             # - . ci-tools ci-push-tag
-            - mavenUrl="https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots"
+            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
             - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives
       # epilogue:
       #   # only needed if your job is java based
