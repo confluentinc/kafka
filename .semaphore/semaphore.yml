@@ -48,8 +48,9 @@ blocks:
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
             - . vault-setup
             - . ci-tools ci-update-version
-            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
             - . ci-tools ci-push-tag
+            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
+            - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives; \
       # epilogue:
       #   # only needed if your job is java based
       #   always:
