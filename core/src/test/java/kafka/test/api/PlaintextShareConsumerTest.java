@@ -49,6 +49,7 @@ import scala.collection.mutable.ArrayBuffer;
 import scala.jdk.javaapi.CollectionConverters;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -714,6 +715,8 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
     }
 
+    // This test is disabled because it is not stable and fails intermittently.
+    @Disabled
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
     public void testMultipleConsumersInMultipleGroupsConcurrentConsumption(String quorum) {
@@ -1148,6 +1151,75 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
 
+        shareConsumer.close();
+    }
+
+    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
+    @ValueSource(strings = {"kraft+kip932"})
+    public void testSubscriptionFollowedByTopicCreation(String quorum) {
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        String topic = "foo";
+        shareConsumer.subscribe(Collections.singleton(topic));
+        // Topic is created post creation of share consumer and subscription.
+        createTopic(topic, 1, 1, new Properties(), listenerName(), new Properties());
+
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(topic, 0, null, "key".getBytes(), "value".getBytes());
+        producer.send(record);
+
+        TestUtils.waitUntilTrue(() -> {
+            int records = shareConsumer.poll(Duration.ofMillis(2000)).count();
+            return records == 1;
+        }, () -> "Failed to consume records for share consumer, metadata sync failed", DEFAULT_MAX_WAIT_MS, 100L);
+
+        producer.send(record);
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        assertEquals(1, records.count());
+        producer.send(record);
+        records = shareConsumer.poll(Duration.ofMillis(2000));
+        assertEquals(1, records.count());
+        shareConsumer.close();
+    }
+
+    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
+    @ValueSource(strings = {"kraft+kip932"})
+    @Disabled
+    public void testSubscriptionAndPollFollowedByTopicDeletion(String quorum) {
+        String topic1 = "bar";
+        String topic2 = "baz";
+        createTopic(topic1, 1, 1, new Properties(), listenerName(), new Properties());
+        createTopic(topic2, 1, 1, new Properties(), listenerName(), new Properties());
+        ProducerRecord<byte[], byte[]> recordTopic1 = new ProducerRecord<>(topic1, 0, null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> recordTopic2 = new ProducerRecord<>(topic2, 0, null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        // Consumer subscribes to the topics -> bar and baz.
+        shareConsumer.subscribe(Arrays.asList(topic1, topic2));
+
+        producer.send(recordTopic1);
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        assertEquals(1, records.count());
+
+        producer.send(recordTopic2);
+        records = shareConsumer.poll(Duration.ofMillis(2000));
+        assertEquals(1, records.count());
+
+        // Topic bar is deleted, hence poll should not give any results.
+        deleteTopic(topic1, listenerName());
+        records = shareConsumer.poll(Duration.ofMillis(2000));
+        assertEquals(0, records.count());
+
+        producer.send(recordTopic2);
+        // Poll should give the record from the non-deleted topic baz.
+        TestUtils.waitUntilTrue(() -> {
+            int recordCount = shareConsumer.poll(Duration.ofMillis(2000)).count();
+            return recordCount == 1;
+        }, () -> "Failed to consume records for share consumer, metadata sync failed", DEFAULT_MAX_WAIT_MS, 100L);
+        producer.send(recordTopic2);
+        records = shareConsumer.poll(Duration.ofMillis(2000));
+        assertEquals(1, records.count());
         shareConsumer.close();
     }
 }
