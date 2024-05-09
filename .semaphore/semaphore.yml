@@ -48,9 +48,16 @@ blocks:
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
             - . vault-setup
             - . ci-tools ci-update-version
+            - |
+              export CODEARTIFACT_AUTH_TOKEN=`aws codeartifact get-authorization-token \
+                --domain confluent \
+                --domain-owner 519856050701 \
+                --region us-west-2 \
+                --query authorizationToken \
+                --output text`
             # - . ci-tools ci-push-tag
             - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
-            - ./gradlewAll -PmavenUrl=$mavenUrl --no-daemon -PkeepAliveMode=session uploadArchives
+            - ./gradlewAll -PmavenUrl=$mavenUrl --no-daemon uploadArchives
       # epilogue:
       #   # only needed if your job is java based
       #   always:
