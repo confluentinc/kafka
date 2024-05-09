@@ -18,6 +18,7 @@ package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
@@ -115,22 +116,19 @@ public class ShareAcknowledgeResponse extends AbstractResponse {
     public static ShareAcknowledgeResponseData toMessage(Errors error, int throttleTimeMs,
                                                    Iterator<Map.Entry<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> partIterator,
                                                    List<Node> nodeEndpoints) {
-        List<ShareAcknowledgeResponseData.ShareAcknowledgeTopicResponse> topicResponseList = new ArrayList<>();
+        Map<Uuid, ShareAcknowledgeResponseData.ShareAcknowledgeTopicResponse> topicResponseList = new LinkedHashMap<>();
         while (partIterator.hasNext()) {
             Map.Entry<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> entry = partIterator.next();
             ShareAcknowledgeResponseData.PartitionData partitionData = entry.getValue();
             // Since PartitionData alone doesn't know the partition ID, we set it here
             partitionData.setPartitionIndex(entry.getKey().topicPartition().partition());
-            // We have to keep the order of input topic-partition. Hence, we batch the partitions only if the last
-            // batch is in the same topic group.
-            ShareAcknowledgeResponseData.ShareAcknowledgeTopicResponse previousTopic = topicResponseList.isEmpty() ? null
-                    : topicResponseList.get(topicResponseList.size() - 1);
-            if (matchingTopic(previousTopic, entry.getKey()))
-                previousTopic.partitions().add(partitionData);
-            else {
+            // Checking if the topic is already present in the map
+            if (topicResponseList.containsKey(entry.getKey().topicId())) {
+                topicResponseList.get(entry.getKey().topicId()).partitions().add(partitionData);
+            } else {
                 List<ShareAcknowledgeResponseData.PartitionData> partitionResponses = new ArrayList<>();
                 partitionResponses.add(partitionData);
-                topicResponseList.add(new ShareAcknowledgeResponseData.ShareAcknowledgeTopicResponse()
+                topicResponseList.put(entry.getKey().topicId(), new ShareAcknowledgeResponseData.ShareAcknowledgeTopicResponse()
                         .setTopicId(entry.getKey().topicId())
                         .setPartitions(partitionResponses));
             }
@@ -145,6 +143,6 @@ public class ShareAcknowledgeResponse extends AbstractResponse {
                         .setRack(endpoint.rack())));
         return data.setThrottleTimeMs(throttleTimeMs)
                 .setErrorCode(error.code())
-                .setResponses(topicResponseList);
+                .setResponses(new ArrayList<>(topicResponseList.values()));
     }
 }

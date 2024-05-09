@@ -176,8 +176,7 @@ public class ShareFetchResponse extends AbstractResponse {
             ShareFetchResponseData.PartitionData partitionData = entry.getValue();
             // Since PartitionData alone doesn't know the partition ID, we set it here
             partitionData.setPartitionIndex(entry.getKey().topicPartition().partition());
-            // We have to keep the order of input topic-partition. Hence, we batch the partitions only if the last
-            // batch is in the same topic group.
+            // Checking if the topic is already present in the map
             if (topicResponseList.containsKey(entry.getKey().topicId())) {
                 topicResponseList.get(entry.getKey().topicId()).partitions().add(partitionData);
             } else {

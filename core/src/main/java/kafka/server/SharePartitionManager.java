@@ -422,9 +422,11 @@ public class SharePartitionManager implements AutoCloseable {
                     throw Errors.INVALID_REQUEST.exception();
                 }
                 context = new FinalContext();
-                if (cache.remove(key) != null) {
-                    removedFetchSessionStr = "Removed share session with key " + key;
-                    log.debug(removedFetchSessionStr);
+                synchronized (cache) {
+                    if (cache.remove(key) != null) {
+                        removedFetchSessionStr = "Removed share session with key " + key;
+                        log.debug(removedFetchSessionStr);
+                    }
                 }
             } else {
                 if (cache.remove(key) != null) {
@@ -474,6 +476,38 @@ public class SharePartitionManager implements AutoCloseable {
             }
         }
         return context;
+    }
+
+    public void acknowledgeSessionUpdate(String groupId, ShareFetchMetadata reqMetadata) {
+        if (reqMetadata.epoch() == ShareFetchMetadata.INITIAL_EPOCH) {
+            // ShareAcknowledge Request cannot have epoch as INITIAL_EPOCH (0)
+            throw Errors.INVALID_SHARE_SESSION_EPOCH.exception();
+        } else if (reqMetadata.epoch() == ShareFetchMetadata.FINAL_EPOCH) {
+            ShareSessionKey key = shareSessionKey(groupId, reqMetadata.memberId());
+            synchronized (cache) {
+                if (cache.remove(key) != null) {
+                    log.debug("Removed share session with key " + key);
+                }
+            }
+        } else {
+            synchronized (cache) {
+                ShareSessionKey key = shareSessionKey(groupId, reqMetadata.memberId());
+                ShareSession shareSession = cache.get(key);
+                if (shareSession == null) {
+                    log.debug("Share session error for {}: no such share session found", key);
+                    throw Errors.SHARE_SESSION_NOT_FOUND.exception();
+                } else {
+                    if (shareSession.epoch != reqMetadata.epoch()) {
+                        log.debug("Share session error for {}: expected epoch {}, but got {} instead", key,
+                                shareSession.epoch, reqMetadata.epoch());
+                        throw  Errors.INVALID_SHARE_SESSION_EPOCH.exception();
+                    } else {
+                        cache.touch(shareSession, time.milliseconds());
+                        shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
+                    }
+                }
+            }
+        }
     }
 
     String partitionsToLogString(Collection<TopicIdPartition> partitions) {
