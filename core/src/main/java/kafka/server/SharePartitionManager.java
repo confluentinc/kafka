@@ -422,9 +422,11 @@ public class SharePartitionManager implements AutoCloseable {
                     throw Errors.INVALID_REQUEST.exception();
                 }
                 context = new FinalContext();
-                if (cache.remove(key) != null) {
-                    removedFetchSessionStr = "Removed share session with key " + key;
-                    log.debug(removedFetchSessionStr);
+                synchronized (cache) {
+                    if (cache.remove(key) != null) {
+                        removedFetchSessionStr = "Removed share session with key " + key;
+                        log.debug(removedFetchSessionStr);
+                    }
                 }
             } else {
                 if (cache.remove(key) != null) {
@@ -482,8 +484,10 @@ public class SharePartitionManager implements AutoCloseable {
             throw Errors.INVALID_SHARE_SESSION_EPOCH.exception();
         } else if (reqMetadata.epoch() == ShareFetchMetadata.FINAL_EPOCH) {
             ShareSessionKey key = shareSessionKey(groupId, reqMetadata.memberId());
-            if (cache.remove(key) != null) {
-                log.debug("Removed share session with key " + key);
+            synchronized (cache) {
+                if (cache.remove(key) != null) {
+                    log.debug("Removed share session with key " + key);
+                }
             }
         } else {
             synchronized (cache) {

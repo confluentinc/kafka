@@ -4712,8 +4712,8 @@ class KafkaApis(val requestChannel: RequestChannel,
       topicIdPartitionSeq
     )(_.topicPartition.topic)
 
-    val acknowledgeResult : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]
-    = handleAcknowledgements(request, topicNames, sharePartitionManager, authorizedTopics, groupId, memberId, false)
+    val acknowledgeResult : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData] =
+      handleAcknowledgements(request, topicNames, sharePartitionManager, authorizedTopics, groupId, memberId, false)
 
     if (shareSessionEpoch == ShareFetchMetadata.FINAL_EPOCH && cachedTopicPartitions != null) {
       sharePartitionManager.releaseAcquiredRecords(groupId,

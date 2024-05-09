@@ -57,7 +57,7 @@ import org.apache.kafka.common.message.OffsetDeleteRequestData.{OffsetDeleteRequ
 import org.apache.kafka.common.message.OffsetDeleteResponseData.{OffsetDeleteResponsePartition, OffsetDeleteResponsePartitionCollection, OffsetDeleteResponseTopic, OffsetDeleteResponseTopicCollection}
 import org.apache.kafka.common.message.StopReplicaRequestData.{StopReplicaPartitionState, StopReplicaTopicState}
 import org.apache.kafka.common.message.UpdateMetadataRequestData.{UpdateMetadataBroker, UpdateMetadataEndpoint, UpdateMetadataPartitionState}
-import org.apache.kafka.common.message.{ShareAcknowledgeResponseData, _}
+import org.apache.kafka.common.message._
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.network.{ClientInformation, ListenerName}
 import org.apache.kafka.common.protocol.{ApiKeys, Errors, MessageUtil}
@@ -9817,7 +9817,8 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -9889,7 +9890,8 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -9988,7 +9990,8 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10086,7 +10089,8 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10157,7 +10161,8 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"),
       authorizer = Option(authorizer))
     kafkaApis.handleShareFetchRequest(request)
 
@@ -10225,7 +10230,8 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10292,7 +10298,8 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10362,7 +10369,8 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     var fetchResponse = verifyNoThrottling[ShareFetchResponse](request)
@@ -10570,7 +10578,8 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10657,7 +10666,8 @@ class KafkaApisTest extends Logging {
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
       .build(ApiKeys.SHARE_ACKNOWLEDGE.latestVersion)
     val request = buildRequest(shareAcknowledgeRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
+      KafkaConfig.ShareGroupEnableProp -> "true"),
       sharePartitionManager = sharePartitionManagerMock)
     kafkaApis.handleShareAcknowledgeRequest(request)
     val response = verifyNoThrottling[ShareAcknowledgeResponse](request)
