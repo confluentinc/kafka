@@ -1463,20 +1463,8 @@ public class SharePartition {
         }
 
         private InFlightState startStateTransition(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount) {
-            try {
-                rollbackState = new InFlightState(state, deliveryCount, memberId, acquisitionLockTimeoutTask);
-                if (newState == RecordState.AVAILABLE && deliveryCount >= maxDeliveryCount) {
-                    newState = RecordState.ARCHIVED;
-                }
-                state = state.validateTransition(newState);
-                if (incrementDeliveryCount && newState != RecordState.ARCHIVED) {
-                    deliveryCount++;
-                }
-                return this;
-            } catch (IllegalStateException e) {
-                log.info("Failed to start state transition of the records", e);
-                return null;
-            }
+            rollbackState = new InFlightState(state, deliveryCount, memberId, acquisitionLockTimeoutTask);
+            return tryUpdateState(newState, incrementDeliveryCount, maxDeliveryCount);
         }
 
         private void completeStateTransition(boolean commit) {
