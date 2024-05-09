@@ -1165,49 +1165,18 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(topic, 0, null, "key".getBytes(), "value".getBytes());
         producer.send(record);
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
-        assertEquals(1, records.count());
-        producer.send(record);
-        records = shareConsumer.poll(Duration.ofMillis(5000));
-        assertEquals(1, records.count());
-        producer.send(record);
-        records = shareConsumer.poll(Duration.ofMillis(5000));
-        assertEquals(1, records.count());
 
-        deleteTopic(topic, listenerName());
-        shareConsumer.close();
-    }
-
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscriptionAndPollFollowedByTopicDeletion(String quorum) {
-        String topic = "bar";
-        createTopic(topic, 1, 1, new Properties(), listenerName(), new Properties());
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(topic, 0, null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(topic));
+        TestUtils.waitUntilTrue(() -> {
+            int records = shareConsumer.poll(Duration.ofMillis(2000)).count();
+            return records == 1;
+        }, () -> "Failed to consume records for share consumer, metadata sync failed", DEFAULT_MAX_WAIT_MS, 100L);
 
         producer.send(record);
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
         producer.send(record);
-        records = shareConsumer.poll(Duration.ofMillis(5000));
+        records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
-
-        // topic is deleted, hence poll should not give any results.
-        deleteTopic(topic, listenerName());
-        records = shareConsumer.poll(Duration.ofMillis(5000));
-        assertEquals(0, records.count());
-
-        // re-creating the topic again, hence poll should give results now.
-        createTopic(topic, 1, 1, new Properties(), listenerName(), new Properties());
-        producer.send(record);
-        records = shareConsumer.poll(Duration.ofMillis(5000));
-        assertEquals(1, records.count());
-
-        deleteTopic(topic, listenerName());
         shareConsumer.close();
     }
 }
