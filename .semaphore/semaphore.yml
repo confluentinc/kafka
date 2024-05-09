@@ -45,7 +45,7 @@ blocks:
             - . vault-setup
             # - . ci-tools ci-update-version
             # - . ci-tools ci-push-tag
-            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
+            - mavenUrl="https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots"
             - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives
       # epilogue:
       #   # only needed if your job is java based
