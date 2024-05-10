@@ -34,4 +34,4 @@ kafkaMuckrakeVersionMap["3.7"]="6.7.x"
 kafkaMuckrakeVersionMap["trunk"]="master"
 kafkaMuckrakeVersionMap["master"]="master"
 
-export kafkaMuckrakeVersionMap
+export DOWNSTREAM_BRANCH_NAME=${kafkaMuckrakeVersionMap["${SEMAPHORE_GIT_BRANCH}"]}

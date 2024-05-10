@@ -63,7 +63,7 @@ global_job_config:
       - git config --global url."git@github.com:".insteadOf "https://github.com/"
       - export SEMAPHORE_CACHE_DIR=/home/semaphore
       - source scripts/set_env_vars.sh
-      - source scripts/set_downstream_map.sh
+      - source scripts/set_downstream_branch.sh
 blocks:
   - name: Run tests
     task:
