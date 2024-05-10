@@ -33,7 +33,7 @@ global_job_config:
     - name: MAX_TEST_RETRY_FAILURES_PER_NODE
       value: "8"
     - name: TEST_TIMEOUT_IN_MINUTES
-      value: "180"
+      value: "240"
     - name: ENABLE_THREAD_LEAK_LISTENER
       value: "true"
     - name: NANO_VERSION
@@ -65,36 +65,59 @@ global_job_config:
       - source scripts/set_env_vars.sh
       - source scripts/set_downstream_branch.sh
 blocks:
-  - name: Run tests
+  - name: Tests
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-amd64-3
+      prologue:
+        commands:
+          - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
+          - make init-ci
+      jobs:
+        - name: Unit tests and Integration tests
+          commands:
+            - './gradlew 
+                unitTest integrationTest --no-daemon --stacktrace --continue 
+                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
+                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
+
+          execution_time_limit:
+            minutes: 120
+
+      epilogue:
+        always:
+          commands:
+            - shopt -s globstar && test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
+            - |
+              echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
+              echo "Current time: $(date +%s%3N)"
+              echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt
+              artifact push workflow duration.txt --destination $SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID || true
+  - name: Gradle Build
     task:
       prologue:
         commands:
-          # - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
+          - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
           - make init-ci
       jobs:
         - name: Build, Compile, Validations, Publish, Upgrade
           commands:
-            # - >-
-            #   if [ "$NANO_VERSION" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then
-            #     . ci-tools ci-update-version
-            #   fi
-            # - make compile-validate
-            # - make check-scala-compatibility
-            # - make publish-maven-artifacts
+            - >-
+              if [ "$NANO_VERSION" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then
+                . ci-tools ci-update-version
+              fi
+            - make compile-validate
+            - make check-scala-compatibility
+            - make publish-maven-artifacts
             - |
               echo "PUBLISH: $PUBLISH, RELEASE_JOB: $RELEASE_JOB, SEMAPHORE_GIT_REF_TYPE: $SEMAPHORE_GIT_REF_TYPE, ENABLE_DOWNSTREAM_TRIGGER: $ENABLE_DOWNSTREAM_TRIGGER"
-              for project in $DOWNSTREAM_PROJECTS; do
-                sem-trigger -p $project -b $DOWNSTREAM_BRANCH_NAME -f .semaphore/semaphore.yml
-              done
-            # - echo Running unit and integration tests
-            # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
-            # - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
-            # - ./gradlewAll -PmavenUrl=$mavenUrl --no-daemon uploadArchives
-      # epilogue:
-      #   # only needed if your job is java based
-      #   always:
-      #     commands:
-            # - shopt -s globstar && test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
+              if [ "$PUBLISH" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$ENABLE_DOWNSTREAM_TRIGGER" = "true" ]; then
+                for project in $DOWNSTREAM_PROJECTS; do
+                  sem-trigger -p $project -b $DOWNSTREAM_BRANCH_NAME -f .semaphore/semaphore.yml
+                done
+              fi
 after_pipeline:
   task:
     agent:
