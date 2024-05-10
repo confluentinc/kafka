@@ -81,7 +81,11 @@ blocks:
             # - make compile-validate
             # - make check-scala-compatibility
             # - make publish-maven-artifacts
-            - make start-downstream-builds
+            - |
+              echo "PUBLISH: $PUBLISH, RELEASE_JOB: $RELEASE_JOB, SEMAPHORE_GIT_REF_TYPE: $SEMAPHORE_GIT_REF_TYPE, ENABLE_DOWNSTREAM_TRIGGER: $ENABLE_DOWNSTREAM_TRIGGER"
+              for project in $DOWNSTREAM_PROJECTS; do
+                sem-trigger -p $project -b $DOWNSTREAM_BRANCH_NAME -f .semaphore/semaphore.yml
+              done
             # - echo Running unit and integration tests
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
             # - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)

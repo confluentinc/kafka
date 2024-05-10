@@ -130,16 +130,6 @@ publish-maven-artifacts:
 		./gradlewAll -PmavenUrl=$$mavenUrl -PkeepAliveMode=session uploadArchives; \
 	fi
 
-.PHONY: start-downstream-builds
-start-downstream-builds:
-	echo "$$DOWNSTREAM_BRANCH_NAME"
-	echo "PUBLISH: $$PUBLISH, RELEASE_JOB: $$RELEASE_JOB, SEMAPHORE_GIT_REF_TYPE: $$SEMAPHORE_GIT_REF_TYPE, ENABLE_DOWNSTREAM_TRIGGER: $$ENABLE_DOWNSTREAM_TRIGGER"
-    # if [ "$$PUBLISH" = "true" ] && [ "$$RELEASE_JOB" = "false" ] && [ "$$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$$ENABLE_DOWNSTREAM_TRIGGER" = "true" ]; then
-    # 	for project in $$DOWNSTREAM_PROJECTS; do
-    #         sem-trigger -p $$project -b $$DOWNSTREAM_BRANCH_NAME -f .semaphore/semaphore.yml
-    #     done
-    # fi
-
 # Below targets are used during kafka packaging for debian.
 
 .PHONY: clean
