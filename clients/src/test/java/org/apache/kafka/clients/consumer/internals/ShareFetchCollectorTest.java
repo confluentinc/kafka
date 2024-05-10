@@ -23,6 +23,7 @@ import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
 import org.apache.kafka.common.message.ShareFetchResponseData;
+import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.CompressionType;
@@ -34,6 +35,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.Time;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -48,6 +50,8 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Stream;
 
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createShareFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createSubscriptionState;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -73,6 +77,8 @@ public class ShareFetchCollectorTest {
     private Deserializers<String, String> deserializers;
     private ShareFetchCollector<String, String> fetchCollector;
     private ShareCompletedFetchBuilder completedFetchBuilder;
+    private ShareFetchMetricsManager shareFetchMetricsManager;
+    private ShareFetchMetricsAggregator shareFetchMetricsAggregator;
 
     @Test
     public void testFetchNormal() {
@@ -228,6 +234,10 @@ public class ShareFetchCollectorTest {
         ConsumerConfig config = new ConsumerConfig(p);
 
         deserializers = new Deserializers<>(new StringDeserializer(), new StringDeserializer());
+        Metrics metrics = createMetrics(config, Time.SYSTEM);
+        shareFetchMetricsManager = createShareFetchMetricsManager(metrics);
+        shareFetchMetricsAggregator = new ShareFetchMetricsAggregator(shareFetchMetricsManager,
+                Collections.singleton(topicAPartition0.topicPartition()));
 
         subscriptions = createSubscriptionState(config, logContext);
         fetchConfig = new FetchConfig(config);
@@ -335,6 +345,7 @@ public class ShareFetchCollectorTest {
                     BufferSupplier.create(),
                     topicAPartition0,
                     partitionData,
+                    shareFetchMetricsAggregator,
                     ApiKeys.SHARE_FETCH.latestVersion());
         }
     }

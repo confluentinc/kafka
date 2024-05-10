@@ -264,7 +264,7 @@ public class RequestManagers implements Closeable {
                                                      final ConsumerConfig config,
                                                      final GroupRebalanceConfig groupRebalanceConfig,
                                                      final Supplier<NetworkClientDelegate> networkClientDelegateSupplier,
-                                                     final FetchMetricsManager fetchMetricsManager,
+                                                     final ShareFetchMetricsManager shareFetchMetricsManager,
                                                      final Optional<ClientTelemetryReporter> clientTelemetryReporter,
                                                      final Metrics metrics
     ) {
@@ -306,7 +306,7 @@ public class RequestManagers implements Closeable {
                         subscriptions,
                         fetchConfig,
                         fetchBuffer,
-                        fetchMetricsManager);
+                        shareFetchMetricsManager);
                 shareMembershipManager.registerStateListener(shareFetchRequestManager);
 
                 return new RequestManagers(

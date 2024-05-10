@@ -16,10 +16,13 @@
  */
 package org.apache.kafka.clients.consumer.internals;
 
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ShareFetchResponseData;
+import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
@@ -31,8 +34,12 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createShareFetchMetricsManager;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -57,10 +64,20 @@ public class ShareFetchBufferTest {
     private final TopicIdPartition topicAPartition2 = new TopicIdPartition(Uuid.randomUuid(), 2, "topic-a");
     private final Set<TopicIdPartition> allPartitions = partitions(topicAPartition0, topicAPartition1, topicAPartition2);
     private LogContext logContext;
+    private ShareFetchMetricsManager shareFetchMetricsManager;
 
     @BeforeEach
     public void setup() {
         logContext = new LogContext();
+
+        Properties p = new Properties();
+        p.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        p.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        ConsumerConfig config = new ConsumerConfig(p);
+
+        Metrics metrics = createMetrics(config, time);
+        shareFetchMetricsManager = createShareFetchMetricsManager(metrics);
     }
 
     /**
@@ -146,12 +163,15 @@ public class ShareFetchBufferTest {
     }
 
     private ShareCompletedFetch completedFetch(TopicIdPartition tp) {
+        ShareFetchMetricsAggregator shareFetchMetricsAggregator = new ShareFetchMetricsAggregator(shareFetchMetricsManager,
+                allPartitions.stream().map(TopicIdPartition::topicPartition).collect(Collectors.toSet()));
         ShareFetchResponseData.PartitionData partitionData = new ShareFetchResponseData.PartitionData();
         return new ShareCompletedFetch(
                 logContext,
                 BufferSupplier.create(),
                 tp,
                 partitionData,
+                shareFetchMetricsAggregator,
                 ApiKeys.SHARE_FETCH.latestVersion());
     }
 
