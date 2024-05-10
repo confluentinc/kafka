@@ -27,9 +27,42 @@ queue:
   - when: "branch != 'master' and branch !~ '[0-9]+\\.[0-9]+\\.x'"
     processing: parallel
 global_job_config:
+  env_vars:
+    - name: NO_OF_TEST_WORKER_NODES
+      value: "2"
+    - name: MAX_TEST_RETRY_FAILURES_PER_NODE
+      value: "8"
+    - name: TEST_TIMEOUT_IN_MINUTES
+      value: "180"
+    - name: ENABLE_THREAD_LEAK_LISTENER
+      value: "true"
+    - name: NANO_VERSION
+      value: "true"
+    - name: PUBLISH
+      value: "true"
+    - name: ENABLE_UPDATE_VERSION
+      value: "true"
+    - name: ENABLE_PUBLISH_ARTIFACTS
+      value: "true"
+    - name: ENABLE_DOWNSTREAM_TRIGGER
+      value: "true"
+    - name: ENABLE_PROPAGATE_CC_RELEASE_BRANCH
+      value: "true"
+    - name: DOWNSTREAM_PROJECTS
+      value: "common"
   prologue:
     commands:
+      - echo $SEMAPHORE_WORKFLOW_ID
+      - echo $SEMAPHORE_GIT_REPO_SLUG
       - checkout
+      - . vault-setup
+      - . vault-sem-get-secret ci-reporting
+      - . vault-sem-get-secret sox-semaphore-build-info
+      - sem-version java 21
+      - sem-version go 1.16.15
+      - git config --global url."git@github.com:".insteadOf "https://github.com/"
+      - export SEMAPHORE_CACHE_DIR=/home/semaphore
+      - source scripts/set_env_vars.sh
 blocks:
   - name: Run tests
     task:
@@ -40,23 +73,35 @@ blocks:
       jobs:
         - name: Check, Compile and Test
           commands:
-            # - echo Check compilation compatibility with Scala 2.12
-            # - ./retry_zinc ./gradlew clean build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true -PscalaVersion=2.12
-            # - echo Compile and validate
-            # - ./retry_zinc ./gradlew clean publishToMavenLocal build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true
+            # - >-
+            #   if [ "$NANO_VERSION" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then
+            #     . ci-tools ci-update-version
+            #   fi
+            # - make compile-validate
+            # - make check-scala-compatibility
+            # - make publish-maven-artifacts
+            # - make publish-maven-artifacts-bazel
+            # - make propogate-cc-release-branch
+            # - |
+            #   echo "PUBLISH: $PUBLISH, RELEASE_JOB: $RELEASE_JOB, SEMAPHORE_GIT_REF_TYPE: $SEMAPHORE_GIT_REF_TYPE, ENABLE_DOWNSTREAM_TRIGGER: $ENABLE_DOWNSTREAM_TRIGGER"
+            #   if [ "$PUBLISH" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$ENABLE_DOWNSTREAM_TRIGGER" = "true" ]; then
+            #     for project in $DOWNSTREAM_PROJECTS; do
+            #       sem-trigger -p $project -b $SEMAPHORE_GIT_BRANCH -f .semaphore/semaphore.yml
+            #     done
+            #   fi
             # - echo Running unit and integration tests
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
-            - . vault-setup
-            - . ci-tools ci-update-version
-            - |
-              export CODEARTIFACT_AUTH_TOKEN=`aws codeartifact get-authorization-token \
-                --domain confluent \
-                --domain-owner 519856050701 \
-                --region us-west-2 \
-                --query authorizationToken \
-                --output text`
+            # - . vault-setup
+            # - . ci-tools ci-update-version
+            # - |
+            #   export CODEARTIFACT_AUTH_TOKEN=`aws codeartifact get-authorization-token \
+            #     --domain confluent \
+            #     --domain-owner 519856050701 \
+            #     --region us-west-2 \
+            #     --query authorizationToken \
+            #     --output text`
             # - . ci-tools ci-push-tag
-            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
+            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
             - ./gradlewAll -PmavenUrl=$mavenUrl --no-daemon uploadArchives
       # epilogue:
       #   # only needed if your job is java based
