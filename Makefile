@@ -130,6 +130,11 @@ publish-maven-artifacts:
 		./gradlewAll -PmavenUrl=$$mavenUrl -PkeepAliveMode=session uploadArchives; \
 	fi
 
+# Enable Thread Leak Listener
+.PHONY: enable-thread-leak-listener
+enable-thread-leak-listener:
+	echo "org.apache.kafka.test.ThreadLeakListener" > clients/src/test/resources/META-INF/services/org.junit.platform.launcher.TestExecutionListener
+
 # Below targets are used during kafka packaging for debian.
 
 .PHONY: clean
