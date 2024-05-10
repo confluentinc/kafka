@@ -63,6 +63,7 @@ global_job_config:
       - git config --global url."git@github.com:".insteadOf "https://github.com/"
       - export SEMAPHORE_CACHE_DIR=/home/semaphore
       - source scripts/set_env_vars.sh
+      - source scripts/set_downstream_map.sh
 blocks:
   - name: Run tests
     task:
@@ -71,7 +72,7 @@ blocks:
           # - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
           - make init-ci
       jobs:
-        - name: Check, Compile and Test
+        - name: Build, Compile, Validations, Publish, Upgrade
           commands:
             # - >-
             #   if [ "$NANO_VERSION" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then
@@ -80,29 +81,11 @@ blocks:
             # - make compile-validate
             # - make check-scala-compatibility
             # - make publish-maven-artifacts
-            # - make publish-maven-artifacts-bazel
-            # - make propogate-cc-release-branch
-            # - |
-            #   echo "PUBLISH: $PUBLISH, RELEASE_JOB: $RELEASE_JOB, SEMAPHORE_GIT_REF_TYPE: $SEMAPHORE_GIT_REF_TYPE, ENABLE_DOWNSTREAM_TRIGGER: $ENABLE_DOWNSTREAM_TRIGGER"
-            #   if [ "$PUBLISH" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$ENABLE_DOWNSTREAM_TRIGGER" = "true" ]; then
-            #     for project in $DOWNSTREAM_PROJECTS; do
-            #       sem-trigger -p $project -b $SEMAPHORE_GIT_BRANCH -f .semaphore/semaphore.yml
-            #     done
-            #   fi
+            - make start-downstream-builds
             # - echo Running unit and integration tests
             # - ./gradlew unitTest integrationTest --no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5
-            # - . vault-setup
-            # - . ci-tools ci-update-version
-            # - |
-            #   export CODEARTIFACT_AUTH_TOKEN=`aws codeartifact get-authorization-token \
-            #     --domain confluent \
-            #     --domain-owner 519856050701 \
-            #     --region us-west-2 \
-            #     --query authorizationToken \
-            #     --output text`
-            # - . ci-tools ci-push-tag
-            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
-            - ./gradlewAll -PmavenUrl=$mavenUrl --no-daemon uploadArchives
+            # - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
+            # - ./gradlewAll -PmavenUrl=$mavenUrl --no-daemon uploadArchives
       # epilogue:
       #   # only needed if your job is java based
       #   always:
