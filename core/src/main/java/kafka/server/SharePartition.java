@@ -690,7 +690,7 @@ public class SharePartition {
                 });
 
                 nextFetchOffset = localNextFetchOffset;
-
+                // Update the cached state and start and end offsets after acknowledgements are completed
                 maybeUpdateCachedStateAndOffsets();
             }
         } finally {
@@ -829,6 +829,8 @@ public class SharePartition {
                     state.cancelAndClearAcquisitionLockTimeoutTask();
                 });
                 nextFetchOffset = localNextFetchOffset;
+                // Update the cached state and start and end offsets after releasing the acquired records
+                maybeUpdateCachedStateAndOffsets();
             }
         } finally {
             lock.writeLock().unlock();
