@@ -394,9 +394,9 @@ public class KafkaShareConsumerTest {
 
         AtomicBoolean heartbeatReceived = prepareShareGroupHeartbeatResponse(client, coordinator, memberId, 2, Errors.NONE);
 
-        // heartbeat interval is 2 seconds
-        time.sleep(heartbeatIntervalMs);
-        Thread.sleep(heartbeatIntervalMs);
+        // heartbeat interval is 1 second
+        time.sleep(heartbeatIntervalMs + 500);
+        Thread.sleep(heartbeatIntervalMs + 500);
 
         assertTrue(heartbeatReceived.get());
     }
@@ -425,8 +425,8 @@ public class KafkaShareConsumerTest {
         client.prepareResponseFrom(shareFetchResponse(tp0, 5L, 0), node);
         AtomicBoolean heartbeatReceived = prepareShareGroupHeartbeatResponse(client, coordinator, memberId, 2, Errors.NONE);
 
-        time.sleep(heartbeatIntervalMs);
-        Thread.sleep(heartbeatIntervalMs);
+        time.sleep(heartbeatIntervalMs + 500);
+        Thread.sleep(heartbeatIntervalMs + 500);
 
         consumer.poll(Duration.ZERO);
 

@@ -16,6 +16,8 @@
  */
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ShareAcknowledgeRequestData;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -23,6 +25,10 @@ import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class ShareAcknowledgeRequest extends AbstractRequest {
 
@@ -37,6 +43,48 @@ public class ShareAcknowledgeRequest extends AbstractRequest {
         public Builder(ShareAcknowledgeRequestData data, boolean enableUnstableLastVersion) {
             super(ApiKeys.SHARE_ACKNOWLEDGE, enableUnstableLastVersion);
             this.data = data;
+        }
+
+        public static ShareAcknowledgeRequest.Builder forConsumer(String groupId, ShareFetchMetadata metadata,
+                                                                  Map<TopicIdPartition, List<ShareAcknowledgeRequestData.AcknowledgementBatch>> acknowledgementsMap) {
+            ShareAcknowledgeRequestData data = new ShareAcknowledgeRequestData();
+            data.setGroupId(groupId);
+            if (metadata != null) {
+                data.setMemberId(metadata.memberId().toString());
+                data.setShareSessionEpoch(metadata.epoch());
+            }
+
+            // Build a map of topics to acknowledge keyed by topic ID, and within each a map of partitions keyed by index
+            Map<Uuid, Map<Integer, ShareAcknowledgeRequestData.AcknowledgePartition>> ackMap = new HashMap<>();
+
+            for (Map.Entry<TopicIdPartition, List<ShareAcknowledgeRequestData.AcknowledgementBatch>> acknowledgeEntry : acknowledgementsMap.entrySet()) {
+                TopicIdPartition tip = acknowledgeEntry.getKey();
+                Map<Integer, ShareAcknowledgeRequestData.AcknowledgePartition> partMap = ackMap.computeIfAbsent(tip.topicId(), k -> new HashMap<>());
+                ShareAcknowledgeRequestData.AcknowledgePartition ackPartition = partMap.get(tip.partition());
+                if (ackPartition == null) {
+                    ackPartition = new ShareAcknowledgeRequestData.AcknowledgePartition()
+                            .setPartitionIndex(tip.partition());
+                    partMap.put(tip.partition(), ackPartition);
+                }
+                ackPartition.setAcknowledgementBatches(acknowledgeEntry.getValue());
+            }
+
+            // Finally, build up the data to fetch
+            data.setTopics(new ArrayList<>());
+            ackMap.forEach((topicId, partMap) -> {
+                ShareAcknowledgeRequestData.AcknowledgeTopic ackTopic = new ShareAcknowledgeRequestData.AcknowledgeTopic()
+                        .setTopicId(topicId)
+                        .setPartitions(new ArrayList<>());
+                data.topics().add(ackTopic);
+
+                partMap.forEach((index, ackPartition) -> ackTopic.partitions().add(ackPartition));
+            });
+
+            return new ShareAcknowledgeRequest.Builder(data, true);
+        }
+
+        public ShareAcknowledgeRequestData data() {
+            return data;
         }
 
         @Override

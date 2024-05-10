@@ -19,7 +19,6 @@ package org.apache.kafka.common.requests;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchRequestData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -51,7 +50,7 @@ public class ShareFetchRequest extends AbstractRequest {
 
         public static Builder forConsumer(String groupId, ShareFetchMetadata metadata,
                                           int maxWait, int minBytes, int maxBytes, int fetchSize,
-                                          List<TopicIdPartition> send,
+                                          List<TopicIdPartition> send, List<TopicIdPartition> forget,
                                           Map<TopicIdPartition, List<ShareFetchRequestData.AcknowledgementBatch>> acknowledgementsMap) {
             ShareFetchRequestData data = new ShareFetchRequestData();
             data.setGroupId(groupId);
@@ -98,18 +97,40 @@ public class ShareFetchRequest extends AbstractRequest {
                 fetchPartition.setAcknowledgementBatches(acknowledgeEntry.getValue());
             }
 
-            // Finally, build up the data to fetch
-            data.setTopics(new ArrayList<>());
-            fetchMap.forEach((topicId, partMap) -> {
-                ShareFetchRequestData.FetchTopic fetchTopic = new ShareFetchRequestData.FetchTopic()
-                        .setTopicId(topicId)
-                        .setPartitions(new ArrayList<>());
-                data.topics().add(fetchTopic);
+            // Build up the data to fetch
+            if (!fetchMap.isEmpty()) {
+                data.setTopics(new ArrayList<>());
+                fetchMap.forEach((topicId, partMap) -> {
+                    ShareFetchRequestData.FetchTopic fetchTopic = new ShareFetchRequestData.FetchTopic()
+                            .setTopicId(topicId)
+                            .setPartitions(new ArrayList<>());
+                    partMap.forEach((index, fetchPartition) -> fetchTopic.partitions().add(fetchPartition));
+                    data.topics().add(fetchTopic);
+                });
+            }
 
-                partMap.forEach((index, fetchPartition) -> fetchTopic.partitions().add(fetchPartition));
-            });
+            // And finally, forget the topic-partitions that are no longer in the session
+            if (!forget.isEmpty()) {
+                Map<Uuid, List<Integer>> forgetMap = new HashMap<>();
+                for (TopicIdPartition tip : forget) {
+                    List<Integer> partList = forgetMap.computeIfAbsent(tip.topicId(), k -> new ArrayList<>());
+                    partList.add(tip.partition());
+                }
+                data.setForgottenTopicsData(new ArrayList<>());
+                forgetMap.forEach((topicId, partList) -> {
+                    ShareFetchRequestData.ForgottenTopic forgetTopic = new ShareFetchRequestData.ForgottenTopic()
+                            .setTopicId(topicId)
+                            .setPartitions(new ArrayList<>());
+                    partList.forEach(index -> forgetTopic.partitions().add(index));
+                    data.forgottenTopicsData().add(forgetTopic);
+                });
+            }
 
             return new Builder(data, true);
+        }
+
+        public ShareFetchRequestData data() {
+            return data;
         }
 
         @Override
@@ -141,20 +162,6 @@ public class ShareFetchRequest extends AbstractRequest {
     public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
         Errors error = Errors.forException(e);
         return new ShareFetchResponse(new ShareFetchResponseData()
-                .setThrottleTimeMs(throttleTimeMs)
-                .setErrorCode(error.code()));
-    }
-
-    public AbstractResponse getEmptyResponse(int throttleTimeMs) {
-        return new ShareFetchResponse(new ShareFetchResponseData()
-                .setThrottleTimeMs(throttleTimeMs)
-                .setErrorCode(Errors.NONE.code())
-                .setResponses(new ArrayList<>()));
-    }
-
-    public AbstractResponse getErrorAcknowledgeResponse(int throttleTimeMs, Throwable e) {
-        Errors error = Errors.forException(e);
-        return new ShareAcknowledgeResponse(new ShareAcknowledgeResponseData()
                 .setThrottleTimeMs(throttleTimeMs)
                 .setErrorCode(error.code()));
     }
