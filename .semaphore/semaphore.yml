@@ -64,6 +64,7 @@ global_job_config:
       - source scripts/set_downstream_branch.sh
 blocks:
   - name: Tests
+    dependencies: []
     task:
       prologue:
         commands:
@@ -88,6 +89,7 @@ blocks:
               artifact push workflow duration.txt --destination $SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID || true
 
   - name: Gradle Build
+    dependencies: []
     task:
       prologue:
         commands:
