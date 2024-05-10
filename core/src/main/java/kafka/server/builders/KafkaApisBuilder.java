@@ -35,6 +35,7 @@ import kafka.server.metadata.ConfigRepository;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.GroupCoordinator;
+import org.apache.kafka.coordinator.group.share.ShareCoordinator;
 import org.apache.kafka.server.ClientMetricsManager;
 import org.apache.kafka.server.authorizer.Authorizer;
 
@@ -66,6 +67,7 @@ public class KafkaApisBuilder {
     private DelegationTokenManager tokenManager = null;
     private ApiVersionManager apiVersionManager = null;
     private Optional<ClientMetricsManager> clientMetricsManager = Optional.empty();
+    private ShareCoordinator shareCoordinator = null;
 
     public KafkaApisBuilder setRequestChannel(RequestChannel requestChannel) {
         this.requestChannel = requestChannel;
@@ -89,6 +91,11 @@ public class KafkaApisBuilder {
 
     public KafkaApisBuilder setTxnCoordinator(TransactionCoordinator txnCoordinator) {
         this.txnCoordinator = txnCoordinator;
+        return this;
+    }
+
+    public KafkaApisBuilder setShareCoordinator(ShareCoordinator shareCoordinator) {
+        this.shareCoordinator = shareCoordinator;
         return this;
     }
 
@@ -194,6 +201,7 @@ public class KafkaApisBuilder {
                              replicaManager,
                              groupCoordinator,
                              txnCoordinator,
+                             shareCoordinator,
                              autoTopicCreationManager,
                              brokerId,
                              config,
