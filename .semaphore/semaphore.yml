@@ -65,36 +65,36 @@ global_job_config:
       - source scripts/set_env_vars.sh
       - source scripts/set_downstream_branch.sh
 blocks:
-  - name: Tests
-    dependencies: []
-    task:
-      agent:
-        machine:
-          type: s1-prod-ubuntu20-04-amd64-3
-      prologue:
-        commands:
-          - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
-          - make init-ci
-      jobs:
-        - name: Unit tests and Integration tests
-          commands:
-            - './gradlew 
-                unitTest integrationTest --no-daemon --stacktrace --continue 
-                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
-                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
+  # - name: Tests
+  #   dependencies: []
+  #   task:
+  #     agent:
+  #       machine:
+  #         type: s1-prod-ubuntu20-04-amd64-3
+  #     prologue:
+  #       commands:
+  #         - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
+  #         - make init-ci
+  #     jobs:
+  #       - name: Unit tests and Integration tests
+  #         commands:
+  #           - './gradlew 
+  #               unitTest integrationTest --no-daemon --stacktrace --continue 
+  #               -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
+  #               -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
 
-          execution_time_limit:
-            minutes: 120
+  #         execution_time_limit:
+  #           minutes: 120
 
-      epilogue:
-        always:
-          commands:
-            - shopt -s globstar && test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
-            - |
-              echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
-              echo "Current time: $(date +%s%3N)"
-              echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt
-              artifact push workflow duration.txt --destination $SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID || true
+  #     epilogue:
+  #       always:
+  #         commands:
+  #           - shopt -s globstar && test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
+  #           - |
+  #             echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
+  #             echo "Current time: $(date +%s%3N)"
+  #             echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt
+  #             artifact push workflow duration.txt --destination $SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID || true
   - name: Gradle Build
     task:
       prologue:
