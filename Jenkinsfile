@@ -28,6 +28,12 @@ def config = jobConfig {
     downStreamRepos = ["common",]
     nanoVersion = true
     disableConcurrentBuilds = true
+    sonarqubeScannerEnable=true
+    sonarqubeXmlTestReportPath="**/build/test-results/**/TEST-*.xml"
+    sonarqubeXmlCoveragePath="coverage.xml"
+    sonarqubeCodeLanguage="java"
+    sonarqubeCompiledClassesPath="./build/libs/"
+    sonarqubeExclusions="**/*test*/**/*"
 }
 
 def retryFlagsString(jobConfig) {
@@ -144,11 +150,11 @@ def job = {
             }
         }
     ]
-
+    sh "ls build"
+    sh "./gradlew jar"
     result = parallel testTargets
     // combine results of the two targets into one result string
     return result.runTestsStepName + "\n" + result.downstreamBuildsStepName
 }
-
 runJob config, job
 echo downstreamBuildFailureOutput
