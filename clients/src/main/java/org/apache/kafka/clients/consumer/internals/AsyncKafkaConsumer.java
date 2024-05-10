@@ -352,7 +352,7 @@ public class AsyncKafkaConsumer<K, V> implements ConsumerDelegate<K, V> {
                     config,
                     apiVersions,
                     metrics,
-                    fetchMetricsManager,
+                    fetchMetricsManager.throttleTimeSensor(),
                     clientTelemetryReporter.map(ClientTelemetryReporter::telemetrySender).orElse(null));
             this.offsetCommitCallbackInvoker = new OffsetCommitCallbackInvoker(interceptors);
             this.asyncCommitFenced = new AtomicBoolean(false);

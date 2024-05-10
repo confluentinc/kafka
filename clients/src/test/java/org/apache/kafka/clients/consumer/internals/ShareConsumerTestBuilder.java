@@ -49,8 +49,8 @@ import static org.apache.kafka.clients.consumer.ConsumerConfig.RETRY_BACKOFF_MAX
 import static org.apache.kafka.clients.consumer.ConsumerConfig.RETRY_BACKOFF_MS_CONFIG;
 import static org.apache.kafka.clients.consumer.ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG;
 import static org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG;
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createShareFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createSubscriptionState;
 import static org.apache.kafka.common.utils.Utils.closeQuietly;
 import static org.mockito.Mockito.spy;
@@ -77,7 +77,7 @@ public class ShareConsumerTestBuilder implements Closeable {
     final FetchConfig fetchConfig;
     final Metrics metrics;
     final Timer pollTimer;
-    final FetchMetricsManager metricsManager;
+    final ShareFetchMetricsManager metricsManager;
     final NetworkClientDelegate networkClientDelegate;
     final Optional<ShareFetchRequestManager> shareFetchRequestManager;
     final Optional<CoordinatorRequestManager> coordinatorRequestManager;
@@ -125,7 +125,7 @@ public class ShareConsumerTestBuilder implements Closeable {
 
         this.subscriptions = spy(createSubscriptionState(config, logContext));
         this.metadata = spy(new ConsumerMetadata(config, subscriptions, logContext, new ClusterResourceListeners()));
-        this.metricsManager = createFetchMetricsManager(metrics);
+        this.metricsManager = createShareFetchMetricsManager(metrics);
         this.pollTimer = time.timer(groupRebalanceConfig.rebalanceTimeoutMs);
 
         this.client = new MockClient(time, metadata);
