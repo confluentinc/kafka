@@ -83,6 +83,10 @@ public class ShareAcknowledgeRequest extends AbstractRequest {
             return new ShareAcknowledgeRequest.Builder(data, true);
         }
 
+        public ShareAcknowledgeRequestData data() {
+            return data;
+        }
+
         @Override
         public ShareAcknowledgeRequest build(short version) {
             return new ShareAcknowledgeRequest(data, version);

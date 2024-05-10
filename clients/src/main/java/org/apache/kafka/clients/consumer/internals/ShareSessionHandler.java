@@ -268,7 +268,7 @@ public class ShareSessionHandler {
 
     /**
      * Handle an error sending the prepared request.
-     * When a network error occurs, we close any existing fetch session on our next request,
+     * When a network error occurs, we close any existing share session on our next request,
      * and try to create a new session.
      *
      * @param t     The exception.

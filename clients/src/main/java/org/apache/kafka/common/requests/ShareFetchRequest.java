@@ -129,6 +129,10 @@ public class ShareFetchRequest extends AbstractRequest {
             return new Builder(data, true);
         }
 
+        public ShareFetchRequestData data() {
+            return data;
+        }
+
         @Override
         public ShareFetchRequest build(short version) {
             return new ShareFetchRequest(data, version);
