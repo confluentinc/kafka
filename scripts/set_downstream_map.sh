@@ -1,3 +1,4 @@
+#!/bin/bash
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -12,18 +13,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-name: kafka
-semaphore:
-  enable: true
-  pipeline_enable: false
-git:
-  enable: true
-lang: java
-lang_version: unknown
-github:
-  enable: true
-code_artifact:
-  enable: true
-  package_paths:
-    - maven-snapshots/maven/org.apache.kafka/*
-    - maven-releases-preview/maven/org.apache.kafka/*
+
+# create branch map to downstream builds
+declare -A kafkaMuckrakeVersionMap
+
+kafkaMuckrakeVersionMap["2.3"]="5.3.x"
+kafkaMuckrakeVersionMap["2.4"]="5.4.x"
+kafkaMuckrakeVersionMap["2.5"]="5.5.x"
+kafkaMuckrakeVersionMap["2.6"]="5.6.x"
+kafkaMuckrakeVersionMap["2.7"]="5.7.x"
+kafkaMuckrakeVersionMap["2.8"]="5.8.x"
+kafkaMuckrakeVersionMap["3.0"]="6.0.x"
+kafkaMuckrakeVersionMap["3.1"]="6.1.x"
+kafkaMuckrakeVersionMap["3.2"]="6.2.x"
+kafkaMuckrakeVersionMap["3.3"]="6.3.x"
+kafkaMuckrakeVersionMap["3.4"]="6.4.x"
+kafkaMuckrakeVersionMap["3.5"]="6.5.x"
+kafkaMuckrakeVersionMap["3.6"]="6.6.x"
+kafkaMuckrakeVersionMap["3.7"]="6.7.x"
+kafkaMuckrakeVersionMap["trunk"]="master"
+kafkaMuckrakeVersionMap["master"]="master"
+
+export kafkaMuckrakeVersionMap
