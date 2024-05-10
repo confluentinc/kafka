@@ -120,6 +120,8 @@ check-scala-compatibility:
 
 .PHONY: publish-maven-artifacts
 publish-maven-artifacts:
+	mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2);
+	echo "$$mavenUrl"
 	if [ "$$PUBLISH" = "true" ] && [ "$$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then \
 		if [[ "$$RELEASE_JOB" = "false" ]]; then \
 			. ci-tools ci-push-tag; \
