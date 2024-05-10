@@ -118,20 +118,6 @@ check-scala-compatibility:
 	echo "Number of compile, checkstyle and spotbug errors: $$error_count"; \
 	exit $$error_count
 
-.PHONY: publish-maven-artifacts
-publish-maven-artifacts:
-	mavenUrl=$$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2);
-	echo "$$mavenUrl"
-	if [ "$$PUBLISH" = "true" ] && [ "$$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then \
-		if [[ "$$RELEASE_JOB" = "false" ]]; then \
-			. ci-tools ci-push-tag; \
-			mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2); \
-		elif [[ "$$SEMAPHORE_GIT_BRANCH" == *-alpha* ]]; then \
-			mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2); \
-		fi; \
-		./gradlewAll -PmavenUrl=$$mavenUrl -PkeepAliveMode=session uploadArchives; \
-	fi
-
 # Below targets are used during kafka packaging for debian.
 
 .PHONY: clean
