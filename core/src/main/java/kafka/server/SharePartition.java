@@ -1188,6 +1188,7 @@ public class SharePartition {
                     }
                 }
                 nextFetchOffset = localNextFetchOffset;
+                
                 // Update the cached state and start and end offsets after releasing the acquisition lock on timeout.
                 maybeUpdateCachedStateAndOffsets();
             }
