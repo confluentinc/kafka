@@ -34,8 +34,6 @@ global_job_config:
       value: "8"
     - name: TEST_TIMEOUT_IN_MINUTES
       value: "240"
-    - name: ENABLE_THREAD_LEAK_LISTENER
-      value: "true"
     - name: NANO_VERSION
       value: "true"
     - name: PUBLISH
@@ -73,7 +71,6 @@ blocks:
   #         type: s1-prod-ubuntu20-04-amd64-3
   #     prologue:
   #       commands:
-  #         - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
   #         - make init-ci
   #     jobs:
   #       - name: Unit tests and Integration tests
@@ -99,7 +96,6 @@ blocks:
     task:
       prologue:
         commands:
-          - if [ "$ENABLE_THREAD_LEAK_LISTENER" = "true" ]; then make enable-thread-leak-listener; fi
           - make init-ci
       jobs:
         - name: Build, Compile, Validations, Publish, Upgrade
