@@ -11481,6 +11481,7 @@ class KafkaApisTest extends Logging {
     assertTrue(partitionResponsesMap2.getOrElse(1, null).errorCode() == Errors.UNKNOWN_TOPIC_OR_PARTITION.code())
   }
 
+  @Test
   def testFindShareCoordinatorWithKraft(): Unit = {
     metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     kafkaApis = createKafkaApis(raftSupport = true)
