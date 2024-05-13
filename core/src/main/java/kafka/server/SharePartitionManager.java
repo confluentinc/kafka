@@ -33,6 +33,7 @@ import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.server.group.share.NoOpShareStatePersister;
 import org.apache.kafka.server.group.share.Persister;
 import org.apache.kafka.server.util.timer.SystemTimer;
 import org.apache.kafka.server.util.timer.SystemTimerReaper;
@@ -274,7 +275,7 @@ public class SharePartitionManager implements AutoCloseable {
     // Visible for testing.
     SharePartition sharePartition(ShareFetchPartitionData shareFetchPartitionData, TopicIdPartition topicIdPartition) {
         try {
-            Persister persister = null;
+            Persister persister = NoOpShareStatePersister.getInstance();
             if (!shareGroupPersisterClassName.isEmpty())
                 persister = Utils.newInstance(shareGroupPersisterClassName, Persister.class);
             return new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
