@@ -4355,6 +4355,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -4385,7 +4386,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
@@ -4406,6 +4410,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.randomUuid()
 
@@ -4444,7 +4449,10 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4480,7 +4488,6 @@ class KafkaApisTest extends Logging {
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4501,6 +4508,7 @@ class KafkaApisTest extends Logging {
   def testHandleShareFetchRequestInvalidRequestOnInitialEpoch() : Unit = {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -4530,7 +4538,10 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4564,7 +4575,6 @@ class KafkaApisTest extends Logging {
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4586,6 +4596,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -4616,7 +4627,10 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4652,7 +4666,6 @@ class KafkaApisTest extends Logging {
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4665,6 +4678,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -4695,7 +4709,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     val response = verifyNoThrottling[ShareFetchResponse](request)
     val responseData = response.data()
@@ -4717,6 +4734,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -4748,7 +4766,10 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4780,7 +4801,6 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4802,7 +4822,6 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4815,6 +4834,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId: Uuid = Uuid.ZERO_UUID
 
@@ -4846,7 +4866,10 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -4875,7 +4898,6 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -4912,6 +4934,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId: Uuid = Uuid.randomUuid()
 
@@ -4960,7 +4983,10 @@ class KafkaApisTest extends Logging {
     var request = buildRequest(shareFetchRequest)
 
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -5073,6 +5099,7 @@ class KafkaApisTest extends Logging {
     val topicName4 = "foo4"
     val topicId4 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 2, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 2, topicId = topicId2)
     addTopicToMetadataCache(topicName3, 1, topicId = topicId3)
@@ -5154,7 +5181,10 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
     var response = verifyNoThrottling[ShareFetchResponse](request)
     var responseData = response.data()
@@ -5239,7 +5269,6 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5284,7 +5313,6 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5401,7 +5429,6 @@ class KafkaApisTest extends Logging {
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
     kafkaApis.handleShareFetchRequest(request)
     response = verifyNoThrottling[ShareFetchResponse](request)
     responseData = response.data()
@@ -5418,6 +5445,7 @@ class KafkaApisTest extends Logging {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 1, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 2, topicId = topicId2)
 
@@ -5522,7 +5550,10 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -5592,6 +5623,7 @@ class KafkaApisTest extends Logging {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 1, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 2, topicId = topicId2)
 
@@ -5694,7 +5726,10 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -5750,13 +5785,13 @@ class KafkaApisTest extends Logging {
     )
   }
 
-
   @Test
   def testHandleShareFetchFromShareFetchRequestFetchMessagesReturnError() : Unit = {
     val shareSessionEpoch = 0
     val topicName1 = "foo1"
     val topicId1 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 1, topicId = topicId1)
 
     val memberId: Uuid = Uuid.ZERO_UUID
@@ -5818,8 +5853,10 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(
-      overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock
     )
 
@@ -5850,6 +5887,7 @@ class KafkaApisTest extends Logging {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 1, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 2, topicId = topicId2)
 
@@ -5952,7 +5990,10 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -6024,6 +6065,7 @@ class KafkaApisTest extends Logging {
     val topicId2 = Uuid.randomUuid()
     val topicId3 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 1, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 2, topicId = topicId2)
     // topicName3 is not in the metadataCache
@@ -6145,7 +6187,10 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val shareFetchResponse : ShareFetchResponse = kafkaApis.handleFetchFromShareFetchRequest(
       request,
       erroneousAndValidPartitionData,
@@ -6242,6 +6287,7 @@ class KafkaApisTest extends Logging {
     val tp2 = new TopicIdPartition(topicId2, new TopicPartition(topicName2, 0))
     val tp3 = new TopicIdPartition(topicId2, new TopicPartition(topicName2, 1))
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 2, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 1, topicId = topicId2)
     val memberId: Uuid = Uuid.ZERO_UUID
@@ -6321,7 +6367,10 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -6360,6 +6409,7 @@ class KafkaApisTest extends Logging {
     val tp4 = new TopicIdPartition(topicId3, new TopicPartition(topicName3, 0))
     val tp5 = new TopicIdPartition(topicId4, new TopicPartition(topicName4, 0))
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 1, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 2, topicId = topicId2)
     addTopicToMetadataCache(topicName3, 1, topicId = topicId3)
@@ -6467,7 +6517,10 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -6506,6 +6559,7 @@ class KafkaApisTest extends Logging {
     val tp2 = new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 0))
     val tp3 = new TopicIdPartition(topicId_2, new TopicPartition(topicName_2, 1))
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName_1, 1, topicId = topicId_1)
     addTopicToMetadataCache(topicName_2, 2, topicId = topicId_2)
 
@@ -6581,7 +6635,10 @@ class KafkaApisTest extends Logging {
     ).asJava))
 
     val shareFetchRequest = buildRequest(new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion))
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true", KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
 
     val shareAcknowledgeResponse = kafkaApis.handleAcknowledgements(
@@ -9769,6 +9826,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.randomUuid()
 
@@ -9817,8 +9875,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -9842,6 +9902,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.randomUuid()
 
@@ -9890,8 +9951,10 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -9942,6 +10005,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.randomUuid()
 
@@ -9990,8 +10054,10 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10041,6 +10107,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -10089,8 +10156,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10108,6 +10177,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -10161,8 +10231,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       authorizer = Option(authorizer))
     kafkaApis.handleShareFetchRequest(request)
 
@@ -10181,6 +10253,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val groupId : String = "group"
     val memberId : Uuid = Uuid.ZERO_UUID
@@ -10230,8 +10303,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10249,6 +10324,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val groupId : String = "group"
     val memberId : Uuid = Uuid.ZERO_UUID
@@ -10298,8 +10374,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10320,6 +10398,7 @@ class KafkaApisTest extends Logging {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
     val topicId3 = Uuid.randomUuid()
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName1, 1, topicId = topicId1)
     addTopicToMetadataCache(topicName2, 1, topicId = topicId2)
     addTopicToMetadataCache(topicName3, 1, topicId = topicId3)
@@ -10369,8 +10448,10 @@ class KafkaApisTest extends Logging {
 
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     var fetchResponse = verifyNoThrottling[ShareFetchResponse](request)
@@ -10529,6 +10610,7 @@ class KafkaApisTest extends Logging {
     val topicName = "foo"
     val topicId = Uuid.randomUuid()
     val partitionIndex = 0
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicName, 1, topicId = topicId)
     val groupId : String = "group"
     val memberId : Uuid = Uuid.ZERO_UUID
@@ -10578,8 +10660,10 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     kafkaApis.handleShareFetchRequest(request)
 
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
@@ -10605,6 +10689,7 @@ class KafkaApisTest extends Logging {
     val partitionIndex = 0
     val topicIdPartition = new TopicIdPartition(topicId, new TopicPartition(topicName, partitionIndex))
     val topicPartition = topicIdPartition.topicPartition
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache(topicPartition.topic, numPartitions = 1, numBrokers = 3, topicId)
     val memberId : Uuid = Uuid.ZERO_UUID
 
@@ -10666,8 +10751,10 @@ class KafkaApisTest extends Logging {
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
       .build(ApiKeys.SHARE_ACKNOWLEDGE.latestVersion)
     val request = buildRequest(shareAcknowledgeRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
     kafkaApis.handleShareAcknowledgeRequest(request)
     val response = verifyNoThrottling[ShareAcknowledgeResponse](request)
@@ -10730,6 +10817,7 @@ class KafkaApisTest extends Logging {
   def testGetAcknowledgeBatchesFromShareFetchRequest() : Unit = {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     val shareFetchRequestData = new ShareFetchRequestData().
       setGroupId("group").
       setMemberId(Uuid.randomUuid().toString).
@@ -10784,7 +10872,10 @@ class KafkaApisTest extends Logging {
     topicNames.put(topicId2, "foo2")
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val acknowledgeBatches = kafkaApis.getAcknowledgeBatchesFromShareFetchRequest(shareFetchRequest, topicNames, erroneous)
 
     assertEquals(3, acknowledgeBatches.size)
@@ -10802,6 +10893,7 @@ class KafkaApisTest extends Logging {
   def testGetAcknowledgeBatchesFromShareFetchRequestError() : Unit = {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     val shareFetchRequestData = new ShareFetchRequestData().
       setGroupId("group").
       setMemberId(Uuid.randomUuid().toString).
@@ -10827,7 +10919,10 @@ class KafkaApisTest extends Logging {
     topicNames.put(topicId2, "foo2")
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val acknowledgeBatches = kafkaApis.getAcknowledgeBatchesFromShareFetchRequest(shareFetchRequest, topicNames, erroneous)
 
     assertEquals(0, acknowledgeBatches.size)
@@ -10840,6 +10935,7 @@ class KafkaApisTest extends Logging {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     val shareAcknowledgeRequestData = new ShareAcknowledgeRequestData().
       setGroupId("group").
       setMemberId(Uuid.randomUuid().toString).
@@ -10889,7 +10985,10 @@ class KafkaApisTest extends Logging {
     topicNames.put(topicId2, "foo2")
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val acknowledgeBatches = kafkaApis.getAcknowledgeBatchesFromShareAcknowledgeRequest(shareAcknowledgeRequest, topicNames, erroneous)
 
     assertEquals(3, acknowledgeBatches.size)
@@ -10908,6 +11007,7 @@ class KafkaApisTest extends Logging {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     val shareAcknowledgeRequestData = new ShareAcknowledgeRequestData().
       setGroupId("group").
       setMemberId(Uuid.randomUuid().toString).
@@ -10933,7 +11033,10 @@ class KafkaApisTest extends Logging {
     topicNames.put(topicId2, "foo2")
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val acknowledgeBatches = kafkaApis.getAcknowledgeBatchesFromShareAcknowledgeRequest(shareAcknowledgeRequest, topicNames, erroneous)
 
     assertEquals(0, acknowledgeBatches.size)
@@ -10948,6 +11051,7 @@ class KafkaApisTest extends Logging {
     val topicId2 = Uuid.randomUuid()
     val memberId = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache("foo1", 1, topicId = topicId1)
     addTopicToMetadataCache("foo2", 2, topicId = topicId2)
 
@@ -11022,7 +11126,10 @@ class KafkaApisTest extends Logging {
           .setErrorCode(Errors.NONE.code())
     ).asJava))
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -11054,6 +11161,7 @@ class KafkaApisTest extends Logging {
     val topicId2 = Uuid.randomUuid()
     val memberId = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache("foo1", 1, topicId = topicId1)
     addTopicToMetadataCache("foo2", 2, topicId = topicId2)
 
@@ -11125,7 +11233,10 @@ class KafkaApisTest extends Logging {
             .setErrorCode(Errors.NONE.code())
       ).asJava))
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -11157,6 +11268,7 @@ class KafkaApisTest extends Logging {
     val topicId2 = Uuid.randomUuid()
     val memberId = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     addTopicToMetadataCache("foo1", 1, topicId = topicId1)
     addTopicToMetadataCache("foo2", 2, topicId = topicId2)
 
@@ -11236,7 +11348,10 @@ class KafkaApisTest extends Logging {
             .setErrorCode(Errors.NONE.code())
       ).asJava))
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -11268,6 +11383,7 @@ class KafkaApisTest extends Logging {
     val topicId2 = Uuid.randomUuid()
     val memberId = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     // Topic with id topicId1 is not present in Metadata Cache
     addTopicToMetadataCache("foo2", 2, topicId = topicId2)
 
@@ -11347,7 +11463,10 @@ class KafkaApisTest extends Logging {
             .setErrorCode(Errors.NONE.code())
       ).asJava))
 
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"),
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true,
       sharePartitionManager = sharePartitionManagerMock)
     val ackResult = kafkaApis.handleAcknowledgements(
       request,
@@ -11379,6 +11498,7 @@ class KafkaApisTest extends Logging {
     val topicId1 = Uuid.randomUuid()
     val topicId2 = Uuid.randomUuid()
 
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
     val responseAcknowledgeData: mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData] = mutable.Map()
     responseAcknowledgeData += (new TopicIdPartition(topicId1, new TopicPartition("foo", 0)) ->
       new ShareAcknowledgeResponseData.PartitionData().setPartitionIndex(0).setErrorCode(Errors.NONE.code()))
@@ -11443,7 +11563,10 @@ class KafkaApisTest extends Logging {
     val shareAcknowledgeRequest = new ShareAcknowledgeRequest.Builder(shareAcknowledgeRequestData)
       .build(ApiKeys.SHARE_ACKNOWLEDGE.latestVersion)
     val request = buildRequest(shareAcknowledgeRequest)
-    kafkaApis = createKafkaApis(overrideProperties = Map(KafkaConfig.ShareGroupEnableProp -> "true"))
+    kafkaApis = createKafkaApis(overrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
+      KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
+      raftSupport = true)
     val response = kafkaApis.AcknowledgeResponseCallback(responseAcknowledgeData, request, topicNames)
     val responseData = response.data()
     val topicResponses = responseData.responses()
