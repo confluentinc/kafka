@@ -4041,6 +4041,76 @@ public class SharePartitionTest {
     }
 
     @Test
+    void testNextFetchOffsetWorksCorrectlyWithMultipleConsumers() {
+        SharePartition sharePartition = SharePartitionBuilder.builder().withMaxInflightMessages(100).build();
+        MemoryRecords records1 = memoryRecords(3, 0);
+        MemoryRecords records2 = memoryRecords(2, 3);
+
+        String memberId1 = "member-1";
+        String memberId2 = "member-2";
+
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                memberId1,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
+        assertEquals(memberId1, sharePartition.cachedState().get(0L).batchMemberId());
+        assertEquals(3, sharePartition.nextFetchOffset());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
+                memberId1,
+                Collections.singletonList(new AcknowledgementBatch(0, 2, null, AcknowledgeType.RELEASE)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(0L).batchState());
+        assertEquals(0, sharePartition.nextFetchOffset());
+
+        result = sharePartition.acquire(
+                memberId2,
+                new FetchPartitionData(Errors.NONE, 20, 0, records2,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(2, sharePartition.cachedState().size());
+        assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(0L).batchState());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(3L).batchState());
+        assertEquals(memberId2, sharePartition.cachedState().get(3L).batchMemberId());
+        assertEquals(0, sharePartition.nextFetchOffset());
+
+        result = sharePartition.acquire(
+                memberId1,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(2, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(3L).batchState());
+        assertEquals(memberId1, sharePartition.cachedState().get(0L).batchMemberId());
+        assertEquals(memberId2, sharePartition.cachedState().get(3L).batchMemberId());
+        assertEquals(5, sharePartition.nextFetchOffset());
+
+        ackResult = sharePartition.acknowledge(
+                memberId2,
+                Collections.singletonList(new AcknowledgementBatch(3, 4, null, AcknowledgeType.RELEASE)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        assertEquals(2, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
+        assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(3L).batchState());
+        assertEquals(3, sharePartition.nextFetchOffset());
+    }
+
+    @Test
     public void testWriteShareGroupStateWithNullResponse() {
         Persister persister = Mockito.mock(Persister.class);
         mockPersisterReadStateMethod(persister);
