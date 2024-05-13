@@ -4387,8 +4387,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -4452,8 +4450,6 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -4543,8 +4539,6 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -4634,8 +4628,6 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -4718,8 +4710,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     val request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -4777,8 +4767,6 @@ class KafkaApisTest extends Logging {
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -4879,8 +4867,6 @@ class KafkaApisTest extends Logging {
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -4998,8 +4984,6 @@ class KafkaApisTest extends Logging {
 
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -5198,8 +5182,6 @@ class KafkaApisTest extends Logging {
     var request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -5569,8 +5551,6 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -5747,8 +5727,6 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -5876,8 +5854,6 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -6015,8 +5991,6 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -6214,8 +6188,6 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
     // First fetch request is to establish the share session with the broker
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -6396,8 +6368,6 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -6548,8 +6518,6 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(shareFetchRequest)
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -6668,8 +6636,6 @@ class KafkaApisTest extends Logging {
 
     val shareFetchRequest = buildRequest(new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion))
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -9910,8 +9876,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -9988,8 +9952,6 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10093,8 +10055,6 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10197,8 +10157,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10274,8 +10232,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -10348,8 +10304,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10421,8 +10375,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10497,8 +10449,6 @@ class KafkaApisTest extends Logging {
     var shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10711,8 +10661,6 @@ class KafkaApisTest extends Logging {
     val shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     var request = buildRequest(shareFetchRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10804,8 +10752,6 @@ class KafkaApisTest extends Logging {
       .build(ApiKeys.SHARE_ACKNOWLEDGE.latestVersion)
     val request = buildRequest(shareAcknowledgeRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -10927,8 +10873,6 @@ class KafkaApisTest extends Logging {
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -10976,8 +10920,6 @@ class KafkaApisTest extends Logging {
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -11044,8 +10986,6 @@ class KafkaApisTest extends Logging {
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -11094,8 +11034,6 @@ class KafkaApisTest extends Logging {
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
@@ -11189,8 +11127,6 @@ class KafkaApisTest extends Logging {
     ).asJava))
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -11298,8 +11234,6 @@ class KafkaApisTest extends Logging {
       ).asJava))
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -11415,8 +11349,6 @@ class KafkaApisTest extends Logging {
       ).asJava))
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -11532,8 +11464,6 @@ class KafkaApisTest extends Logging {
       ).asJava))
 
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true,
@@ -11634,8 +11564,6 @@ class KafkaApisTest extends Logging {
       .build(ApiKeys.SHARE_ACKNOWLEDGE.latestVersion)
     val request = buildRequest(shareAcknowledgeRequest)
     kafkaApis = createKafkaApis(overrideProperties = Map(
-      KafkaConfig.NewGroupCoordinatorEnableProp -> "true",
-      KafkaConfig.ShareGroupEnableProp -> "true",
       KafkaConfig.GroupCoordinatorRebalanceProtocolsProp -> "classic,consumer,share",
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
