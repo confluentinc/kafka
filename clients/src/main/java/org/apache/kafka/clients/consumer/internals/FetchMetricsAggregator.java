@@ -80,12 +80,12 @@ class FetchMetricsAggregator {
         }
     }
 
-    private static class FetchMetrics {
+    static class FetchMetrics {
 
-        private int bytes;
-        private int records;
+        int bytes;
+        int records;
 
-        private void increment(int bytes, int records) {
+        void increment(int bytes, int records) {
             this.bytes += bytes;
             this.records += records;
         }

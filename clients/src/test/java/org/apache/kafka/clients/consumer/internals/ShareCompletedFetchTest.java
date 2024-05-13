@@ -21,6 +21,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ShareFetchResponseData;
+import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.ControlRecordType;
@@ -285,12 +286,17 @@ public class ShareCompletedFetchTest {
 
     private ShareCompletedFetch newShareCompletedFetch(ShareFetchResponseData.PartitionData partitionData) {
         LogContext logContext = new LogContext();
+        ShareFetchMetricsRegistry shareFetchMetricsRegistry = new ShareFetchMetricsRegistry();
+        ShareFetchMetricsManager shareFetchMetricsManager = new ShareFetchMetricsManager(new Metrics(), shareFetchMetricsRegistry);
+        ShareFetchMetricsAggregator shareFetchMetricsAggregator = new ShareFetchMetricsAggregator(shareFetchMetricsManager,
+                Collections.singleton(TIP.topicPartition()));
 
         return new ShareCompletedFetch(
                 logContext,
                 BufferSupplier.create(),
                 TIP,
                 partitionData,
+                shareFetchMetricsAggregator,
                 ApiKeys.SHARE_FETCH.latestVersion());
     }
 

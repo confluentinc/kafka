@@ -84,11 +84,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_JMX_PREFIX;
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_METRIC_GROUP_PREFIX;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.DEFAULT_CLOSE_TIMEOUT_MS;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.SHARE_CONSUMER_METRIC_GROUP_PREFIX;
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createShareFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createSubscriptionState;
 import static org.apache.kafka.common.utils.Utils.closeQuietly;
 import static org.apache.kafka.common.utils.Utils.isBlank;
@@ -261,7 +260,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             final List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(config);
             metadata.bootstrap(addresses);
 
-            FetchMetricsManager fetchMetricsManager = createFetchMetricsManager(metrics);
+            ShareFetchMetricsManager shareFetchMetricsManager = createShareFetchMetricsManager(metrics);
             ApiVersions apiVersions = new ApiVersions();
             final BlockingQueue<ApplicationEvent> applicationEventQueue = new LinkedBlockingQueue<>();
             final BackgroundEventHandler backgroundEventHandler = new BackgroundEventHandler(
@@ -278,7 +277,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                     config,
                     apiVersions,
                     metrics,
-                    fetchMetricsManager,
+                    shareFetchMetricsManager.throttleTimeSensor(),
                     clientTelemetryReporter.map(ClientTelemetryReporter::telemetrySender).orElse(null)
             );
             final Supplier<RequestManagers> requestManagersSupplier = RequestManagers.supplier(
@@ -291,7 +290,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                     config,
                     groupRebalanceConfig,
                     networkClientDelegateSupplier,
-                    fetchMetricsManager,
+                    shareFetchMetricsManager,
                     clientTelemetryReporter,
                     metrics
             );
@@ -359,8 +358,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         this.metadata = metadata;
         this.fetchBuffer = new ShareFetchBuffer(logContext);
 
-        ConsumerMetrics metricsRegistry = new ConsumerMetrics(CONSUMER_METRIC_GROUP_PREFIX);
-        FetchMetricsManager fetchMetricsManager = new FetchMetricsManager(metrics, metricsRegistry.fetcherMetrics);
+        ShareConsumerMetrics metricsRegistry = new ShareConsumerMetrics(SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        ShareFetchMetricsManager shareFetchMetricsManager = new ShareFetchMetricsManager(metrics, metricsRegistry.shareFetchMetrics);
         this.fetchCollector = new ShareFetchCollector<>(
                 logContext,
                 metadata,
@@ -392,7 +391,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 config,
                 groupRebalanceConfig,
                 networkClientDelegateSupplier,
-                fetchMetricsManager,
+                shareFetchMetricsManager,
                 clientTelemetryReporter,
                 metrics
         );

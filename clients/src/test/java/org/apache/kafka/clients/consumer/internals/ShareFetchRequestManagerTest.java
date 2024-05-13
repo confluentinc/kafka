@@ -126,7 +126,7 @@ public class ShareFetchRequestManagerTest {
     private MockTime time = new MockTime(1);
     private SubscriptionState subscriptions;
     private ConsumerMetadata metadata;
-    private FetchMetricsManager metricsManager;
+    private ShareFetchMetricsManager metricsManager;
     private MockClient client;
     private Metrics metrics;
     private TestableShareFetchRequestManager<?, ?> fetcher;
@@ -751,8 +751,8 @@ public class ShareFetchRequestManagerTest {
                 subscriptions, logContext, new ClusterResourceListeners());
         client = new MockClient(time, metadata);
         metrics = new Metrics(metricConfig, time);
-        FetchMetricsRegistry metricsRegistry = new FetchMetricsRegistry(metricConfig.tags().keySet(), "consumer" + groupId);
-        metricsManager = new FetchMetricsManager(metrics, metricsRegistry);
+        ShareFetchMetricsRegistry metricsRegistry = new ShareFetchMetricsRegistry(metricConfig.tags().keySet(), "consumer" + groupId);
+        metricsManager = new ShareFetchMetricsManager(metrics, metricsRegistry);
 
         Properties properties = new Properties();
         properties.put(KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
@@ -773,7 +773,7 @@ public class ShareFetchRequestManagerTest {
                                            SubscriptionState subscriptions,
                                            FetchConfig fetchConfig,
                                            ShareFetchBuffer shareFetchBuffer,
-                                           FetchMetricsManager metricsManager,
+                                           ShareFetchMetricsManager metricsManager,
                                            ShareFetchCollector<K, V> fetchCollector) {
             super(logContext, groupId, metadata, subscriptions, fetchConfig, shareFetchBuffer, metricsManager);
             this.shareFetchCollector = fetchCollector;

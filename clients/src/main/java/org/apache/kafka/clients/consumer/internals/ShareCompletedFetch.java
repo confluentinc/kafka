@@ -61,6 +61,8 @@ public class ShareCompletedFetch {
     private final Logger log;
     private final BufferSupplier decompressionBufferSupplier;
     private final Iterator<? extends RecordBatch> batches;
+    private int recordsRead;
+    private int bytesRead;
     private RecordBatch currentBatch;
     private Record lastRecord;
     private CloseableIterator<Record> records;
@@ -71,16 +73,19 @@ public class ShareCompletedFetch {
     private final List<OffsetAndDeliveryCount> acquiredRecordList;
     private ListIterator<OffsetAndDeliveryCount> acquiredRecordIterator;
     private OffsetAndDeliveryCount nextAcquired;
+    private ShareFetchMetricsAggregator metricAggregator;
 
     ShareCompletedFetch(final LogContext logContext,
                         final BufferSupplier decompressionBufferSupplier,
                         final TopicIdPartition partition,
                         final ShareFetchResponseData.PartitionData partitionData,
+                        final ShareFetchMetricsAggregator metricAggregator,
                         final short requestVersion) {
         this.log = logContext.logger(org.apache.kafka.clients.consumer.internals.ShareCompletedFetch.class);
         this.decompressionBufferSupplier = decompressionBufferSupplier;
         this.partition = partition;
         this.partitionData = partitionData;
+        this.metricAggregator = metricAggregator;
         this.requestVersion = requestVersion;
         this.batches = ShareFetchResponse.recordsOrFail(partitionData).batches().iterator();
         this.acquiredRecordList = buildAcquiredRecordList(partitionData.acquiredRecords());
@@ -121,7 +126,16 @@ public class ShareCompletedFetch {
             cachedRecordException = null;
             cachedBatchException = null;
             this.isConsumed = true;
+            recordAggregatedMetrics(bytesRead, recordsRead);
         }
+    }
+
+    /**
+     * After each partition is parsed, we update the current metric totals with the total bytes
+     * and number of records parsed. After all partitions have reported, we write the metric.
+     */
+    void recordAggregatedMetrics(int bytes, int records) {
+        metricAggregator.record(partition.topicPartition(), bytes, records);
     }
 
     /**
@@ -183,6 +197,8 @@ public class ShareCompletedFetch {
                         ConsumerRecord<K, V> record = parseRecord(deserializers, partition, leaderEpoch,
                                 timestampType, lastRecord, nextAcquired.deliveryCount);
                         inFlightBatch.addRecord(record);
+                        recordsRead++;
+                        bytesRead += lastRecord.sizeInBytes();
                         recordsInBatch++;
 
                         nextAcquired = nextAcquiredRecord();
