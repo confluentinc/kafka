@@ -20,9 +20,13 @@ package org.apache.kafka.clients.consumer.internals;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.message.ShareAcknowledgeRequestData;
+import org.apache.kafka.common.message.ShareFetchRequestData;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.requests.ShareAcknowledgeRequest;
 import org.apache.kafka.common.requests.ShareAcknowledgeResponse;
 import org.apache.kafka.common.requests.ShareFetchMetadata;
+import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Utils;
@@ -31,6 +35,7 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,7 +50,7 @@ import java.util.Map.Entry;
  * without explicitly enumerating all the partitions in the request and response.
  *
  * <p>ShareSessionHandler tracks the partitions which are in the session. It also determines
- * which partitions need to be included in each ShareFetch request.
+ * which partitions need to be included in each ShareFetch/ShareAcknowledge request.
  */
 public class ShareSessionHandler {
     private final Logger log;
@@ -53,7 +58,7 @@ public class ShareSessionHandler {
     private final Uuid memberId;
 
     /**
-     * The metadata for the next ShareFetchRequest.
+     * The metadata for the next ShareFetchRequest/ShareAcknowledgeRequest.
      */
     private ShareFetchMetadata nextMetadata;
 
@@ -62,127 +67,59 @@ public class ShareSessionHandler {
      */
     private LinkedHashMap<TopicPartition, TopicIdPartition> sessionPartitions;
 
+    /*
+     * The partitions to be included in the next ShareFetch request.
+     */
+    private LinkedHashMap<TopicPartition, TopicIdPartition> nextPartitions;
+
+    /*
+     * The acknowledgements to be included in the next ShareFetch/ShareAcknowledge request.
+     */
+    private LinkedHashMap<TopicIdPartition, Acknowledgements> nextAcknowledgements;
+
     public ShareSessionHandler(LogContext logContext, int node, Uuid memberId) {
         this.log = logContext.logger(ShareSessionHandler.class);
         this.node = node;
         this.memberId = memberId;
         this.nextMetadata = ShareFetchMetadata.initialEpoch(memberId);
         this.sessionPartitions = new LinkedHashMap<>();
+        this.nextPartitions = new LinkedHashMap<>();
+        this.nextAcknowledgements = new LinkedHashMap<>();
+    }
+
+    Map<TopicPartition, TopicIdPartition> sessionPartitionMap() {
+        return sessionPartitions;
     }
 
     public Collection<TopicIdPartition> sessionPartitions() {
         return Collections.unmodifiableCollection(sessionPartitions.values());
     }
 
-    public static class ShareFetchRequestData {
-
-        /**
-         * All the partitions which exist in the share session.
-         */
-        private final Map<TopicPartition, TopicIdPartition> sessionPartitions;
-
-        /**
-         * The partitions to send in the ShareFetch request.
-         */
-        private final List<TopicIdPartition> toSend;
-
-        /**
-         * The partitions to send in the ShareFetch "forget" list.
-         */
-        private final List<TopicIdPartition> toForget;
-
-        /**
-         * The partitions whose TopicIds have changed due to topic recreation.
-         */
-        private final List<TopicIdPartition> toReplace;
-
-        /**
-         * The metadata to use in this ShareFetch request.
-         */
-        private final ShareFetchMetadata metadata;
-
-        /**
-         * A map of the acknowledgements to send.
-         */
-        private final Map<TopicIdPartition, Acknowledgements> acknowledgements;
-
-        ShareFetchRequestData(Map<TopicPartition, TopicIdPartition> sessionPartitions,
-                              List<TopicIdPartition> toSend,
-                              List<TopicIdPartition> toForget,
-                              List<TopicIdPartition> toReplace,
-                              Map<TopicIdPartition, Acknowledgements> acknowledgements,
-                              ShareFetchMetadata metadata) {
-            this.toSend = toSend;
-            this.toForget = toForget;
-            this.toReplace = toReplace;
-            this.sessionPartitions = sessionPartitions;
-            this.metadata = metadata;
-            this.acknowledgements = acknowledgements;
-        }
-
-        public Map<TopicPartition, TopicIdPartition> sessionPartitions() {
-            return sessionPartitions;
-        }
-
-        public List<TopicIdPartition> toSend() {
-            return toSend;
-        }
-
-        public List<TopicIdPartition> toForget() {
-            return toForget;
-        }
-
-        public List<TopicIdPartition> toReplace() {
-            return toReplace;
-        }
-
-        public Map<TopicIdPartition, Acknowledgements> acknowledgements() {
-            return acknowledgements;
-        }
-
-        public ShareFetchMetadata metadata() {
-            return metadata;
+    public void addPartitionToFetch(TopicIdPartition topicIdPartition, Acknowledgements partitionAcknowledgements) {
+        nextPartitions.put(topicIdPartition.topicPartition(), topicIdPartition);
+        if (partitionAcknowledgements != null) {
+            nextAcknowledgements.put(topicIdPartition, partitionAcknowledgements);
         }
     }
 
-    public class Builder {
+    public ShareFetchRequest.Builder newShareFetchBuilder(String groupId, FetchConfig fetchConfig) {
+        List<TopicIdPartition> added = new ArrayList<>();
+        List<TopicIdPartition> removed = new ArrayList<>();
+        List<TopicIdPartition> replaced = new ArrayList<>();
 
-        private LinkedHashMap<TopicPartition, TopicIdPartition> nextPartitions;
-
-        private LinkedHashMap<TopicIdPartition, Acknowledgements> nextAcknowledgements;
-
-        Builder() {
-            this.nextPartitions = new LinkedHashMap<>();
-            this.nextAcknowledgements = new LinkedHashMap<>();
-        }
-
-        public void add(TopicIdPartition topicIdPartition, Acknowledgements partitionAcknowledgements) {
-            nextPartitions.put(topicIdPartition.topicPartition(), topicIdPartition);
-            if (partitionAcknowledgements != null) {
-                nextAcknowledgements.put(topicIdPartition, partitionAcknowledgements);
-            }
-        }
-
-        public ShareFetchRequestData build() {
-            if (nextMetadata.isNewSession()) {
-                sessionPartitions = nextPartitions;
-                nextPartitions = null;
-                nextAcknowledgements = null;
-                return new ShareFetchRequestData(sessionPartitions,
-                        Collections.unmodifiableList(new ArrayList<>(sessionPartitions.values())),
-                        Collections.emptyList(),
-                        Collections.emptyList(),
-                        Collections.emptyMap(),
-                        nextMetadata);
+        if (nextMetadata.isNewSession()) {
+            // Add any new partitions to the session
+            for (Entry<TopicPartition, TopicIdPartition> entry : nextPartitions.entrySet()) {
+                TopicPartition topicPartition = entry.getKey();
+                TopicIdPartition topicIdPartition = entry.getValue();
+                sessionPartitions.put(topicPartition, topicIdPartition);
             }
 
-            List<TopicIdPartition> added = new ArrayList<>();
-            List<TopicIdPartition> removed = new ArrayList<>();
-            List<TopicIdPartition> replaced = new ArrayList<>();
-
-            // Iterate over the session partitions, tallying which were added to the builder
-            Iterator<Entry<TopicPartition, TopicIdPartition>> partitionIterator =
-                    sessionPartitions.entrySet().iterator();
+            // If it's a new session, all the partitions must be added to the request
+            added.addAll(sessionPartitions.values());
+        } else {
+            // Iterate over the session partitions, tallying which were added
+            Iterator<Entry<TopicPartition, TopicIdPartition>> partitionIterator = sessionPartitions.entrySet().iterator();
             while (partitionIterator.hasNext()) {
                 Entry<TopicPartition, TopicIdPartition> entry = partitionIterator.next();
                 TopicPartition topicPartition = entry.getKey();
@@ -209,34 +146,44 @@ public class ShareSessionHandler {
                 sessionPartitions.put(topicPartition, topicIdPartition);
                 added.add(topicIdPartition);
             }
-
-            if (log.isDebugEnabled()) {
-                log.debug("Build ShareFetch {} for node {}. Added {}, removed {}, replaced {} out of {}",
-                        nextMetadata, node,
-                        topicIdPartitionsToLogString(added),
-                        topicIdPartitionsToLogString(removed),
-                        topicIdPartitionsToLogString(replaced),
-                        topicIdPartitionsToLogString(sessionPartitions.values()));
-            }
-
-            Map<TopicPartition, TopicIdPartition> curSessionPartitions = Collections.unmodifiableMap(sessionPartitions);
-            List<TopicIdPartition> toSend = Collections.unmodifiableList(added);
-            List<TopicIdPartition> toForget = Collections.unmodifiableList(removed);
-            List<TopicIdPartition> toReplace = Collections.unmodifiableList(replaced);
-            Map<TopicIdPartition, Acknowledgements> curAcknowledgements = Collections.unmodifiableMap(nextAcknowledgements);
-            nextPartitions = null;
-            nextAcknowledgements = null;
-            return new ShareFetchRequestData(curSessionPartitions,
-                    toSend,
-                    toForget,
-                    toReplace,
-                    curAcknowledgements,
-                    nextMetadata);
         }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Build ShareFetch {} for node {}. Added {}, removed {}, replaced {} out of {}",
+                    nextMetadata, node,
+                    topicIdPartitionsToLogString(added),
+                    topicIdPartitionsToLogString(removed),
+                    topicIdPartitionsToLogString(replaced),
+                    topicIdPartitionsToLogString(sessionPartitions.values()));
+        }
+
+        // The replaced topic-partitions need to be removed, and their replacements are already added
+        removed.addAll(replaced);
+
+        Map<TopicIdPartition, List<ShareFetchRequestData.AcknowledgementBatch>> acknowledgementBatches = new HashMap<>();
+        nextAcknowledgements.forEach((partition, acknowledgements) -> acknowledgementBatches.put(partition, acknowledgements.getShareFetchBatches()));
+
+        nextPartitions = new LinkedHashMap<>();
+        nextAcknowledgements = new LinkedHashMap<>();
+
+        return ShareFetchRequest.Builder.forConsumer(
+                groupId, nextMetadata, fetchConfig.maxWaitMs,
+                fetchConfig.minBytes, fetchConfig.maxBytes, fetchConfig.fetchSize,
+                added, removed, acknowledgementBatches);
     }
 
-    Builder newBuilder() {
-        return new Builder();
+    public ShareAcknowledgeRequest.Builder newShareAcknowledgeBuilder(String groupId, FetchConfig fetchConfig) {
+        if (nextMetadata.isNewSession()) {
+            // A share session cannot be started with a ShareAcknowledge request
+            return null;
+        }
+
+        Map<TopicIdPartition, List<ShareAcknowledgeRequestData.AcknowledgementBatch>> acknowledgementBatches = new HashMap<>();
+        nextAcknowledgements.forEach((partition, acknowledgements) -> acknowledgementBatches.put(partition, acknowledgements.getShareAcknowledgeBatches()));
+
+        nextAcknowledgements = new LinkedHashMap<>();
+
+        return ShareAcknowledgeRequest.Builder.forConsumer(groupId, nextMetadata, acknowledgementBatches);
     }
 
     private String topicIdPartitionsToLogString(Collection<TopicIdPartition> partitions) {
@@ -321,7 +268,7 @@ public class ShareSessionHandler {
 
     /**
      * Handle an error sending the prepared request.
-     * When a network error occurs, we close any existing fetch session on our next request,
+     * When a network error occurs, we close any existing share session on our next request,
      * and try to create a new session.
      *
      * @param t     The exception.

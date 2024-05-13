@@ -52,11 +52,9 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -243,7 +241,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
-        // We get back the acknowledgment error code after the second poll.
+        // We get back the acknowledgement error code after the second poll.
         // The acknowledgement commit callback is invoked in close.
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.close();
@@ -288,9 +286,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
         @Override
         public void onComplete(Map<TopicIdPartition, Set<Long>> offsetsMap, Exception exception) {
-            offsetsMap.forEach((partition, offsets) -> offsets.forEach(offset -> {
-                partitionExceptionMap.put(partition.topicPartition(), exception);
-            }));
+            offsetsMap.forEach((partition, offsets) -> offsets.forEach(offset -> partitionExceptionMap.put(partition.topicPartition(), exception)));
         }
     }
 
@@ -611,12 +607,15 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         int consumer1MessageCount = 0;
         int consumer2MessageCount = 0;
 
-        while (true) {
+        int maxRetries = 10;
+        int retries = 0;
+        while (retries < maxRetries) {
             ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(2000));
             consumer1MessageCount += records1.count();
             ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(2000));
             consumer2MessageCount += records2.count();
             if (records1.count() + records2.count() == 0) break;
+            retries++;
         }
 
         assertEquals(totalMessages, consumer1MessageCount + consumer2MessageCount);
@@ -663,6 +662,8 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
                 totalMessagesConsumed.addAndGet(records.count());
                 retries++;
             }
+            // One final poll to complete acknowledgement of the records (will be commit once we have that)
+            shareConsumer.poll(Duration.ofMillis(2000));
         } catch (Exception e) {
             fail("Consumer " + consumerNumber + " failed with exception: " + e);
         } finally {
@@ -674,7 +675,6 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
-    @Disabled
     public void testMultipleConsumersInGroupConcurrentConsumption(String quorum) {
         AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
 
@@ -716,7 +716,6 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
     }
 
     // This test is disabled because it is not stable and fails intermittently.
-    @Disabled
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
     public void testMultipleConsumersInMultipleGroupsConcurrentConsumption(String quorum) {
@@ -840,9 +839,12 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         // because the consumer is closed, which makes the broker release the records fetched.
         ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(2000));
         consumer1MessageCount += records1.count();
+        int consumer1MessageCountA = records1.count();
         records1 = shareConsumer1.poll(Duration.ofMillis(2000));
         consumer1MessageCount += records1.count();
-        shareConsumer1.poll(Duration.ofMillis(2000));
+        int consumer1MessageCountB = records1.count();
+        records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+        int consumer1MessageCountC = records1.count();
         shareConsumer1.close();
 
         int maxRetries = 10;
@@ -858,28 +860,12 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
-    @Disabled // This test remains disabled until the broker releases records automatically when a share session is closed
     public void testMultipleConsumersInGroupFailureConcurrentConsumption(String quorum) {
         AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
 
         int consumerCount = 5;
         int producerCount = 5;
         int messagesPerProducer = 2000;
-
-        Random random = new Random();
-        int totalConsumerFailures = random.nextInt(consumerCount - 1) + 1; // Generates a random number between 1 and consumerCount, this represents the random number of consumers that will be simulated to fail
-            System.out.println("number of failing consumers : " + totalConsumerFailures);
-        Set<Integer> failedConsumers = new HashSet<>();
-
-        while (failedConsumers.size() < totalConsumerFailures) {
-            int randomNumber = random.nextInt(consumerCount) + 1; // Generates a random number between 1 and 5
-            failedConsumers.add(randomNumber);
-        }
-
-        System.out.println("Failing consumers are :-");
-        for (Integer consumer : failedConsumers) {
-            System.out.println(consumer);
-        }
 
         ExecutorService consumerExecutorService = Executors.newFixedThreadPool(consumerCount);
         ExecutorService producerExecutorService = Executors.newFixedThreadPool(producerCount);
@@ -894,19 +880,17 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresSuccess = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresFail = new ConcurrentLinkedQueue<>();
 
+        consumerExecutorService.submit(() -> {
+            // The "failing" consumer polls but immediately closes, which releases the records for the other consumers
+            CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", 0, 0);
+            futuresFail.add(future);
+        });
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
-            if (failedConsumers.contains(consumerNumber)) {
-                consumerExecutorService.submit(() -> {
-                    CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 1);
-                    futuresFail.add(future);
-                });
-            } else {
-                consumerExecutorService.submit(() -> {
-                    CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 25);
-                    futuresSuccess.add(future);
-                });
-            }
+            consumerExecutorService.submit(() -> {
+                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 25);
+                futuresSuccess.add(future);
+            });
         }
         producerExecutorService.shutdown();
         consumerExecutorService.shutdown();
@@ -1058,7 +1042,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
     }
 
     /**
-     * Test to verify that the acknowledgement commit callback can throw an exception and it is propagated
+     * Test to verify that the acknowledgement commit callback can throw an exception, and it is propagated
      * to the caller of poll().
      */
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
@@ -1091,7 +1075,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
     }
 
     /**
-     * Test to verify that calling Thread.interrupt before KafkaShareConsumer.poll(Duration)
+     * Test to verify that calling Thread.interrupt() before KafkaShareConsumer.poll(Duration)
      * causes it to throw InterruptException
      */
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
@@ -1185,6 +1169,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
     @Disabled
+    // This test is under development and disabled while it is still flaky
     public void testSubscriptionAndPollFollowedByTopicDeletion(String quorum) {
         String topic1 = "bar";
         String topic2 = "baz";
