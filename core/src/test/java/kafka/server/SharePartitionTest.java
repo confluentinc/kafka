@@ -4547,7 +4547,7 @@ public class SharePartitionTest {
         private int acquisitionLockTimeoutMs = RECORD_LOCK_DURATION_MS;
         private int maxDeliveryCount = MAX_DELIVERY_COUNT;
         private int maxInflightMessages = MAX_IN_FLIGHT_MESSAGES;
-        private Persister persister = new NoOpShareStatePersister();
+        private Persister persister = NoOpShareStatePersister.getInstance();
 
         private SharePartitionBuilder withAcquisitionLockTimeoutMs(int acquisitionLockTimeoutMs) {
             this.acquisitionLockTimeoutMs = acquisitionLockTimeoutMs;

@@ -275,7 +275,7 @@ public class SharePartitionManager implements AutoCloseable {
     // Visible for testing.
     SharePartition sharePartition(ShareFetchPartitionData shareFetchPartitionData, TopicIdPartition topicIdPartition) {
         try {
-            Persister persister = new NoOpShareStatePersister();
+            Persister persister = NoOpShareStatePersister.getInstance();
             if (!shareGroupPersisterClassName.isEmpty())
                 persister = Utils.newInstance(shareGroupPersisterClassName, Persister.class);
             return new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,

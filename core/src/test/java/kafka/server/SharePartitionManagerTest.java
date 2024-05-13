@@ -111,7 +111,7 @@ public class SharePartitionManagerTest {
     private static Timer mockTimer;
     private static final String SHARE_GROUP_PERSISTER_CLASS_NAME = "MockShareGroupPersisterClassPath";
     private static MockedStatic<Utils> mockUtils;
-    private static Persister persister = new NoOpShareStatePersister();
+    private static Persister persister = NoOpShareStatePersister.getInstance();
 
     @BeforeEach
     public void setUp() {
