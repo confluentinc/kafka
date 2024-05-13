@@ -33,14 +33,14 @@ class ShareFetchMetricsManagerTest {
     private static final double EPSILON = 0.0001;
     private final Time time = new MockTime(1, 0, 0);
     private ShareFetchMetricsManager shareFetchMetricsManager;
-    private FetchMetricsRegistry fetchMetricsRegistry;
+    private ShareFetchMetricsRegistry shareFetchMetricsRegistry;
     private Metrics metrics;
 
     @BeforeEach
     public void setup() {
         metrics = new Metrics(time);
-        fetchMetricsRegistry = new FetchMetricsRegistry(SHARE_CONSUMER_METRIC_GROUP_PREFIX);
-        shareFetchMetricsManager = new ShareFetchMetricsManager(metrics, fetchMetricsRegistry);
+        shareFetchMetricsRegistry = new ShareFetchMetricsRegistry(SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        shareFetchMetricsManager = new ShareFetchMetricsManager(metrics, shareFetchMetricsRegistry);
     }
 
     @AfterEach
@@ -59,8 +59,8 @@ class ShareFetchMetricsManagerTest {
         time.sleep(metrics.config().timeWindowMs() + 1);
         shareFetchMetricsManager.recordLatency(155);
 
-        assertEquals(155, (double) getMetric(fetchMetricsRegistry.fetchLatencyMax).metricValue(), EPSILON);
-        assertEquals(128, (double) getMetric(fetchMetricsRegistry.fetchLatencyAvg).metricValue(), EPSILON);
+        assertEquals(155, (double) getMetric(shareFetchMetricsRegistry.fetchLatencyMax).metricValue(), EPSILON);
+        assertEquals(128, (double) getMetric(shareFetchMetricsRegistry.fetchLatencyAvg).metricValue(), EPSILON);
     }
 
     @Test
@@ -69,8 +69,8 @@ class ShareFetchMetricsManagerTest {
         time.sleep(metrics.config().timeWindowMs() + 1);
         shareFetchMetricsManager.recordBytesFetched(10);
 
-        assertEquals(10, (double) getMetric(fetchMetricsRegistry.fetchSizeMax).metricValue());
-        assertEquals(6, (double) getMetric(fetchMetricsRegistry.fetchSizeAvg).metricValue(), EPSILON);
+        assertEquals(10, (double) getMetric(shareFetchMetricsRegistry.fetchSizeMax).metricValue());
+        assertEquals(6, (double) getMetric(shareFetchMetricsRegistry.fetchSizeAvg).metricValue(), EPSILON);
     }
 
     @Test
@@ -79,8 +79,8 @@ class ShareFetchMetricsManagerTest {
         time.sleep(metrics.config().timeWindowMs() + 1);
         shareFetchMetricsManager.recordRecordsFetched(9);
 
-        assertEquals(9, (double) getMetric(shareFetchMetricsManager.recordsPerRequestMax).metricValue());
-        assertEquals(8, (double) getMetric(shareFetchMetricsManager.recordsPerRequestAvg).metricValue(), EPSILON);
+        assertEquals(9, (double) getMetric(shareFetchMetricsRegistry.recordsPerRequestMax).metricValue());
+        assertEquals(8, (double) getMetric(shareFetchMetricsRegistry.recordsPerRequestAvg).metricValue(), EPSILON);
     }
 
     private KafkaMetric getMetric(MetricName name) {

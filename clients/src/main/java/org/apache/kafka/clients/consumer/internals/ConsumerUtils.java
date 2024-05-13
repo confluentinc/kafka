@@ -160,7 +160,7 @@ public final class ConsumerUtils {
 
     public static ShareFetchMetricsManager createShareFetchMetricsManager(Metrics metrics) {
         Set<String> metricsTags = Collections.singleton(CONSUMER_CLIENT_ID_METRIC_TAG);
-        FetchMetricsRegistry metricsRegistry = new FetchMetricsRegistry(metricsTags, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        ShareFetchMetricsRegistry metricsRegistry = new ShareFetchMetricsRegistry(metricsTags, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
         return new ShareFetchMetricsManager(metrics, metricsRegistry);
     }
 

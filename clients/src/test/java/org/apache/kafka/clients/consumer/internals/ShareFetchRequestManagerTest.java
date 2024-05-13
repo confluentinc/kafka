@@ -751,7 +751,7 @@ public class ShareFetchRequestManagerTest {
                 subscriptions, logContext, new ClusterResourceListeners());
         client = new MockClient(time, metadata);
         metrics = new Metrics(metricConfig, time);
-        FetchMetricsRegistry metricsRegistry = new FetchMetricsRegistry(metricConfig.tags().keySet(), "consumer" + groupId);
+        ShareFetchMetricsRegistry metricsRegistry = new ShareFetchMetricsRegistry(metricConfig.tags().keySet(), "consumer" + groupId);
         metricsManager = new ShareFetchMetricsManager(metrics, metricsRegistry);
 
         Properties properties = new Properties();
