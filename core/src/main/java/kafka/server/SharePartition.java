@@ -384,8 +384,7 @@ public class SharePartition {
                 log.trace("No cached data exists for the share partition for requested fetch batch: {}-{}",
                     groupId, topicIdPartition);
                 return CompletableFuture.completedFuture(Collections.singletonList(
-                            acquireNewBatchRecords(memberId, firstBatch.baseOffset(), lastBatch.lastOffset(),
-                            lastBatch.nextOffset())));
+                            acquireNewBatchRecords(memberId, firstBatch.baseOffset(), lastBatch.lastOffset())));
             }
 
             log.trace("Overlap exists with in-flight records. Acquire the records if available for"
@@ -455,7 +454,7 @@ public class SharePartition {
             if (subMap.lastEntry().getValue().lastOffset < lastBatch.lastOffset()) {
                 log.trace("There exists another batch which needs to be acquired as well");
                 result.add(acquireNewBatchRecords(memberId, subMap.lastEntry().getValue().lastOffset() + 1,
-                    lastBatch.lastOffset(), lastBatch.nextOffset()));
+                    lastBatch.lastOffset()));
             }
             return CompletableFuture.completedFuture(result);
         } finally {
@@ -1014,7 +1013,7 @@ public class SharePartition {
         }
     }
 
-    private AcquiredRecords acquireNewBatchRecords(String memberId, long firstOffset, long lastOffset, long nextOffset) {
+    private AcquiredRecords acquireNewBatchRecords(String memberId, long firstOffset, long lastOffset) {
         lock.writeLock().lock();
         try {
             // Schedule acquisition lock timeout for the batch.
@@ -1032,7 +1031,7 @@ public class SharePartition {
                 startOffset = firstOffset;
             }
             endOffset = lastOffset;
-            nextFetchOffset = nextOffset;
+            findNextFetchOffset.set(true);
             return new AcquiredRecords()
                 .setFirstOffset(firstOffset)
                 .setLastOffset(lastOffset)
