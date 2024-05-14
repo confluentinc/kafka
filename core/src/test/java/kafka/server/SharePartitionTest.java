@@ -4041,6 +4041,66 @@ public class SharePartitionTest {
     }
 
     @Test
+    void testNextFetchOffsetComputesNextOffsetCorrectly() {
+        SharePartition sharePartition = SharePartitionBuilder.builder().build();
+        MemoryRecords records1 = memoryRecords(10, 0);
+        MemoryRecords records2 = memoryRecords(10, 10);
+        MemoryRecords records3 = memoryRecords(10, 20);
+
+        String memberId1 = "memberId-1";
+        String memberId2 = "memberId-2";
+        String memberId3 = "memberId-3";
+
+        CompletableFuture<List<AcquiredRecords>> result = sharePartition.acquire(
+                memberId1,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
+        assertEquals(memberId1, sharePartition.cachedState().get(0L).batchMemberId());
+        assertEquals(false, sharePartition.findNextFetchOffset());
+        assertEquals(10, sharePartition.nextFetchOffset());
+
+        result = sharePartition.acquire(
+                memberId2,
+                new FetchPartitionData(Errors.NONE, 20, 0, records2,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(1, result.join().size());
+        assertEquals(2, sharePartition.cachedState().size());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
+        assertEquals(memberId1, sharePartition.cachedState().get(0L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertEquals(memberId2, sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(false, sharePartition.findNextFetchOffset());
+        assertEquals(20, sharePartition.nextFetchOffset());
+
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
+                memberId1,
+                Collections.singletonList(new AcknowledgementBatch(5, 9, null, AcknowledgeType.RELEASE)));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+        assertEquals(2, sharePartition.cachedState().size());
+        assertEquals(true, sharePartition.findNextFetchOffset());
+        assertEquals(5, sharePartition.nextFetchOffset());
+
+        result = sharePartition.acquire(
+                memberId1,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1,
+                        Optional.empty(), OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertFalse(result.isCompletedExceptionally());
+        assertEquals(2, sharePartition.cachedState().size());
+        assertEquals(true, sharePartition.findNextFetchOffset());
+        assertEquals(20, sharePartition.nextFetchOffset());
+        assertEquals(false, sharePartition.findNextFetchOffset());
+    }
+
+    @Test
     void testNextFetchOffsetWorksCorrectlyWithMultipleConsumers() {
         SharePartition sharePartition = SharePartitionBuilder.builder().withMaxInflightMessages(100).build();
         MemoryRecords records1 = memoryRecords(3, 0);
