@@ -627,7 +627,7 @@ class BrokerServer(
   }
 
   private def createShareCoordinator(): ShareCoordinator = {
-    val shareConfig = new ShareCoordinatorConfig(config.shareGroupStateSegmentBytes)
+    val shareConfig = new ShareCoordinatorConfig(config.shareCoordinatorStateTopicSegmentBytes)
     new ShareCoordinatorService(shareConfig)
   }
 

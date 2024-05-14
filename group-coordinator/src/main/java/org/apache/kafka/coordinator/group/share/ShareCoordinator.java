@@ -39,5 +39,5 @@ public interface ShareCoordinator {
    *
    * @return Properties of the internal topic.
    */
-  Properties shareStateMetadataTopicConfigs();
+  Properties shareGroupStateTopicConfigs();
 }

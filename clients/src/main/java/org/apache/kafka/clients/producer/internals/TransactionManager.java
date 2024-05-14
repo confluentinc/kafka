@@ -1499,7 +1499,7 @@ public class TransactionManager {
                         transactionCoordinator = node;
                         break;
                     default:
-                        log.warn("Unknown coordinator type " + coordinatorType + "found.");
+                        log.warn("Unknown coordinator type {} found.", coordinatorType);
 
                 }
                 result.done();

@@ -18,9 +18,9 @@
 package org.apache.kafka.coordinator.group.share;
 
 public class ShareCoordinatorConfig {
-  public final int shareGroupStateTopicSegmentBytes;
+  public final int shareCoordinatorStateTopicSegmentBytes;
 
-  public ShareCoordinatorConfig(int shareGroupStateTopicSegmentBytes) {
-    this.shareGroupStateTopicSegmentBytes = shareGroupStateTopicSegmentBytes;
+  public ShareCoordinatorConfig(int shareCoordinatorStateTopicSegmentBytes) {
+    this.shareCoordinatorStateTopicSegmentBytes = shareCoordinatorStateTopicSegmentBytes;
   }
 }
