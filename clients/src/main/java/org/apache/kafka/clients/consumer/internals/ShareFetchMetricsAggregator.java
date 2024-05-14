@@ -18,6 +18,7 @@ package org.apache.kafka.clients.consumer.internals;
 
 import org.apache.kafka.common.TopicPartition;
 
+import java.util.HashSet;
 import java.util.Set;
 
 public class ShareFetchMetricsAggregator {
@@ -27,7 +28,7 @@ public class ShareFetchMetricsAggregator {
 
     public ShareFetchMetricsAggregator(ShareFetchMetricsManager shareFetchMetricsManager, Set<TopicPartition> partitions) {
         this.shareFetchMetricsManager = shareFetchMetricsManager;
-        this.unrecordedPartitions = partitions;
+        this.unrecordedPartitions = new HashSet<>(partitions);
     }
 
     public void record(TopicPartition partition, int bytes, int records) {
