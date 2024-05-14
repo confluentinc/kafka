@@ -19,6 +19,7 @@ package org.apache.kafka.clients.consumer.internals;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
@@ -45,9 +46,11 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
@@ -236,8 +239,9 @@ public class ShareFetchCollectorTest {
         deserializers = new Deserializers<>(new StringDeserializer(), new StringDeserializer());
         Metrics metrics = createMetrics(config, Time.SYSTEM);
         shareFetchMetricsManager = createShareFetchMetricsManager(metrics);
-        shareFetchMetricsAggregator = new ShareFetchMetricsAggregator(shareFetchMetricsManager,
-                Collections.singleton(topicAPartition0.topicPartition()));
+        Set<TopicPartition> partitionSet = new HashSet<>();
+        partitionSet.add(topicAPartition0.topicPartition());
+        shareFetchMetricsAggregator = new ShareFetchMetricsAggregator(shareFetchMetricsManager, partitionSet);
 
         subscriptions = createSubscriptionState(config, logContext);
         fetchConfig = new FetchConfig(config);
