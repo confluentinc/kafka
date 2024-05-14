@@ -109,7 +109,6 @@ public class SharePartitionManagerTest {
     private static final short MAX_IN_FLIGHT_MESSAGES = 200;
     static final int MAX_DELIVERY_COUNT = 5;
     private static Timer mockTimer;
-    private static final String SHARE_GROUP_PERSISTER_CLASS_NAME = "MockShareGroupPersisterClassPath";
     private static MockedStatic<Utils> mockUtils;
     private static Persister persister = NoOpShareStatePersister.getInstance();
 
@@ -1265,8 +1264,6 @@ public class SharePartitionManagerTest {
             return null;
         }).when(replicaManager).fetchMessages(any(), any(), any(ReplicaQuota.class), any());
 
-        mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenReturn(persister);
-
         sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp0, tp1, tp2, tp3), partitionMaxBytes);
         Mockito.verify(replicaManager, times(1)).fetchMessages(
                 any(), any(), any(ReplicaQuota.class), any());
@@ -1849,44 +1846,21 @@ public class SharePartitionManagerTest {
 
     @Test
     public void testSharePersisterObjectCreationFailure() throws RuntimeException {
-        Uuid fooId = Uuid.randomUuid();
-        TopicIdPartition tp0 = new TopicIdPartition(fooId, new TopicPartition("foo", 0));
-        TopicIdPartition tp1 = new TopicIdPartition(fooId, new TopicPartition("foo", 1));
-        Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
-        partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
-        partitionMaxBytes.put(tp1, PARTITION_MAX_BYTES);
-        SharePartitionManager.ShareFetchPartitionData shareFetchPartitionData = new SharePartitionManager.ShareFetchPartitionData(
-                new FetchParams(ApiKeys.SHARE_FETCH.latestVersion(), FetchRequest.ORDINARY_CONSUMER_ID, -1, 0,
-                        1, 1024 * 1024, FetchIsolation.HIGH_WATERMARK, Optional.empty()),
-                "grp", Uuid.randomUuid().toString(), Arrays.asList(tp0, tp1), new CompletableFuture<>(),
-                partitionMaxBytes);
-
-        SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder().build();
-
         mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenThrow(new
                 RuntimeException("Persister object creation failed"));
-        assertThrows(KafkaException.class, () -> sharePartitionManager.sharePartition(shareFetchPartitionData, tp0));
+        assertThrows(KafkaException.class, () -> SharePartitionManagerBuilder.builder()
+                .withShareGroupPersisterClassName("mockShareGroupPersisterClass").build());
 
         mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenThrow(new
                 ClassNotFoundException("Persister object creation failed"));
-        assertThrows(ConfigException.class, () -> sharePartitionManager.sharePartition(shareFetchPartitionData, tp0));
+        assertThrows(ConfigException.class, () -> SharePartitionManagerBuilder.builder()
+                .withShareGroupPersisterClassName("mockShareGroupPersisterClass").build());
     }
 
     @Test
     public void testSharePersisterObjectCreationSuccess() {
         Uuid fooId = Uuid.randomUuid();
         TopicIdPartition tp0 = new TopicIdPartition(fooId, new TopicPartition("foo", 0));
-        TopicIdPartition tp1 = new TopicIdPartition(fooId, new TopicPartition("foo", 1));
-        Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
-        partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
-        partitionMaxBytes.put(tp1, PARTITION_MAX_BYTES);
-        SharePartitionManager.ShareFetchPartitionData shareFetchPartitionData = new SharePartitionManager.ShareFetchPartitionData(
-                new FetchParams(ApiKeys.SHARE_FETCH.latestVersion(), FetchRequest.ORDINARY_CONSUMER_ID, -1, 0,
-                        1, 1024 * 1024, FetchIsolation.HIGH_WATERMARK, Optional.empty()),
-                "grp", Uuid.randomUuid().toString(), Arrays.asList(tp0, tp1), new CompletableFuture<>(),
-                partitionMaxBytes);
-
-        SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder().build();
 
         // Mocking the Persister object creation. We also need to mock readState() method to return a valid result since
         // it is called during SharePartition object creation.
@@ -1901,7 +1875,7 @@ public class SharePartitionManagerTest {
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
 
         mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenReturn(persister);
-        assertDoesNotThrow(() -> sharePartitionManager.sharePartition(shareFetchPartitionData, tp0));
+        assertDoesNotThrow(() -> SharePartitionManagerBuilder.builder().withShareGroupPersisterClassName("mockShareGroupPersisterClass").build());
     }
 
     private static class SharePartitionManagerBuilder {
@@ -1909,6 +1883,7 @@ public class SharePartitionManagerTest {
         private Time time = new MockTime();
         private SharePartitionManager.ShareSessionCache cache = new SharePartitionManager.ShareSessionCache(10, 1000);
         private Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new HashMap<>();
+        private String shareGroupPersisterClassName = "";
 
         private SharePartitionManagerBuilder withReplicaManager(ReplicaManager replicaManager) {
             this.replicaManager = replicaManager;
@@ -1930,11 +1905,16 @@ public class SharePartitionManagerTest {
             return this;
         }
 
+        private SharePartitionManagerBuilder withShareGroupPersisterClassName(String shareGroupPersisterClassName) {
+            this.shareGroupPersisterClassName = shareGroupPersisterClassName;
+            return this;
+        }
+
         public static SharePartitionManagerBuilder builder() {
             return new SharePartitionManagerBuilder();
         }
         public SharePartitionManager build() {
-            return new SharePartitionManager(replicaManager, time, cache, partitionCacheMap, RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES, SHARE_GROUP_PERSISTER_CLASS_NAME);
+            return new SharePartitionManager(replicaManager, time, cache, partitionCacheMap, RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES, shareGroupPersisterClassName);
         }
     }
 }

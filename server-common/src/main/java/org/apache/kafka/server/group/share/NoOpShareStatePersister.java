@@ -32,12 +32,12 @@ import java.util.stream.Collectors;
 public class NoOpShareStatePersister implements Persister {
 
   private static final Logger log = LoggerFactory.getLogger(NoOpShareStatePersister.class);
-  private static Persister instance = null;
+  private static volatile Persister instance = null;
 
   private NoOpShareStatePersister() {
   }
 
-  public static synchronized Persister getInstance() {
+  public static Persister getInstance() {
     if (instance == null) {
       instance = new NoOpShareStatePersister();
     }
