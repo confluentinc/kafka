@@ -2259,11 +2259,13 @@ class KafkaApis(val requestChannel: RequestChannel,
     else if (keyType == CoordinatorType.TRANSACTION.id &&
         !authHelper.authorize(request.context, DESCRIBE, TRANSACTIONAL_ID, key))
       (Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED, Node.noNode)
-    else if (keyType == CoordinatorType.SHARE.id && shareCoordinator == null) {
-      //todo smjn: add check for share coordinator auth
-      (Errors.INVALID_REQUEST, Node.noNode) // this case should arise only when running in ZK mode
-    }
     else {
+      if (keyType == CoordinatorType.SHARE.id) {
+        authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
+        if (shareCoordinator == null) {
+          return (Errors.INVALID_REQUEST, Node.noNode)
+        }
+      }
       val (partition, internalTopicName) = CoordinatorType.forId(keyType) match {
         case CoordinatorType.GROUP =>
           (groupCoordinator.partitionFor(key), GROUP_METADATA_TOPIC_NAME)

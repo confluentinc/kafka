@@ -273,7 +273,7 @@ object KafkaConfig {
   val ShareCoordinatorStateTopicReplicationFactorProp = "share.coordinator.state.topic.replication.factor"
   val ShareCoordinatorStateTopicSegmentBytesProp = "share.coordinator.state.topic.segment.bytes"
   val ShareCoordinatorStateTopicMinISRProp = "share.coordinator.state.topic.min.isr"
-  val ShareCoordinatorNumThreadsProp = "share.coordinator.threads "
+  val ShareCoordinatorNumThreadsProp = "share.coordinator.threads"
 
 
   /** ********* Offset management configuration ***********/
@@ -720,10 +720,10 @@ object KafkaConfig {
   val ShareGroupAssignorsDoc = "The server-side assignors as a list of full class names. The first one in the list is considered as the default assignor to be used in the case where the share group does not specify an assignor."
   val ShareGroupPersisterClassNameDoc = "The class name of share persister for share group. The class should implement " +
     "the <code>org.apache.kafka.server.group.share.Persister</code> interface."
-  val ShareCoordinatorStateTopicPartitionsDoc = "Number of partitions for the internal share-group state topic."
-  val ShareCoordinatorStateTopicReplicationFactorDoc = "Replication factor for the share-group state internal topic. " +
-  "Internal topic creation will fail until the cluster size meets this replication factor requirement."
-  val ShareCoordinatorStateTopicSegmentBytesDoc = "The share-group state topic segment bytes should be kept relatively small in order to facilitate faster log compaction and cache loads."
+  val ShareCoordinatorStateTopicPartitionsDoc = "The number of partitions for the share-group state topic (should not change after deployment)."
+  val ShareCoordinatorStateTopicReplicationFactorDoc = "Replication factor for the share-group state topic. " +
+  "Topic creation will fail until the cluster size meets this replication factor requirement."
+  val ShareCoordinatorStateTopicSegmentBytesDoc = "The log segment size for the share-group state topic."
   val ShareCoordinatorStateTopicMinISRDoc = "Overridden min.insync.replicas for the share-group state topic."
   val ShareCoordinatorNumThreadsDoc = "The number of threads used by the share coordinator."
 
@@ -1120,7 +1120,7 @@ object KafkaConfig {
       .define(ShareCoordinatorStateTopicPartitionsProp, INT, Defaults.SHARE_COORDINATOR_STATE_TOPIC_PARTITIONS, atLeast(1), HIGH, ShareCoordinatorStateTopicPartitionsDoc)
       .define(ShareCoordinatorStateTopicSegmentBytesProp, INT, Defaults.SHARE_COORDINATOR_STATE_TOPIC_SEGMENT_BYTES, atLeast(1), HIGH, ShareCoordinatorStateTopicSegmentBytesDoc)
       .define(ShareCoordinatorStateTopicMinISRProp, INT, Defaults.SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR, atLeast(1), HIGH, ShareCoordinatorStateTopicMinISRDoc)
-      .define(ShareCoordinatorNumThreadsProp, INT, Defaults.SHARE_COORDINATOR_NUM_THREADS, atLeast(1), HIGH, ShareCoordinatorNumThreadsDoc)
+      .define(ShareCoordinatorNumThreadsProp, INT, Defaults.SHARE_COORDINATOR_NUM_THREADS, atLeast(1), MEDIUM, ShareCoordinatorNumThreadsDoc)
 
       /** ********* Offset management configuration ***********/
       .define(OffsetMetadataMaxSizeProp, INT, Defaults.OFFSET_METADATA_MAX_SIZE, HIGH, OffsetMetadataMaxSizeDoc)

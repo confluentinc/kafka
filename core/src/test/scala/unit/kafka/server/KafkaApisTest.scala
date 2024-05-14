@@ -34,7 +34,7 @@ import org.apache.kafka.clients.consumer.AcknowledgeType
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.config.ConfigResource.Type.{BROKER, BROKER_LOGGER}
-import org.apache.kafka.common.errors.UnsupportedVersionException
+import org.apache.kafka.common.errors.{ClusterAuthorizationException, UnsupportedVersionException}
 import org.apache.kafka.common.internals.{KafkaFutureImpl, Topic}
 import org.apache.kafka.common.memory.MemoryPool
 import org.apache.kafka.common.message.AddPartitionsToTxnRequestData.{AddPartitionsToTxnTopic, AddPartitionsToTxnTopicCollection, AddPartitionsToTxnTransaction, AddPartitionsToTxnTransactionCollection}
@@ -11484,7 +11484,10 @@ class KafkaApisTest extends Logging {
   @Test
   def testFindShareCoordinatorWithKraft(): Unit = {
     metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
-    kafkaApis = createKafkaApis(raftSupport = true)
+    val authorizer = mock(classOf[Authorizer])
+    authorizeResource(authorizer, AclOperation.CLUSTER_ACTION, ResourceType.CLUSTER, Resource.CLUSTER_NAME, AuthorizationResult.ALLOWED)
+
+    kafkaApis = createKafkaApis(raftSupport = true, authorizer = Some(authorizer))
     val (groupId, topicId, partition) = ("group", Uuid.randomUuid(), 0)
     val findCoordinatorRequestBuilder =
       new FindCoordinatorRequest.Builder(
@@ -11498,5 +11501,11 @@ class KafkaApisTest extends Logging {
     val response = verifyNoThrottling[FindCoordinatorResponse](request)
     assertEquals(Errors.COORDINATOR_NOT_AVAILABLE.code, response.data.coordinators.get(0).errorCode)
     assertEquals(groupId + ":" + topicId + ":" + partition, response.data.coordinators.get(0).key)
+
+    // denied
+    authorizeResource(authorizer, AclOperation.CLUSTER_ACTION, ResourceType.CLUSTER, Resource.CLUSTER_NAME, AuthorizationResult.DENIED)
+
+    kafkaApis = createKafkaApis(raftSupport = true, authorizer = Some(authorizer))
+    assertThrows(classOf[ClusterAuthorizationException], () => kafkaApis.handleFindCoordinatorRequest(request))
   }
 }

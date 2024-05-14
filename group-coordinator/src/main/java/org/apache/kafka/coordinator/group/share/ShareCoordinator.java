@@ -34,7 +34,7 @@ public interface ShareCoordinator {
   int partitionFor(String key);
 
   /**
-   * Return the configuration properties of the internal share-group state topic.
+   * Return the configuration properties of the share-group state topic.
    *
    * @return Properties of the share-group state topic.
    */
