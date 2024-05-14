@@ -35,7 +35,7 @@ import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.acl.AclOperation._
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.errors._
-import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME, isInternal}
+import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, SHARE_GROUP_STATE_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME, isInternal}
 import org.apache.kafka.common.internals.{FatalExitError, Topic}
 import org.apache.kafka.common.message.AddPartitionsToTxnResponseData.{AddPartitionsToTxnResult, AddPartitionsToTxnResultCollection}
 import org.apache.kafka.common.message.AlterConfigsResponseData.AlterConfigsResourceResponse
@@ -70,6 +70,7 @@ import org.apache.kafka.common.security.token.delegation.{DelegationToken, Token
 import org.apache.kafka.common.utils.{ProducerIdAndEpoch, Time}
 import org.apache.kafka.common.{Node, TopicIdPartition, TopicPartition, Uuid}
 import org.apache.kafka.coordinator.group.GroupCoordinator
+import org.apache.kafka.coordinator.group.share.ShareCoordinator
 import org.apache.kafka.server.ClientMetricsManager
 import org.apache.kafka.server.authorizer._
 import org.apache.kafka.server.common.MetadataVersion
@@ -99,6 +100,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 val replicaManager: ReplicaManager,
                 val groupCoordinator: GroupCoordinator,
                 val txnCoordinator: TransactionCoordinator,
+                val shareCoordinator: ShareCoordinator,
                 val autoTopicCreationManager: AutoTopicCreationManager,
                 val brokerId: Int,
                 val config: KafkaConfig,
@@ -2258,12 +2260,21 @@ class KafkaApis(val requestChannel: RequestChannel,
         !authHelper.authorize(request.context, DESCRIBE, TRANSACTIONAL_ID, key))
       (Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED, Node.noNode)
     else {
+      if (keyType == CoordinatorType.SHARE.id) {
+        authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
+        if (shareCoordinator == null) {
+          return (Errors.INVALID_REQUEST, Node.noNode)
+        }
+      }
       val (partition, internalTopicName) = CoordinatorType.forId(keyType) match {
         case CoordinatorType.GROUP =>
           (groupCoordinator.partitionFor(key), GROUP_METADATA_TOPIC_NAME)
 
         case CoordinatorType.TRANSACTION =>
           (txnCoordinator.partitionFor(key), TRANSACTION_STATE_TOPIC_NAME)
+
+        case CoordinatorType.SHARE =>
+          (shareCoordinator.partitionFor(key), SHARE_GROUP_STATE_TOPIC_NAME)
       }
 
       val topicMetadata = metadataCache.getTopicMetadata(Set(internalTopicName), request.context.listenerName)

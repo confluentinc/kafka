@@ -38,6 +38,7 @@ import org.apache.kafka.common.utils.{LogContext, Time}
 import org.apache.kafka.common.{ClusterResource, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.coordinator.group
 import org.apache.kafka.coordinator.group.metrics.{GroupCoordinatorMetrics, GroupCoordinatorRuntimeMetrics}
+import org.apache.kafka.coordinator.group.share.{ShareCoordinator, ShareCoordinatorConfig, ShareCoordinatorService}
 import org.apache.kafka.coordinator.group.{GroupCoordinator, GroupCoordinatorConfig, GroupCoordinatorService, RecordSerde}
 import org.apache.kafka.image.publisher.MetadataPublisher
 import org.apache.kafka.metadata.{BrokerState, ListenerInfo, VersionRange}
@@ -116,6 +117,7 @@ class BrokerServer(
   var tokenCache: DelegationTokenCache = _
 
   @volatile var groupCoordinator: GroupCoordinator = _
+  var shareCoordinator: ShareCoordinator = _
 
   var transactionCoordinator: TransactionCoordinator = _
 
@@ -334,6 +336,7 @@ class BrokerServer(
       tokenManager.startup()
 
       groupCoordinator = createGroupCoordinator()
+      shareCoordinator = createShareCoordinator()
 
       val producerIdManagerSupplier = () => ProducerIdManager.rpc(
         config.brokerId,
@@ -350,7 +353,7 @@ class BrokerServer(
 
       autoTopicCreationManager = new DefaultAutoTopicCreationManager(
         config, Some(clientToControllerChannelManager), None, None,
-        groupCoordinator, transactionCoordinator)
+        groupCoordinator, transactionCoordinator, shareCoordinator)
 
       dynamicConfigHandlers = Map[String, ConfigHandler](
         ConfigType.TOPIC -> new TopicConfigHandler(replicaManager, config, quotaManagers, None),
@@ -413,6 +416,7 @@ class BrokerServer(
         replicaManager = replicaManager,
         groupCoordinator = groupCoordinator,
         txnCoordinator = transactionCoordinator,
+        shareCoordinator = shareCoordinator,
         autoTopicCreationManager = autoTopicCreationManager,
         brokerId = config.nodeId,
         config = config,
@@ -620,6 +624,11 @@ class BrokerServer(
         metrics
       )
     }
+  }
+
+  private def createShareCoordinator(): ShareCoordinator = {
+    val shareConfig = new ShareCoordinatorConfig(config.shareCoordinatorStateTopicSegmentBytes)
+    new ShareCoordinatorService(shareConfig)
   }
 
   protected def createRemoteLogManager(): Option[RemoteLogManager] = {

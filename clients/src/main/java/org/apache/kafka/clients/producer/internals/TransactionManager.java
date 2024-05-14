@@ -1497,6 +1497,9 @@ public class TransactionManager {
                         break;
                     case TRANSACTION:
                         transactionCoordinator = node;
+                        break;
+                    default:
+                        log.warn("Unknown coordinator type {} found.", coordinatorType);
 
                 }
                 result.done();

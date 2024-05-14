@@ -34,7 +34,7 @@ import org.apache.kafka.clients.consumer.AcknowledgeType
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.config.ConfigResource.Type.{BROKER, BROKER_LOGGER}
-import org.apache.kafka.common.errors.UnsupportedVersionException
+import org.apache.kafka.common.errors.{ClusterAuthorizationException, UnsupportedVersionException}
 import org.apache.kafka.common.internals.{KafkaFutureImpl, Topic}
 import org.apache.kafka.common.memory.MemoryPool
 import org.apache.kafka.common.message.AddPartitionsToTxnRequestData.{AddPartitionsToTxnTopic, AddPartitionsToTxnTopicCollection, AddPartitionsToTxnTransaction, AddPartitionsToTxnTransactionCollection}
@@ -78,6 +78,7 @@ import org.apache.kafka.common.message.ShareAcknowledgeResponseData.ShareAcknowl
 import org.apache.kafka.common.message.ShareFetchRequestData.{AcknowledgementBatch, ForgottenTopic}
 import org.apache.kafka.common.message.ShareFetchResponseData.{AcquiredRecords, PartitionData, ShareFetchableTopicResponse}
 import org.apache.kafka.coordinator.group.GroupCoordinator
+import org.apache.kafka.coordinator.group.share.ShareCoordinator
 import org.apache.kafka.server.ClientMetricsManager
 import org.apache.kafka.server.authorizer.{Action, AuthorizationResult, Authorizer}
 import org.apache.kafka.server.common.MetadataVersion.{IBP_0_10_2_IV0, IBP_2_2_IV1}
@@ -208,6 +209,7 @@ class KafkaApisTest extends Logging {
       () => new Features(MetadataVersion.latestTesting(), Collections.emptyMap[String, java.lang.Short], 0, raftSupport))
 
     val clientMetricsManagerOpt = if (raftSupport) Some(clientMetricsManager) else None
+    val shareCoordinator: ShareCoordinator = if (raftSupport) mock(classOf[ShareCoordinator]) else null
 
     new KafkaApis(
       requestChannel = requestChannel,
@@ -215,6 +217,7 @@ class KafkaApisTest extends Logging {
       replicaManager = replicaManager,
       groupCoordinator = groupCoordinator,
       txnCoordinator = txnCoordinator,
+      shareCoordinator = shareCoordinator,
       autoTopicCreationManager = autoTopicCreationManager,
       brokerId = brokerId,
       config = config,
@@ -11599,5 +11602,33 @@ class KafkaApisTest extends Logging {
     assertTrue(partitionResponsesMap2.contains(1))
     assertTrue(partitionResponsesMap2.getOrElse(0, null).errorCode() == Errors.TOPIC_AUTHORIZATION_FAILED.code())
     assertTrue(partitionResponsesMap2.getOrElse(1, null).errorCode() == Errors.UNKNOWN_TOPIC_OR_PARTITION.code())
+  }
+
+  @Test
+  def testFindShareCoordinatorWithKraft(): Unit = {
+    metadataCache = MetadataCache.kRaftMetadataCache(brokerId)
+    val authorizer = mock(classOf[Authorizer])
+    authorizeResource(authorizer, AclOperation.CLUSTER_ACTION, ResourceType.CLUSTER, Resource.CLUSTER_NAME, AuthorizationResult.ALLOWED)
+
+    kafkaApis = createKafkaApis(raftSupport = true, authorizer = Some(authorizer))
+    val (groupId, topicId, partition) = ("group", Uuid.randomUuid(), 0)
+    val findCoordinatorRequestBuilder =
+      new FindCoordinatorRequest.Builder(
+        new FindCoordinatorRequestData()
+          .setKeyType(CoordinatorType.SHARE.id())
+          .setCoordinatorKeys(asList(groupId + ":" + topicId + ":" + partition)))
+
+    val requestHeader = new RequestHeader(ApiKeys.FIND_COORDINATOR, ApiKeys.FIND_COORDINATOR.latestVersion, clientId, 0)
+    val request = buildRequest(findCoordinatorRequestBuilder.build(requestHeader.apiVersion))
+    kafkaApis.handleFindCoordinatorRequest(request)
+    val response = verifyNoThrottling[FindCoordinatorResponse](request)
+    assertEquals(Errors.COORDINATOR_NOT_AVAILABLE.code, response.data.coordinators.get(0).errorCode)
+    assertEquals(groupId + ":" + topicId + ":" + partition, response.data.coordinators.get(0).key)
+
+    // denied
+    authorizeResource(authorizer, AclOperation.CLUSTER_ACTION, ResourceType.CLUSTER, Resource.CLUSTER_NAME, AuthorizationResult.DENIED)
+
+    kafkaApis = createKafkaApis(raftSupport = true, authorizer = Some(authorizer))
+    assertThrows(classOf[ClusterAuthorizationException], () => kafkaApis.handleFindCoordinatorRequest(request))
   }
 }

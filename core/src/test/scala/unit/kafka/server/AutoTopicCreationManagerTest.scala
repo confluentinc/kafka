@@ -27,7 +27,7 @@ import kafka.utils.TestUtils
 import org.apache.kafka.clients.{ClientResponse, NodeApiVersions, RequestCompletionHandler}
 import org.apache.kafka.common.Node
 import org.apache.kafka.common.internals.Topic
-import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME}
+import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, SHARE_GROUP_STATE_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME}
 import org.apache.kafka.common.message.{ApiVersionsResponseData, CreateTopicsRequestData}
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopic
 import org.apache.kafka.common.message.MetadataResponseData.MetadataResponseTopic
@@ -37,6 +37,7 @@ import org.apache.kafka.common.requests._
 import org.apache.kafka.common.security.auth.{KafkaPrincipal, KafkaPrincipalSerde, SecurityProtocol}
 import org.apache.kafka.common.utils.{SecurityUtils, Utils}
 import org.apache.kafka.coordinator.group.GroupCoordinator
+import org.apache.kafka.coordinator.group.share.ShareCoordinator
 import org.apache.kafka.server.{ControllerRequestCompletionHandler, NodeToControllerChannelManager}
 import org.junit.jupiter.api.Assertions.{assertEquals, assertThrows, assertTrue}
 import org.junit.jupiter.api.{BeforeEach, Test}
@@ -56,6 +57,7 @@ class AutoTopicCreationManagerTest {
   private val controller = Mockito.mock(classOf[KafkaController])
   private val groupCoordinator = Mockito.mock(classOf[GroupCoordinator])
   private val transactionCoordinator = Mockito.mock(classOf[TransactionCoordinator])
+  private val shareCoordinator = Mockito.mock(classOf[ShareCoordinator])
   private var autoTopicCreationManager: AutoTopicCreationManager = _
 
   private val internalTopicPartitions = 2
@@ -72,10 +74,13 @@ class AutoTopicCreationManagerTest {
     props.setProperty(KafkaConfig.OffsetsTopicPartitionsProp, internalTopicReplicationFactor.toString)
     props.setProperty(KafkaConfig.TransactionsTopicPartitionsProp, internalTopicReplicationFactor.toString)
 
+    props.setProperty(KafkaConfig.ShareCoordinatorStateTopicPartitionsProp, internalTopicPartitions.toString)
+    props.setProperty(KafkaConfig.ShareCoordinatorStateTopicReplicationFactorProp, internalTopicReplicationFactor.toString)
+
     config = KafkaConfig.fromProps(props)
     val aliveBrokers = Seq(new Node(0, "host0", 0), new Node(1, "host1", 1))
 
-    Mockito.reset(metadataCache, controller, brokerToController, groupCoordinator, transactionCoordinator)
+    Mockito.reset(metadataCache, controller, brokerToController, groupCoordinator, transactionCoordinator, shareCoordinator)
 
     Mockito.when(metadataCache.getAliveBrokerNodes(any(classOf[ListenerName]))).thenReturn(aliveBrokers)
   }
@@ -93,6 +98,12 @@ class AutoTopicCreationManagerTest {
   }
 
   @Test
+  def testCreateShareStateTopic(): Unit = {
+    Mockito.when(shareCoordinator.shareGroupStateTopicConfigs()).thenReturn(new Properties)
+    testCreateTopic(SHARE_GROUP_STATE_TOPIC_NAME, true, internalTopicPartitions, internalTopicReplicationFactor)
+  }
+
+  @Test
   def testCreateNonInternalTopic(): Unit = {
     testCreateTopic("topic", false)
   }
@@ -107,7 +118,8 @@ class AutoTopicCreationManagerTest {
       Some(adminManager),
       Some(controller),
       groupCoordinator,
-      transactionCoordinator)
+      transactionCoordinator,
+      shareCoordinator)
 
     val topicsCollection = new CreateTopicsRequestData.CreatableTopicCollection
     topicsCollection.add(getNewTopic(topicName, numPartitions, replicationFactor))
@@ -135,7 +147,8 @@ class AutoTopicCreationManagerTest {
       Some(adminManager),
       Some(controller),
       groupCoordinator,
-      transactionCoordinator)
+      transactionCoordinator,
+      shareCoordinator)
 
     val topicName = "topic"
 
@@ -318,7 +331,8 @@ class AutoTopicCreationManagerTest {
       Some(adminManager),
       Some(controller),
       groupCoordinator,
-      transactionCoordinator)
+      transactionCoordinator,
+      shareCoordinator)
 
     val topicsCollection = new CreateTopicsRequestData.CreatableTopicCollection
     topicsCollection.add(getNewTopic(topicName))
@@ -348,7 +362,9 @@ class AutoTopicCreationManagerTest {
       Some(adminManager),
       Some(controller),
       groupCoordinator,
-      transactionCoordinator)
+      transactionCoordinator,
+      null
+    )
 
     Mockito.when(controller.isActive).thenReturn(false)
     val newTopic = if (isInternal) {
