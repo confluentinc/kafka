@@ -26,7 +26,7 @@ import kafka.utils.Logging
 import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.errors.InvalidTopicException
 import org.apache.kafka.common.internals.Topic
-import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, SHARE_STATE_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME}
+import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, SHARE_GROUP_STATE_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME}
 import org.apache.kafka.common.message.CreateTopicsRequestData
 import org.apache.kafka.common.message.CreateTopicsRequestData.{CreatableTopic, CreateableTopicConfig, CreateableTopicConfigCollection}
 import org.apache.kafka.common.message.MetadataResponseData.MetadataResponseTopic
@@ -247,6 +247,13 @@ class DefaultAutoTopicCreationManager(
           .setReplicationFactor(config.transactionTopicReplicationFactor)
           .setConfigs(convertToTopicConfigCollections(
             txnCoordinator.transactionTopicConfigs))
+      case SHARE_GROUP_STATE_TOPIC_NAME =>
+        val props = if (shareCoordinator != null) shareCoordinator.shareGroupStateTopicConfigs() else new Properties()
+        new CreatableTopic()
+          .setName(topic)
+          .setNumPartitions(config.shareCoordinatorStateTopicPartitions)
+          .setReplicationFactor(config.shareCoordinatorStateTopicReplicationFactor)
+          .setConfigs(convertToTopicConfigCollections(props))
       case topicName =>
         new CreatableTopic()
           .setName(topicName)
@@ -300,17 +307,7 @@ class DefaultAutoTopicCreationManager(
             .setName(topic)
             .setIsInternal(Topic.isInternal(topic))
         case None =>
-          if (!topic.equals(SHARE_STATE_TOPIC_NAME)) { // special handling as we don't want creation in zk mode
-            creatableTopics.put(topic, creatableTopic(topic))
-          } else {
-            if (shareCoordinator != null) { // should be null in zk mode
-              creatableTopics.put(topic, new CreatableTopic()
-                .setName(topic)
-                .setNumPartitions(config.shareGroupStateTopicPartitions)
-                .setReplicationFactor(config.shareGroupStateReplicationFactor)
-                .setConfigs(convertToTopicConfigCollections(shareCoordinator.shareStateMetadataTopicConfigs())))
-            }
-          }
+          creatableTopics.put(topic, creatableTopic(topic))
       }
     }
 

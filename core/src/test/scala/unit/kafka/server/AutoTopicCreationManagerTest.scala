@@ -27,7 +27,7 @@ import kafka.utils.TestUtils
 import org.apache.kafka.clients.{ClientResponse, NodeApiVersions, RequestCompletionHandler}
 import org.apache.kafka.common.Node
 import org.apache.kafka.common.internals.Topic
-import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, SHARE_STATE_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME}
+import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, SHARE_GROUP_STATE_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME}
 import org.apache.kafka.common.message.{ApiVersionsResponseData, CreateTopicsRequestData}
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopic
 import org.apache.kafka.common.message.MetadataResponseData.MetadataResponseTopic
@@ -74,8 +74,8 @@ class AutoTopicCreationManagerTest {
     props.setProperty(KafkaConfig.OffsetsTopicPartitionsProp, internalTopicReplicationFactor.toString)
     props.setProperty(KafkaConfig.TransactionsTopicPartitionsProp, internalTopicReplicationFactor.toString)
 
-    props.setProperty(KafkaConfig.ShareGroupStateTopicPartitionsProp, internalTopicPartitions.toString)
-    props.setProperty(KafkaConfig.ShareGroupStateTopicReplicationFactorProp, internalTopicReplicationFactor.toString)
+    props.setProperty(KafkaConfig.ShareCoordinatorStateTopicPartitionsProp, internalTopicPartitions.toString)
+    props.setProperty(KafkaConfig.ShareCoordinatorStateTopicReplicationFactorProp, internalTopicReplicationFactor.toString)
 
     config = KafkaConfig.fromProps(props)
     val aliveBrokers = Seq(new Node(0, "host0", 0), new Node(1, "host1", 1))
@@ -99,8 +99,8 @@ class AutoTopicCreationManagerTest {
 
   @Test
   def testCreateShareStateTopic(): Unit = {
-    Mockito.when(shareCoordinator.shareStateMetadataTopicConfigs).thenReturn(new Properties)
-    testCreateTopic(SHARE_STATE_TOPIC_NAME, true, internalTopicPartitions, internalTopicReplicationFactor)
+    Mockito.when(shareCoordinator.shareGroupStateTopicConfigs()).thenReturn(new Properties)
+    testCreateTopic(SHARE_GROUP_STATE_TOPIC_NAME, true, internalTopicPartitions, internalTopicReplicationFactor)
   }
 
   @Test

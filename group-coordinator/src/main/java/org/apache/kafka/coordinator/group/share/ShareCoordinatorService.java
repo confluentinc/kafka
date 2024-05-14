@@ -38,12 +38,12 @@ public class ShareCoordinatorService implements ShareCoordinator {
   }
 
   @Override
-  public Properties shareStateMetadataTopicConfigs() {
+  public Properties shareGroupStateTopicConfigs() {
     Properties properties = new Properties();
     //todo smjn: taken directly from group coord - need to check validity of these configs
-    properties.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT);
+    properties.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE); // as defined in KIP-932
     properties.put(TopicConfig.COMPRESSION_TYPE_CONFIG, BrokerCompressionType.PRODUCER.name);
-    properties.put(TopicConfig.SEGMENT_BYTES_CONFIG, config.shareGroupStateTopicSegmentBytes);
+    properties.put(TopicConfig.SEGMENT_BYTES_CONFIG, config.shareCoordinatorStateTopicSegmentBytes);
     return properties;
   }
 }

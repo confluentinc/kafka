@@ -34,10 +34,9 @@ public interface ShareCoordinator {
   int partitionFor(String key);
 
   /**
-   * Return the configuration properties of the internal share state
-   * metadata topic.
+   * Return the configuration properties of the internal share-group state topic.
    *
-   * @return Properties of the internal topic.
+   * @return Properties of the share-group state topic.
    */
-  Properties shareStateMetadataTopicConfigs();
+  Properties shareGroupStateTopicConfigs();
 }
