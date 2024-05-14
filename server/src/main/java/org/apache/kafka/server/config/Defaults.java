@@ -173,6 +173,13 @@ public class Defaults {
     );
     public static final String SHARE_GROUP_PERSISTER_CLASS_NAME = "";
 
+    /** ********* Share coordinator configuration *********/
+    public static final int SHARE_COORDINATOR_STATE_TOPIC_PARTITIONS = 50;
+    public static final short SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR = 3;
+    public static final int SHARE_COORDINATOR_STATE_TOPIC_SEGMENT_BYTES = 100 * 1024 * 1024;
+    public static final int SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR = 2;
+    public static final int SHARE_COORDINATOR_NUM_THREADS = 1;
+
     /** ********* Offset management configuration *********/
     public static final int OFFSET_METADATA_MAX_SIZE = OffsetConfig.DEFAULT_MAX_METADATA_SIZE;
     public static final int OFFSETS_LOAD_BUFFER_SIZE = OffsetConfig.DEFAULT_LOAD_BUFFER_SIZE;
