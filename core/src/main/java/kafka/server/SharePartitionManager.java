@@ -33,6 +33,7 @@ import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.server.group.share.NoOpShareStatePersister;
 import org.apache.kafka.server.group.share.Persister;
 import org.apache.kafka.server.util.timer.SystemTimer;
 import org.apache.kafka.server.util.timer.SystemTimerReaper;
@@ -82,6 +83,7 @@ public class SharePartitionManager implements AutoCloseable {
     private final int maxInFlightMessages;
     private final int maxDeliveryCount;
     private final String shareGroupPersisterClassName;
+    private Persister persister;
 
     public SharePartitionManager(
             ReplicaManager replicaManager,
@@ -110,6 +112,21 @@ public class SharePartitionManager implements AutoCloseable {
         this.maxDeliveryCount = maxDeliveryCount;
         this.maxInFlightMessages = maxInFlightMessages;
         this.shareGroupPersisterClassName = shareGroupPersisterClassName;
+        initializeShareGroupPersister();
+    }
+
+    private void initializeShareGroupPersister() {
+        if (!shareGroupPersisterClassName.isEmpty()) {
+            try {
+                persister = Utils.newInstance(shareGroupPersisterClassName, Persister.class);
+            } catch (ClassNotFoundException e) {
+                throw new ConfigException("Could not instantiate class share group persister " + e.getMessage());
+            } catch (RuntimeException e) {
+                throw new KafkaException("Could not instantiate class share group persister " + e.getMessage());
+            }
+        } else {
+            persister = NoOpShareStatePersister.getInstance();
+        }
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -152,7 +169,8 @@ public class SharePartitionManager implements AutoCloseable {
                         topicIdPartition
                 );
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
-                    k -> sharePartition(shareFetchPartitionData, topicIdPartition));
+                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
+                            recordLockDurationMs, timer, time, persister));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.
@@ -269,21 +287,6 @@ public class SharePartitionManager implements AutoCloseable {
             futures.forEach((topicIdPartition, future) -> processedResult.put(topicIdPartition, future.join()));
             return processedResult;
         });
-    }
-
-    // Visible for testing.
-    SharePartition sharePartition(ShareFetchPartitionData shareFetchPartitionData, TopicIdPartition topicIdPartition) {
-        try {
-            Persister persister = null;
-            if (!shareGroupPersisterClassName.isEmpty())
-                persister = Utils.newInstance(shareGroupPersisterClassName, Persister.class);
-            return new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
-                    recordLockDurationMs, timer, time, persister);
-        } catch (ClassNotFoundException e) {
-            throw new ConfigException("Could not instantiate class share partition " + e.getMessage());
-        } catch (RuntimeException e) {
-            throw new KafkaException("Could not instantiate class share partition " + e.getMessage());
-        }
     }
 
     // Visible for testing.

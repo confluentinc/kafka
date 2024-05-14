@@ -32,6 +32,7 @@ import org.apache.kafka.common.record.MemoryRecordsBuilder;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.server.group.share.NoOpShareStatePersister;
 import org.apache.kafka.server.group.share.PartitionFactory;
 import org.apache.kafka.server.group.share.Persister;
 import org.apache.kafka.server.group.share.PersisterStateBatch;
@@ -230,7 +231,7 @@ public class SharePartitionTest {
     }
 
     @Test
-    public void testInitializeWithNullPersister() {
+    public void testInitializeWithNoOpShareStatePersister() {
         SharePartition sharePartition = SharePartitionBuilder.builder().build();
 
         assertTrue(sharePartition.cachedState().isEmpty());
@@ -4168,6 +4169,17 @@ public class SharePartitionTest {
     }
 
     @Test
+    public void testWriteShareGroupStateWithNoOpShareStatePersister() {
+        SharePartition sharePartition = SharePartitionBuilder.builder().build();
+
+        List<PersisterStateBatch> stateBatches = Arrays.asList(
+                new PersisterStateBatch(5L, 10L, RecordState.AVAILABLE.id, (short) 2),
+                new PersisterStateBatch(11L, 15L, RecordState.ARCHIVED.id, (short) 3));
+
+        assertTrue(sharePartition.isWriteShareGroupStateSuccessful(stateBatches));
+    }
+
+    @Test
     public void testAcknowledgeBatchWithWriteShareGroupStateFailure() {
         Persister persister = Mockito.mock(Persister.class);
         mockPersisterReadStateMethod(persister);
@@ -4535,7 +4547,7 @@ public class SharePartitionTest {
         private int acquisitionLockTimeoutMs = RECORD_LOCK_DURATION_MS;
         private int maxDeliveryCount = MAX_DELIVERY_COUNT;
         private int maxInflightMessages = MAX_IN_FLIGHT_MESSAGES;
-        private Persister persister = null;
+        private Persister persister = NoOpShareStatePersister.getInstance();
 
         private SharePartitionBuilder withAcquisitionLockTimeoutMs(int acquisitionLockTimeoutMs) {
             this.acquisitionLockTimeoutMs = acquisitionLockTimeoutMs;
