@@ -104,7 +104,7 @@ versions += [
   metrics: "2.2.0",
   mockito: "3.6.0",
   owaspDepCheckPlugin: "6.0.3",
-  netty: "4.1.100.Final",
+  netty: "4.1.108.Final",
   powermock: "2.0.9",
   reflections: "0.9.12",
   rocksDB: "5.18.4",
