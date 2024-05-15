@@ -242,10 +242,6 @@ public class SharePartition {
         initialize();
     }
 
-    boolean findNextFetchOffset() {
-        return findNextFetchOffset.get();
-    }
-
     long startOffset() {
         long startOffset;
         lock.readLock().lock();
@@ -287,13 +283,17 @@ public class SharePartition {
             // When none of the records in the cachedState are in the AVAILABLE state, findNextFetchOffset will be false
             if (!findNextFetchOffset.get()) {
                 if (cachedState.isEmpty()) {
+                    // when cachedState is empty, endOffset is set to the next offset of the last offset removed from
+                    // batch, which is the next offset to be fetched
                     return endOffset;
                 } else {
                     return endOffset + 1;
                 }
             }
 
+            // If this piece of code is reached, it means that findNextFetchOffset is true
             if (cachedState.isEmpty()) {
+                // If cachedState is empty, there is no need of re-computing next fetch offset in future fetch requests
                 findNextFetchOffset.set(false);
                 return endOffset;
             }
@@ -323,6 +323,8 @@ public class SharePartition {
                 }
             }
 
+            // If nextFetchOffset is -1, then no AVAILABLE records are found in the cachedState, so there is no need of
+            // re-computing next fetch offset in future fetch requests
             if (nextFetchOffset == -1) {
                 findNextFetchOffset.set(false);
                 nextFetchOffset = endOffset + 1;
@@ -1269,6 +1271,11 @@ public class SharePartition {
     // Visible for testing. Should only be used for testing purposes.
     NavigableMap<Long, InFlightBatch> cachedState() {
         return new ConcurrentSkipListMap<>(cachedState);
+    }
+
+    // Visible for testing
+    boolean findNextFetchOffset() {
+        return findNextFetchOffset.get();
     }
 
     // Visible for testing.
