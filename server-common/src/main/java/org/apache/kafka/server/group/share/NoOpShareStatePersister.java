@@ -39,7 +39,11 @@ public class NoOpShareStatePersister implements Persister {
 
   public static Persister getInstance() {
     if (instance == null) {
-      instance = new NoOpShareStatePersister();
+      synchronized (NoOpShareStatePersister.class) {
+        if (instance == null) {
+          instance = new NoOpShareStatePersister();
+        }
+      }
     }
     return instance;
   }
