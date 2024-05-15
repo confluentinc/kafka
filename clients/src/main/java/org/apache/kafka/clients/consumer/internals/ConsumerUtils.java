@@ -158,6 +158,12 @@ public final class ConsumerUtils {
         return new FetchMetricsManager(metrics, metricsRegistry);
     }
 
+    public static ShareFetchMetricsManager createShareFetchMetricsManager(Metrics metrics) {
+        Set<String> metricsTags = Collections.singleton(CONSUMER_CLIENT_ID_METRIC_TAG);
+        ShareFetchMetricsRegistry metricsRegistry = new ShareFetchMetricsRegistry(metricsTags, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        return new ShareFetchMetricsManager(metrics, metricsRegistry);
+    }
+
     @SuppressWarnings("unchecked")
     public static <K, V> List<ConsumerInterceptor<K, V>> configuredConsumerInterceptors(ConsumerConfig config) {
         return (List<ConsumerInterceptor<K, V>>) ClientUtils.configuredInterceptors(config, ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG, ConsumerInterceptor.class);

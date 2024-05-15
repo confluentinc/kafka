@@ -65,7 +65,7 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
     protected final ShareFetchBuffer shareFetchBuffer;
     private final Map<Integer, ShareSessionHandler> sessionHandlers;
     private final Set<Integer> nodesWithPendingRequests;
-    private final FetchMetricsManager metricsManager;
+    private final ShareFetchMetricsManager metricsManager;
     private final IdempotentCloser idempotentCloser = new IdempotentCloser();
     private Uuid memberId;
 
@@ -75,7 +75,7 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                              final SubscriptionState subscriptions,
                              final FetchConfig fetchConfig,
                              final ShareFetchBuffer shareFetchBuffer,
-                             final FetchMetricsManager metricsManager) {
+                             final ShareFetchMetricsManager metricsManager) {
         this.log = logContext.logger(ShareFetchRequestManager.class);
         this.logContext = logContext;
         this.groupId = groupId;
@@ -90,9 +90,6 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
 
     @Override
     public PollResult poll(long currentTimeMs) {
-        // Update metrics in case there was an assignment change
-        metricsManager.maybeUpdateAssignment(subscriptions);
-
         if (memberId == null) {
             return PollResult.EMPTY;
         }
@@ -156,9 +153,6 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
 
     @Override
     public PollResult pollOnClose() {
-        // Update metrics in case there was an assignment change
-        metricsManager.maybeUpdateAssignment(subscriptions);
-
         if (memberId == null) {
             return PollResult.EMPTY;
         }
@@ -244,6 +238,9 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                             partition.partitionIndex(),
                             metadata.topicNames().get(topicResponse.topicId())), partition)));
 
+            final Set<TopicPartition> partitions = responseData.keySet().stream().map(TopicIdPartition::topicPartition).collect(Collectors.toSet());
+            final ShareFetchMetricsAggregator shareFetchMetricsAggregator = new ShareFetchMetricsAggregator(metricsManager, partitions);
+
             for (Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData> entry : responseData.entrySet()) {
                 TopicIdPartition partition = entry.getKey();
 
@@ -258,6 +255,7 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                         BufferSupplier.create(),
                         partition,
                         partitionData,
+                        shareFetchMetricsAggregator,
                         requestVersion);
                 shareFetchBuffer.add(completedFetch);
             }
