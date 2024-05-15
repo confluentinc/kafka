@@ -26,10 +26,27 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+/**
+ * A no-op singleton implementation of {@link Persister} interface.
+ */
 public class NoOpShareStatePersister implements Persister {
 
   private static final Logger log = LoggerFactory.getLogger(NoOpShareStatePersister.class);
+  private static volatile Persister instance = null;
 
+  private NoOpShareStatePersister() {
+  }
+
+  public static Persister getInstance() {
+    if (instance == null) {
+      synchronized (NoOpShareStatePersister.class) {
+        if (instance == null) {
+          instance = new NoOpShareStatePersister();
+        }
+      }
+    }
+    return instance;
+  }
 
   @Override
   public CompletableFuture<InitializeShareGroupStateResult> initializeState(InitializeShareGroupStateParameters request) {

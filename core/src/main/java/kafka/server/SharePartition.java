@@ -856,15 +856,6 @@ public class SharePartition {
     private void initialize() {
         // Initialize the partition.
         log.debug("Initializing share partition: {}-{}", groupId, topicIdPartition);
-        // Persister class can be null during active development and shall be driven by temporary config.
-        if (persister == null) {
-            // Set the default states so that the partition can be used without the persister.
-            startOffset = 0;
-            endOffset = 0;
-            nextFetchOffset = 0;
-            stateEpoch = 0;
-            return;
-        }
 
         // Initialize the partition by issuing an initialize RPC call to persister.
         ReadShareGroupStateResult response = null;
@@ -1235,9 +1226,6 @@ public class SharePartition {
     // Visible for testing
      boolean isWriteShareGroupStateSuccessful(List<PersisterStateBatch> stateBatches) {
         try {
-            // Persister class can be null during active development and shall be driven by temporary config.
-            if (persister == null)
-                return true;
             WriteShareGroupStateResult response = persister.writeState(new WriteShareGroupStateParameters.Builder()
                 .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateBatchData>()
                     .setGroupId(this.groupId)
