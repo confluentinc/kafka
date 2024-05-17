@@ -4484,7 +4484,7 @@ class KafkaApisTest extends Logging {
               new AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -4534,7 +4534,7 @@ class KafkaApisTest extends Logging {
             new AcknowledgementBatch()
               .setFirstOffset(0)
               .setLastOffset(9)
-              .setAcknowledgeType(1)
+              .setAcknowledgeTypes(Collections.singletonList(1.toByte))
           ).asJava)
         ).asJava)
       ).asJava)
@@ -4662,7 +4662,7 @@ class KafkaApisTest extends Logging {
               new AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -5023,7 +5023,6 @@ class KafkaApisTest extends Logging {
               new ShareFetchRequestData.AcknowledgementBatch().
                 setFirstOffset(0).
                 setLastOffset(9).
-                setAcknowledgeType(1).
                 setAcknowledgeTypes(List[java.lang.Byte](1.toByte).asJava)).asJava)).asJava)).asJava)
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
@@ -5062,7 +5061,6 @@ class KafkaApisTest extends Logging {
               new ShareFetchRequestData.AcknowledgementBatch().
                 setFirstOffset(10).
                 setLastOffset(19).
-                setAcknowledgeType(1).
                 setAcknowledgeTypes(List[java.lang.Byte](1.toByte).asJava)).asJava)).asJava)).asJava)
 
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
@@ -5367,7 +5365,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -5376,7 +5374,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(10)
                   .setLastOffset(19)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava)
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -5389,7 +5387,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(43)
                   .setLastOffset(52)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -5398,7 +5396,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(17)
                   .setLastOffset(26)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava)
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -5411,7 +5409,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(54)
                   .setLastOffset(93)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -5424,7 +5422,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(10)
                   .setLastOffset(24)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
           ).asJava),
       ).asJava)
@@ -6340,7 +6338,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(14)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -6349,7 +6347,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(45)
                   .setLastOffset(54)
-                  .setAcknowledgeType(2),
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte)),
               ).asJava)
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -6362,7 +6360,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(56)
                   .setLastOffset(67)
-                  .setAcknowledgeType(3),
+                  .setAcknowledgeTypes(Collections.singletonList(3.toByte)),
               ).asJava),
           ).asJava),
       ).asJava)
@@ -6464,7 +6462,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(14)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -6477,7 +6475,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(56)
                   .setLastOffset(67)
-                  .setAcknowledgeType(3),
+                  .setAcknowledgeTypes(Collections.singletonList(3.toByte)),
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -6486,7 +6484,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(36)
                   .setLastOffset(52)
-                  .setAcknowledgeType(2),
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte)),
               ).asJava),
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -6499,7 +6497,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(3)
                   .setLastOffset(15)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -6512,7 +6510,7 @@ class KafkaApisTest extends Logging {
                 new AcknowledgementBatch()
                   .setFirstOffset(36)
                   .setLastOffset(78)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava),
           ).asJava),
       ).asJava)
@@ -9871,7 +9869,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -9947,7 +9945,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(2)
+                .setAcknowledgeTypes(Collections.singletonList(2.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10050,7 +10048,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(3)
+                .setAcknowledgeTypes(Collections.singletonList(3.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10152,7 +10150,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10222,7 +10220,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10299,7 +10297,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10370,7 +10368,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10499,7 +10497,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10554,7 +10552,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(24)
                 .setLastOffset(38)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10587,7 +10585,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(45)
                 .setLastOffset(68)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10656,7 +10654,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(10)
                 .setLastOffset(4) // end offset is less than base offset
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10744,8 +10742,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(10)
                 .setLastOffset(20)
-                .setAcknowledgeTypes(util.Arrays.asList(1.toByte,1.toByte,0.toByte,1.toByte,1.toByte,1.toByte,1.toByte,1.toByte,1.toByte,1.toByte))
-                .setGapOffsets(List(12L.asInstanceOf[java.lang.Long]).asJava)
+                .setAcknowledgeTypes(util.Arrays.asList(1.toByte,1.toByte,0.toByte,1.toByte,1.toByte,1.toByte,1.toByte,1.toByte,1.toByte,1.toByte,1.toByte))
             ).asJava)
         ).asJava)
       ).asJava)
@@ -10799,10 +10796,10 @@ class KafkaApisTest extends Logging {
                                    ) : Boolean = {
     if (baseOffset == acknowledgementBatch.firstOffset()
       && endOffset == acknowledgementBatch.lastOffset()
-      && AcknowledgeType.forId(acknowledgementType) == acknowledgementBatch.acknowledgeType()) {
+      && AcknowledgeType.forId(acknowledgementType) == acknowledgementBatch.acknowledgeTypes().get(0)) {
       return true
     }
-    return false
+    false
   }
 
   def compareAcknowledgeResponsePartitionData(
@@ -10813,7 +10810,7 @@ class KafkaApisTest extends Logging {
     if (partitionIndex == partitionData.partitionIndex() && ackErrorCode == partitionData.errorCode()) {
       return true
     }
-    return false
+    false
   }
 
   @Test
@@ -10836,11 +10833,11 @@ class KafkaApisTest extends Logging {
               new ShareFetchRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1),
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               new ShareFetchRequestData.AcknowledgementBatch()
                 .setFirstOffset(10)
                 .setLastOffset(17)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava),
           new ShareFetchRequestData.FetchPartition()
             .setPartitionIndex(1)
@@ -10849,7 +10846,7 @@ class KafkaApisTest extends Logging {
               new ShareFetchRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(2)
+                .setAcknowledgeTypes(Collections.singletonList(2.toByte))
             ).asJava)
         ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -10862,7 +10859,7 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(24)
                   .setLastOffset(65)
-                  .setAcknowledgeType(3)
+                  .setAcknowledgeTypes(Collections.singletonList(3.toByte))
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -10912,7 +10909,7 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(7) // wrong acknowledgement type here (can only be 1, 2 or 3)
+                  .setAcknowledgeTypes(Collections.singletonList(7.toByte)) // wrong acknowledgement type here (can only be 0, 1, 2 or 3)
               ).asJava)
           ).asJava)
       ).asJava)
@@ -10953,11 +10950,11 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(10)
                   .setLastOffset(17)
-                  .setAcknowledgeType(1)
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte))
               ).asJava),
             new ShareAcknowledgeRequestData.AcknowledgePartition()
               .setPartitionIndex(1)
@@ -10965,7 +10962,7 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(2)
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte))
               ).asJava)
           ).asJava),
         new ShareAcknowledgeRequestData.AcknowledgeTopic().
@@ -10977,7 +10974,7 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(24)
                   .setLastOffset(65)
-                  .setAcknowledgeType(3)
+                  .setAcknowledgeTypes(Collections.singletonList(3.toByte))
               ).asJava)
           ).asJava)
       ).asJava)
@@ -11025,7 +11022,7 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(7) // wrong acknowledgement type here (can only be 1, 2 or 3)
+                  .setAcknowledgeTypes(Collections.singletonList(7.toByte)) // wrong acknowledgement type here (can only be 0, 1, 2 or 3)
               ).asJava)
         ).asJava)
       ).asJava)
@@ -11073,11 +11070,11 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(10)
                   .setLastOffset(19)
-                  .setAcknowledgeType(2)
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte))
               ).asJava)
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -11090,7 +11087,7 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(5)
                   .setLastOffset(19)
-                  .setAcknowledgeType(2),
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte)),
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -11099,7 +11096,7 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(34)
                   .setLastOffset(56)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava)
           ).asJava)
       ).asJava)
@@ -11182,11 +11179,11 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(10)
                   .setLastOffset(19)
-                  .setAcknowledgeType(2)
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte))
               ).asJava)
           ).asJava),
         new ShareAcknowledgeRequestData.AcknowledgeTopic().
@@ -11198,7 +11195,7 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(5)
                   .setLastOffset(19)
-                  .setAcknowledgeType(2),
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte)),
               ).asJava),
             new ShareAcknowledgeRequestData.AcknowledgePartition()
               .setPartitionIndex(1)
@@ -11206,7 +11203,7 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(34)
                   .setLastOffset(56)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava)
           ).asJava)
       ).asJava)
@@ -11290,11 +11287,11 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(39)
                   .setLastOffset(24) // this is an invalid batch because last offset is less than base offset
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(43)
                   .setLastOffset(56)
-                  .setAcknowledgeType(2)
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte))
               ).asJava)
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -11307,8 +11304,8 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(5)
                   .setLastOffset(19)
-                  .setGapOffsets(List(1L.asInstanceOf[java.lang.Long], 2L.asInstanceOf[java.lang.Long]).asJava) // this is an invalid batch because gap offsets are out of bounds
-                  .setAcknowledgeType(2),
+                  // this is an invalid batch because per offset ack is provided but doesn't cover all offsets
+                  .setAcknowledgeTypes(util.Arrays.asList(0.toByte, 2.toByte)),
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -11317,11 +11314,11 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(34)
                   .setLastOffset(56)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(10) // this is an invalid batch because start is offset is less than previous end offset
                   .setLastOffset(19)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava)
           ).asJava)
       ).asJava)
@@ -11405,11 +11402,11 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(24)
                   .setLastOffset(39)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(43)
                   .setLastOffset(56)
-                  .setAcknowledgeType(2)
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte))
               ).asJava)
           ).asJava),
         new ShareFetchRequestData.FetchTopic().
@@ -11422,8 +11419,7 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(5)
                   .setLastOffset(19)
-                  .setGapOffsets(List(7L.asInstanceOf[java.lang.Long], 9L.asInstanceOf[java.lang.Long]).asJava)
-                  .setAcknowledgeType(2),
+                  .setAcknowledgeTypes(Collections.singletonList(2.toByte)),
               ).asJava),
             new ShareFetchRequestData.FetchPartition()
               .setPartitionIndex(1)
@@ -11432,11 +11428,11 @@ class KafkaApisTest extends Logging {
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(34)
                   .setLastOffset(56)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
                 new ShareFetchRequestData.AcknowledgementBatch()
                   .setFirstOffset(67)
                   .setLastOffset(87)
-                  .setAcknowledgeType(1),
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte)),
               ).asJava)
           ).asJava)
       ).asJava)
@@ -11530,7 +11526,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava),
           new ShareAcknowledgeRequestData.AcknowledgePartition()
             .setPartitionIndex(1)
@@ -11538,7 +11534,7 @@ class KafkaApisTest extends Logging {
               new ShareAcknowledgeRequestData.AcknowledgementBatch()
                 .setFirstOffset(0)
                 .setLastOffset(9)
-                .setAcknowledgeType(1)
+                .setAcknowledgeTypes(Collections.singletonList(1.toByte))
             ).asJava)
         ).asJava),
         new ShareAcknowledgeRequestData.AcknowledgeTopic().
@@ -11550,7 +11546,7 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(1)
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte))
               ).asJava),
             new ShareAcknowledgeRequestData.AcknowledgePartition()
               .setPartitionIndex(1)
@@ -11558,7 +11554,7 @@ class KafkaApisTest extends Logging {
                 new ShareAcknowledgeRequestData.AcknowledgementBatch()
                   .setFirstOffset(0)
                   .setLastOffset(9)
-                  .setAcknowledgeType(1)
+                  .setAcknowledgeTypes(Collections.singletonList(1.toByte))
               ).asJava)
           ).asJava)
       ).asJava)

@@ -1080,16 +1080,16 @@ public class SharePartitionManagerTest {
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
                 .withPartitionCacheMap(partitionCacheMap).build();
         acknowledgeTopics.put(tp1, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(12, 20, new ArrayList<>(), AcknowledgeType.ACCEPT),
-                new SharePartition.AcknowledgementBatch(24, 56, new ArrayList<>(), AcknowledgeType.ACCEPT)
+                new SharePartition.AcknowledgementBatch(12, 20, Collections.singletonList(AcknowledgeType.ACCEPT)),
+                new SharePartition.AcknowledgementBatch(24, 56, Collections.singletonList(AcknowledgeType.ACCEPT))
         ));
         acknowledgeTopics.put(tp2, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(5, 17, new ArrayList<>(), AcknowledgeType.REJECT),
-                new SharePartition.AcknowledgementBatch(19, 26, new ArrayList<>(), AcknowledgeType.ACCEPT)
+                new SharePartition.AcknowledgementBatch(5, 17, Collections.singletonList(AcknowledgeType.REJECT)),
+                new SharePartition.AcknowledgementBatch(19, 26, Collections.singletonList(AcknowledgeType.ACCEPT))
         ));
         acknowledgeTopics.put(tp3, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(45, 60, new ArrayList<>(), AcknowledgeType.RELEASE),
-                new SharePartition.AcknowledgementBatch(67, 82, new ArrayList<>(), AcknowledgeType.RELEASE)
+                new SharePartition.AcknowledgementBatch(45, 60, Collections.singletonList(AcknowledgeType.RELEASE)),
+                new SharePartition.AcknowledgementBatch(67, 82, Collections.singletonList(AcknowledgeType.RELEASE))
         ));
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.acknowledge(memberId, groupId, acknowledgeTopics);
@@ -1131,16 +1131,16 @@ public class SharePartitionManagerTest {
                 .withPartitionCacheMap(partitionCacheMap).build();
 
         acknowledgeTopics.put(tp1, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(12, 20, new ArrayList<>(), AcknowledgeType.ACCEPT),
-                new SharePartition.AcknowledgementBatch(24, 56, new ArrayList<>(), AcknowledgeType.ACCEPT)
+                new SharePartition.AcknowledgementBatch(12, 20, Collections.singletonList(AcknowledgeType.ACCEPT)),
+                new SharePartition.AcknowledgementBatch(24, 56, Collections.singletonList(AcknowledgeType.ACCEPT))
         ));
         acknowledgeTopics.put(tp2, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(5, 17, new ArrayList<>(), AcknowledgeType.REJECT),
-                new SharePartition.AcknowledgementBatch(19, 26, new ArrayList<>(), AcknowledgeType.ACCEPT)
+                new SharePartition.AcknowledgementBatch(5, 17, Collections.singletonList(AcknowledgeType.REJECT)),
+                new SharePartition.AcknowledgementBatch(19, 26, Collections.singletonList(AcknowledgeType.ACCEPT))
         ));
         acknowledgeTopics.put(tp3, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(45, 60, new ArrayList<>(), AcknowledgeType.RELEASE),
-                new SharePartition.AcknowledgementBatch(67, 82, new ArrayList<>(), AcknowledgeType.RELEASE)
+                new SharePartition.AcknowledgementBatch(45, 60, Collections.singletonList(AcknowledgeType.RELEASE)),
+                new SharePartition.AcknowledgementBatch(67, 82, Collections.singletonList(AcknowledgeType.RELEASE))
         ));
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.acknowledge(memberId, groupId2, acknowledgeTopics);
@@ -1182,12 +1182,12 @@ public class SharePartitionManagerTest {
                 .withPartitionCacheMap(partitionCacheMap).build();
 
         acknowledgeTopics.put(tp1, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(12, 20, new ArrayList<>(), AcknowledgeType.ACCEPT),
-                new SharePartition.AcknowledgementBatch(24, 56, new ArrayList<>(), AcknowledgeType.ACCEPT)
+                new SharePartition.AcknowledgementBatch(12, 20, Collections.singletonList(AcknowledgeType.ACCEPT)),
+                new SharePartition.AcknowledgementBatch(24, 56, Collections.singletonList(AcknowledgeType.ACCEPT))
         ));
         acknowledgeTopics.put(tp2, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(5, 17, new ArrayList<>(), AcknowledgeType.REJECT),
-                new SharePartition.AcknowledgementBatch(19, 26, new ArrayList<>(), AcknowledgeType.ACCEPT)
+                new SharePartition.AcknowledgementBatch(5, 17, Collections.singletonList(AcknowledgeType.REJECT)),
+                new SharePartition.AcknowledgementBatch(19, 26, Collections.singletonList(AcknowledgeType.ACCEPT))
         ));
 
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
@@ -1219,8 +1219,8 @@ public class SharePartitionManagerTest {
 
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder().build();
         acknowledgeTopics.put(tp, Arrays.asList(
-                new SharePartition.AcknowledgementBatch(78, 90, new ArrayList<>(), AcknowledgeType.RELEASE),
-                new SharePartition.AcknowledgementBatch(94, 99, new ArrayList<>(), AcknowledgeType.RELEASE)
+                new SharePartition.AcknowledgementBatch(78, 90, Collections.singletonList(AcknowledgeType.RELEASE)),
+                new SharePartition.AcknowledgementBatch(94, 99, Collections.singletonList(AcknowledgeType.RELEASE))
         ));
         CompletableFuture<Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData>> resultFuture =
                 sharePartitionManager.acknowledge(memberId, groupId, acknowledgeTopics);
