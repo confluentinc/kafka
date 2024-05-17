@@ -84,6 +84,7 @@ import java.time.Duration
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap}
+import java.util.stream.Collectors
 import java.util.{Collections, Optional, OptionalInt}
 import scala.annotation.nowarn
 import scala.collection.mutable.ArrayBuffer
@@ -1108,8 +1109,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 acknowledgeBatches.add(new SharePartition.AcknowledgementBatch(
                   batch.firstOffset(),
                   batch.lastOffset(),
-                  batch.gapOffsets(),
-                  AcknowledgeType.forId(batch.acknowledgeType())
+                  batch.acknowledgeTypes().stream().map(AcknowledgeType.forId(_)).collect(Collectors.toList())
                 ))
               } catch {
                 case e : IllegalArgumentException =>
@@ -1170,18 +1170,14 @@ class KafkaApis(val requestChannel: RequestChannel,
               erroneousTopicIdPartitions.add(tp)
               break()
             }
-            var gapOffsetsValid = true
-            breakable {
-              batch.gapOffsets().forEach(gapOffset => {
-                if (gapOffset < batch.firstOffset() || gapOffset > batch.lastOffset()) {
-                  erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
-                  erroneousTopicIdPartitions.add(tp)
-                  gapOffsetsValid = false
-                  break()
-                }
-              })
+            if (batch.acknowledgeTypes() == null || batch.acknowledgeTypes().isEmpty) {
+              erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
+              erroneousTopicIdPartitions.add(tp)
+              break()
             }
-            if (!gapOffsetsValid) {
+            if (batch.acknowledgeTypes().size() > 1 && batch.lastOffset() - batch.firstOffset() != batch.acknowledgeTypes().size() - 1) {
+              erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
+              erroneousTopicIdPartitions.add(tp)
               break()
             }
             prevEndOffset = batch.lastOffset()
@@ -4617,8 +4613,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 acknowledgeBatches.add(new SharePartition.AcknowledgementBatch(
                   batch.firstOffset(),
                   batch.lastOffset(),
-                  batch.gapOffsets(),
-                  AcknowledgeType.forId(batch.acknowledgeType())
+                  batch.acknowledgeTypes().stream().map(AcknowledgeType.forId(_)).collect(Collectors.toList())
                 ))
               } catch {
                 case e : IllegalArgumentException =>
