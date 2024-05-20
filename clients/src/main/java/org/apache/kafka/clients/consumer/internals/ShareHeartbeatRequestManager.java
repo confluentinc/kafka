@@ -194,9 +194,10 @@ public class ShareHeartbeatRequestManager implements RequestManager {
                     "the poll loop is spending too much time processing messages. You can address this " +
                     "either by increasing max.poll.interval.ms or by reducing the maximum size of batches " +
                     "returned in poll() with max.poll.records.");
-            // This should trigger a heartbeat with leave group epoch
-            shareMembershipManager.transitionToStale();
+
+            shareMembershipManager.transitionToSendingLeaveGroup(true);
             NetworkClientDelegate.UnsentRequest request = makeHeartbeatRequest(currentTimeMs, true);
+
             // We can ignore the leave response because we can join before or after receiving the response.
             heartbeatRequestState.reset();
             heartbeatState.reset();
