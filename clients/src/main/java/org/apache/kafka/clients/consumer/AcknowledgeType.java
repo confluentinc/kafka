@@ -22,6 +22,8 @@ import java.util.Locale;
 
 @InterfaceStability.Evolving
 public enum AcknowledgeType {
+    /** The record was identified as gap. */
+    GAP((byte) 0),
     /** The record was consumed successfully. */
     ACCEPT((byte) 1),
 
@@ -45,6 +47,8 @@ public enum AcknowledgeType {
 
     public static AcknowledgeType forId(byte id) {
         switch (id) {
+            case 0:
+                return GAP;
             case 1:
                 return ACCEPT;
             case 2:
