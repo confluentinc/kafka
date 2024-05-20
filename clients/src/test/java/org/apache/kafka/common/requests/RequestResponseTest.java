@@ -1462,7 +1462,7 @@ public class RequestResponseTest {
                                 .setAcknowledgementBatches(singletonList(new ShareAcknowledgeRequestData.AcknowledgementBatch()
                                         .setFirstOffset(0)
                                         .setLastOffset(0)
-                                        .setAcknowledgeType((byte) 0)))))));
+                                        .setAcknowledgeTypes(Collections.singletonList((byte) 0))))))));
         return new ShareAcknowledgeRequest.Builder(data).build(version);
     }
 

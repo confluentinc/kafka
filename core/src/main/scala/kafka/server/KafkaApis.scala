@@ -30,7 +30,6 @@ import kafka.utils.{CoreUtils, Logging}
 import org.apache.kafka.admin.AdminUtils
 import org.apache.kafka.clients.admin.AlterConfigOp.OpType
 import org.apache.kafka.clients.admin.{AlterConfigOp, ConfigEntry, EndpointType}
-import org.apache.kafka.clients.consumer.AcknowledgeType
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.acl.AclOperation._
 import org.apache.kafka.common.config.ConfigResource
@@ -1108,8 +1107,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 acknowledgeBatches.add(new SharePartition.AcknowledgementBatch(
                   batch.firstOffset(),
                   batch.lastOffset(),
-                  batch.gapOffsets(),
-                  AcknowledgeType.forId(batch.acknowledgeType())
+                  batch.acknowledgeTypes()
                 ))
               } catch {
                 case e : IllegalArgumentException =>
@@ -1154,46 +1152,10 @@ class KafkaApis(val requestChannel: RequestChannel,
       acknowledgementDataFromRequest = getAcknowledgeBatchesFromShareAcknowledgeRequest(requestData.asInstanceOf[ShareAcknowledgeRequest], topicNames, erroneous)
     }
 
-    def validateAcknowledgementBatchesInFetchRequest() : Unit = {
-      val erroneousTopicIdPartitions: mutable.Set[TopicIdPartition] = mutable.Set.empty[TopicIdPartition]
-      acknowledgementDataFromRequest.foreach{ case (tp : TopicIdPartition, acknowledgeBatches : util.List[SharePartition.AcknowledgementBatch]) => {
-        var prevEndOffset = -1L
-        breakable {
-          acknowledgeBatches.forEach(batch => {
-            if (batch.firstOffset() > batch.lastOffset()) {
-              erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
-              erroneousTopicIdPartitions.add(tp)
-              break()
-            }
-            if (batch.firstOffset() < prevEndOffset) {
-              erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
-              erroneousTopicIdPartitions.add(tp)
-              break()
-            }
-            var gapOffsetsValid = true
-            breakable {
-              batch.gapOffsets().forEach(gapOffset => {
-                if (gapOffset < batch.firstOffset() || gapOffset > batch.lastOffset()) {
-                  erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
-                  erroneousTopicIdPartitions.add(tp)
-                  gapOffsetsValid = false
-                  break()
-                }
-              })
-            }
-            if (!gapOffsetsValid) {
-              break()
-            }
-            prevEndOffset = batch.lastOffset()
-          })
-        }
-      }}
-      erroneousTopicIdPartitions.foreach(tp => {
-        acknowledgementDataFromRequest.remove(tp)
-      })
-    }
-
-    validateAcknowledgementBatchesInFetchRequest()
+    val erroneousTopicIdPartitions = validateAcknowledgementBatches(acknowledgementDataFromRequest, erroneous)
+    erroneousTopicIdPartitions.foreach(tp => {
+      acknowledgementDataFromRequest.remove(tp)
+    })
 
     acknowledgementDataFromRequest.foreach{
       case (topicIdPartition : TopicIdPartition, acknowledgeBatches : util.List[SharePartition.AcknowledgementBatch]) =>
@@ -4617,8 +4579,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 acknowledgeBatches.add(new SharePartition.AcknowledgementBatch(
                   batch.firstOffset(),
                   batch.lastOffset(),
-                  batch.gapOffsets(),
-                  AcknowledgeType.forId(batch.acknowledgeType())
+                  batch.acknowledgeTypes()
                 ))
               } catch {
                 case e : IllegalArgumentException =>
@@ -4635,6 +4596,47 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
     })
     acknowledgeBatchesMap
+  }
+
+  def validateAcknowledgementBatches(
+                                    acknowledgementDataFromRequest : mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]],
+                                    erroneous : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]
+                                    ) : mutable.Set[TopicIdPartition] = {
+    val erroneousTopicIdPartitions: mutable.Set[TopicIdPartition] = mutable.Set.empty[TopicIdPartition]
+    acknowledgementDataFromRequest.foreach{ case (tp : TopicIdPartition, acknowledgeBatches : util.List[SharePartition.AcknowledgementBatch]) =>
+      var prevEndOffset = -1L
+      breakable {
+        acknowledgeBatches.forEach(batch => {
+          if (batch.firstOffset() > batch.lastOffset()) {
+            erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
+            erroneousTopicIdPartitions.add(tp)
+            break()
+          }
+          if (batch.firstOffset() < prevEndOffset) {
+            erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
+            erroneousTopicIdPartitions.add(tp)
+            break()
+          }
+          if (batch.acknowledgeTypes() == null || batch.acknowledgeTypes().isEmpty) {
+            erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
+            erroneousTopicIdPartitions.add(tp)
+            break()
+          }
+          if (batch.acknowledgeTypes().size() > 1 && batch.lastOffset() - batch.firstOffset() != batch.acknowledgeTypes().size() - 1) {
+            erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
+            erroneousTopicIdPartitions.add(tp)
+            break()
+          }
+          if (batch.acknowledgeTypes().stream().anyMatch(ackType => ackType < 0 || ackType > 3)) {
+            erroneous += tp -> ShareAcknowledgeResponse.partitionResponse(tp, Errors.INVALID_REQUEST)
+            erroneousTopicIdPartitions.add(tp)
+            break()
+          }
+          prevEndOffset = batch.lastOffset()
+        })
+      }
+    }
+    erroneousTopicIdPartitions
   }
 
   def handleShareAcknowledgeRequest(request: RequestChannel.Request): Unit = {
