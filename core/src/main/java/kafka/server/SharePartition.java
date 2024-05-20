@@ -994,10 +994,10 @@ public class SharePartition {
                     groupId, topicIdPartition);
                 updatedStates.forEach(state -> {
                     state.completeStateTransition(true);
-                    // Cancel the acquisition lock timeout task for the state since it is released successfully.
+                    // Cancel the acquisition lock timeout task for the state since it is acknowledged/released successfully.
                     state.cancelAndClearAcquisitionLockTimeoutTask();
                 });
-                // Update the cached state and start and end offsets after releasing the acquired records
+                // Update the cached state and start and end offsets after acknowledging/releasing the acquired records.
                 maybeUpdateCachedStateAndOffsets();
             }
         } finally {
