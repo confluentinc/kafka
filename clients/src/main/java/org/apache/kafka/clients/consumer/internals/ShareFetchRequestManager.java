@@ -121,7 +121,10 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                 ShareSessionHandler handler = handlerMap.computeIfAbsent(node, k -> sessionHandlers.computeIfAbsent(node.id(), n -> new ShareSessionHandler(logContext, n, memberId)));
 
                 TopicIdPartition tip = new TopicIdPartition(topicId, partition);
-                handler.addPartitionToFetch(tip, shareFetchBuffer.getAcknowledgementsToSend(tip));
+                Acknowledgements acknowledgementsToSend = shareFetchBuffer.getAcknowledgementsToSend(tip);
+                if (acknowledgementsToSend != null)
+                    metricsManager.recordAcknowledgementSent(acknowledgementsToSend.size());
+                handler.addPartitionToFetch(tip, acknowledgementsToSend);
 
                 log.debug("Added fetch request for partition {} to node {}", partition, node);
             }
@@ -170,6 +173,7 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                 for (TopicIdPartition tip : sessionHandler.sessionPartitions()) {
                     Acknowledgements acknowledgements = shareFetchBuffer.getAcknowledgementsToSend(tip);
                     if (acknowledgements != null) {
+                        metricsManager.recordAcknowledgementSent(acknowledgements.size());
                         sessionHandler.addPartitionToFetch(tip, acknowledgements);
 
                         log.debug("Added closing acknowledge request for partition {} to node {}", tip.topicPartition(), node);
@@ -248,6 +252,9 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
 
                 log.debug("ShareFetch for partition {} returned fetch data {}", partition, partitionData);
 
+                if (partitionData.acknowledgeErrorCode() != 0) {
+                    metricsManager.recordFailedAcknowledgements(shareFetchBuffer.getPendingAcknowledgementsCount(partition));
+                }
                 shareFetchBuffer.handleAcknowledgementResponses(partition, Errors.forCode(partitionData.acknowledgeErrorCode()));
 
                 ShareCompletedFetch completedFetch = new ShareCompletedFetch(
@@ -281,6 +288,7 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                     TopicIdPartition tip = new TopicIdPartition(topic.topicId(),
                             partition.partitionIndex(),
                             metadata.topicNames().get(topic.topicId()));
+                    metricsManager.recordFailedAcknowledgements(shareFetchBuffer.getPendingAcknowledgementsCount(tip));
                     shareFetchBuffer.handleAcknowledgementResponses(tip, Errors.forException(error));
                 });
             });
@@ -301,6 +309,9 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                     TopicIdPartition tip = new TopicIdPartition(topic.topicId(),
                             partition.partitionIndex(),
                             metadata.topicNames().get(topic.topicId()));
+                    if (partition.errorCode() != 0) {
+                        metricsManager.recordFailedAcknowledgements(shareFetchBuffer.getPendingAcknowledgementsCount(tip));
+                    }
                     shareFetchBuffer.handleAcknowledgementResponses(tip, Errors.forCode(partition.errorCode()));
                 });
             });
@@ -327,6 +338,7 @@ public class ShareFetchRequestManager implements RequestManager, MemberStateList
                     TopicIdPartition tip = new TopicIdPartition(topic.topicId(),
                             partition.partitionIndex(),
                             metadata.topicNames().get(topic.topicId()));
+                    metricsManager.recordAcknowledgementSent(shareFetchBuffer.getPendingAcknowledgementsCount(tip));
                     shareFetchBuffer.handleAcknowledgementResponses(tip, Errors.forException(error));
                 });
             });

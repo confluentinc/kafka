@@ -139,6 +139,24 @@ public class ShareFetchBuffer implements AutoCloseable {
     }
 
     /**
+     * Returns the number of acknowledgements which have been sent
+     * to the broker and are still in pending state.
+     */
+    public int getPendingAcknowledgementsCount(TopicIdPartition partition) {
+        lock.lock();
+        try {
+            Acknowledgements pending = pendingAcknowledgements.get(partition);
+            if (pending != null) {
+                return pending.size();
+            } else {
+                return 0;
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Returns {@code true} if there are no completed fetches pending to return to the user.
      *
      * @return {@code true} if the buffer is empty, {@code false} otherwise
