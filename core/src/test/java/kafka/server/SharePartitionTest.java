@@ -19,7 +19,6 @@ package kafka.server;
 import kafka.server.SharePartition.AcknowledgementBatch;
 import kafka.server.SharePartition.InFlightState;
 import kafka.server.SharePartition.RecordState;
-import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
@@ -417,7 +416,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(1, 1, Collections.singletonList(AcknowledgeType.ACCEPT))));
+            Collections.singletonList(new AcknowledgementBatch(1, 1, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -442,7 +441,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList(AcknowledgeType.ACCEPT))));
+            Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -479,11 +478,11 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
             Arrays.asList(
-                new AcknowledgementBatch(5, 6, Collections.singletonList(AcknowledgeType.RELEASE)),
+                new AcknowledgementBatch(5, 6, Collections.singletonList((byte) 2)),
                 new AcknowledgementBatch(10, 18, Arrays.asList(
-                    AcknowledgeType.RELEASE, AcknowledgeType.RELEASE, AcknowledgeType.RELEASE,
-                    AcknowledgeType.RELEASE, AcknowledgeType.RELEASE, AcknowledgeType.GAP,
-                    AcknowledgeType.GAP, AcknowledgeType.GAP, AcknowledgeType.ACCEPT
+                    (byte) 2, (byte) 2, (byte) 2,
+                    (byte) 2, (byte) 2, (byte) 0,
+                    (byte) 0, (byte) 0, (byte) 1
                 ))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -546,11 +545,11 @@ public class SharePartitionTest {
                 // TODO: NOTE - untracked gap of 3 offsets from 7-9 has no effect on acknowledgment
                 //  irrespective of acknowledgement type provided. While acquiring, the log start
                 //  offset should be used to determine such gaps.
-                AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                AcknowledgeType.GAP, AcknowledgeType.GAP, AcknowledgeType.ACCEPT,
-                AcknowledgeType.GAP, AcknowledgeType.ACCEPT, AcknowledgeType.GAP,
-                AcknowledgeType.ACCEPT))));
+                (byte) 1, (byte) 1, (byte) 1,
+                (byte) 1, (byte) 1, (byte) 1,
+                (byte) 0, (byte) 0, (byte) 1,
+                (byte) 0, (byte) 1, (byte) 0,
+                (byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -586,7 +585,7 @@ public class SharePartitionTest {
         // Acknowledge a batch when cache is empty.
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(0, 15, Collections.singletonList(AcknowledgeType.REJECT))));
+            Collections.singletonList(new AcknowledgementBatch(0, 15, Collections.singletonList((byte) 3))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -604,7 +603,7 @@ public class SharePartitionTest {
 
         ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(20, 25, Collections.singletonList(AcknowledgeType.REJECT))));
+            Collections.singletonList(new AcknowledgementBatch(20, 25, Collections.singletonList((byte) 3))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRequestException.class, ackResult.join().get().getClass());
@@ -626,7 +625,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             "member-2",
-            Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.REJECT))));
+            Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 3))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -648,14 +647,14 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.RELEASE))));
+            Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
         // Acknowledge the same batch again but with ACCEPT type.
         ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.ACCEPT))));
+            Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -670,14 +669,14 @@ public class SharePartitionTest {
 
         ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(6, 8, Collections.singletonList(AcknowledgeType.REJECT))));
+            Collections.singletonList(new AcknowledgementBatch(6, 8, Collections.singletonList((byte) 3))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
         // Re-acknowledge the subset batch with REJECT type.
         ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(6, 8, Collections.singletonList(AcknowledgeType.REJECT))));
+            Collections.singletonList(new AcknowledgementBatch(6, 8, Collections.singletonList((byte) 3))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -715,11 +714,11 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
             Arrays.asList(
-                new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.RELEASE)),
-                new AcknowledgementBatch(10, 14, Collections.singletonList(AcknowledgeType.ACCEPT)),
-                new AcknowledgementBatch(15, 19, Collections.singletonList(AcknowledgeType.ACCEPT)),
+                new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 2)),
+                new AcknowledgementBatch(10, 14, Collections.singletonList((byte) 1)),
+                new AcknowledgementBatch(15, 19, Collections.singletonList((byte) 1)),
                 // Add another batch which should fail the request.
-                new AcknowledgementBatch(15, 19, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                new AcknowledgementBatch(15, 19, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -763,11 +762,11 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
             Arrays.asList(
-                new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.RELEASE)),
-                new AcknowledgementBatch(10, 14, Collections.singletonList(AcknowledgeType.ACCEPT)),
-                new AcknowledgementBatch(15, 19, Collections.singletonList(AcknowledgeType.ACCEPT)),
+                new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 2)),
+                new AcknowledgementBatch(10, 14, Collections.singletonList((byte) 1)),
+                new AcknowledgementBatch(15, 19, Collections.singletonList((byte) 1)),
                 // Add another batch which should fail the request.
-                new AcknowledgementBatch(16, 19, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                new AcknowledgementBatch(16, 19, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -798,7 +797,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(12, 13, Collections.singletonList(AcknowledgeType.RELEASE))));
+            Collections.singletonList(new AcknowledgementBatch(12, 13, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -885,7 +884,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             MEMBER_ID,
-            Collections.singletonList(new AcknowledgementBatch(12, 30, Collections.singletonList(AcknowledgeType.RELEASE))));
+            Collections.singletonList(new AcknowledgementBatch(12, 30, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -1069,7 +1068,7 @@ public class SharePartitionTest {
                     // TODO: NOTE - untracked gap of 3 offsets from 7-9 has no effect on acknowledgment
                     //  irrespective of acknowledgement type provided. While acquiring, the log start
                     //  offset should be used to determine such gaps.
-                    new AcknowledgementBatch(5, 18, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                    new AcknowledgementBatch(5, 18, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -1128,11 +1127,11 @@ public class SharePartitionTest {
                     // TODO: NOTE - untracked gap of 3 offsets from 7-9 has no effect on acknowledgment
                     //  irrespective of acknowledgement type provided. While acquiring, the log start
                     //  offset should be used to determine such gaps.
-                    AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                    AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                    AcknowledgeType.GAP, AcknowledgeType.GAP, AcknowledgeType.ACCEPT,
-                    AcknowledgeType.GAP, AcknowledgeType.ACCEPT, AcknowledgeType.GAP,
-                    AcknowledgeType.ACCEPT))));
+                    (byte) 1, (byte) 1, (byte) 1,
+                    (byte) 1, (byte) 1, (byte) 1,
+                    (byte) 0, (byte) 0, (byte) 1,
+                    (byte) 0, (byte) 1, (byte) 0,
+                    (byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(21, sharePartition.nextFetchOffset());
@@ -1197,9 +1196,9 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 Collections.singletonList(new AcknowledgementBatch(10, 18, Arrays.asList(
-                    AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.GAP, AcknowledgeType.GAP,
-                    AcknowledgeType.ACCEPT, AcknowledgeType.GAP, AcknowledgeType.ACCEPT, AcknowledgeType.GAP,
-                    AcknowledgeType.ACCEPT))));
+                    (byte) 1, (byte) 1, (byte) 0, (byte) 0,
+                    (byte) 1, (byte) 0, (byte) 1, (byte) 0,
+                    (byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(21, sharePartition.nextFetchOffset());
@@ -1285,9 +1284,9 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 Collections.singletonList(new AcknowledgementBatch(10, 18, Arrays.asList(
-                    AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.GAP, AcknowledgeType.GAP,
-                    AcknowledgeType.ACCEPT, AcknowledgeType.GAP, AcknowledgeType.ACCEPT, AcknowledgeType.GAP,
-                    AcknowledgeType.ACCEPT))));
+                    (byte) 1, (byte) 1, (byte) 0, (byte) 0,
+                    (byte) 1, (byte) 0, (byte) 1, (byte) 0,
+                    (byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(21, sharePartition.nextFetchOffset());
@@ -1318,7 +1317,7 @@ public class SharePartitionTest {
         // Ack subset of records by "member-2".
         ackResult = sharePartition.acknowledge(
                 "member-2",
-                Collections.singletonList(new AcknowledgementBatch(5, 5, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(5, 5, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(19, sharePartition.nextFetchOffset());
@@ -1377,14 +1376,14 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 6, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(5, 6, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(5, sharePartition.nextFetchOffset());
 
         ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -1416,7 +1415,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -1435,7 +1434,7 @@ public class SharePartitionTest {
 
         ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -1479,9 +1478,9 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 new ArrayList<>(Arrays.asList(
-                        new AcknowledgementBatch(10, 12, Collections.singletonList(AcknowledgeType.ACCEPT)),
-                        new AcknowledgementBatch(13, 16, Collections.singletonList(AcknowledgeType.RELEASE)),
-                        new AcknowledgementBatch(17, 19, Collections.singletonList(AcknowledgeType.ACCEPT))
+                        new AcknowledgementBatch(10, 12, Collections.singletonList((byte) 1)),
+                        new AcknowledgementBatch(13, 16, Collections.singletonList((byte) 2)),
+                        new AcknowledgementBatch(17, 19, Collections.singletonList((byte) 1))
                 )));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -1553,7 +1552,7 @@ public class SharePartitionTest {
         ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 Collections.singletonList(
-                        new AcknowledgementBatch(13, 16, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(13, 16, Collections.singletonList((byte) 2))
                 ));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -1587,7 +1586,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 new ArrayList<>(Collections.singletonList(
-                        new AcknowledgementBatch(0, 1, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(0, 1, Collections.singletonList((byte) 2))
                 )));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -1627,7 +1626,7 @@ public class SharePartitionTest {
         ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 4, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(0, 4, Collections.singletonList((byte) 2))
                 ));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -1680,7 +1679,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 Collections.singletonList(
-                        new AcknowledgementBatch(10, 14, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(10, 14, Collections.singletonList((byte) 2))
                 ));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -1757,9 +1756,9 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 new ArrayList<>(Arrays.asList(
-                        new AcknowledgementBatch(13, 16, Collections.singletonList(AcknowledgeType.RELEASE)),
-                        new AcknowledgementBatch(17, 19, Collections.singletonList(AcknowledgeType.REJECT)),
-                        new AcknowledgementBatch(20, 24, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(13, 16, Collections.singletonList((byte) 2)),
+                        new AcknowledgementBatch(17, 19, Collections.singletonList((byte) 3)),
+                        new AcknowledgementBatch(20, 24, Collections.singletonList((byte) 2))
                 )));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -1900,10 +1899,10 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 new ArrayList<>(Arrays.asList(
-                        new AcknowledgementBatch(10, 12, Collections.singletonList(AcknowledgeType.ACCEPT)),
-                        new AcknowledgementBatch(13, 16, Collections.singletonList(AcknowledgeType.RELEASE)),
-                        new AcknowledgementBatch(17, 19, Collections.singletonList(AcknowledgeType.REJECT)),
-                        new AcknowledgementBatch(20, 24, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(10, 12, Collections.singletonList((byte) 1)),
+                        new AcknowledgementBatch(13, 16, Collections.singletonList((byte) 2)),
+                        new AcknowledgementBatch(17, 19, Collections.singletonList((byte) 3)),
+                        new AcknowledgementBatch(20, 24, Collections.singletonList((byte) 2))
                 )));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
@@ -2140,7 +2139,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(0, 0, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(0, 0, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertNull(sharePartition.cachedState().get(0L).acquisitionLockTimeoutTask());
@@ -2179,7 +2178,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -2246,7 +2245,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
                 // Do not send gap offsets to verify that they are ignored and accepted as per client ack.
-                Collections.singletonList(new AcknowledgementBatch(5, 18, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(5, 18, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -2394,11 +2393,11 @@ public class SharePartitionTest {
                         // TODO: NOTE - untracked gap of 3 offsets from 7-9 has no effect on acknowledgment
                         //  irrespective of acknowledgement type provided. While acquiring, the log start
                         //  offset should be used to determine such gaps.
-                        AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                        AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                        AcknowledgeType.GAP, AcknowledgeType.GAP, AcknowledgeType.ACCEPT,
-                        AcknowledgeType.GAP, AcknowledgeType.ACCEPT, AcknowledgeType.GAP,
-                        AcknowledgeType.ACCEPT))));
+                        (byte) 1, (byte) 1, (byte) 1,
+                        (byte) 1, (byte) 1, (byte) 1,
+                        (byte) 0, (byte) 0, (byte) 1,
+                        (byte) 0, (byte) 1, (byte) 0,
+                        (byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -2770,7 +2769,7 @@ public class SharePartitionTest {
         // Acknowledge with ACCEPT type.
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -2780,7 +2779,7 @@ public class SharePartitionTest {
         // Try acknowledging with REJECT type.
         ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.REJECT))));
+                Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 3))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -2866,11 +2865,11 @@ public class SharePartitionTest {
                     // TODO: NOTE - untracked gap of 3 offsets from 7-9 has no effect on acknowledgment
                     //  irrespective of acknowledgement type provided. While acquiring, the log start
                     //  offset should be used to determine such gaps.
-                    AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                    AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT, AcknowledgeType.ACCEPT,
-                    AcknowledgeType.GAP, AcknowledgeType.GAP, AcknowledgeType.ACCEPT,
-                    AcknowledgeType.GAP, AcknowledgeType.ACCEPT, AcknowledgeType.GAP,
-                    AcknowledgeType.ACCEPT))));
+                    (byte) 1, (byte) 1, (byte) 1,
+                    (byte) 1, (byte) 1, (byte) 1,
+                    (byte) 0, (byte) 0, (byte) 1,
+                    (byte) 0, (byte) 1, (byte) 0,
+                    (byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -2965,7 +2964,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 6, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(5, 6, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(5, sharePartition.nextFetchOffset());
@@ -2978,7 +2977,7 @@ public class SharePartitionTest {
 
         ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         //Check cached state.
@@ -3032,7 +3031,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge("member-1",
-                Collections.singletonList(new AcknowledgementBatch(5, 7, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(5, 7, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(12, sharePartition.nextFetchOffset());
@@ -3052,7 +3051,7 @@ public class SharePartitionTest {
 
         // Acknowledge subset with another member.
         ackResult = sharePartition.acknowledge("member-2",
-                Collections.singletonList(new AcknowledgementBatch(9, 11, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(9, 11, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -3073,7 +3072,7 @@ public class SharePartitionTest {
         assertEquals(1, sharePartition.cachedState().get(5L).batchDeliveryCount());
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge("member-1",
-                Collections.singletonList(new AcknowledgementBatch(5, 7, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(5, 7, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(12, sharePartition.nextFetchOffset());
@@ -3125,16 +3124,16 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge("member-1",
                 Arrays.asList(
-                    new AcknowledgementBatch(5, 11, Collections.singletonList(AcknowledgeType.RELEASE)),
-                    new AcknowledgementBatch(12, 13, Collections.singletonList(AcknowledgeType.GAP)),
-                    new AcknowledgementBatch(14, 15, Collections.singletonList(AcknowledgeType.RELEASE))));
+                    new AcknowledgementBatch(5, 11, Collections.singletonList((byte) 2)),
+                    new AcknowledgementBatch(12, 13, Collections.singletonList((byte) 0)),
+                    new AcknowledgementBatch(14, 15, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(5, sharePartition.nextFetchOffset());
 
         // Records 17-20 are released in the acknowledgement
         ackResult = sharePartition.acknowledge("member-1",
-                Collections.singletonList(new AcknowledgementBatch(17, 20, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(17, 20, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(5, sharePartition.nextFetchOffset());
@@ -3222,10 +3221,10 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Arrays.asList(
-                        new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.RELEASE)),
+                        new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 2)),
                         // Acknowledging batch with another member will cause failure and rollback.
-                        new AcknowledgementBatch(10, 14, Collections.singletonList(AcknowledgeType.ACCEPT)),
-                        new AcknowledgementBatch(15, 19, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                        new AcknowledgementBatch(10, 14, Collections.singletonList((byte) 1)),
+                        new AcknowledgementBatch(15, 19, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -3282,10 +3281,10 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Arrays.asList(
-                        new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.RELEASE)),
-                        new AcknowledgementBatch(10, 14, Collections.singletonList(AcknowledgeType.ACCEPT)),
+                        new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 2)),
+                        new AcknowledgementBatch(10, 14, Collections.singletonList((byte) 1)),
                         // Acknowledging subset with another member will cause failure and rollback.
-                        new AcknowledgementBatch(16, 18, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                        new AcknowledgementBatch(16, 18, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertTrue(ackResult.join().isPresent());
         assertEquals(InvalidRecordStateException.class, ackResult.join().get().getClass());
@@ -3357,7 +3356,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 249, Collections.singletonList(AcknowledgeType.ACCEPT))
+                        new AcknowledgementBatch(0, 249, Collections.singletonList((byte) 1))
                 )
         );
 
@@ -3398,7 +3397,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 89, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(0, 89, Collections.singletonList((byte) 2))
                 )
         );
         assertFalse(ackResult.isCompletedExceptionally());
@@ -3440,7 +3439,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 89, Collections.singletonList(AcknowledgeType.REJECT))
+                        new AcknowledgementBatch(0, 89, Collections.singletonList((byte) 3))
                 )
         );
         assertFalse(ackResult.isCompletedExceptionally());
@@ -3482,7 +3481,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 89, Collections.singletonList(AcknowledgeType.ACCEPT))
+                        new AcknowledgementBatch(0, 89, Collections.singletonList((byte) 1))
                 )
         );
         assertFalse(ackResult.isCompletedExceptionally());
@@ -3519,7 +3518,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 249, Collections.singletonList(AcknowledgeType.ACCEPT))
+                        new AcknowledgementBatch(0, 249, Collections.singletonList((byte) 1))
                 )
         );
         assertFalse(ackResult.isCompletedExceptionally());
@@ -3555,7 +3554,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 249, Collections.singletonList(AcknowledgeType.REJECT))
+                        new AcknowledgementBatch(0, 249, Collections.singletonList((byte) 3))
                 )
         );
         assertFalse(ackResult.isCompletedExceptionally());
@@ -3591,7 +3590,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 249, Collections.singletonList(AcknowledgeType.RELEASE))
+                        new AcknowledgementBatch(0, 249, Collections.singletonList((byte) 2))
                 )
         );
         assertFalse(ackResult.isCompletedExceptionally());
@@ -3652,7 +3651,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 12, Collections.singletonList(AcknowledgeType.ACCEPT))
+                        new AcknowledgementBatch(0, 12, Collections.singletonList((byte) 1))
                 )
         );
 
@@ -3719,7 +3718,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(0, 14, Collections.singletonList(AcknowledgeType.REJECT))
+                        new AcknowledgementBatch(0, 14, Collections.singletonList((byte) 3))
                 )
         );
 
@@ -3780,7 +3779,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 "member-1",
                 Collections.singletonList(
-                        new AcknowledgementBatch(10, 14, Collections.singletonList(AcknowledgeType.REJECT))
+                        new AcknowledgementBatch(10, 14, Collections.singletonList((byte) 3))
                 )
         );
 
@@ -3849,7 +3848,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             "member-1",
             Collections.singletonList(
-                new AcknowledgementBatch(0, 29, Collections.singletonList(AcknowledgeType.ACCEPT))
+                new AcknowledgementBatch(0, 29, Collections.singletonList((byte) 1))
             )
         );
 
@@ -3933,7 +3932,7 @@ public class SharePartitionTest {
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
             "member-1",
             Collections.singletonList(
-                new AcknowledgementBatch(0, 19, Collections.singletonList(AcknowledgeType.ACCEPT))
+                new AcknowledgementBatch(0, 19, Collections.singletonList((byte) 1))
             )
         );
 
@@ -3976,7 +3975,7 @@ public class SharePartitionTest {
         ackResult = sharePartition.acknowledge(
             "member-1",
             Collections.singletonList(
-                new AcknowledgementBatch(20, 49, Collections.singletonList(AcknowledgeType.ACCEPT))
+                new AcknowledgementBatch(20, 49, Collections.singletonList((byte) 1))
             )
         );
 
@@ -4018,7 +4017,7 @@ public class SharePartitionTest {
         ackResult = sharePartition.acknowledge(
             "member-1",
             Collections.singletonList(
-                new AcknowledgementBatch(50, 179, Collections.singletonList(AcknowledgeType.REJECT))
+                new AcknowledgementBatch(50, 179, Collections.singletonList((byte) 3))
             )
         );
 
@@ -4088,7 +4087,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 memberId1,
-                Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(5, 9, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(2, sharePartition.cachedState().size());
@@ -4130,7 +4129,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 memberId1,
-                Collections.singletonList(new AcknowledgementBatch(0, 2, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(0, 2, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -4167,7 +4166,7 @@ public class SharePartitionTest {
 
         ackResult = sharePartition.acknowledge(
                 memberId2,
-                Collections.singletonList(new AcknowledgementBatch(3, 4, Collections.singletonList(AcknowledgeType.RELEASE))));
+                Collections.singletonList(new AcknowledgementBatch(3, 4, Collections.singletonList((byte) 2))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -4341,7 +4340,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(5, 14, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -4377,7 +4376,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(8, 10, Collections.singletonList(AcknowledgeType.REJECT))));
+                Collections.singletonList(new AcknowledgementBatch(8, 10, Collections.singletonList((byte) 3))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -4457,7 +4456,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 
@@ -4571,7 +4570,7 @@ public class SharePartitionTest {
 
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(
                 MEMBER_ID,
-                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList(AcknowledgeType.ACCEPT))));
+                Collections.singletonList(new AcknowledgementBatch(8, 9, Collections.singletonList((byte) 1))));
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
 

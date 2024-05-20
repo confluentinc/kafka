@@ -16,7 +16,6 @@
  */
 package kafka.server;
 
-import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
@@ -204,7 +203,7 @@ public class SharePartition {
     /**
      * The persister is used to persist the state of the share partition to disk.
      */
-    private Persister persister;
+    private final Persister persister;
 
     /**
      * The share partition start offset specifies the partition start offset from which the records
@@ -717,7 +716,7 @@ public class SharePartition {
         log.debug("Initializing share partition: {}-{}", groupId, topicIdPartition);
 
         // Initialize the partition by issuing an initialize RPC call to persister.
-        ReadShareGroupStateResult response = null;
+        ReadShareGroupStateResult response;
         try {
             response = persister.readState(new ReadShareGroupStateParameters.Builder()
                 .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdData>()
@@ -1180,14 +1179,14 @@ public class SharePartition {
         }
     }
 
-    private static RecordState fetchRecordState(AcknowledgeType acknowledgeType) {
+    private static RecordState fetchRecordState(byte acknowledgeType) {
         switch (acknowledgeType) {
-            case ACCEPT:
+            case 1 /* ACCEPT */:
                 return RecordState.ACKNOWLEDGED;
-            case RELEASE:
+            case 2 /* RELEASE */:
                 return RecordState.AVAILABLE;
-            case REJECT:
-            case GAP:
+            case 3 /* REJECT */:
+            case 0 /* GAP */:
                 return RecordState.ARCHIVED;
             default:
                 throw new IllegalArgumentException("Invalid acknowledge type: " + acknowledgeType);
@@ -1668,9 +1667,9 @@ public class SharePartition {
 
         private final long firstOffset;
         private final long lastOffset;
-        private final List<AcknowledgeType> acknowledgeTypes;
+        private final List<Byte> acknowledgeTypes;
 
-        public AcknowledgementBatch(long firstOffset, long lastOffset, List<AcknowledgeType> acknowledgeTypes) {
+        public AcknowledgementBatch(long firstOffset, long lastOffset, List<Byte> acknowledgeTypes) {
             this.firstOffset = firstOffset;
             this.lastOffset = lastOffset;
             this.acknowledgeTypes = acknowledgeTypes;
@@ -1684,7 +1683,7 @@ public class SharePartition {
             return lastOffset;
         }
 
-        public List<AcknowledgeType> acknowledgeTypes() {
+        public List<Byte> acknowledgeTypes() {
             return acknowledgeTypes;
         }
 

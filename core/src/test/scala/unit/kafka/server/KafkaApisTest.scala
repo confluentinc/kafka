@@ -30,7 +30,6 @@ import kafka.utils.{CoreUtils, Log4jController, Logging, TestUtils}
 import kafka.zk.KafkaZkClient
 import org.apache.kafka.clients.admin.AlterConfigOp.OpType
 import org.apache.kafka.clients.admin.{AlterConfigOp, ConfigEntry}
-import org.apache.kafka.clients.consumer.AcknowledgeType
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.config.ConfigResource.Type.{BROKER, BROKER_LOGGER}
@@ -10796,7 +10795,7 @@ class KafkaApisTest extends Logging {
                                    ) : Boolean = {
     if (baseOffset == acknowledgementBatch.firstOffset()
       && endOffset == acknowledgementBatch.lastOffset()
-      && AcknowledgeType.forId(acknowledgementType) == acknowledgementBatch.acknowledgeTypes().get(0)) {
+      && acknowledgementType == acknowledgementBatch.acknowledgeTypes().get(0)) {
       return true
     }
     false
@@ -10924,9 +10923,10 @@ class KafkaApisTest extends Logging {
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
     val acknowledgeBatches = kafkaApis.getAcknowledgeBatchesFromShareFetchRequest(shareFetchRequest, topicNames, erroneous)
+    val erroneousTopicIdPartitions = kafkaApis.validateAcknowledgementBatches(acknowledgeBatches, erroneous)
 
-    assertEquals(0, acknowledgeBatches.size)
     assertEquals(1, erroneous.size)
+    assertEquals(1, erroneousTopicIdPartitions.size)
     assertTrue(erroneous.contains(new TopicIdPartition(topicId1, new TopicPartition("foo1", 0))))
   }
 
@@ -11038,9 +11038,10 @@ class KafkaApisTest extends Logging {
       KafkaConfig.UnstableApiVersionsEnableProp -> "true"),
       raftSupport = true)
     val acknowledgeBatches = kafkaApis.getAcknowledgeBatchesFromShareAcknowledgeRequest(shareAcknowledgeRequest, topicNames, erroneous)
+    val erroneousTopicIdPartitions = kafkaApis.validateAcknowledgementBatches(acknowledgeBatches, erroneous)
 
-    assertEquals(0, acknowledgeBatches.size)
     assertEquals(1, erroneous.size)
+    assertEquals(1, erroneousTopicIdPartitions.size)
     assertTrue(erroneous.contains(new TopicIdPartition(topicId1, new TopicPartition("foo1", 0))))
   }
 
