@@ -181,7 +181,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
   }
 
   @Override
-  public void start(
+  public void startup(
       IntSupplier shareGroupTopicPartitionCount
   ) {
     if (!isActive.compareAndSet(false, true)) {
@@ -196,7 +196,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
   }
 
   @Override
-  public void stop() {
+  public void shutdown() {
     if (!isActive.compareAndSet(true, false)) {
       log.warn("Share coordinator is already shutting down.");
       return;

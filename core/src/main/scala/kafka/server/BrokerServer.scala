@@ -445,6 +445,7 @@ class BrokerServer(
         replicaManager,
         groupCoordinator,
         transactionCoordinator,
+        shareCoordinator,
         new DynamicConfigPublisher(
           config,
           sharedServer.metadataPublishingFaultHandler,
@@ -730,6 +731,8 @@ class BrokerServer(
         CoreUtils.swallow(transactionCoordinator.shutdown(), this)
       if (groupCoordinator != null)
         CoreUtils.swallow(groupCoordinator.shutdown(), this)
+      if (shareCoordinator != null)
+        CoreUtils.swallow(shareCoordinator.shutdown(), this)
 
       if (tokenManager != null)
         CoreUtils.swallow(tokenManager.shutdown(), this)

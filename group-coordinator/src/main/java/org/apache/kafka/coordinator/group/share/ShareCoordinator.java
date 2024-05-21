@@ -45,10 +45,10 @@ public interface ShareCoordinator {
    *
    * @param shareGroupTopicPartitionCount - supplier returning the number of partitions for __share_group_state topic
    */
-  void start(IntSupplier shareGroupTopicPartitionCount);
+  void startup(IntSupplier shareGroupTopicPartitionCount);
 
   /**
    * Stop the share coordinator
    */
-  void stop();
+  void shutdown();
 }
