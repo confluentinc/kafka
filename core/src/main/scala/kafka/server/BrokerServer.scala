@@ -38,7 +38,7 @@ import org.apache.kafka.common.utils.{LogContext, Time}
 import org.apache.kafka.common.{ClusterResource, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.coordinator.group
 import org.apache.kafka.coordinator.group.metrics.{GroupCoordinatorMetrics, GroupCoordinatorRuntimeMetrics}
-import org.apache.kafka.coordinator.group.share.{ShareCoordinator, ShareCoordinatorConfig, ShareCoordinatorService}
+import org.apache.kafka.coordinator.group.share.{ShareCoordinator, ShareCoordinatorConfig, ShareCoordinatorMetrics, ShareCoordinatorRuntimeMetrics, ShareCoordinatorService}
 import org.apache.kafka.coordinator.group.{GroupCoordinator, GroupCoordinatorConfig, GroupCoordinatorService, RecordSerde}
 import org.apache.kafka.image.publisher.MetadataPublisher
 import org.apache.kafka.metadata.{BrokerState, ListenerInfo, VersionRange}
@@ -445,6 +445,7 @@ class BrokerServer(
         replicaManager,
         groupCoordinator,
         transactionCoordinator,
+        shareCoordinator,
         new DynamicConfigPublisher(
           config,
           sharedServer.metadataPublishingFaultHandler,
@@ -627,8 +628,38 @@ class BrokerServer(
   }
 
   private def createShareCoordinator(): ShareCoordinator = {
-    val shareConfig = new ShareCoordinatorConfig(config.shareCoordinatorStateTopicSegmentBytes)
-    new ShareCoordinatorService(shareConfig)
+    val time = Time.SYSTEM
+    val serde = new RecordSerde
+    val shareConfig = new ShareCoordinatorConfig(
+      config.shareCoordinatorStateTopicSegmentBytes,
+      config.shareCoordinatorNumThreads,
+      //todo smjn: should we redefine for share coord?
+      config.offsetCommitTimeoutMs)
+
+    val timer = new SystemTimerReaper(
+      "share-coordinator-reaper",
+      new SystemTimer("share-coordinator")
+    )
+    val loader = new CoordinatorLoaderImpl[group.Record](
+      time,
+      replicaManager,
+      serde,
+      config.offsetsLoadBufferSize //todo smjn: redefine for share group?
+    )
+    val writer = new CoordinatorPartitionWriter[group.Record](
+      replicaManager,
+      serde,
+      config.offsetsTopicCompressionType, //todo smjn: redefine for share group?
+      time
+    )
+    new ShareCoordinatorService.Builder(config.brokerId, shareConfig)
+      .withTimer(timer)
+      .withTime(time)
+      .withLoader(loader)
+      .withWriter(writer)
+      .withCoordinatorRuntimeMetrics(new ShareCoordinatorRuntimeMetrics(metrics))
+      .withCoordinatorMetrics(new ShareCoordinatorMetrics(KafkaYammerMetrics.defaultRegistry, metrics))
+      .build()
   }
 
   protected def createRemoteLogManager(): Option[RemoteLogManager] = {
@@ -700,6 +731,8 @@ class BrokerServer(
         CoreUtils.swallow(transactionCoordinator.shutdown(), this)
       if (groupCoordinator != null)
         CoreUtils.swallow(groupCoordinator.shutdown(), this)
+      if (shareCoordinator != null)
+        CoreUtils.swallow(shareCoordinator.shutdown(), this)
 
       if (tokenManager != null)
         CoreUtils.swallow(tokenManager.shutdown(), this)
