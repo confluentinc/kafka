@@ -134,6 +134,7 @@ public class ShareFetchRequestManagerTest {
     private MemoryRecords records;
     private List<ShareFetchResponseData.AcquiredRecords> acquiredRecords;
     private List<ShareFetchResponseData.AcquiredRecords> emptyAcquiredRecords;
+    private ShareFetchMetricsRegistry shareFetchMetricsRegistry;
 
     @BeforeEach
     public void setup() {
@@ -245,6 +246,8 @@ public class ShareFetchRequestManagerTest {
                 ShareCompletedFetchTest.acquiredRecords(2L, 1), Errors.NONE, Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
         assertTrue(fetcher.hasCompletedFetches());
+        assertEquals(1.0,
+                metrics.metrics().get(metrics.metricInstance(shareFetchMetricsRegistry.acknowledgementSendTotal)).metricValue());
 
         partitionRecords = fetchRecords();
         assertTrue(partitionRecords.containsKey(tp0));
@@ -257,10 +260,15 @@ public class ShareFetchRequestManagerTest {
         assertEquals(1, sendFetches());
         assertFalse(fetcher.hasCompletedFetches());
 
+        // Preparing a response with an acknowledgement error.
         client.prepareResponse(fullFetchResponse(tip0, records,
-                Collections.emptyList(), Errors.NONE, Errors.NONE));
+                Collections.emptyList(), Errors.NONE, Errors.INVALID_RECORD_STATE));
         networkClientDelegate.poll(time.timer(0));
         assertTrue(fetcher.hasCompletedFetches());
+        assertEquals(2.0,
+                metrics.metrics().get(metrics.metricInstance(shareFetchMetricsRegistry.acknowledgementSendTotal)).metricValue());
+        assertEquals(1.0,
+                metrics.metrics().get(metrics.metricInstance(shareFetchMetricsRegistry.acknowledgementErrorTotal)).metricValue());
 
         partitionRecords = fetchRecords();
         assertTrue(partitionRecords.isEmpty());
@@ -751,8 +759,8 @@ public class ShareFetchRequestManagerTest {
                 subscriptions, logContext, new ClusterResourceListeners());
         client = new MockClient(time, metadata);
         metrics = new Metrics(metricConfig, time);
-        ShareFetchMetricsRegistry metricsRegistry = new ShareFetchMetricsRegistry(metricConfig.tags().keySet(), "consumer" + groupId);
-        metricsManager = new ShareFetchMetricsManager(metrics, metricsRegistry);
+        shareFetchMetricsRegistry = new ShareFetchMetricsRegistry(metricConfig.tags().keySet(), "consumer-share" + groupId);
+        metricsManager = new ShareFetchMetricsManager(metrics, shareFetchMetricsRegistry);
 
         Properties properties = new Properties();
         properties.put(KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);

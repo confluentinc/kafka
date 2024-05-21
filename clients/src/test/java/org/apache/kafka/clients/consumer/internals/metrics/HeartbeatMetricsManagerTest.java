@@ -27,7 +27,7 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_METRIC_GROUP_PREFIX;
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.SHARE_CONSUMER_METRIC_GROUP_PREFIX;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_SHARE_METRIC_GROUP_PREFIX;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -39,7 +39,7 @@ public class HeartbeatMetricsManagerTest {
     public void testHeartbeatMetrics() {
         List<String> groupPrefixes = new ArrayList<>();
         groupPrefixes.add(CONSUMER_METRIC_GROUP_PREFIX);
-        groupPrefixes.add(SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        groupPrefixes.add(CONSUMER_SHARE_METRIC_GROUP_PREFIX);
 
         groupPrefixes.forEach(grpPrefix -> {
             // Assuming 'metrics' is an instance of your Metrics class

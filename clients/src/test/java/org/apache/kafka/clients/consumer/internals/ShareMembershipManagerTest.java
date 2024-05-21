@@ -49,6 +49,7 @@ import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_SHARE_METRIC_GROUP_PREFIX;
 import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
 import static org.apache.kafka.common.utils.Utils.mkSortedSet;
@@ -1263,6 +1264,6 @@ public class ShareMembershipManagerTest {
     }
 
     private KafkaMetric getMetric(final String name) {
-        return metrics.metrics().get(metrics.metricName(name, "share-consumer-coordinator-metrics"));
+        return metrics.metrics().get(metrics.metricName(name, CONSUMER_SHARE_METRIC_GROUP_PREFIX + "-coordinator-metrics"));
     }
 }

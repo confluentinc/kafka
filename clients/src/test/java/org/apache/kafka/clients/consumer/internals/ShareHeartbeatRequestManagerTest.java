@@ -62,6 +62,7 @@ import static org.apache.kafka.clients.consumer.internals.ConsumerTestBuilder.DE
 import static org.apache.kafka.clients.consumer.internals.ConsumerTestBuilder.DEFAULT_MAX_POLL_INTERVAL_MS;
 import static org.apache.kafka.clients.consumer.internals.ConsumerTestBuilder.DEFAULT_RETRY_BACKOFF_MAX_MS;
 import static org.apache.kafka.clients.consumer.internals.ConsumerTestBuilder.DEFAULT_RETRY_BACKOFF_MS;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_SHARE_METRIC_GROUP_PREFIX;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -82,7 +83,7 @@ public class ShareHeartbeatRequestManagerTest {
     private final int maxPollIntervalMs = DEFAULT_MAX_POLL_INTERVAL_MS;
     private final long retryBackoffMaxMs = DEFAULT_RETRY_BACKOFF_MAX_MS;
     private static final String DEFAULT_GROUP_ID = "groupId";
-    private static final String SHARE_CONSUMER_COORDINATOR_METRICS = "share-consumer-coordinator-metrics";
+    private static final String SHARE_CONSUMER_COORDINATOR_METRICS = CONSUMER_SHARE_METRIC_GROUP_PREFIX + "-coordinator-metrics";
 
     private ShareConsumerTestBuilder testBuilder;
     private Time time;
