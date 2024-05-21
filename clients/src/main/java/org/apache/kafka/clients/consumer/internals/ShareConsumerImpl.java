@@ -85,7 +85,7 @@ import java.util.function.Supplier;
 
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_JMX_PREFIX;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.DEFAULT_CLOSE_TIMEOUT_MS;
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.SHARE_CONSUMER_METRIC_GROUP_PREFIX;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_SHARE_METRIC_GROUP_PREFIX;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createShareFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createSubscriptionState;
@@ -320,7 +320,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                     new FetchConfig(config),
                     deserializers);
 
-            this.kafkaShareConsumerMetrics = new KafkaShareConsumerMetrics(metrics, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+            this.kafkaShareConsumerMetrics = new KafkaShareConsumerMetrics(metrics, CONSUMER_SHARE_METRIC_GROUP_PREFIX);
 
             config.logUnused();
             AppInfoParser.registerAppInfo(CONSUMER_JMX_PREFIX, clientId, metrics, time.milliseconds());
@@ -358,7 +358,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         this.metadata = metadata;
         this.fetchBuffer = new ShareFetchBuffer(logContext);
 
-        ShareConsumerMetrics metricsRegistry = new ShareConsumerMetrics(SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        ShareConsumerMetrics metricsRegistry = new ShareConsumerMetrics(CONSUMER_SHARE_METRIC_GROUP_PREFIX);
         ShareFetchMetricsManager shareFetchMetricsManager = new ShareFetchMetricsManager(metrics, metricsRegistry.shareFetchMetrics);
         this.fetchCollector = new ShareFetchCollector<>(
                 logContext,
@@ -366,7 +366,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 subscriptions,
                 new FetchConfig(config),
                 deserializers);
-        this.kafkaShareConsumerMetrics = new KafkaShareConsumerMetrics(metrics, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        this.kafkaShareConsumerMetrics = new KafkaShareConsumerMetrics(metrics, CONSUMER_SHARE_METRIC_GROUP_PREFIX);
 
         final BlockingQueue<ApplicationEvent> applicationEventQueue = new LinkedBlockingQueue<>();
         final BlockingQueue<BackgroundEvent> backgroundEventQueue = new LinkedBlockingQueue<>();

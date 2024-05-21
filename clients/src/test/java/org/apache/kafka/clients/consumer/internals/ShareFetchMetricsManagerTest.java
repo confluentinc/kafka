@@ -26,7 +26,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.SHARE_CONSUMER_METRIC_GROUP_PREFIX;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_SHARE_METRIC_GROUP_PREFIX;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ShareFetchMetricsManagerTest {
@@ -39,7 +39,7 @@ class ShareFetchMetricsManagerTest {
     @BeforeEach
     public void setup() {
         metrics = new Metrics(time);
-        shareFetchMetricsRegistry = new ShareFetchMetricsRegistry(SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        shareFetchMetricsRegistry = new ShareFetchMetricsRegistry(CONSUMER_SHARE_METRIC_GROUP_PREFIX);
         shareFetchMetricsManager = new ShareFetchMetricsManager(metrics, shareFetchMetricsRegistry);
     }
 

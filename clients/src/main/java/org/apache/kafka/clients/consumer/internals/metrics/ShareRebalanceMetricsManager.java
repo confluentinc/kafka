@@ -26,7 +26,7 @@ import org.apache.kafka.common.metrics.stats.WindowedCount;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.COORDINATOR_METRICS_SUFFIX;
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.SHARE_CONSUMER_METRIC_GROUP_PREFIX;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_SHARE_METRIC_GROUP_PREFIX;
 
 public class ShareRebalanceMetricsManager {
     private final String metricGroupName;
@@ -36,7 +36,7 @@ public class ShareRebalanceMetricsManager {
     private long lastRebalanceStartMs = -1L;
 
     public ShareRebalanceMetricsManager(Metrics metrics) {
-        metricGroupName = SHARE_CONSUMER_METRIC_GROUP_PREFIX + COORDINATOR_METRICS_SUFFIX;
+        metricGroupName = CONSUMER_SHARE_METRIC_GROUP_PREFIX + COORDINATOR_METRICS_SUFFIX;
 
         rebalanceTotal = createMetric(metrics, "rebalance-total",
                 "The total number of rebalance events");

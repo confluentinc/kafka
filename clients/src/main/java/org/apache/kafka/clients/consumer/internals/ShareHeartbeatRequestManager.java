@@ -39,7 +39,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.TreeSet;
 
-import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.SHARE_CONSUMER_METRIC_GROUP_PREFIX;
+import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER_SHARE_METRIC_GROUP_PREFIX;
 
 /**
  * <p>Manages the request creation and response handling for the heartbeat of a share group. The module creates a
@@ -131,7 +131,7 @@ public class ShareHeartbeatRequestManager implements RequestManager {
         this.heartbeatRequestState = new HeartbeatRequestState(logContext, time, 0, retryBackoffMs,
                 retryBackoffMaxMs, maxPollIntervalMs);
         this.pollTimer = time.timer(maxPollIntervalMs);
-        this.metricsManager = new HeartbeatMetricsManager(metrics, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        this.metricsManager = new HeartbeatMetricsManager(metrics, CONSUMER_SHARE_METRIC_GROUP_PREFIX);
     }
 
     // Visible for testing
@@ -153,7 +153,7 @@ public class ShareHeartbeatRequestManager implements RequestManager {
         this.shareMembershipManager = shareMembershipManager;
         this.backgroundEventHandler = backgroundEventHandler;
         this.pollTimer = timer;
-        this.metricsManager = new HeartbeatMetricsManager(metrics, SHARE_CONSUMER_METRIC_GROUP_PREFIX);
+        this.metricsManager = new HeartbeatMetricsManager(metrics, CONSUMER_SHARE_METRIC_GROUP_PREFIX);
     }
 
     /**
