@@ -327,12 +327,14 @@ class BrokerMetadataPublisher(
     } catch {
       case t: Throwable => fatalFaultHandler.handleFault("Error starting TransactionCoordinator", t)
     }
-    try {
-      // Start the share coordinator.
-      shareCoordinator.startup(() => metadataCache.numPartitions(
-        Topic.SHARE_GROUP_STATE_TOPIC_NAME).getOrElse(config.shareCoordinatorStateTopicPartitions))
-    } catch {
-      case t: Throwable => fatalFaultHandler.handleFault("Error starting Share coordinator", t)
+    if (config.isShareGroupEnabled) {
+      try {
+        // Start the share coordinator.
+        shareCoordinator.startup(() => metadataCache.numPartitions(
+          Topic.SHARE_GROUP_STATE_TOPIC_NAME).getOrElse(config.shareCoordinatorStateTopicPartitions))
+      } catch {
+        case t: Throwable => fatalFaultHandler.handleFault("Error starting Share coordinator", t)
+      }
     }
   }
 

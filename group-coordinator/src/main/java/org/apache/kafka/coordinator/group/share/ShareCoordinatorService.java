@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
 
 public class ShareCoordinatorService implements ShareCoordinator {
-  private volatile int numPartitions = -1;
+  private volatile int numPartitions = -1; // Number of partitions for __share_group_state. Provided when component is started.
   private final ShareCoordinatorConfig config;
   private final Logger log;
   private final AtomicBoolean isActive = new AtomicBoolean(false);  // for controlling start and stop

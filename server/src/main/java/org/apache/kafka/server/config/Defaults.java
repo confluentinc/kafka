@@ -175,7 +175,7 @@ public class Defaults {
 
     /** ********* Share coordinator configuration *********/
     public static final int SHARE_COORDINATOR_STATE_TOPIC_PARTITIONS = 50;
-    public static final short SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR = 1; // in case single broker
+    public static final short SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR = 3;
     public static final int SHARE_COORDINATOR_STATE_TOPIC_SEGMENT_BYTES = 100 * 1024 * 1024;
     public static final int SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR = 2;
     public static final int SHARE_COORDINATOR_NUM_THREADS = 1;
