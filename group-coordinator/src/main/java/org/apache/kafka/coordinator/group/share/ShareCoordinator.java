@@ -20,6 +20,7 @@ package org.apache.kafka.coordinator.group.share;
 import org.apache.kafka.common.annotation.InterfaceStability;
 
 import java.util.Properties;
+import java.util.function.IntSupplier;
 
 @InterfaceStability.Evolving
 public interface ShareCoordinator {
@@ -27,8 +28,7 @@ public interface ShareCoordinator {
   /**
    * Return the partition index for the given key.
    *
-   * @param key           key - groupId:topicId:partitionId.
-   *
+   * @param key key - groupId:topicId:partitionId.
    * @return The partition index.
    */
   int partitionFor(String key);
@@ -39,4 +39,16 @@ public interface ShareCoordinator {
    * @return Properties of the share-group state topic.
    */
   Properties shareGroupStateTopicConfigs();
+
+  /**
+   * Start the share coordinator
+   *
+   * @param shareGroupTopicPartitionCount - supplier returning the number of partitions for __share_group_state topic
+   */
+  void startup(IntSupplier shareGroupTopicPartitionCount);
+
+  /**
+   * Stop the share coordinator
+   */
+  void shutdown();
 }
