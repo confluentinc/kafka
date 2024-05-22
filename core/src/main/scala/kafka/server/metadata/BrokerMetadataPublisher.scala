@@ -327,7 +327,7 @@ class BrokerMetadataPublisher(
     } catch {
       case t: Throwable => fatalFaultHandler.handleFault("Error starting TransactionCoordinator", t)
     }
-    if (config.isShareGroupEnabled) {
+    if (config.isShareGroupEnabled && shareCoordinator != null) {
       try {
         // Start the share coordinator.
         shareCoordinator.startup(() => metadataCache.numPartitions(

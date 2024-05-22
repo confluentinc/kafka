@@ -336,7 +336,7 @@ class BrokerServer(
       tokenManager.startup()
 
       groupCoordinator = createGroupCoordinator()
-      shareCoordinator = createShareCoordinator()
+      shareCoordinator = if (config.isShareGroupEnabled) createShareCoordinator() else null
 
       val producerIdManagerSupplier = () => ProducerIdManager.rpc(
         config.brokerId,
