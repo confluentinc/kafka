@@ -18,18 +18,152 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.config.TopicConfig;
+import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.coordinator.group.Record;
+import org.apache.kafka.coordinator.group.metrics.CoordinatorRuntimeMetrics;
+import org.apache.kafka.coordinator.group.runtime.CoordinatorEventProcessor;
+import org.apache.kafka.coordinator.group.runtime.CoordinatorLoader;
+import org.apache.kafka.coordinator.group.runtime.CoordinatorRuntime;
+import org.apache.kafka.coordinator.group.runtime.CoordinatorShardBuilderSupplier;
+import org.apache.kafka.coordinator.group.runtime.MultiThreadedEventProcessor;
+import org.apache.kafka.coordinator.group.runtime.PartitionWriter;
 import org.apache.kafka.server.record.BrokerCompressionType;
+import org.apache.kafka.server.util.timer.Timer;
+import org.slf4j.Logger;
 
+import java.time.Duration;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.IntSupplier;
 
 public class ShareCoordinatorService implements ShareCoordinator {
-  private final int numPartitions;
   private final ShareCoordinatorConfig config;
+  private final Logger log;
+  private final AtomicBoolean isActive = new AtomicBoolean(false);  // for controlling start and stop
+  private final CoordinatorRuntime<ShareCoordinatorShard, Record> runtime;
+  private final ShareCoordinatorMetrics shareCoordinatorMetrics;
+  private volatile int numPartitions = -1; // Number of partitions for __share_group_state. Provided when component is started.
 
-  public ShareCoordinatorService(ShareCoordinatorConfig config) {
-    this.numPartitions = 50;  //todo smjn: this should be configurable
+  public static class Builder {
+    private final int nodeId;
+    private final ShareCoordinatorConfig config;
+    private PartitionWriter<Record> writer;
+    private CoordinatorLoader<Record> loader;
+    private Time time;
+    private Timer timer;
+
+    private ShareCoordinatorMetrics coordinatorMetrics;
+    private CoordinatorRuntimeMetrics coordinatorRuntimeMetrics;
+
+    public Builder(int nodeId, ShareCoordinatorConfig config) {
+      this.nodeId = nodeId;
+      this.config = config;
+    }
+
+    public Builder withWriter(PartitionWriter<Record> writer) {
+      this.writer = writer;
+      return this;
+    }
+
+    public Builder withLoader(CoordinatorLoader<Record> loader) {
+      this.loader = loader;
+      return this;
+    }
+
+    public Builder withTime(Time time) {
+      this.time = time;
+      return this;
+    }
+
+    public Builder withTimer(Timer timer) {
+      this.timer = timer;
+      return this;
+    }
+
+    public Builder withCoordinatorMetrics(ShareCoordinatorMetrics coordinatorMetrics) {
+      this.coordinatorMetrics = coordinatorMetrics;
+      return this;
+    }
+
+    public Builder withCoordinatorRuntimeMetrics(CoordinatorRuntimeMetrics coordinatorRuntimeMetrics) {
+      this.coordinatorRuntimeMetrics = coordinatorRuntimeMetrics;
+      return this;
+    }
+
+    public ShareCoordinatorService build() {
+      //todo maybe move to common class as similar to GroupCoordinatorService
+      if (config == null) {
+        throw new IllegalArgumentException("Config must be set.");
+      }
+      if (writer == null) {
+        throw new IllegalArgumentException("Writer must be set.");
+      }
+      if (loader == null) {
+        throw new IllegalArgumentException("Loader must be set.");
+      }
+      if (time == null) {
+        throw new IllegalArgumentException("Time must be set.");
+      }
+      if (timer == null) {
+        throw new IllegalArgumentException("Timer must be set.");
+      }
+      if (coordinatorMetrics == null) {
+        throw new IllegalArgumentException("Share Coordinator metrics must be set.");
+      }
+      if (coordinatorRuntimeMetrics == null) {
+        throw new IllegalArgumentException("Coordinator runtime metrics must be set.");
+      }
+
+      String logPrefix = String.format("ShareCoordinator id=%d", nodeId);
+      LogContext logContext = new LogContext(String.format("[%s] ", logPrefix));
+
+      CoordinatorShardBuilderSupplier<ShareCoordinatorShard, Record> supplier = () ->
+          new ShareCoordinatorShard.Builder(config);
+
+      CoordinatorEventProcessor processor = new MultiThreadedEventProcessor(
+          logContext,
+          "share-coordinator-event-processor-",
+          config.numThreads,
+          time,
+          coordinatorRuntimeMetrics
+      );
+
+      CoordinatorRuntime<ShareCoordinatorShard, Record> runtime =
+          new CoordinatorRuntime.Builder<ShareCoordinatorShard, Record>()
+              .withTime(time)
+              .withTimer(timer)
+              .withLogPrefix(logPrefix)
+              .withLogContext(logContext)
+              .withEventProcessor(processor)
+              .withPartitionWriter(writer)
+              .withLoader(loader)
+              .withCoordinatorShardBuilderSupplier(supplier)
+              .withTime(time)
+              .withDefaultWriteTimeOut(Duration.ofMillis(config.writeTimeoutMs))
+              .withCoordinatorRuntimeMetrics(coordinatorRuntimeMetrics)
+              .withCoordinatorMetrics(coordinatorMetrics)
+              .build();
+
+      return new ShareCoordinatorService(
+          logContext,
+          config,
+          runtime,
+          coordinatorMetrics
+      );
+    }
+  }
+
+  public ShareCoordinatorService(
+      LogContext logContext,
+      ShareCoordinatorConfig config,
+      CoordinatorRuntime<ShareCoordinatorShard, Record> runtime,
+      ShareCoordinatorMetrics shareCoordinatorMetrics) {
+    this.log = logContext.logger(ShareCoordinatorService.class);
     this.config = config;
+    this.runtime = runtime;
+    this.shareCoordinatorMetrics = shareCoordinatorMetrics;
   }
 
   @Override
@@ -40,10 +174,38 @@ public class ShareCoordinatorService implements ShareCoordinator {
   @Override
   public Properties shareGroupStateTopicConfigs() {
     Properties properties = new Properties();
-    //todo smjn: taken directly from group coord - need to check validity of these configs
     properties.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE); // as defined in KIP-932
     properties.put(TopicConfig.COMPRESSION_TYPE_CONFIG, BrokerCompressionType.PRODUCER.name);
     properties.put(TopicConfig.SEGMENT_BYTES_CONFIG, config.shareCoordinatorStateTopicSegmentBytes);
     return properties;
+  }
+
+  @Override
+  public void startup(
+      IntSupplier shareGroupTopicPartitionCount
+  ) {
+    if (!isActive.compareAndSet(false, true)) {
+      log.warn("Share coordinator is already running.");
+      return;
+    }
+
+    log.info("Starting up.");
+    numPartitions = shareGroupTopicPartitionCount.getAsInt();
+    isActive.set(true);
+    log.info("Startup complete.");
+  }
+
+  @Override
+  public void shutdown() {
+    if (!isActive.compareAndSet(true, false)) {
+      log.warn("Share coordinator is already shutting down.");
+      return;
+    }
+
+    log.info("Shutting down.");
+    isActive.set(false);
+    Utils.closeQuietly(runtime, "coordinator runtime");
+    Utils.closeQuietly(shareCoordinatorMetrics, "share coordinator metrics");
+    log.info("Shutdown complete.");
   }
 }

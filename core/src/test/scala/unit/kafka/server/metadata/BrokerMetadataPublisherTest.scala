@@ -33,6 +33,7 @@ import org.apache.kafka.common.config.ConfigResource.Type.BROKER
 import org.apache.kafka.common.metadata.FeatureLevelRecord
 import org.apache.kafka.common.utils.Exit
 import org.apache.kafka.coordinator.group.GroupCoordinator
+import org.apache.kafka.coordinator.group.share.ShareCoordinator
 import org.apache.kafka.image.{MetadataDelta, MetadataImage, MetadataImageTest, MetadataProvenance}
 import org.apache.kafka.image.loader.LogDeltaManifest
 import org.apache.kafka.raft.LeaderAndEpoch
@@ -194,6 +195,7 @@ class BrokerMetadataPublisherTest {
       replicaManager,
       groupCoordinator,
       mock(classOf[TransactionCoordinator]),
+      mock(classOf[ShareCoordinator]),
       mock(classOf[DynamicConfigPublisher]),
       mock(classOf[DynamicClientQuotaPublisher]),
       mock(classOf[ScramPublisher]),
@@ -238,6 +240,7 @@ class BrokerMetadataPublisherTest {
       replicaManager,
       groupCoordinator,
       mock(classOf[TransactionCoordinator]),
+      mock(classOf[ShareCoordinator]),
       mock(classOf[DynamicConfigPublisher]),
       mock(classOf[DynamicClientQuotaPublisher]),
       mock(classOf[ScramPublisher]),

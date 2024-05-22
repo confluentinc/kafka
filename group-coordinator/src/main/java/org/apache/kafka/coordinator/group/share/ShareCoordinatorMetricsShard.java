@@ -17,17 +17,28 @@
 
 package org.apache.kafka.coordinator.group.share;
 
-public class ShareCoordinatorConfig {
-  public final int shareCoordinatorStateTopicSegmentBytes;
-  public final int numThreads;
-  public final int writeTimeoutMs;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.coordinator.group.metrics.CoordinatorMetricsShard;
 
-  public ShareCoordinatorConfig(
-      int shareCoordinatorStateTopicSegmentBytes,
-      int numThreads,
-      int writeTimeoutMs) {
-    this.shareCoordinatorStateTopicSegmentBytes = shareCoordinatorStateTopicSegmentBytes;
-    this.numThreads = numThreads;
-    this.writeTimeoutMs = writeTimeoutMs;
+// todo smjn - currently placeholder
+public class ShareCoordinatorMetricsShard implements CoordinatorMetricsShard {
+  @Override
+  public void record(String sensorName) {
+
+  }
+
+  @Override
+  public void record(String sensorName, double val) {
+
+  }
+
+  @Override
+  public TopicPartition topicPartition() {
+    return null;
+  }
+
+  @Override
+  public void commitUpTo(long offset) {
+
   }
 }
