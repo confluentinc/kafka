@@ -1268,6 +1268,7 @@ public class SharePartitionManagerTest {
             return null;
         }).when(replicaManager).fetchMessages(any(), any(), any(ReplicaQuota.class), any());
 
+        // LSO returned is 0.
         when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
                 new Some<>(new FileRecords.TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));
 
@@ -1490,6 +1491,7 @@ public class SharePartitionManagerTest {
             return null;
         }).when(replicaManager).fetchMessages(any(), any(), any(ReplicaQuota.class), any());
 
+        // LSO returned is 0.
         when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
                 new Some<>(new FileRecords.TimestampAndOffset(
                         ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));

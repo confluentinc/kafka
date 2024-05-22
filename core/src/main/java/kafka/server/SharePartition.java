@@ -359,13 +359,12 @@ public class SharePartition {
                 if (cachedState.isEmpty()) {
                     startOffset = logStartOffset;
                     endOffset = logStartOffset;
-                    // Even if write share group state RPC call fails, we will still go ahead with the state transition.
+                    // Even if write share group state RPC call fails, we will not be rolling back startOffset and endOffset.
                     isWriteShareGroupStateSuccessful(stateBatches);
-                    // TODO: do we need to verify the persister write result
                 } else {
                     for (Map.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
                         long batchStartOffset = entry.getKey();
-                        // We do not need to transition state of batches/offsets that are ahead of the new log start offset
+                        // We do not need to transition state of batches/offsets that are ahead of the new log start offset.
                         if (batchStartOffset >= logStartOffset) {
                             break;
                         }
@@ -500,7 +499,7 @@ public class SharePartition {
         lock.writeLock().lock();
         try {
             if (throwable != null || !isWriteShareGroupStateSuccessful(stateBatches)) {
-                // TODO: We do not rollback startOffset and endOffset here.
+                // We do not rollback startOffset and endOffset here.
                 log.debug("Request failed for archiving records, rollback any changed state"
                         + " for the share partition: {}-{}", groupId, topicIdPartition);
                 updatedStates.forEach(state -> state.completeStateTransition(false));
