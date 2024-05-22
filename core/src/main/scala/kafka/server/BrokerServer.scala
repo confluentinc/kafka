@@ -335,8 +335,9 @@ class BrokerServer(
       tokenManager = new DelegationTokenManager(config, tokenCache, time)
       tokenManager.startup()
 
-      groupCoordinator = createGroupCoordinator()
-      shareCoordinator = createShareCoordinator()
+      val serde = new RecordSerde
+      groupCoordinator = createGroupCoordinator(serde)
+      shareCoordinator = createShareCoordinator(serde)
 
       val producerIdManagerSupplier = () => ProducerIdManager.rpc(
         config.brokerId,
@@ -567,13 +568,12 @@ class BrokerServer(
     }
   }
 
-  private def createGroupCoordinator(): GroupCoordinator = {
+  private def createGroupCoordinator(serde: RecordSerde): GroupCoordinator = {
     // Create group coordinator, but don't start it until we've started replica manager.
     // Hardcode Time.SYSTEM for now as some Streams tests fail otherwise, it would be good
     // to fix the underlying issue.
     if (config.isNewGroupCoordinatorEnabled) {
       val time = Time.SYSTEM
-      val serde = new RecordSerde
       val groupCoordinatorConfig = new GroupCoordinatorConfig(
         config.groupCoordinatorNumThreads,
         config.consumerGroupSessionTimeoutMs,
@@ -627,9 +627,11 @@ class BrokerServer(
     }
   }
 
-  private def createShareCoordinator(): ShareCoordinator = {
+  private def createShareCoordinator(serde: RecordSerde): ShareCoordinator = {
+    if (!config.isShareGroupEnabled) {
+      return null
+    }
     val time = Time.SYSTEM
-    val serde = new RecordSerde
     val shareConfig = new ShareCoordinatorConfig(
       config.shareCoordinatorStateTopicSegmentBytes,
       config.shareCoordinatorNumThreads,
