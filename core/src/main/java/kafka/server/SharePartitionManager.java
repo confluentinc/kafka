@@ -170,7 +170,7 @@ public class SharePartitionManager implements AutoCloseable {
                 );
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
                     k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
-                            recordLockDurationMs, timer, time, persister));
+                            recordLockDurationMs, timer, time, persister, replicaManager));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.

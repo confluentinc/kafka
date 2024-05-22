@@ -28,14 +28,16 @@ import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
 import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.record.FileRecords;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.requests.FetchRequest;
+import org.apache.kafka.common.requests.ListOffsetsRequest;
 import org.apache.kafka.common.requests.ShareFetchMetadata;
-import org.apache.kafka.common.TopicIdPartition;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
+import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.Uuid;
@@ -83,6 +85,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import scala.Some;
 import scala.Tuple2;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -94,6 +97,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
@@ -1263,6 +1268,9 @@ public class SharePartitionManagerTest {
             return null;
         }).when(replicaManager).fetchMessages(any(), any(), any(ReplicaQuota.class), any());
 
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));
+
         sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp0, tp1, tp2, tp3), partitionMaxBytes);
         Mockito.verify(replicaManager, times(1)).fetchMessages(
                 any(), any(), any(ReplicaQuota.class), any());
@@ -1286,14 +1294,15 @@ public class SharePartitionManagerTest {
         Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
         partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
         partitionMaxBytes.put(tp1, PARTITION_MAX_BYTES);
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
             k -> new SharePartition(groupId, tp0, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
-                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister));
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister, replicaManager));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
             k -> new SharePartition(groupId, tp1, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
-                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister));
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister, replicaManager));
 
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
                 .withPartitionCacheMap(partitionCacheMap).build();
@@ -1353,14 +1362,15 @@ public class SharePartitionManagerTest {
         Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
         partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
         partitionMaxBytes.put(tp1, PARTITION_MAX_BYTES);
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
             k -> new SharePartition(groupId, tp0, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
-                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister));
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister, replicaManager));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
             k -> new SharePartition(groupId, tp1, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
-                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister));
+                    RECORD_LOCK_DURATION_MS, mockTimer, new MockTime(), persister, replicaManager));
 
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
                 .withPartitionCacheMap(partitionCacheMap).build();
@@ -1419,16 +1429,16 @@ public class SharePartitionManagerTest {
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
                 k -> new SharePartition(groupId, tp0, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
-                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister));
+                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister, replicaManager));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp1),
                 k -> new SharePartition(groupId, tp1, MAX_DELIVERY_COUNT,  MAX_IN_FLIGHT_MESSAGES,
-                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister));
+                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister, replicaManager));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp2),
                 k -> new SharePartition(groupId, tp2, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
-                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister));
+                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister, replicaManager));
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp3),
                 k -> new SharePartition(groupId, tp3, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES,
-                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister));
+                        RECORD_LOCK_DURATION_MS, mockTimer, time, persister, replicaManager));
 
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
                 .withPartitionCacheMap(partitionCacheMap).withTime(time).withReplicaManager(replicaManager).build();
@@ -1479,6 +1489,10 @@ public class SharePartitionManagerTest {
             sharePartitionManager.releaseFetchQueueAndPartitionsLock(groupId, partitionMaxBytes.keySet());
             return null;
         }).when(replicaManager).fetchMessages(any(), any(), any(ReplicaQuota.class), any());
+
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));
 
         int threadCount = 100;
         ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
