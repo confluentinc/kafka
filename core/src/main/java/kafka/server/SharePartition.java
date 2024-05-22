@@ -351,9 +351,9 @@ public class SharePartition {
         Throwable throwable = null;
         if (logStartOffset > startOffset) {
             lock.writeLock().lock();
-            List<PersisterStateBatch> stateBatches = new ArrayList<>();
-            List<InFlightState> updatedStates = new ArrayList<>();
             try {
+                List<PersisterStateBatch> stateBatches = new ArrayList<>();
+                List<InFlightState> updatedStates = new ArrayList<>();
                 log.debug("Updating start offset for share partition: {}-{} from: {} to: {} since LSO has moved to: {}",
                         groupId, topicIdPartition, startOffset, logStartOffset, logStartOffset);
                 if (cachedState.isEmpty()) {
@@ -423,7 +423,6 @@ public class SharePartition {
                                                              long endOffset,
                                                              List<InFlightState> updatedStates,
                                                              List<PersisterStateBatch> stateBatches) {
-
         Throwable throwable = null;
         lock.writeLock().lock();
         try {
