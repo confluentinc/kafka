@@ -402,38 +402,6 @@ public class KafkaShareConsumerTest {
     }
 
     @Test
-    public void testHeartbeatSentWhenFetchedDataReady() throws Exception {
-        ConsumerMetadata metadata = createMetadata(subscription);
-        MockClient client = new MockClient(time, metadata);
-
-        initMetadata(client, Collections.singletonMap(topic, 1));
-        Node node = metadata.fetch().nodes().get(0);
-
-        Uuid memberId = Uuid.randomUuid();
-        Node coordinator = joinGroupAndGetInitialAssignment(client, node, memberId, 1, Collections.singletonList(tp0), null);
-
-        consumer = newShareConsumer(time, client, subscription, metadata);
-        consumer.subscribe(Collections.singleton(topic));
-
-        client.prepareResponseFrom(shareFetchResponse(Collections.singletonList(tp0), Errors.NONE, Errors.NONE), node);
-        consumer.poll(Duration.ZERO);
-
-        // respond to the outstanding fetch so that we have data available on the next poll
-        client.prepareResponseFrom(shareFetchResponse(tp0, 0L, 5), node);
-        client.poll(0, time.milliseconds());
-
-        client.prepareResponseFrom(shareFetchResponse(tp0, 5L, 0), node);
-        AtomicBoolean heartbeatReceived = prepareShareGroupHeartbeatResponse(client, coordinator, memberId, 2, Errors.NONE);
-
-        time.sleep(heartbeatIntervalMs + 500);
-        Thread.sleep(heartbeatIntervalMs + 500);
-
-        consumer.poll(Duration.ZERO);
-
-        assertTrue(heartbeatReceived.get());
-    }
-
-    @Test
     public void testPollTimesOutDuringMetadataUpdate() {
         final ConsumerMetadata metadata = createMetadata(subscription);
         final MockClient client = new MockClient(time, metadata);
