@@ -28,7 +28,6 @@ import org.apache.kafka.server.group.share.GroupTopicPartitionData;
 import org.apache.kafka.server.group.share.PartitionAllData;
 import org.apache.kafka.server.group.share.PartitionErrorData;
 import org.apache.kafka.server.group.share.PartitionFactory;
-import org.apache.kafka.server.group.share.PartitionIdData;
 import org.apache.kafka.server.group.share.PartitionIdLeaderEpochData;
 import org.apache.kafka.server.group.share.PartitionStateBatchData;
 import org.apache.kafka.server.group.share.Persister;
