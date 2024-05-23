@@ -67,5 +67,5 @@ public interface Persister {
    * @param request ReadShareGroupOffsetsStateParameters
    * @return ReadShareGroupOffsetsStateResult
    */
-  CompletableFuture<ReadShareGroupOffsetsStateResult> readOffsets(ReadShareGroupOffsetsStateParameters request);
+  CompletableFuture<ReadShareGroupStateSummaryResult> readSummary(ReadShareGroupStateSummaryParameters request);
 }

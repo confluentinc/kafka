@@ -37,7 +37,7 @@ public class DeleteShareGroupStateResult implements PersisterResult {
     return new Builder()
         .setTopicsData(data.results().stream()
             .map(deleteStateResult -> new TopicData<>(deleteStateResult.topicId(), deleteStateResult.partitions().stream()
-                .map(partitionResult -> PartitionFactory.newPartitionErrorData(partitionResult.partition(), partitionResult.errorCode()))
+                .map(partitionResult -> PartitionFactory.newPartitionErrorData(partitionResult.partition(), partitionResult.errorCode(), partitionResult.errorMessage()))
                 .collect(Collectors.toList())))
             .collect(Collectors.toList()))
         .build();

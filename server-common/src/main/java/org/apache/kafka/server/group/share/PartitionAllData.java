@@ -28,5 +28,7 @@ public interface PartitionAllData extends PartitionInfoData {
 
   short errorCode();
 
+  String errorMessage();
+
   List<PersisterStateBatch> stateBatches();
 }

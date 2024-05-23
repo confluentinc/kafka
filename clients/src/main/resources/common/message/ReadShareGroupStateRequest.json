@@ -31,7 +31,9 @@
       { "name": "Partitions", "type": "[]PartitionData", "versions": "0+",
         "about":  "The data for the partitions.", "fields": [
         { "name": "Partition", "type": "int32", "versions": "0+",
-          "about": "The partition index." }
+          "about": "The partition index." },
+        { "name": "LeaderEpoch", "type": "int32", "versions": "0+",
+          "about": "The leader epoch of the share-partition." }
       ]}
     ]}
   ]
