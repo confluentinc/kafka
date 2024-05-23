@@ -17,24 +17,25 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.message.ReadShareGroupOffsetsStateResponseData;
+import org.apache.kafka.common.message.ReadShareGroupStateSummaryResponseData;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class ReadShareGroupOffsetsStateResult implements PersisterResult {
+public class ReadShareGroupStateSummaryResult implements PersisterResult {
   private final List<TopicData<PartitionStateErrorData>> topicsData;
 
-  private ReadShareGroupOffsetsStateResult(List<TopicData<PartitionStateErrorData>> topicsData) {
+  private ReadShareGroupStateSummaryResult(List<TopicData<PartitionStateErrorData>> topicsData) {
     this.topicsData = topicsData;
   }
 
-  public static ReadShareGroupOffsetsStateResult from(ReadShareGroupOffsetsStateResponseData data) {
+  public static ReadShareGroupStateSummaryResult from(ReadShareGroupStateSummaryResponseData data) {
     return new Builder()
         .setTopicsData(data.results().stream()
-            .map(readOffsetsStateResult -> new TopicData<>(readOffsetsStateResult.topicId(),
-                readOffsetsStateResult.partitions().stream()
-                    .map(partitionResult -> PartitionFactory.newPartitionStateErrorData(partitionResult.partition(), partitionResult.stateEpoch(), partitionResult.startOffset(), partitionResult.errorCode()))
+            .map(readStateSummaryResult -> new TopicData<>(readStateSummaryResult.topicId(),
+                readStateSummaryResult.partitions().stream()
+                    .map(partitionResult -> PartitionFactory.newPartitionStateErrorData(
+                        partitionResult.partition(), partitionResult.stateEpoch(), partitionResult.startOffset(), partitionResult.errorCode(), partitionResult.errorMessage()))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList()))
         .build();
@@ -48,8 +49,8 @@ public class ReadShareGroupOffsetsStateResult implements PersisterResult {
       return this;
     }
 
-    public ReadShareGroupOffsetsStateResult build() {
-      return new ReadShareGroupOffsetsStateResult(topicsData);
+    public ReadShareGroupStateSummaryResult build() {
+      return new ReadShareGroupStateSummaryResult(topicsData);
     }
   }
 }

@@ -16,7 +16,7 @@
 {
   "apiKey": 84,
   "type": "response",
-  "name": "ReadShareGroupOffsetsStateResponse",
+  "name": "ReadShareGroupStateSummaryResponse",
   "validVersions": "0",
   "flexibleVersions": "0+",
   // - NOT_COORDINATOR (version 0+)
@@ -24,9 +24,10 @@
   // - COORDINATOR_LOAD_IN_PROGRESS (version 0+)
   // - GROUP_ID_NOT_FOUND (version 0+)
   // - UNKNOWN_TOPIC_OR_PARTITION (version 0+)
+  // - FENCED_LEADER_EPOCH (version 0+)
   // - INVALID_REQUEST (version 0+)
   "fields": [
-    { "name": "Results", "type": "[]ReadOffsetsStateResult", "versions": "0+",
+    { "name": "Results", "type": "[]ReadStateSummaryResult", "versions": "0+",
       "about": "The read results", "fields": [
       { "name": "TopicId", "type": "uuid", "versions": "0+",
         "about": "The topic identifier" },
@@ -39,7 +40,7 @@
         { "name": "ErrorMessage", "type": "string", "versions": "0+", "nullableVersions": "0+", "default": "null",
           "about": "The error message, or null if there was no error." },
         { "name": "StateEpoch", "type": "int32", "versions": "0+",
-          "about": "The state epoch for this share-partition." },
+          "about": "The state epoch of the share-partition." },
         { "name": "StartOffset", "type": "int64", "versions": "0+",
           "about": "The share-partition start offset." }
       ]}

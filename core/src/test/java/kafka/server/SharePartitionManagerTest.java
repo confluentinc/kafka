@@ -1867,7 +1867,7 @@ public class SharePartitionManagerTest {
         ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
                 new TopicData<>(tp0.topicId(), Collections.singletonList(
-                        PartitionFactory.newPartitionAllData(0, 3, 5L, Errors.NONE.code(),
+                        PartitionFactory.newPartitionAllData(0, 3, 5L, Errors.NONE.code(), Errors.NONE.message(),
                                 Arrays.asList(
                                         new PersisterStateBatch(5L, 10L, SharePartition.RecordState.AVAILABLE.id, (short) 2),
                                         new PersisterStateBatch(11L, 15L, SharePartition.RecordState.ARCHIVED.id, (short) 3)))))));

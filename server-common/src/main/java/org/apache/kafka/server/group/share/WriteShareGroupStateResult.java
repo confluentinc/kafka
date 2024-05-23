@@ -38,7 +38,7 @@ public class WriteShareGroupStateResult implements PersisterResult {
         .setTopicsData(data.results().stream()
             .map(writeStateResult -> new TopicData<>(writeStateResult.topicId(),
                 writeStateResult.partitions().stream()
-                    .map(partitionResult -> PartitionFactory.newPartitionErrorData(partitionResult.partition(), partitionResult.errorCode()))
+                    .map(partitionResult -> PartitionFactory.newPartitionErrorData(partitionResult.partition(), partitionResult.errorCode(), partitionResult.errorMessage()))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList()))
         .build();

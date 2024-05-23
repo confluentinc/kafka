@@ -28,7 +28,7 @@ import org.apache.kafka.server.group.share.GroupTopicPartitionData;
 import org.apache.kafka.server.group.share.PartitionAllData;
 import org.apache.kafka.server.group.share.PartitionErrorData;
 import org.apache.kafka.server.group.share.PartitionFactory;
-import org.apache.kafka.server.group.share.PartitionIdData;
+import org.apache.kafka.server.group.share.PartitionIdLeaderEpochData;
 import org.apache.kafka.server.group.share.PartitionStateBatchData;
 import org.apache.kafka.server.group.share.Persister;
 import org.apache.kafka.server.group.share.PersisterStateBatch;
@@ -719,10 +719,10 @@ public class SharePartition {
         ReadShareGroupStateResult response;
         try {
             response = persister.readState(new ReadShareGroupStateParameters.Builder()
-                .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdData>()
+                .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                     .setGroupId(this.groupId)
                     .setTopicsData(Collections.singletonList(new TopicData<>(topicIdPartition.topicId(),
-                        Collections.singletonList(PartitionFactory.newPartitionIdData(topicIdPartition.partition())))))
+                        Collections.singletonList(PartitionFactory.newPartitionIdLeaderEpochData(topicIdPartition.partition(), 0)))))
                     .build())
                 .build()
             ).get();
@@ -1328,7 +1328,7 @@ public class SharePartition {
                     .setGroupId(this.groupId)
                     .setTopicsData(Collections.singletonList(new TopicData<>(topicIdPartition.topicId(),
                         Collections.singletonList(PartitionFactory.newPartitionStateBatchData(
-                            topicIdPartition.partition(), stateEpoch, startOffset, stateBatches))))
+                            topicIdPartition.partition(), stateEpoch, startOffset, 0, stateBatches))))
                     ).build()).build()).get();
 
             if (response == null || response.topicsData() == null || response.topicsData().size() != 1) {

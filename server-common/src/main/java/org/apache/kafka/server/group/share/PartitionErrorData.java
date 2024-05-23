@@ -21,4 +21,6 @@ public interface PartitionErrorData extends PartitionInfoData {
   int partition();
 
   short errorCode();
+
+  String errorMessage();
 }

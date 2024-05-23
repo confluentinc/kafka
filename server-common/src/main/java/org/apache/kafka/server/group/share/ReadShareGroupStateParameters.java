@@ -23,13 +23,13 @@ import java.util.stream.Collectors;
 
 public class ReadShareGroupStateParameters implements PersisterParameters {
 
-  private final GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
+  private final GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData;
 
-  private ReadShareGroupStateParameters(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
+  private ReadShareGroupStateParameters(GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData) {
     this.groupTopicPartitionData = groupTopicPartitionData;
   }
 
-  public GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData() {
+  public GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData() {
     return groupTopicPartitionData;
   }
 
@@ -47,16 +47,16 @@ public class ReadShareGroupStateParameters implements PersisterParameters {
         .setGroupTopicPartitionData(new GroupTopicPartitionData<>(data.groupId(), data.topics().stream()
             .map(readStateData -> new TopicData<>(readStateData.topicId(),
                 readStateData.partitions().stream()
-                    .map(partitionData -> PartitionFactory.newPartitionIdData(partitionData.partition()))
+                    .map(partitionData -> PartitionFactory.newPartitionIdLeaderEpochData(partitionData.partition(), partitionData.leaderEpoch()))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList())))
         .build();
   }
 
   public static class Builder {
-    private GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
+    private GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData) {
       this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }

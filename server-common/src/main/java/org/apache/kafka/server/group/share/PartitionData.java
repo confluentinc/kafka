@@ -21,18 +21,22 @@ import java.util.List;
 import java.util.Objects;
 
 public class PartitionData implements
-    PartitionIdData, PartitionStateData, PartitionErrorData, PartitionStateErrorData, PartitionStateBatchData, PartitionAllData {
+    PartitionIdData, PartitionStateData, PartitionErrorData, PartitionStateErrorData, PartitionStateBatchData, PartitionIdLeaderEpochData, PartitionAllData {
   private final int partition;
   private final int stateEpoch;
   private final long startOffset;
   private final short errorCode;
+  private final String errorMessage;
+  private final int leaderEpoch;
   private final List<PersisterStateBatch> stateBatches;
 
-  public PartitionData(int partition, int stateEpoch, long startOffset, short errorCode, List<PersisterStateBatch> stateBatches) {
+  public PartitionData(int partition, int stateEpoch, long startOffset, short errorCode, String errorMessage, int leaderEpoch, List<PersisterStateBatch> stateBatches) {
     this.partition = partition;
     this.stateEpoch = stateEpoch;
     this.startOffset = startOffset;
     this.errorCode = errorCode;
+    this.leaderEpoch = leaderEpoch;
+    this.errorMessage = errorMessage;
     this.stateBatches = stateBatches;
   }
 
@@ -41,13 +45,18 @@ public class PartitionData implements
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     PartitionData that = (PartitionData) o;
-    return partition == that.partition && stateEpoch == that.stateEpoch && startOffset == that.startOffset && this.errorCode == that.errorCode && this.stateBatches == that
-        .stateBatches;
+    return Objects.equals(partition, that.partition) &&
+        Objects.equals(stateEpoch, that.stateEpoch) &&
+        Objects.equals(startOffset, that.startOffset) &&
+        Objects.equals(errorCode, that.errorCode) &&
+        Objects.equals(errorMessage, that.errorMessage) &&
+        Objects.equals(leaderEpoch, that.leaderEpoch) &&
+        Objects.equals(stateBatches, that.stateBatches);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(partition, stateEpoch, startOffset, errorCode, stateBatches);
+    return Objects.hash(partition, stateEpoch, startOffset, errorCode, leaderEpoch, errorMessage, stateBatches);
   }
 
   public int partition() {
@@ -66,6 +75,14 @@ public class PartitionData implements
     return errorCode;
   }
 
+  public String errorMessage() {
+    return errorMessage;
+  }
+
+  public int leaderEpoch() {
+    return leaderEpoch;
+  }
+
   public List<PersisterStateBatch> stateBatches() {
     return stateBatches;
   }
@@ -75,6 +92,8 @@ public class PartitionData implements
     private int stateEpoch;
     private long startOffset;
     private short errorCode;
+    private String errorMessage;
+    private int leaderEpoch;
     private List<PersisterStateBatch> stateBatches;
 
     public Builder setPartition(int partition) {
@@ -97,13 +116,23 @@ public class PartitionData implements
       return this;
     }
 
+    public Builder setErrorMessage(String errorMessage) {
+      this.errorMessage = errorMessage;
+      return this;
+    }
+
+    public Builder setLeaderEpoch(int leaderEpoch) {
+      this.leaderEpoch = leaderEpoch;
+      return this;
+    }
+
     public Builder setStateBatches(List<PersisterStateBatch> stateBatches) {
       this.stateBatches = stateBatches;
       return this;
     }
 
     public PartitionData build() {
-      return new PartitionData(partition, stateEpoch, startOffset, errorCode, stateBatches);
+      return new PartitionData(partition, stateEpoch, startOffset, errorCode, errorMessage, leaderEpoch, stateBatches);
     }
   }
 }

@@ -17,42 +17,42 @@
 
 package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.message.ReadShareGroupOffsetsStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateSummaryRequestData;
 
 import java.util.stream.Collectors;
 
-public class ReadShareGroupOffsetsStateParameters implements PersisterParameters {
-  private final GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
+public class ReadShareGroupStateSummaryParameters implements PersisterParameters {
+  private final GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData;
 
-  private ReadShareGroupOffsetsStateParameters(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
+  private ReadShareGroupStateSummaryParameters(GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData) {
     this.groupTopicPartitionData = groupTopicPartitionData;
   }
 
-  public GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData() {
+  public GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData() {
     return groupTopicPartitionData;
   }
 
-  public static ReadShareGroupOffsetsStateParameters from(ReadShareGroupOffsetsStateRequestData data) {
+  public static ReadShareGroupStateSummaryParameters from(ReadShareGroupStateSummaryRequestData data) {
     return new Builder()
         .setGroupTopicPartitionData(new GroupTopicPartitionData<>(data.groupId(), data.topics().stream()
             .map(topicData -> new TopicData<>(topicData.topicId(),
                 topicData.partitions().stream()
-                    .map(partitionData -> PartitionFactory.newPartitionIdData(partitionData.partition()))
+                    .map(partitionData -> PartitionFactory.newPartitionIdLeaderEpochData(partitionData.partition(), partitionData.leaderEpoch()))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList())))
         .build();
   }
 
   public static class Builder {
-    private GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData;
+    private GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData;
 
-    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionIdData> groupTopicPartitionData) {
+    public Builder setGroupTopicPartitionData(GroupTopicPartitionData<PartitionIdLeaderEpochData> groupTopicPartitionData) {
       this.groupTopicPartitionData = groupTopicPartitionData;
       return this;
     }
 
-    public ReadShareGroupOffsetsStateParameters build() {
-      return new ReadShareGroupOffsetsStateParameters(groupTopicPartitionData);
+    public ReadShareGroupStateSummaryParameters build() {
+      return new ReadShareGroupStateSummaryParameters(groupTopicPartitionData);
     }
   }
 }

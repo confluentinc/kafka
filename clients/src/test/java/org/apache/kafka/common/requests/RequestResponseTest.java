@@ -208,10 +208,10 @@ import org.apache.kafka.common.message.ProduceRequestData;
 import org.apache.kafka.common.message.ProduceResponseData;
 import org.apache.kafka.common.message.PushTelemetryRequestData;
 import org.apache.kafka.common.message.PushTelemetryResponseData;
-import org.apache.kafka.common.message.ReadShareGroupOffsetsStateRequestData;
-import org.apache.kafka.common.message.ReadShareGroupOffsetsStateResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.message.ReadShareGroupStateSummaryRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateSummaryResponseData;
 import org.apache.kafka.common.message.RenewDelegationTokenRequestData;
 import org.apache.kafka.common.message.RenewDelegationTokenResponseData;
 import org.apache.kafka.common.message.SaslAuthenticateRequestData;
@@ -1111,7 +1111,7 @@ public class RequestResponseTest {
             case READ_SHARE_GROUP_STATE: return createReadShareGroupStateRequest(version);
             case WRITE_SHARE_GROUP_STATE: return createWriteShareGroupStateRequest(version);
             case DELETE_SHARE_GROUP_STATE: return createDeleteShareGroupStateRequest(version);
-            case READ_SHARE_GROUP_OFFSETS_STATE: return createReadShareGroupOffsetsStateRequest(version);
+            case READ_SHARE_GROUP_STATE_SUMMARY: return createReadShareGroupOffsetsStateRequest(version);
             default: throw new IllegalArgumentException("Unknown API key " + apikey);
         }
     }
@@ -1202,7 +1202,7 @@ public class RequestResponseTest {
             case READ_SHARE_GROUP_STATE: return createReadShareGroupStateResponse();
             case WRITE_SHARE_GROUP_STATE: return createWriteShareGroupStateResponse();
             case DELETE_SHARE_GROUP_STATE: return createDeleteShareGroupStateResponse();
-            case READ_SHARE_GROUP_OFFSETS_STATE: return createReadShareGroupOffsetsStateResponse();
+            case READ_SHARE_GROUP_STATE_SUMMARY: return createReadShareGroupOffsetsStateResponse();
             default: throw new IllegalArgumentException("Unknown API key " + apikey);
         }
     }
@@ -3917,26 +3917,26 @@ public class RequestResponseTest {
         return new DeleteShareGroupStateResponse(data);
     }
 
-    private ReadShareGroupOffsetsStateRequest createReadShareGroupOffsetsStateRequest(short version) {
-        ReadShareGroupOffsetsStateRequestData data = new ReadShareGroupOffsetsStateRequestData()
+    private ReadShareGroupStateSummaryRequest createReadShareGroupOffsetsStateRequest(short version) {
+        ReadShareGroupStateSummaryRequestData data = new ReadShareGroupStateSummaryRequestData()
             .setGroupId("group")
-            .setTopics(Collections.singletonList(new ReadShareGroupOffsetsStateRequestData.ReadOffsetsStateData()
+            .setTopics(Collections.singletonList(new ReadShareGroupStateSummaryRequestData.ReadStateSummaryData()
                 .setTopicId(Uuid.randomUuid())
-                .setPartitions(Collections.singletonList(new ReadShareGroupOffsetsStateRequestData.PartitionData()
+                .setPartitions(Collections.singletonList(new ReadShareGroupStateSummaryRequestData.PartitionData()
                     .setPartition(0)))));
-        return new ReadShareGroupOffsetsStateRequest.Builder(data).build(version);
+        return new ReadShareGroupStateSummaryRequest.Builder(data).build(version);
     }
 
-    private ReadShareGroupOffsetsStateResponse createReadShareGroupOffsetsStateResponse() {
-        ReadShareGroupOffsetsStateResponseData data = new ReadShareGroupOffsetsStateResponseData()
-            .setResults(Collections.singletonList(new ReadShareGroupOffsetsStateResponseData.ReadOffsetsStateResult()
+    private ReadShareGroupStateSummaryResponse createReadShareGroupOffsetsStateResponse() {
+        ReadShareGroupStateSummaryResponseData data = new ReadShareGroupStateSummaryResponseData()
+            .setResults(Collections.singletonList(new ReadShareGroupStateSummaryResponseData.ReadStateSummaryResult()
                 .setTopicId(Uuid.randomUuid())
-                .setPartitions(Collections.singletonList(new ReadShareGroupOffsetsStateResponseData.PartitionResult()
+                .setPartitions(Collections.singletonList(new ReadShareGroupStateSummaryResponseData.PartitionResult()
                     .setPartition(0)
                     .setErrorCode(Errors.NONE.code())
                     .setStartOffset(0)
                     .setStateEpoch(0)))));
-        return new ReadShareGroupOffsetsStateResponse(data);
+        return new ReadShareGroupStateSummaryResponse(data);
     }
 
     @Test
