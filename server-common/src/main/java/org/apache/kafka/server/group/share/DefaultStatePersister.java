@@ -77,10 +77,10 @@ public class DefaultStatePersister implements Persister {
    * Used by the group coordinator to read the offset information from share-partition state from a share coordinator.
    * This is an inter-broker RPC authorized as a cluster action.
    *
-   * @param request ReadShareGroupOffsetsStateParameters
-   * @return ReadShareGroupOffsetsStateResult
+   * @param request ReadShareGroupStateSummaryParameters
+   * @return ReadShareGroupStateSummaryResult
    */
-  public CompletableFuture<ReadShareGroupOffsetsStateResult> readOffsets(ReadShareGroupOffsetsStateParameters request) {
+  public CompletableFuture<ReadShareGroupStateSummaryResult> readSummary(ReadShareGroupStateSummaryParameters request) {
     throw new RuntimeException("not implemented");
   }
 }

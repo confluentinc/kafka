@@ -25,4 +25,6 @@ public interface PartitionStateErrorData extends PartitionInfoData {
   long startOffset();
 
   short errorCode();
+
+  String errorMessage();
 }

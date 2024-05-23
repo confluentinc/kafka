@@ -129,7 +129,7 @@ public enum ApiKeys {
     READ_SHARE_GROUP_STATE(ApiMessageType.READ_SHARE_GROUP_STATE),
     WRITE_SHARE_GROUP_STATE(ApiMessageType.WRITE_SHARE_GROUP_STATE),
     DELETE_SHARE_GROUP_STATE(ApiMessageType.DELETE_SHARE_GROUP_STATE),
-    READ_SHARE_GROUP_OFFSETS_STATE(ApiMessageType.READ_SHARE_GROUP_OFFSETS_STATE);
+    READ_SHARE_GROUP_STATE_SUMMARY(ApiMessageType.READ_SHARE_GROUP_STATE_SUMMARY);
 
     private static final Map<ApiMessageType.ListenerType, EnumSet<ApiKeys>> APIS_BY_LISTENER =
         new EnumMap<>(ApiMessageType.ListenerType.class);

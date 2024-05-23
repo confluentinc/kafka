@@ -17,7 +17,7 @@
 
 package org.apache.kafka.common.requests;
 
-import org.apache.kafka.common.message.ReadShareGroupOffsetsStateResponseData;
+import org.apache.kafka.common.message.ReadShareGroupStateSummaryResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
@@ -26,16 +26,16 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ReadShareGroupOffsetsStateResponse extends AbstractResponse {
-  private final ReadShareGroupOffsetsStateResponseData data;
+public class ReadShareGroupStateSummaryResponse extends AbstractResponse {
+  private final ReadShareGroupStateSummaryResponseData data;
 
-  public ReadShareGroupOffsetsStateResponse(ReadShareGroupOffsetsStateResponseData data) {
-    super(ApiKeys.READ_SHARE_GROUP_OFFSETS_STATE);
+  public ReadShareGroupStateSummaryResponse(ReadShareGroupStateSummaryResponseData data) {
+    super(ApiKeys.READ_SHARE_GROUP_STATE_SUMMARY);
     this.data = data;
   }
 
   @Override
-  public ReadShareGroupOffsetsStateResponseData data() {
+  public ReadShareGroupStateSummaryResponseData data() {
     return data;
   }
 
@@ -59,9 +59,9 @@ public class ReadShareGroupOffsetsStateResponse extends AbstractResponse {
   public void maybeSetThrottleTimeMs(int throttleTimeMs) {
     // No op
   }
-  public static ReadShareGroupOffsetsStateResponse parse(ByteBuffer buffer, short version) {
-    return new ReadShareGroupOffsetsStateResponse(
-        new ReadShareGroupOffsetsStateResponseData(new ByteBufferAccessor(buffer), version)
+  public static ReadShareGroupStateSummaryResponse parse(ByteBuffer buffer, short version) {
+    return new ReadShareGroupStateSummaryResponse(
+        new ReadShareGroupStateSummaryResponseData(new ByteBufferAccessor(buffer), version)
     );
   }
 }

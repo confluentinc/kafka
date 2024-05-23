@@ -17,8 +17,8 @@
 
 package org.apache.kafka.common.requests;
 
-import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
-import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.message.ReadShareGroupStateSummaryRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateSummaryResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
@@ -28,23 +28,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class WriteShareGroupStateRequest extends AbstractRequest {
-  public static class Builder extends AbstractRequest.Builder<WriteShareGroupStateRequest> {
+public class ReadShareGroupStateSummaryRequest extends AbstractRequest {
+  public static class Builder extends AbstractRequest.Builder<ReadShareGroupStateSummaryRequest> {
 
-    private final WriteShareGroupStateRequestData data;
+    private final ReadShareGroupStateSummaryRequestData data;
 
-    public Builder(WriteShareGroupStateRequestData data) {
+    public Builder(ReadShareGroupStateSummaryRequestData data) {
       this(data, false);
     }
 
-    public Builder(WriteShareGroupStateRequestData data, boolean enableUnstableLastVersion) {
-      super(ApiKeys.WRITE_SHARE_GROUP_STATE, enableUnstableLastVersion);
+    public Builder(ReadShareGroupStateSummaryRequestData data, boolean enableUnstableLastVersion) {
+      super(ApiKeys.READ_SHARE_GROUP_STATE_SUMMARY, enableUnstableLastVersion);
       this.data = data;
     }
 
     @Override
-    public WriteShareGroupStateRequest build(short version) {
-      return new WriteShareGroupStateRequest(data, version);
+    public ReadShareGroupStateSummaryRequest build(short version) {
+      return new ReadShareGroupStateSummaryRequest(data, version);
     }
 
     @Override
@@ -53,37 +53,37 @@ public class WriteShareGroupStateRequest extends AbstractRequest {
     }
   }
 
-  private final WriteShareGroupStateRequestData data;
+  private final ReadShareGroupStateSummaryRequestData data;
 
-  public WriteShareGroupStateRequest(WriteShareGroupStateRequestData data, short version) {
-    super(ApiKeys.WRITE_SHARE_GROUP_STATE, version);
+  public ReadShareGroupStateSummaryRequest(ReadShareGroupStateSummaryRequestData data, short version) {
+    super(ApiKeys.READ_SHARE_GROUP_STATE_SUMMARY, version);
     this.data = data;
   }
 
   @Override
-  public WriteShareGroupStateResponse getErrorResponse(int throttleTimeMs, Throwable e) {
-    List<WriteShareGroupStateResponseData.WriteStateResult> results = new ArrayList<>();
+  public ReadShareGroupStateSummaryResponse getErrorResponse(int throttleTimeMs, Throwable e) {
+    List<ReadShareGroupStateSummaryResponseData.ReadStateSummaryResult> results = new ArrayList<>();
     data.topics().forEach(
-        topicResult -> results.add(new WriteShareGroupStateResponseData.WriteStateResult()
+        topicResult -> results.add(new ReadShareGroupStateSummaryResponseData.ReadStateSummaryResult()
             .setTopicId(topicResult.topicId())
             .setPartitions(topicResult.partitions().stream()
-                .map(partitionData -> new WriteShareGroupStateResponseData.PartitionResult()
+                .map(partitionData -> new ReadShareGroupStateSummaryResponseData.PartitionResult()
                     .setPartition(partitionData.partition())
                     .setErrorCode(Errors.forException(e).code())
                     .setErrorMessage(Errors.forException(e).message()))
                 .collect(Collectors.toList()))));
-    return new WriteShareGroupStateResponse(new WriteShareGroupStateResponseData()
+    return new ReadShareGroupStateSummaryResponse(new ReadShareGroupStateSummaryResponseData()
         .setResults(results));
   }
 
   @Override
-  public WriteShareGroupStateRequestData data() {
+  public ReadShareGroupStateSummaryRequestData data() {
     return data;
   }
 
-  public static WriteShareGroupStateRequest parse(ByteBuffer buffer, short version) {
-    return new WriteShareGroupStateRequest(
-        new WriteShareGroupStateRequestData(new ByteBufferAccessor(buffer), version),
+  public static ReadShareGroupStateSummaryRequest parse(ByteBuffer buffer, short version) {
+    return new ReadShareGroupStateSummaryRequest(
+        new ReadShareGroupStateSummaryRequestData(new ByteBufferAccessor(buffer), version),
         version
     );
   }
