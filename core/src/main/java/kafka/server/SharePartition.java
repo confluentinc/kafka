@@ -409,7 +409,7 @@ public class SharePartition {
 
 
     // This function provides the logic to get the earliest valid offset for a topic partition.
-    public long offsetForEarliestTimestamp() {
+    private long offsetForEarliestTimestamp() {
         // TODO: We need to know the isolation level from group configs, for now we are passing Option.empty() for isolationLevel
         Option<FileRecords.TimestampAndOffset> timestampAndOffset = replicaManager.fetchOffsetForTimestamp(
                 topicIdPartition.topicPartition(), ListOffsetsRequest.EARLIEST_TIMESTAMP, Option.empty(),
