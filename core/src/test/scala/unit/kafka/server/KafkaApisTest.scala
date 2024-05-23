@@ -4372,6 +4372,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
@@ -4434,6 +4437,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -4575,6 +4581,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     shareFetchRequest = new ShareFetchRequest.Builder(shareFetchRequestData).build(ApiKeys.SHARE_FETCH.latestVersion)
     request = buildRequest(shareFetchRequest)
     kafkaApis.handleShareFetchRequest(request)
@@ -4612,6 +4621,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -4695,6 +4707,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
@@ -4750,6 +4765,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -4850,6 +4868,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -4966,6 +4987,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -5147,6 +5171,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -5469,6 +5496,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     val shareFetchData : util.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData] = new util.HashMap()
     shareFetchData.put(
       new TopicIdPartition(topicId1, new TopicPartition(topicName1, 0)),
@@ -5640,6 +5670,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     val shareFetchData : util.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData] = new util.HashMap()
     shareFetchData.put(
@@ -5909,6 +5942,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     val shareFetchData : util.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData] = new util.HashMap()
     shareFetchData.put(
       new TopicIdPartition(topicId1, new TopicPartition(topicName1, 0)),
@@ -6086,6 +6122,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     val shareFetchData : util.Map[TopicIdPartition, ShareFetchRequest.SharePartitionData] = new util.HashMap()
     shareFetchData.put(
@@ -9841,6 +9880,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
@@ -9916,6 +9958,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -10020,6 +10065,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
@@ -10121,6 +10169,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -10269,6 +10320,9 @@ class KafkaApisTest extends Logging {
       callback(responseCallbackParams)
     }
 
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
+
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
 
@@ -10339,6 +10393,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -10431,6 +10488,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
@@ -10625,6 +10685,9 @@ class KafkaApisTest extends Logging {
       )
       callback(responseCallbackParams)
     }
+
+    when(replicaManager.fetchOffsetForTimestamp(any(), any(), any(), any(), any())
+    ).thenReturn(Some(new TimestampAndOffset(ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.empty[Integer]())))
 
     when(clientQuotaManager.maybeRecordAndGetThrottleTimeMs(
       any[RequestChannel.Request](), anyDouble, anyLong)).thenReturn(0)
