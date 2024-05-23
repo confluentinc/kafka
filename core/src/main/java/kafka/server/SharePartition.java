@@ -384,12 +384,15 @@ public class SharePartition {
                             archiveCompleteBatch(inFlightBatch, stateBatches);
                         }
                     }
+                    // If we have transitioned the state of any batch/offset from AVAILABLE to ARCHIVED,
+                    // then there is a chance that the next fetch offset can change.
                     if (!stateBatches.isEmpty()) {
                         findNextFetchOffset.set(true);
                     }
-
+                    // The new startOffset will be the log start offset.
                     startOffset = logStartOffset;
                     if (endOffset < startOffset) {
+                        // This case means that the cached state is completely fresh now.
                         endOffset = startOffset;
                     }
                 }
@@ -409,17 +412,17 @@ public class SharePartition {
     }
 
     private void archivePerOffsetBatchRecords(InFlightBatch inFlightBatch,
-                                              long startOffset,
-                                              long endOffset,
+                                              long startOffsetToArchive,
+                                              long endOffsetToArchive,
                                               List<PersisterStateBatch> stateBatches) {
         lock.writeLock().lock();
         try {
             log.trace("Archiving offset tracked batch: {} for the share partition: {}-{}", inFlightBatch, groupId, topicIdPartition);
             for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState().entrySet()) {
-                if (offsetState.getKey() < startOffset) {
+                if (offsetState.getKey() < startOffsetToArchive) {
                     continue;
                 }
-                if (offsetState.getKey() > endOffset) {
+                if (offsetState.getKey() > endOffsetToArchive) {
                     // No further offsets to process.
                     break;
                 }
