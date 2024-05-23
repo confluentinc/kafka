@@ -288,7 +288,7 @@ public class SharePartition {
         try {
             // When none of the records in the cachedState are in the AVAILABLE state, findNextFetchOffset will be false
             if (!findNextFetchOffset.get()) {
-                if (cachedState.isEmpty()) {
+                if (cachedState.isEmpty() || startOffset > cachedState.lastEntry().getValue().lastOffset) {
                     // when cachedState is empty, endOffset is set to the next offset of the last offset removed from
                     // batch, which is the next offset to be fetched
                     return endOffset;
@@ -298,7 +298,7 @@ public class SharePartition {
             }
 
             // If this piece of code is reached, it means that findNextFetchOffset is true
-            if (cachedState.isEmpty()) {
+            if (cachedState.isEmpty() || startOffset > cachedState.lastEntry().getValue().lastOffset) {
                 // If cachedState is empty, there is no need of re-computing next fetch offset in future fetch requests
                 findNextFetchOffset.set(false);
                 return endOffset;
