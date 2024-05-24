@@ -357,8 +357,6 @@ public class SharePartition {
                 if (cachedState.isEmpty()) {
                     startOffset = logStartOffset;
                     endOffset = logStartOffset;
-                    // Even if write share group state RPC call fails, we will not be rolling back startOffset and endOffset.
-                    isWriteShareGroupStateSuccessful(new ArrayList<>());
                 } else {
                     List<PersisterStateBatch> stateBatches = new ArrayList<>();
                     for (Map.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
@@ -404,6 +402,9 @@ public class SharePartition {
                         endOffset = startOffset;
                     }
                 }
+                // We will only write the start and end offset to the persister actively.
+                // Even if write share group state RPC call fails, we will not be rolling back startOffset and endOffset.
+                isWriteShareGroupStateSuccessful(new ArrayList<>());
             }
         } finally {
             lock.writeLock().unlock();

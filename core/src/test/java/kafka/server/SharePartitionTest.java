@@ -5665,11 +5665,12 @@ public class SharePartitionTest {
 
         sharePartition.rollbackOrProcessStateUpdates(null, new ArrayList<>(), new ArrayList<>());
         assertEquals(0, sharePartition.pendingWriteStateBatches().size());
-        // 3 calls to write state method-
+        // 4 calls are made to write state method-
         // 1. On acknowledge in the test above.
-        // 2. On rollbackOrProcessStateUpdates for the state batches above.
-        // 3. On rollbackOrProcessStateUpdates for the pending write state batches.
-        Mockito.verify(persister, Mockito.times(3)).writeState(Mockito.any());
+        // 2. On updateOffsetsOnLsoMovement, to write the start offset to the persister.
+        // 3. On rollbackOrProcessStateUpdates for the state batches above.
+        // 4. On rollbackOrProcessStateUpdates for the pending write state batches.
+        Mockito.verify(persister, Mockito.times(4)).writeState(Mockito.any());
     }
 
     @Test
