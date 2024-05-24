@@ -228,6 +228,11 @@ public class SharePartition {
      * The replica manager is used to get the earliest offset of the share partition, so we can adjust the start offset.
      */
     private final ReplicaManager replicaManager;
+    /**
+     * The pending write state batches are used to track the state batches that are pending to be written to persister.
+     * They originate from the archiving of records due to LSO advancing forward.
+     */
+    private final List<PersisterStateBatch> pendingWriteStateBatches;
 
     SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount,
                    int recordLockDurationMs, Timer timer, Time time, Persister persister, ReplicaManager replicaManager) {
@@ -244,6 +249,7 @@ public class SharePartition {
         this.time = time;
         this.persister = persister;
         this.replicaManager = replicaManager;
+        this.pendingWriteStateBatches = new ArrayList<>();
         // Initialize the partition.
         initialize();
     }
@@ -388,6 +394,8 @@ public class SharePartition {
                     // then there is a chance that the next fetch offset can change.
                     if (!stateBatches.isEmpty()) {
                         findNextFetchOffset.set(true);
+                        // We will write the archived state batches to the persister lazily during acknowledge/release acquired records API call.
+                        pendingWriteStateBatches.addAll(stateBatches);
                     }
                     // The new startOffset will be the log start offset.
                     startOffset = logStartOffset;
@@ -1097,7 +1105,8 @@ public class SharePartition {
         return Optional.empty();
     }
 
-    private void rollbackOrProcessStateUpdates(
+    // Visible for testing
+    void rollbackOrProcessStateUpdates(
         Throwable throwable,
         List<InFlightState> updatedStates,
         List<PersisterStateBatch> stateBatches
@@ -1119,6 +1128,11 @@ public class SharePartition {
                 });
                 // Update the cached state and start and end offsets after acknowledging/releasing the acquired records.
                 maybeUpdateCachedStateAndOffsets();
+            }
+            // We need to check if there are any pending write state batches that need to be written to the persister.
+            if (!pendingWriteStateBatches.isEmpty()) {
+                isWriteShareGroupStateSuccessful(pendingWriteStateBatches);
+                pendingWriteStateBatches.clear();
             }
         } finally {
             lock.writeLock().unlock();
@@ -1501,6 +1515,11 @@ public class SharePartition {
     // Visible for testing.
     int stateEpoch() {
         return stateEpoch;
+    }
+
+    // Visible for testing.
+    List<PersisterStateBatch> pendingWriteStateBatches() {
+        return new ArrayList<>(pendingWriteStateBatches);
     }
 
     /**
