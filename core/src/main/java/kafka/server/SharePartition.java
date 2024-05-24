@@ -224,15 +224,11 @@ public class SharePartition {
      * The state epoch is used to track the version of the state of the share partition.
      */
     private int stateEpoch;
+
     /**
      * The replica manager is used to get the earliest offset of the share partition, so we can adjust the start offset.
      */
     private final ReplicaManager replicaManager;
-    /**
-     * The pending write state batches are used to track the state batches that are pending to be written to persister.
-     * They originate from the archiving of records due to LSO advancing forward.
-     */
-    private final List<PersisterStateBatch> pendingWriteStateBatches;
 
     SharePartition(String groupId, TopicIdPartition topicIdPartition, int maxInFlightMessages, int maxDeliveryCount,
                    int recordLockDurationMs, Timer timer, Time time, Persister persister, ReplicaManager replicaManager) {
@@ -249,7 +245,6 @@ public class SharePartition {
         this.time = time;
         this.persister = persister;
         this.replicaManager = replicaManager;
-        this.pendingWriteStateBatches = new ArrayList<>();
         // Initialize the partition.
         initialize();
     }
@@ -295,8 +290,10 @@ public class SharePartition {
             // When none of the records in the cachedState are in the AVAILABLE state, findNextFetchOffset will be false
             if (!findNextFetchOffset.get()) {
                 if (cachedState.isEmpty() || startOffset > cachedState.lastEntry().getValue().lastOffset) {
-                    // when cachedState is empty, endOffset is set to the next offset of the last offset removed from
-                    // batch, which is the next offset to be fetched
+                    // 1. When cachedState is empty, endOffset is set to the next offset of the last offset removed from
+                    // batch, which is the next offset to be fetched.
+                    // 2. When startOffset has moved beyond the in-flight records, startOffset and endOffset point to the LSO,
+                    // which is the next offset to be fetched.
                     return endOffset;
                 } else {
                     return endOffset + 1;
@@ -305,7 +302,9 @@ public class SharePartition {
 
             // If this piece of code is reached, it means that findNextFetchOffset is true
             if (cachedState.isEmpty() || startOffset > cachedState.lastEntry().getValue().lastOffset) {
-                // If cachedState is empty, there is no need of re-computing next fetch offset in future fetch requests
+                // If cachedState is empty, there is no need of re-computing next fetch offset in future fetch requests.
+                // Same case when startOffset has moved beyond the in-flight records, startOffset and endOffset point to the LSO
+                // and the cached state is fresh.
                 findNextFetchOffset.set(false);
                 return endOffset;
             }
@@ -351,67 +350,75 @@ public class SharePartition {
         long logStartOffset = offsetForEarliestTimestamp();
         lock.writeLock().lock();
         try {
-            if (logStartOffset > startOffset) {
-                log.debug("Updating start offset for share partition: {}-{} from: {} to: {} since LSO has moved to: {}",
-                        groupId, topicIdPartition, startOffset, logStartOffset, logStartOffset);
-                if (cachedState.isEmpty()) {
-                    startOffset = logStartOffset;
-                    endOffset = logStartOffset;
-                } else {
-                    List<PersisterStateBatch> stateBatches = new ArrayList<>();
-                    for (Map.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
-                        long batchStartOffset = entry.getKey();
-                        // We do not need to transition state of batches/offsets that are later than the new log start offset.
-                        if (batchStartOffset >= logStartOffset) {
-                            break;
-                        }
-                        InFlightBatch inFlightBatch = entry.getValue();
-                        boolean fullMatch = inFlightBatch.firstOffset >= startOffset && inFlightBatch.lastOffset < logStartOffset;
-
-                        // Maintain state per offset if the inflight batch is not a full match or the offset state is managed.
-                        if (!fullMatch || inFlightBatch.offsetState != null) {
-                            log.debug("Subset or offset tracked batch record found while trying to update offsets and cached" +
-                                            " state map due to LSO movement, batch: {}, offsets to update - " +
-                                            "first: {}, last: {} for the share partition: {}-{}", inFlightBatch, startOffset,
-                                    logStartOffset - 1, groupId, topicIdPartition);
-
-                            if (inFlightBatch.offsetState == null) {
-                                if (inFlightBatch.batchState() != RecordState.AVAILABLE) {
-                                    continue;
-                                }
-                                inFlightBatch.maybeInitializeOffsetStateUpdate();
-                            }
-
-                            archivePerOffsetBatchRecords(inFlightBatch, startOffset, logStartOffset - 1, stateBatches);
-                        } else {
-                            // The in-flight batch is a full match hence change the state of the complete batch.
-                            archiveCompleteBatch(inFlightBatch, stateBatches);
-                        }
-                    }
-                    // If we have transitioned the state of any batch/offset from AVAILABLE to ARCHIVED,
-                    // then there is a chance that the next fetch offset can change.
-                    if (!stateBatches.isEmpty()) {
-                        findNextFetchOffset.set(true);
-                        // We will write the archived state batches to the persister lazily during acknowledge/release acquired records API call.
-                        pendingWriteStateBatches.addAll(stateBatches);
-                    }
-                    // The new startOffset will be the log start offset.
-                    startOffset = logStartOffset;
-                    if (endOffset < startOffset) {
-                        // This case means that the cached state is completely fresh now.
-                        endOffset = startOffset;
-                    }
-                }
-                // We will only write the start and end offset to the persister actively.
-                // Even if write share group state RPC call fails, we will not be rolling back startOffset and endOffset.
-                isWriteShareGroupStateSuccessful(new ArrayList<>());
+            if (logStartOffset <= startOffset) {
+                log.error("The log start offset: {} is not greater than the start offset: {} for the share partition: {}-{}",
+                        logStartOffset, startOffset, groupId, topicIdPartition);
+                return;
             }
+            log.debug("Updating start offset for share partition: {}-{} from: {} to: {} since LSO has moved to: {}",
+                    groupId, topicIdPartition, startOffset, logStartOffset, logStartOffset);
+            if (cachedState.isEmpty()) {
+                // If the cached state is empty, then the start and end offset will be the new log start offset.
+                // This can occur during the initialization of share partition if LSO has moved.
+                startOffset = logStartOffset;
+                endOffset = logStartOffset;
+                return;
+            }
+            List<PersisterStateBatch> stateBatches = new ArrayList<>();
+            for (Map.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
+                long batchStartOffset = entry.getKey();
+                // We do not need to transition state of batches/offsets that are later than the new log start offset.
+                if (batchStartOffset >= logStartOffset) {
+                    break;
+                }
+                InFlightBatch inFlightBatch = entry.getValue();
+                boolean fullMatch = inFlightBatch.firstOffset >= startOffset && inFlightBatch.lastOffset < logStartOffset;
+
+                // Maintain state per offset if the inflight batch is not a full match or the offset state is managed.
+                if (!fullMatch || inFlightBatch.offsetState != null) {
+                    log.debug("Subset or offset tracked batch record found while trying to update offsets and cached" +
+                                    " state map due to LSO movement, batch: {}, offsets to update - " +
+                                    "first: {}, last: {} for the share partition: {}-{}", inFlightBatch, startOffset,
+                            logStartOffset - 1, groupId, topicIdPartition);
+
+                    if (inFlightBatch.offsetState == null) {
+                        if (inFlightBatch.batchState() != RecordState.AVAILABLE) {
+                            continue;
+                        }
+                        inFlightBatch.maybeInitializeOffsetStateUpdate();
+                    }
+
+                    archivePerOffsetBatchRecords(inFlightBatch, startOffset, logStartOffset - 1, stateBatches);
+                } else {
+                    // The in-flight batch is a full match hence change the state of the complete batch.
+                    archiveCompleteBatch(inFlightBatch, stateBatches);
+                }
+            }
+            // If we have transitioned the state of any batch/offset from AVAILABLE to ARCHIVED,
+            // then there is a chance that the next fetch offset can change.
+            if (!stateBatches.isEmpty()) {
+                findNextFetchOffset.set(true);
+            }
+            // The new startOffset will be the log start offset.
+            startOffset = logStartOffset;
+            if (endOffset < startOffset) {
+                // This case means that the cached state is completely fresh now.
+                // Example scenario - batch of 0-10 in acquired state in cached state, then LSO moves to 15,
+                // then endOffset should be 15 as well.
+                endOffset = startOffset;
+            }
+            // Note -
+            // 1. We will be writing the new starOffset lazily during acknowledge/release acquired records API call.
+            // 2. We will not be writing the archived state batches to the persister.
         } finally {
             lock.writeLock().unlock();
         }
     }
 
-    // This function provides the logic to get the earliest valid offset for a topic partition.
+    /**
+     * This function provides the logic to get the earliest valid offset for a topic partition.
+     * @return The earliest valid offset for the topic partition.
+     */
     private long offsetForEarliestTimestamp() {
         // TODO: We need to know the isolation level from group configs, for now we are passing Option.empty() for isolationLevel
         Option<FileRecords.TimestampAndOffset> timestampAndOffset = replicaManager.fetchOffsetForTimestamp(
@@ -1140,11 +1147,6 @@ public class SharePartition {
                 // Update the cached state and start and end offsets after acknowledging/releasing the acquired records.
                 maybeUpdateCachedStateAndOffsets();
             }
-            // We need to check if there are any pending write state batches that need to be written to the persister.
-            if (!pendingWriteStateBatches.isEmpty()) {
-                isWriteShareGroupStateSuccessful(pendingWriteStateBatches);
-                pendingWriteStateBatches.clear();
-            }
         } finally {
             lock.writeLock().unlock();
         }
@@ -1544,11 +1546,6 @@ public class SharePartition {
     // Visible for testing.
     int stateEpoch() {
         return stateEpoch;
-    }
-
-    // Visible for testing.
-    List<PersisterStateBatch> pendingWriteStateBatches() {
-        return new ArrayList<>(pendingWriteStateBatches);
     }
 
     /**
