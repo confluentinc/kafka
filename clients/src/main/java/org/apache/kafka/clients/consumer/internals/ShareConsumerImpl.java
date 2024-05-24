@@ -40,18 +40,21 @@ import org.apache.kafka.clients.consumer.internals.events.PollEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareSubscriptionChangeApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareUnsubscribeApplicationEvent;
+import org.apache.kafka.clients.consumer.internals.events.SyncShareAcknowledgeEvent;
 import org.apache.kafka.clients.consumer.internals.metrics.KafkaShareConsumerMetrics;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.errors.InvalidGroupIdException;
 import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.MetricsReporter;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter;
 import org.apache.kafka.common.telemetry.internals.ClientTelemetryUtils;
@@ -69,6 +72,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -201,6 +205,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     private final SubscriptionState subscriptions;
     private final ConsumerMetadata metadata;
     private final Metrics metrics;
+    private final int defaultApiTimeoutMs;
     private volatile boolean closed = false;
     private final Optional<ClientTelemetryReporter> clientTelemetryReporter;
 
@@ -245,6 +250,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             this.log = logContext.logger(getClass());
 
             log.debug("Initializing the Kafka share consumer");
+            this.defaultApiTimeoutMs = config.getInt(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG);
             this.time = time;
             List<MetricsReporter> reporters = CommonClientConfigs.metricsReporters(clientId, config);
             this.clientTelemetryReporter = CommonClientConfigs.telemetryReporter(clientId, config);
@@ -356,6 +362,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         this.deserializers = new Deserializers<>(config, keyDeserializer, valueDeserializer);
         this.subscriptions = subscriptions;
         this.metadata = metadata;
+        this.defaultApiTimeoutMs = config.getInt(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG);
         this.fetchBuffer = new ShareFetchBuffer(logContext);
 
         ShareConsumerMetrics metricsRegistry = new ShareConsumerMetrics(CONSUMER_SHARE_METRIC_GROUP_PREFIX);
@@ -620,7 +627,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      */
     @Override
     public Map<TopicIdPartition, Optional<KafkaException>> commitSync() {
-        throw new UnsupportedOperationException();
+        return this.commitSync(Duration.ofMillis(defaultApiTimeoutMs));
     }
 
     /**
@@ -628,7 +635,43 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      */
     @Override
     public Map<TopicIdPartition, Optional<KafkaException>> commitSync(final Duration timeout) {
-        throw new UnsupportedOperationException();
+        acquireAndEnsureOpen();
+        try {
+            // Handle any completed acknowledgements for which we already have the responses
+            handleCompletedAcknowledgements();
+
+            // If using implicit acknowledgement, acknowledge the previously fetched records
+            maybeSendAcknowledgements();
+
+            Timer requestTimer = time.timer(timeout.toMillis());
+            SyncShareAcknowledgeEvent event = new SyncShareAcknowledgeEvent(requestTimer);
+            applicationEventHandler.add(event);
+            CompletableFuture<Void> commitFuture = event.future();
+            wakeupTrigger.setActiveTask(commitFuture);
+            try {
+                Map<TopicIdPartition, Optional<KafkaException>> result = new HashMap<>();
+                ConsumerUtils.getResult(commitFuture, requestTimer);
+                Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
+                completedAcknowledgements.forEach((tip, acks) -> {
+                    Errors ackErrorCode = acks.getAcknowledgeErrorCode();
+                    if (ackErrorCode == null) {
+                        result.put(tip, null);
+                    } else {
+                        ApiException exception = ackErrorCode.exception();
+                        if (exception == null) {
+                            result.put(tip, null);
+                        } else {
+                            result.put(tip, Optional.of(ackErrorCode.exception()));
+                        }
+                    }
+                });
+                return result;
+            } finally {
+                wakeupTrigger.clearTask();
+            }
+        } finally {
+            release();
+        }
     }
 
     /**

@@ -55,6 +55,7 @@ public class RequestManagers implements Closeable {
     public final TopicMetadataRequestManager topicMetadataRequestManager;
     public final FetchRequestManager fetchRequestManager;
     public final ShareFetchRequestManager shareFetchRequestManager;
+    public final Optional<ShareConsumeRequestManager> shareConsumeRequestManager;
     private final List<Optional<? extends RequestManager>> entries;
     private final IdempotentCloser closer = new IdempotentCloser();
 
@@ -73,6 +74,7 @@ public class RequestManagers implements Closeable {
         this.topicMetadataRequestManager = topicMetadataRequestManager;
         this.fetchRequestManager = fetchRequestManager;
         this.shareFetchRequestManager = null;
+        this.shareConsumeRequestManager = Optional.empty();
         this.heartbeatRequestManager = heartbeatRequestManager;
         this.shareHeartbeatRequestManager = Optional.empty();
         this.membershipManager = membershipManager;
@@ -96,6 +98,7 @@ public class RequestManagers implements Closeable {
                            Optional<ShareMembershipManager> shareMembershipManager) {
         this.log = logContext.logger(RequestManagers.class);
         this.shareFetchRequestManager = shareFetchRequestManager;
+        this.shareConsumeRequestManager = Optional.empty();
         this.coordinatorRequestManager = coordinatorRequestManager;
         this.commitRequestManager = Optional.empty();
         this.heartbeatRequestManager = Optional.empty();
@@ -111,6 +114,32 @@ public class RequestManagers implements Closeable {
         list.add(shareHeartbeatRequestManager);
         list.add(shareMembershipManager);
         list.add(Optional.of(shareFetchRequestManager));
+        entries = Collections.unmodifiableList(list);
+    }
+
+    public RequestManagers(LogContext logContext,
+                           Optional<ShareConsumeRequestManager> shareConsumeRequestManager,
+                           Optional<CoordinatorRequestManager> coordinatorRequestManager,
+                           Optional<ShareHeartbeatRequestManager> shareHeartbeatRequestManager,
+                           Optional<ShareMembershipManager> shareMembershipManager) {
+        this.log = logContext.logger(RequestManagers.class);
+        this.shareFetchRequestManager = null;
+        this.shareConsumeRequestManager = shareConsumeRequestManager;
+        this.coordinatorRequestManager = coordinatorRequestManager;
+        this.commitRequestManager = Optional.empty();
+        this.heartbeatRequestManager = Optional.empty();
+        this.shareHeartbeatRequestManager = shareHeartbeatRequestManager;
+        this.membershipManager = Optional.empty();
+        this.shareMembershipManager = shareMembershipManager;
+        this.offsetsRequestManager = null;
+        this.topicMetadataRequestManager = null;
+        this.fetchRequestManager = null;
+
+        List<Optional<? extends RequestManager>> list = new ArrayList<>();
+        list.add(coordinatorRequestManager);
+        list.add(shareHeartbeatRequestManager);
+        list.add(shareMembershipManager);
+        list.add(shareConsumeRequestManager);
         entries = Collections.unmodifiableList(list);
     }
 
@@ -307,11 +336,21 @@ public class RequestManagers implements Closeable {
                         fetchConfig,
                         fetchBuffer,
                         shareFetchMetricsManager);
+                ShareConsumeRequestManager shareConsumeRequestManager = new ShareConsumeRequestManager(
+                        logContext,
+                        groupRebalanceConfig.groupId,
+                        metadata,
+                        subscriptions,
+                        fetchConfig,
+                        fetchBuffer,
+                        shareFetchMetricsManager);
                 shareMembershipManager.registerStateListener(shareFetchRequestManager);
+                shareMembershipManager.registerStateListener(shareConsumeRequestManager);
 
                 return new RequestManagers(
                         logContext,
-                        shareFetchRequestManager,
+//                        shareFetchRequestManager,
+                        Optional.of(shareConsumeRequestManager),
                         Optional.of(coordinator),
                         Optional.of(shareHeartbeatRequestManager),
                         Optional.of(shareMembershipManager)
