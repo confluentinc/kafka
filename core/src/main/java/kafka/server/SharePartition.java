@@ -410,7 +410,7 @@ public class SharePartition {
                     break;
                 }
                 InFlightBatch inFlightBatch = entry.getValue();
-                boolean fullMatch = inFlightBatch.firstOffset >= startOffset && inFlightBatch.lastOffset < logStartOffset;
+                boolean fullMatch = checkForFullMatch(inFlightBatch, startOffset, logStartOffset - 1);
 
                 // Maintain state per offset if the inflight batch is not a full match or the offset state is managed.
                 if (!fullMatch || inFlightBatch.offsetState != null) {
@@ -458,7 +458,7 @@ public class SharePartition {
                     continue;
                 }
 
-                InFlightState updateResult = offsetState.getValue().archive(EMPTY_MEMBER_ID);
+                offsetState.getValue().archive(EMPTY_MEMBER_ID);
                 isAnyOffsetArchived = true;
             }
             return isAnyOffsetArchived;
@@ -473,7 +473,7 @@ public class SharePartition {
             log.trace("Archiving complete batch: {} for the share partition: {}-{}", inFlightBatch, groupId, topicIdPartition);
             if (inFlightBatch.batchState() == RecordState.AVAILABLE) {
                 // Change the state of complete batch since the same state exists for the entire inFlight batch.
-                InFlightState updateResult = inFlightBatch.archiveBatch(EMPTY_MEMBER_ID);
+                inFlightBatch.archiveBatch(EMPTY_MEMBER_ID);
                 return true;
             }
         } finally {
@@ -547,8 +547,7 @@ public class SharePartition {
             for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
                 InFlightBatch inFlightBatch = entry.getValue();
                 // Compute if the batch is a full match.
-                boolean fullMatch = inFlightBatch.firstOffset() >= firstBatch.baseOffset()
-                    && inFlightBatch.lastOffset() <= lastBatch.lastOffset();
+                boolean fullMatch = checkForFullMatch(inFlightBatch, firstBatch.baseOffset(), lastBatch.lastOffset());
 
                 if (!fullMatch || inFlightBatch.offsetState != null) {
                     log.trace("Subset or offset tracked batch record found for share partition,"
@@ -675,8 +674,7 @@ public class SharePartition {
                     }
 
                     // Determine if the in-flight batch is a full match from the request batch.
-                    boolean fullMatch = inFlightBatch.firstOffset() >= batch.firstOffset
-                        && inFlightBatch.lastOffset() <= batch.lastOffset;
+                    boolean fullMatch = checkForFullMatch(inFlightBatch, batch.firstOffset, batch.lastOffset);
                     boolean isPerOffsetClientAck = batch.acknowledgeTypes().size() > 1;
 
                     // Maintain state per offset if the inflight batch is not a full match or the
@@ -1540,6 +1538,10 @@ public class SharePartition {
         }
     }
 
+    private boolean checkForFullMatch(InFlightBatch inFlightBatch, long firstOffsetToCompare, long lastOffsetToCompare) {
+        return inFlightBatch.firstOffset >= firstOffsetToCompare && inFlightBatch.lastOffset <= lastOffsetToCompare;
+    }
+
     // Visible for testing. Should only be used for testing purposes.
     NavigableMap<Long, InFlightBatch> cachedState() {
         return new ConcurrentSkipListMap<>(cachedState);
@@ -1625,11 +1627,11 @@ public class SharePartition {
             return offsetState;
         }
 
-        private InFlightState archiveBatch(String newMemberId) {
+        private void archiveBatch(String newMemberId) {
             if (inFlightState == null) {
                 throw new IllegalStateException("The batch state is not available as the offset state is maintained");
             }
-            return inFlightState.archive(newMemberId);
+            inFlightState.archive(newMemberId);
         }
 
         private InFlightState tryUpdateBatchState(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount, String newMemberId) {
@@ -1802,10 +1804,9 @@ public class SharePartition {
             }
         }
 
-        private InFlightState archive(String newMemberId) {
+        private void archive(String newMemberId) {
             state = RecordState.ARCHIVED;
             memberId = newMemberId;
-            return this;
         }
 
         private InFlightState startStateTransition(RecordState newState, boolean incrementDeliveryCount, int maxDeliveryCount, String newMemberId) {
