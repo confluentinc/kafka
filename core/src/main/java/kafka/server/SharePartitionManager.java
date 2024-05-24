@@ -150,7 +150,7 @@ public class SharePartitionManager implements AutoCloseable {
                 );
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
                     k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
-                            recordLockDurationMs, timer, time, persister));
+                            recordLockDurationMs, timer, time, persister, replicaManager));
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.
@@ -251,12 +251,27 @@ public class SharePartitionManager implements AutoCloseable {
                         // Maybe check if no records are acquired and we want to retry replica
                         // manager fetch. Depends on the share partition manager implementation,
                         // if we want parallel requests for the same share partition or not.
-                        partitionData
-                            .setPartitionIndex(topicIdPartition.partition())
-                            .setRecords(fetchPartitionData.records)
-                            .setErrorCode(fetchPartitionData.error.code())
-                            .setAcquiredRecords(acquiredRecords)
-                            .setAcknowledgeErrorCode(Errors.NONE.code());
+                        if (fetchPartitionData.error.code() == Errors.OFFSET_OUT_OF_RANGE.code()) {
+                            // In case we get OFFSET_OUT_OF_RANGE error, that's because the LSO is later than the fetch offset.
+                            // So, we would update the start and end offset of the share partition and still return an empty
+                            // response and let the client retry the fetch. This way we do not lose out on the data that
+                            // would be returned for other share partitions in the fetch request.
+                            sharePartition.updateOffsetsOnLsoMovement();
+                            partitionData
+                                .setPartitionIndex(topicIdPartition.partition())
+                                .setRecords(fetchPartitionData.records)
+                                .setErrorCode(Errors.NONE.code())
+                                .setAcquiredRecords(acquiredRecords)
+                                .setAcknowledgeErrorCode(Errors.NONE.code());
+
+                        } else {
+                            partitionData
+                                .setPartitionIndex(topicIdPartition.partition())
+                                .setRecords(fetchPartitionData.records)
+                                .setErrorCode(fetchPartitionData.error.code())
+                                .setAcquiredRecords(acquiredRecords)
+                                .setAcknowledgeErrorCode(Errors.NONE.code());
+                        }
                     }
                     return partitionData;
                 }));
