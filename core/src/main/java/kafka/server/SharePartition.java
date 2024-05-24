@@ -755,6 +755,16 @@ public class SharePartition {
             for (Map.Entry<Long, InFlightBatch> entry : cachedState.entrySet()) {
                 InFlightBatch inFlightBatch = entry.getValue();
 
+                if (inFlightBatch.offsetState == null
+                        && inFlightBatch.batchState() == RecordState.ACQUIRED
+                        && inFlightBatch.batchMemberId().equals(memberId)
+                        && inFlightBatch.firstOffset < startOffset
+                        && inFlightBatch.lastOffset >= startOffset) {
+                    // For the case when batch.firstOffset < start offset <= batch.lastOffset, we will be having some
+                    // acquired records that need to move to archived state despite their delivery count.
+                    inFlightBatch.maybeInitializeOffsetStateUpdate();
+                }
+
                 if (inFlightBatch.offsetState != null) {
                     log.trace("Offset tracked batch record found, batch: {} for the share partition: {}-{}", inFlightBatch,
                             groupId, topicIdPartition);
@@ -767,7 +777,7 @@ public class SharePartition {
                         }
                         if (offsetState.getValue().state == RecordState.ACQUIRED) {
                             InFlightState updateResult = offsetState.getValue().startStateTransition(
-                                    recordState,
+                                    offsetState.getKey() < startOffset ? RecordState.ARCHIVED : recordState,
                                     false,
                                     this.maxDeliveryCount,
                                     EMPTY_MEMBER_ID
@@ -808,7 +818,7 @@ public class SharePartition {
 
                 if (inFlightBatch.batchState() == RecordState.ACQUIRED) {
                     InFlightState updateResult = inFlightBatch.startBatchStateTransition(
-                            recordState,
+                            inFlightBatch.lastOffset < startOffset ? RecordState.ARCHIVED : recordState,
                             false,
                             this.maxDeliveryCount,
                             EMPTY_MEMBER_ID
@@ -1385,10 +1395,24 @@ public class SharePartition {
                 NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(floorOffset.getKey(), true, lastOffset, true);
                 for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
                     InFlightBatch inFlightBatch = entry.getValue();
+
+                    if (inFlightBatch.offsetState == null
+                            && inFlightBatch.batchState() == RecordState.ACQUIRED
+                            && inFlightBatch.firstOffset < startOffset
+                            && inFlightBatch.lastOffset >= startOffset) {
+                        // For the case when batch.firstOffset < start offset <= batch.lastOffset, we will be having some
+                        // acquired records that need to move to archived state despite their delivery count.
+                        inFlightBatch.maybeInitializeOffsetStateUpdate();
+                    }
+
                     // Case when the state of complete batch is valid
                     if (inFlightBatch.offsetState == null) {
                         if (inFlightBatch.batchState() == RecordState.ACQUIRED) {
-                            InFlightState updateResult = inFlightBatch.tryUpdateBatchState(RecordState.AVAILABLE, false, maxDeliveryCount, EMPTY_MEMBER_ID);
+                            InFlightState updateResult = inFlightBatch.tryUpdateBatchState(
+                                    inFlightBatch.lastOffset < startOffset ? RecordState.ARCHIVED : RecordState.AVAILABLE,
+                                    false,
+                                    maxDeliveryCount,
+                                    EMPTY_MEMBER_ID);
                             if (updateResult == null) {
                                 log.debug("Unable to release acquisition lock on timeout for the batch: {}"
                                         + " for the share partition: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
@@ -1426,7 +1450,11 @@ public class SharePartition {
                                         groupId, memberId, topicIdPartition);
                                 continue;
                             }
-                            InFlightState updateResult = offsetState.getValue().tryUpdateState(RecordState.AVAILABLE, false, maxDeliveryCount, EMPTY_MEMBER_ID);
+                            InFlightState updateResult = offsetState.getValue().tryUpdateState(
+                                    offsetState.getKey() < startOffset ? RecordState.ARCHIVED : RecordState.AVAILABLE,
+                                    false,
+                                    maxDeliveryCount,
+                                    EMPTY_MEMBER_ID);
                             if (updateResult == null) {
                                 log.debug("Unable to release acquisition lock on timeout for the offset: {} in batch: {}"
                                                 + " for the share group: {}-{}-{}", offsetState.getKey(), inFlightBatch,
