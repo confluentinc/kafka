@@ -16,11 +16,9 @@
  */
 package kafka.server;
 
-import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.errors.ShareSessionNotFoundException;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
@@ -32,8 +30,6 @@ import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.server.group.share.NoOpShareStatePersister;
 import org.apache.kafka.server.group.share.Persister;
 import org.apache.kafka.server.util.timer.SystemTimer;
 import org.apache.kafka.server.util.timer.SystemTimerReaper;
@@ -82,8 +78,7 @@ public class SharePartitionManager implements AutoCloseable {
     private final Timer timer;
     private final int maxInFlightMessages;
     private final int maxDeliveryCount;
-    private final String shareGroupPersisterClassName;
-    private Persister persister;
+    private final Persister persister;
 
     public SharePartitionManager(
             ReplicaManager replicaManager,
@@ -92,14 +87,14 @@ public class SharePartitionManager implements AutoCloseable {
             int recordLockDurationMs,
             int maxDeliveryCount,
             int maxInFlightMessages,
-            String shareGroupPersisterClassName
+            Persister persister
     ) {
-        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, maxDeliveryCount, maxInFlightMessages, shareGroupPersisterClassName);
+        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, maxDeliveryCount, maxInFlightMessages, persister);
     }
 
     // Visible for testing
     SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap,
-                          int recordLockDurationMs, int maxDeliveryCount, int maxInFlightMessages, String shareGroupPersisterClassName) {
+                          int recordLockDurationMs, int maxDeliveryCount, int maxInFlightMessages, Persister persister) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
@@ -111,22 +106,7 @@ public class SharePartitionManager implements AutoCloseable {
                 new SystemTimer("share-group-lock-timeout"));
         this.maxDeliveryCount = maxDeliveryCount;
         this.maxInFlightMessages = maxInFlightMessages;
-        this.shareGroupPersisterClassName = shareGroupPersisterClassName;
-        initializeShareGroupPersister();
-    }
-
-    private void initializeShareGroupPersister() {
-        if (!shareGroupPersisterClassName.isEmpty()) {
-            try {
-                persister = Utils.newInstance(shareGroupPersisterClassName, Persister.class);
-            } catch (ClassNotFoundException e) {
-                throw new ConfigException("Could not instantiate class share group persister " + e.getMessage());
-            } catch (RuntimeException e) {
-                throw new KafkaException("Could not instantiate class share group persister " + e.getMessage());
-            }
-        } else {
-            persister = NoOpShareStatePersister.getInstance();
-        }
+        this.persister = persister;
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -525,6 +505,7 @@ public class SharePartitionManager implements AutoCloseable {
     @Override
     public void close() throws Exception {
         timer.close();
+        this.persister.stop();
     }
 
     public static class ShareSession {

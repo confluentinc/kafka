@@ -16,8 +16,6 @@
  */
 package kafka.server;
 
-import org.apache.kafka.common.KafkaException;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.InvalidShareSessionEpochException;
@@ -85,7 +83,6 @@ import java.util.stream.Collectors;
 
 import scala.Tuple2;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -94,6 +91,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
@@ -1065,8 +1063,8 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp2 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo2", 2));
         TopicIdPartition tp3 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo3", 4));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
         when(sp1.acknowledge(ArgumentMatchers.eq(memberId), any())).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         when(sp2.acknowledge(ArgumentMatchers.eq(memberId), any())).thenReturn(CompletableFuture.completedFuture(
                 Optional.of(new InvalidRequestException("Batch record not found. The base offset is not found in the cache."))
@@ -1115,8 +1113,8 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp2 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo2", 2));
         TopicIdPartition tp3 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo3", 4));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
         when(sp1.acknowledge(ArgumentMatchers.eq(memberId), any())).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         when(sp2.acknowledge(ArgumentMatchers.eq(memberId), any())).thenReturn(CompletableFuture.completedFuture(
                 Optional.of(new InvalidRequestException("Batch record not found. The base offset is not found in the cache."))
@@ -1164,8 +1162,8 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp1 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo1", 0));
         TopicIdPartition tp2 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo2", 2));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
         when(sp1.acknowledge(ArgumentMatchers.eq(memberId2), any())).thenReturn(CompletableFuture.completedFuture(
                 Optional.of(new InvalidRequestException("Member is not the owner of batch record"))
         ));
@@ -1208,8 +1206,8 @@ public class SharePartitionManagerTest {
 
         TopicIdPartition tp = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo4", 3));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
         when(sp1.acknowledge(ArgumentMatchers.eq(memberId), any())).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         when(sp2.acknowledge(ArgumentMatchers.eq(memberId), any())).thenReturn(CompletableFuture.completedFuture(
                 Optional.of(new InvalidRequestException("Batch record not found. The base offset is not found in the cache."))
@@ -1254,9 +1252,10 @@ public class SharePartitionManagerTest {
         partitionMaxBytes.put(tp5, PARTITION_MAX_BYTES);
         partitionMaxBytes.put(tp6, PARTITION_MAX_BYTES);
 
-        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        ReplicaManager replicaManager = mock(ReplicaManager.class);
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
-                .withReplicaManager(replicaManager).build();
+            .withReplicaManager(replicaManager)
+            .withShareGroupPersister(NoOpShareStatePersister.getInstance()).build();
 
         doAnswer(invocation -> {
             sharePartitionManager.releaseFetchQueueAndPartitionsLock(groupId, partitionMaxBytes.keySet());
@@ -1414,7 +1413,7 @@ public class SharePartitionManagerTest {
         partitionMaxBytes.put(tp3, PARTITION_MAX_BYTES);
 
         final Time time = new MockTime(0, System.currentTimeMillis(), 0);
-        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        ReplicaManager replicaManager = mock(ReplicaManager.class);
 
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new ConcurrentHashMap<>();
         partitionCacheMap.computeIfAbsent(new SharePartitionManager.SharePartitionKey(groupId, tp0),
@@ -1433,10 +1432,10 @@ public class SharePartitionManagerTest {
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
                 .withPartitionCacheMap(partitionCacheMap).withTime(time).withReplicaManager(replicaManager).build();
 
-        SharePartition sp0 = Mockito.mock(SharePartition.class);
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
-        SharePartition sp3 = Mockito.mock(SharePartition.class);
+        SharePartition sp0 = mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
+        SharePartition sp3 = mock(SharePartition.class);
 
         when(sp0.nextFetchOffset()).thenReturn((long) 1, (long) 15, (long) 6, (long) 30, (long) 25);
         when(sp1.nextFetchOffset()).thenReturn((long) 4, (long) 1, (long) 18, (long) 5);
@@ -1514,9 +1513,9 @@ public class SharePartitionManagerTest {
         Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
         partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
 
-        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        ReplicaManager replicaManager = mock(ReplicaManager.class);
 
-        SharePartition sp0 = Mockito.mock(SharePartition.class);
+        SharePartition sp0 = mock(SharePartition.class);
         when(sp0.maybeAcquireFetchLock()).thenReturn(true);
         // Simulating the case where the SharePartition has reached the maximum in-flight records limit, and the
         // nextFetchOffset points to endOffset + 1
@@ -1550,9 +1549,9 @@ public class SharePartitionManagerTest {
         Map<TopicIdPartition, Integer> partitionMaxBytes = new HashMap<>();
         partitionMaxBytes.put(tp0, PARTITION_MAX_BYTES);
 
-        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        ReplicaManager replicaManager = mock(ReplicaManager.class);
 
-        SharePartition sp0 = Mockito.mock(SharePartition.class);
+        SharePartition sp0 = mock(SharePartition.class);
         when(sp0.maybeAcquireFetchLock()).thenReturn(true);
         // Simulating the case where the SharePartition has reached the maximum in-flight records limit, and the
         // nextFetchOffset does not point to endOffset + 1
@@ -1708,8 +1707,8 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp2 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("bar", 2));
         TopicIdPartition tp3 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("baz", 4));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
         when(sp1.releaseAcquiredRecords(ArgumentMatchers.eq(memberId))).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         when(sp2.releaseAcquiredRecords(ArgumentMatchers.eq(memberId))).thenReturn(CompletableFuture.completedFuture(
                 Optional.of(new InvalidRecordStateException("Unable to release acquired records for the batch"))
@@ -1743,7 +1742,7 @@ public class SharePartitionManagerTest {
 
         TopicIdPartition tp1 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo", 0));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
         when(sp1.releaseAcquiredRecords(ArgumentMatchers.eq(memberId))).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new HashMap<>();
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp1), sp1);
@@ -1767,8 +1766,8 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp1 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo", 0));
         TopicIdPartition tp2 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("bar", 2));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
         when(sp1.releaseAcquiredRecords(ArgumentMatchers.eq(memberId))).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         when(sp2.releaseAcquiredRecords(ArgumentMatchers.eq(memberId))).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
 
@@ -1799,8 +1798,8 @@ public class SharePartitionManagerTest {
         TopicIdPartition tp1 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo", 0));
         TopicIdPartition tp2 = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("bar", 2));
 
-        SharePartition sp1 = Mockito.mock(SharePartition.class);
-        SharePartition sp2 = Mockito.mock(SharePartition.class);
+        SharePartition sp1 = mock(SharePartition.class);
+        SharePartition sp2 = mock(SharePartition.class);
         when(sp1.releaseAcquiredRecords(ArgumentMatchers.eq(memberId))).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         when(sp2.releaseAcquiredRecords(ArgumentMatchers.eq(memberId))).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
 
@@ -1844,27 +1843,14 @@ public class SharePartitionManagerTest {
     }
 
     @Test
-    public void testSharePersisterObjectCreationFailure() throws RuntimeException {
-        mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenThrow(new
-                RuntimeException("Persister object creation failed"));
-        assertThrows(KafkaException.class, () -> SharePartitionManagerBuilder.builder()
-                .withShareGroupPersisterClassName("mockShareGroupPersisterClass").build());
-
-        mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenThrow(new
-                ClassNotFoundException("Persister object creation failed"));
-        assertThrows(ConfigException.class, () -> SharePartitionManagerBuilder.builder()
-                .withShareGroupPersisterClassName("mockShareGroupPersisterClass").build());
-    }
-
-    @Test
     public void testSharePersisterObjectCreationSuccess() {
         Uuid fooId = Uuid.randomUuid();
         TopicIdPartition tp0 = new TopicIdPartition(fooId, new TopicPartition("foo", 0));
 
         // Mocking the Persister object creation. We also need to mock readState() method to return a valid result since
         // it is called during SharePartition object creation.
-        Persister persister = Mockito.mock(Persister.class);
-        ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
+        Persister persister = mock(Persister.class);
+        ReadShareGroupStateResult readShareGroupStateResult = mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(Collections.singletonList(
                 new TopicData<>(tp0.topicId(), Collections.singletonList(
                         PartitionFactory.newPartitionAllData(0, 3, 5L, Errors.NONE.code(), Errors.NONE.message(),
@@ -1874,15 +1860,14 @@ public class SharePartitionManagerTest {
         Mockito.when(persister.readState(Mockito.any())).thenReturn(CompletableFuture.completedFuture(readShareGroupStateResult));
 
         mockUtils.when(() -> Utils.newInstance(ArgumentMatchers.anyString(), ArgumentMatchers.any())).thenReturn(persister);
-        assertDoesNotThrow(() -> SharePartitionManagerBuilder.builder().withShareGroupPersisterClassName("mockShareGroupPersisterClass").build());
     }
 
     private static class SharePartitionManagerBuilder {
-        private ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        private ReplicaManager replicaManager = mock(ReplicaManager.class);
         private Time time = new MockTime();
         private SharePartitionManager.ShareSessionCache cache = new SharePartitionManager.ShareSessionCache(10, 1000);
         private Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new HashMap<>();
-        private String shareGroupPersisterClassName = "";
+        private Persister persister = null;
 
         private SharePartitionManagerBuilder withReplicaManager(ReplicaManager replicaManager) {
             this.replicaManager = replicaManager;
@@ -1904,8 +1889,8 @@ public class SharePartitionManagerTest {
             return this;
         }
 
-        private SharePartitionManagerBuilder withShareGroupPersisterClassName(String shareGroupPersisterClassName) {
-            this.shareGroupPersisterClassName = shareGroupPersisterClassName;
+        private SharePartitionManagerBuilder withShareGroupPersister(Persister persister) {
+            this.persister = persister;
             return this;
         }
 
@@ -1913,7 +1898,7 @@ public class SharePartitionManagerTest {
             return new SharePartitionManagerBuilder();
         }
         public SharePartitionManager build() {
-            return new SharePartitionManager(replicaManager, time, cache, partitionCacheMap, RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES, shareGroupPersisterClassName);
+            return new SharePartitionManager(replicaManager, time, cache, partitionCacheMap, RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES, persister);
         }
     }
 }

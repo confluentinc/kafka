@@ -47,6 +47,7 @@ import org.apache.kafka.security.CredentialProvider
 import org.apache.kafka.server.authorizer.Authorizer
 import org.apache.kafka.server.common.{ApiMessageAndVersion, DirectoryEventHandler, TopicIdPartition}
 import org.apache.kafka.server.config.ConfigType
+import org.apache.kafka.server.group.share.{NoOpShareStatePersister, Persister, PersisterConfig, PersisterStateManager}
 import org.apache.kafka.server.log.remote.storage.RemoteLogManagerConfig
 import org.apache.kafka.server.metrics.{ClientMetricsReceiverPlugin, KafkaYammerMetrics}
 import org.apache.kafka.server.network.{EndpointReadyFutures, KafkaAuthorizerServerInfo}
@@ -152,6 +153,8 @@ class BrokerServer(
   var clientMetricsManager: ClientMetricsManager = _
 
   var sharePartitionManager: SharePartitionManager = _
+
+  var persister: Persister = _
 
   private def maybeChangeStatus(from: ProcessStatus, to: ProcessStatus): Boolean = {
     lock.lock()
@@ -335,8 +338,17 @@ class BrokerServer(
       tokenManager = new DelegationTokenManager(config, tokenCache, time)
       tokenManager.startup()
 
+      /* setup and configure the persister */
+      persister = if (config.shareGroupPersisterClassName.nonEmpty)
+        CoreUtils.createObject[Persister](config.shareGroupPersisterClassName) else NoOpShareStatePersister.getInstance()
+      val persisterStateManager = new PersisterStateManager(
+        NetworkUtils.buildNetworkClient("Persister", config, metrics, Time.SYSTEM, new LogContext(s"[PersisterStateManager broker=${config.brokerId}]")),
+        () => metadataCache.getAliveBrokerNodes(config.interBrokerListenerName).asJava, Time.SYSTEM)
+      persister.configure(new PersisterConfig(persisterStateManager))
+
       val serde = new RecordSerde
-      groupCoordinator = createGroupCoordinator(serde)
+
+      groupCoordinator = createGroupCoordinator(serde, persister)
       shareCoordinator = createShareCoordinator(serde)
 
       val producerIdManagerSupplier = () => ProducerIdManager.rpc(
@@ -406,7 +418,7 @@ class BrokerServer(
         config.shareGroupRecordLockDurationMs,
         config.shareGroupDeliveryCountLimit,
         config.shareGroupPartitionMaxRecordLocks,
-        config.shareGroupPersisterClassName
+        persister
       )
 
       // Create the request processor objects.
@@ -568,7 +580,7 @@ class BrokerServer(
     }
   }
 
-  private def createGroupCoordinator(serde: RecordSerde): GroupCoordinator = {
+  private def createGroupCoordinator(serde: RecordSerde, persister: Persister): GroupCoordinator = {  //todo smjn: pass persister to group coord
     // Create group coordinator, but don't start it until we've started replica manager.
     // Hardcode Time.SYSTEM for now as some Streams tests fail otherwise, it would be good
     // to fix the underlying issue.
@@ -765,8 +777,12 @@ class BrokerServer(
         CoreUtils.swallow(socketServer.shutdown(), this)
       if (brokerTopicStats != null)
         CoreUtils.swallow(brokerTopicStats.close(), this)
-      if (sharePartitionManager != null)
+      if (sharePartitionManager != null) {
         CoreUtils.swallow(sharePartitionManager.close(), this)
+      }
+      if (persister != null) {
+        CoreUtils.swallow(persister.stop(), this)
+      }
 
       isShuttingDown.set(false)
 

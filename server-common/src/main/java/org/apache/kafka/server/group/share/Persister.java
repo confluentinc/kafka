@@ -68,4 +68,18 @@ public interface Persister {
    * @return ReadShareGroupOffsetsStateResult
    */
   CompletableFuture<ReadShareGroupStateSummaryResult> readSummary(ReadShareGroupStateSummaryParameters request);
+
+  /**
+   * Add any specific configs for the persister
+   *
+   * @param config - PersisterConfig
+   */
+  default void configure(PersisterConfig config) {
+    // no use of config required by default.
+  }
+
+  /**
+   * Perform cleanup and interrupt any threads
+   */
+  void stop();
 }

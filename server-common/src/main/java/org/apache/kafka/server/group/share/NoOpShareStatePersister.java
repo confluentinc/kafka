@@ -30,22 +30,22 @@ import java.util.stream.Collectors;
  * A no-op singleton implementation of {@link Persister} interface.
  */
 public class NoOpShareStatePersister implements Persister {
-
   private static final Logger log = LoggerFactory.getLogger(NoOpShareStatePersister.class);
-  private static volatile Persister instance = null;
 
   private NoOpShareStatePersister() {
   }
 
+  private static final class InstanceHolder {
+    static final Persister INSTANCE = new NoOpShareStatePersister();
+  }
+
   public static Persister getInstance() {
-    if (instance == null) {
-      synchronized (NoOpShareStatePersister.class) {
-        if (instance == null) {
-          instance = new NoOpShareStatePersister();
-        }
-      }
-    }
-    return instance;
+    return NoOpShareStatePersister.InstanceHolder.INSTANCE;
+  }
+
+  @Override
+  public void stop() {
+    //noop
   }
 
   @Override
