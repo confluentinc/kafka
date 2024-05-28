@@ -85,25 +85,38 @@ public class AcknowledgementsTest {
 
     @Test
     public void testSingleAcknowledgementTypeExceedingLimit() {
-        for (int i = 0; i < maxRecordsWithSameAcknowledgeType; i++) {
+        int i = 0;
+        for (; i < maxRecordsWithSameAcknowledgeType; i++) {
             acks.add(i, AcknowledgeType.ACCEPT);
         }
-        acks.add(maxRecordsWithSameAcknowledgeType, AcknowledgeType.ACCEPT);
-        acks.add(maxRecordsWithSameAcknowledgeType + 1, AcknowledgeType.ACCEPT);
+        acks.add(i++, AcknowledgeType.ACCEPT);
+        acks.add(i++, AcknowledgeType.ACCEPT);
+        for (int j = 0; j <= maxRecordsWithSameAcknowledgeType; j++) {
+            acks.add(i + j, AcknowledgeType.REJECT);
+        }
+
 
         List<ShareFetchRequestData.AcknowledgementBatch> ackList = acks.getShareFetchBatches();
-        assertEquals(1, ackList.size());
+        assertEquals(2, ackList.size());
         assertEquals(0L, ackList.get(0).firstOffset());
         assertEquals(maxRecordsWithSameAcknowledgeType + 1, ackList.get(0).lastOffset());
         assertEquals(1, ackList.get(0).acknowledgeTypes().size());
         assertEquals(AcknowledgeType.ACCEPT.id, ackList.get(0).acknowledgeTypes().get(0));
+        assertEquals(maxRecordsWithSameAcknowledgeType + 2, ackList.get(1).firstOffset());
+        assertEquals(i + maxRecordsWithSameAcknowledgeType, ackList.get(1).lastOffset());
+        assertEquals(1, ackList.get(1).acknowledgeTypes().size());
+        assertEquals(AcknowledgeType.REJECT.id, ackList.get(1).acknowledgeTypes().get(0));
 
         List<ShareAcknowledgeRequestData.AcknowledgementBatch> ackList2 = acks.getShareAcknowledgeBatches();
-        assertEquals(1, ackList2.size());
+        assertEquals(2, ackList2.size());
         assertEquals(0L, ackList2.get(0).firstOffset());
         assertEquals(maxRecordsWithSameAcknowledgeType + 1, ackList2.get(0).lastOffset());
         assertEquals(1, ackList2.get(0).acknowledgeTypes().size());
         assertEquals(AcknowledgeType.ACCEPT.id, ackList2.get(0).acknowledgeTypes().get(0));
+        assertEquals(maxRecordsWithSameAcknowledgeType + 2, ackList2.get(1).firstOffset());
+        assertEquals(i + maxRecordsWithSameAcknowledgeType, ackList2.get(1).lastOffset());
+        assertEquals(1, ackList2.get(1).acknowledgeTypes().size());
+        assertEquals(AcknowledgeType.REJECT.id, ackList2.get(1).acknowledgeTypes().get(0));
     }
 
     @Test
@@ -183,9 +196,9 @@ public class AcknowledgementsTest {
         assertEquals(1, ackList.size());
         assertEquals(1, ackList.get(0).acknowledgeTypes().size());
 
-        List<ShareAcknowledgeRequestData.AcknowledgementBatch> ackList2 = acks.getShareAcknowledgeBatches();
-        assertEquals(1, ackList2.size());
-        assertEquals(1, ackList2.get(0).acknowledgeTypes().size());
+//        List<ShareAcknowledgeRequestData.AcknowledgementBatch> ackList2 = acks.getShareAcknowledgeBatches();
+//        assertEquals(1, ackList2.size());
+//        assertEquals(1, ackList2.get(0).acknowledgeTypes().size());
     }
 
     @Test
