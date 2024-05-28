@@ -37,6 +37,7 @@ import org.apache.kafka.clients.consumer.internals.events.CompletableApplication
 import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
 import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
 import org.apache.kafka.clients.consumer.internals.events.PollEvent;
+import org.apache.kafka.clients.consumer.internals.events.ShareFetchEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareSubscriptionChangeApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareUnsubscribeApplicationEvent;
@@ -590,10 +591,16 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     }
 
     private ShareFetch<K, V> collect() {
-        // Notify the network thread to wake up and start the next round of fetching
-        applicationEventHandler.wakeupNetworkThread();
+        final ShareFetch<K, V> fetch = fetchCollector.collect(fetchBuffer);
+        if (fetch.isEmpty()) {
+            // Make sure the network thread can tell the application is actively polling
+            applicationEventHandler.add(new ShareFetchEvent());
 
-        return fetchCollector.collect(fetchBuffer);
+            // Notify the network thread to wake up and start the next round of fetching
+            applicationEventHandler.wakeupNetworkThread();
+        }
+
+        return fetch;
     }
 
     /**

@@ -67,11 +67,11 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     protected final ShareFetchBuffer shareFetchBuffer;
     private final Map<Integer, ShareSessionHandler> sessionHandlers;
     private final Set<Integer> nodesWithPendingRequests;
+    private final List<UnsentRequest> pendingRequests;
     private final ShareFetchMetricsManager metricsManager;
     private final IdempotentCloser idempotentCloser = new IdempotentCloser();
     private Uuid memberId;
-
-    private List<UnsentRequest> pendingRequests;
+    private boolean fetchMoreRecords = false;
 
     ShareConsumeRequestManager(final LogContext logContext,
                                final String groupId,
@@ -100,9 +100,13 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         }
 
         if (!pendingRequests.isEmpty()) {
-            List<UnsentRequest> inFlightRequests = pendingRequests;
-            pendingRequests = new LinkedList<>();
+            List<UnsentRequest> inFlightRequests = new LinkedList<>(pendingRequests);
+            pendingRequests.clear();
             return new PollResult(inFlightRequests);
+        }
+
+        if (!fetchMoreRecords) {
+            return PollResult.EMPTY;
         }
 
         Map<Node, ShareSessionHandler> handlerMap = new HashMap<>();
@@ -172,8 +176,8 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         }
 
         if (!pendingRequests.isEmpty()) {
-            List<UnsentRequest> inFlightRequests = pendingRequests;
-            pendingRequests = new LinkedList<>();
+            List<UnsentRequest> inFlightRequests = new LinkedList<>(pendingRequests);
+            pendingRequests.clear();
             return new PollResult(inFlightRequests);
         }
 
@@ -226,6 +230,13 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         }).collect(Collectors.toList());
 
         return new PollResult(requests);
+    }
+
+    public void fetch() {
+        if (!fetchMoreRecords) {
+            log.debug("Fetch more data");
+            fetchMoreRecords = true;
+        }
     }
 
     public CompletableFuture<Void> commitSync(final long retryExpirationTimeMs) {
@@ -310,7 +321,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 if (response.error() == Errors.UNKNOWN_TOPIC_ID) {
                     metadata.requestUpdate(false);
                 }
-
                 return;
             }
 
@@ -345,6 +355,10 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         shareFetchMetricsAggregator,
                         requestVersion);
                 shareFetchBuffer.add(completedFetch);
+
+                if (!partitionData.acquiredRecords().isEmpty()) {
+                    fetchMoreRecords = false;
+                }
             }
 
             metricsManager.recordLatency(resp.requestLatencyMs());

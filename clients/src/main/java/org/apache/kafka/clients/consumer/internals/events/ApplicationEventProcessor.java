@@ -138,6 +138,10 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
                 process((LeaveOnCloseEvent) event);
                 return;
 
+            case SHARE_FETCH:
+                process((ShareFetchEvent) event);
+                return;
+
             case SHARE_ACKNOWLEDGE_ASYNC:
                 process((AsyncShareAcknowledgeEvent) event);
                 return;
@@ -313,6 +317,13 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
         CompletableFuture<Void> future = membershipManager.leaveGroup();
         // The future will be completed on heartbeat sent
         future.whenComplete(complete(event.future()));
+    }
+
+    /**
+     * Process event that tells the share consume request manager to fetch more records.
+     */
+    private void process(final ShareFetchEvent event) {
+        requestManagers.shareConsumeRequestManager.ifPresent(scrm -> scrm.fetch());
     }
 
     /**
