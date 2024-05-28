@@ -776,8 +776,7 @@ public class SharePartition {
                 if (inFlightBatch.offsetState == null
                         && inFlightBatch.batchState() == RecordState.ACQUIRED
                         && inFlightBatch.batchMemberId().equals(memberId)
-                        && inFlightBatch.firstOffset < startOffset
-                        && inFlightBatch.lastOffset >= startOffset) {
+                        && checkForStartOffsetWithinBatch(inFlightBatch.firstOffset, inFlightBatch.lastOffset)) {
                     // For the case when batch.firstOffset < start offset <= batch.lastOffset, we will be having some
                     // acquired records that need to move to archived state despite their delivery count.
                     inFlightBatch.maybeInitializeOffsetStateUpdate();
@@ -1411,8 +1410,7 @@ public class SharePartition {
 
                     if (inFlightBatch.offsetState == null
                             && inFlightBatch.batchState() == RecordState.ACQUIRED
-                            && inFlightBatch.firstOffset < startOffset
-                            && inFlightBatch.lastOffset >= startOffset) {
+                            && checkForStartOffsetWithinBatch(inFlightBatch.firstOffset, inFlightBatch.lastOffset)) {
                         // For the case when batch.firstOffset < start offset <= batch.lastOffset, we will be having some
                         // acquired records that need to move to archived state despite their delivery count.
                         inFlightBatch.maybeInitializeOffsetStateUpdate();
@@ -1540,6 +1538,10 @@ public class SharePartition {
 
     private boolean checkForFullMatch(InFlightBatch inFlightBatch, long firstOffsetToCompare, long lastOffsetToCompare) {
         return inFlightBatch.firstOffset >= firstOffsetToCompare && inFlightBatch.lastOffset <= lastOffsetToCompare;
+    }
+
+    private boolean checkForStartOffsetWithinBatch(long batchFirstOffset, long batchLastOffset) {
+        return batchFirstOffset < startOffset && batchLastOffset >= startOffset;
     }
 
     // Visible for testing. Should only be used for testing purposes.
