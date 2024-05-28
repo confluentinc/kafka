@@ -171,6 +171,12 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return PollResult.EMPTY;
         }
 
+        if (!pendingRequests.isEmpty()) {
+            List<UnsentRequest> inFlightRequests = pendingRequests;
+            pendingRequests = new LinkedList<>();
+            return new PollResult(inFlightRequests);
+        }
+
         final Cluster cluster = metadata.fetch();
 
         Map<Node, ShareSessionHandler> handlerMap = new HashMap<>();

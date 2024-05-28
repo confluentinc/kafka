@@ -25,6 +25,7 @@ import org.apache.kafka.clients.consumer.internals.ConsumerNetworkThread;
 import org.apache.kafka.clients.consumer.internals.MembershipManager;
 import org.apache.kafka.clients.consumer.internals.RequestManagers;
 import org.apache.kafka.clients.consumer.internals.ShareConsumeRequestManager;
+import org.apache.kafka.clients.consumer.internals.ShareFetchRequestManager;
 import org.apache.kafka.clients.consumer.internals.ShareMembershipManager;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.PartitionInfo;
@@ -319,6 +320,10 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
      */
     private void process(final SyncShareAcknowledgeEvent event) {
         if (!requestManagers.shareConsumeRequestManager.isPresent()) {
+            // Temporarily support commitSync in ShareFetchRequestManager
+            ShareFetchRequestManager fetchRequestManager = requestManagers.shareFetchRequestManager;
+            CompletableFuture<Void> future = fetchRequestManager.commitSync(event.deadlineMs());
+            future.whenComplete(complete(event.future()));
             return;
         }
 
@@ -332,6 +337,10 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
      */
     private void process(final AsyncShareAcknowledgeEvent event) {
         if (!requestManagers.shareConsumeRequestManager.isPresent()) {
+            // Temporarily support commitSync in ShareFetchRequestManager
+            ShareFetchRequestManager fetchRequestManager = requestManagers.shareFetchRequestManager;
+            CompletableFuture<Void> future = fetchRequestManager.commitSync(event.deadlineMs());
+            future.whenComplete(complete(event.future()));
             return;
         }
 

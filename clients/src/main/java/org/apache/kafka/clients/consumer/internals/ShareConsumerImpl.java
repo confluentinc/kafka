@@ -640,8 +640,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             // Handle any completed acknowledgements for which we already have the responses
             handleCompletedAcknowledgements();
 
-            // If using implicit acknowledgement, acknowledge the previously fetched records
-            maybeSendAcknowledgements();
+            // Acknowledge the previously fetched records
+            sendAcknowledgements();
 
             Timer requestTimer = time.timer(timeout.toMillis());
             SyncShareAcknowledgeEvent event = new SyncShareAcknowledgeEvent(requestTimer);
@@ -888,6 +888,28 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         if (currentFetch != null) {
             // If IMPLICIT, acknowledge all records and send
             if (acknowledgementMode == AcknowledgementMode.IMPLICIT) {
+                currentFetch.acknowledgeAll(AcknowledgeType.ACCEPT);
+                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
+            } else if (acknowledgementMode == AcknowledgementMode.EXPLICIT) {
+                // If EXPLICIT, send any acknowledgements which are ready
+                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
+            }
+
+            currentFetch = null;
+        }
+    }
+
+    /**
+     * If the acknowledgement mode is IMPLICIT, acknowledges the current batch and puts them into the fetch
+     * buffer for the background thread to pick up.
+     * If the acknowledgement mode is EXPLICIT, puts any ready acknowledgements into the fetch buffer for the
+     * background thread to pick up.
+     */
+    private void sendAcknowledgements() {
+        if (currentFetch != null) {
+            // If IMPLICIT, acknowledge all records and send
+            if ((acknowledgementMode == AcknowledgementMode.PENDING) ||
+                    (acknowledgementMode == AcknowledgementMode.IMPLICIT)) {
                 currentFetch.acknowledgeAll(AcknowledgeType.ACCEPT);
                 fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
             } else if (acknowledgementMode == AcknowledgementMode.EXPLICIT) {

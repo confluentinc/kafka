@@ -349,8 +349,8 @@ public class RequestManagers implements Closeable {
 
                 return new RequestManagers(
                         logContext,
-//                        shareFetchRequestManager,
-                        Optional.of(shareConsumeRequestManager),
+                        shareFetchRequestManager,
+//                        Optional.of(shareConsumeRequestManager),
                         Optional.of(coordinator),
                         Optional.of(shareHeartbeatRequestManager),
                         Optional.of(shareMembershipManager)
