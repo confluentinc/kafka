@@ -1501,8 +1501,10 @@ public class SharePartition {
                         }
                     }
                 }
-                // Even if write share group state RPC call fails, we will still go ahead with the state transition.
-                isWriteShareGroupStateSuccessful(stateBatches);
+                if (!stateBatches.isEmpty()) {
+                    // Even if write share group state RPC call fails, we will still go ahead with the state transition.
+                    isWriteShareGroupStateSuccessful(stateBatches);
+                }
                 // Update the cached state and start and end offsets after releasing the acquisition lock on timeout.
                 maybeUpdateCachedStateAndOffsets();
             }
