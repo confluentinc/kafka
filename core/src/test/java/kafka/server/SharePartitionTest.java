@@ -5970,6 +5970,259 @@ public class SharePartitionTest {
         assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
     }
 
+    @Test
+    public void testAcknowledgeBatchAndOffsetPostLsoMovement() {
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        // LSO returned is 0.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));
+
+        SharePartition sharePartition = SharePartitionBuilder.builder().withReplicaManager(replicaManager).build();
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(0, sharePartition.nextFetchOffset());
+        assertEquals(0, sharePartition.startOffset());
+        assertEquals(0, sharePartition.endOffset());
+
+        MemoryRecords records1 = memoryRecords(5, 2);
+        MemoryRecords records2 = memoryRecords(5, 10);
+
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records2, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertEquals(2, sharePartition.cachedState().size());
+        assertEquals(15, sharePartition.nextFetchOffset());
+        assertEquals(2, sharePartition.startOffset());
+        assertEquals(14, sharePartition.endOffset());
+
+        // LSO returned is 12.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 12, Optional.of(0))));
+
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(15, sharePartition.nextFetchOffset());
+        assertEquals(12, sharePartition.startOffset());
+        assertEquals(14, sharePartition.endOffset());
+        assertEquals(2, sharePartition.cachedState().size());
+
+        // Checked cached state map.
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(2L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(2L).batchState());
+        assertNotNull(sharePartition.cachedState().get(2L).acquisitionLockTimeoutTask());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertNotNull(sharePartition.cachedState().get(10L).acquisitionLockTimeoutTask());
+
+        // Acknowledge with RELEASE action.
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(MEMBER_ID, Arrays.asList(
+                new AcknowledgementBatch(2, 6, Collections.singletonList((byte) 2)),
+                new AcknowledgementBatch(10, 14, Collections.singletonList((byte) 2))));
+
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        assertEquals(12, sharePartition.nextFetchOffset());
+        assertEquals(12, sharePartition.startOffset());
+        assertEquals(14, sharePartition.endOffset());
+        assertEquals(2, sharePartition.cachedState().size());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(2L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(2L).batchState());
+        assertNotNull(sharePartition.cachedState().get(2L).acquisitionLockTimeoutTask());
+
+        // Checked cached offset state map.
+        Map<Long, InFlightState>  expectedOffsetStateMap = new HashMap<>();
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.AVAILABLE, (short) 1, EMPTY_MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.AVAILABLE, (short) 1, EMPTY_MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.AVAILABLE, (short) 1, EMPTY_MEMBER_ID));
+
+        assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
+
+        assertNotNull(sharePartition.cachedState().get(10L).offsetState().get(10L).acquisitionLockTimeoutTask());
+        assertNotNull(sharePartition.cachedState().get(10L).offsetState().get(11L).acquisitionLockTimeoutTask());
+        assertNull(sharePartition.cachedState().get(10L).offsetState().get(12L).acquisitionLockTimeoutTask());
+        assertNull(sharePartition.cachedState().get(10L).offsetState().get(13L).acquisitionLockTimeoutTask());
+        assertNull(sharePartition.cachedState().get(10L).offsetState().get(14L).acquisitionLockTimeoutTask());
+    }
+
+    @Test
+    public void testAcknowledgeBatchPostLsoMovement() {
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        // LSO returned is 0.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));
+
+        SharePartition sharePartition = SharePartitionBuilder.builder().withReplicaManager(replicaManager).build();
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(0, sharePartition.nextFetchOffset());
+        assertEquals(0, sharePartition.startOffset());
+        assertEquals(0, sharePartition.endOffset());
+
+        MemoryRecords records1 = memoryRecords(5, 2);
+        MemoryRecords records2 = memoryRecords(5, 10);
+        MemoryRecords records3 = memoryRecords(5, 20);
+
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records2, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records3, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertEquals(3, sharePartition.cachedState().size());
+        assertEquals(25, sharePartition.nextFetchOffset());
+        assertEquals(2, sharePartition.startOffset());
+        assertEquals(24, sharePartition.endOffset());
+
+        // LSO returned is 14.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 14, Optional.of(0))));
+
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(25, sharePartition.nextFetchOffset());
+        assertEquals(14, sharePartition.startOffset());
+        assertEquals(24, sharePartition.endOffset());
+        assertEquals(3, sharePartition.cachedState().size());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(2L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(2L).batchState());
+        assertNotNull(sharePartition.cachedState().get(2L).acquisitionLockTimeoutTask());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(10L).batchState());
+        assertNotNull(sharePartition.cachedState().get(10L).acquisitionLockTimeoutTask());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(20L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(20L).batchState());
+        assertNotNull(sharePartition.cachedState().get(20L).acquisitionLockTimeoutTask());
+
+        // Acknowledge with ACCEPT action.
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(MEMBER_ID, Collections.singletonList(
+                new AcknowledgementBatch(2, 14, Collections.singletonList((byte) 1))));
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        assertEquals(25, sharePartition.nextFetchOffset());
+        // For cached state corresponding to entry 2, the offset states will be ARCHIVED, ARCHIVED, ARCHIVED, ARCHIVED and ACKNOWLEDGED.
+        // Hence, it will get removed when calling maybeUpdateCachedStateAndOffsets() internally.
+        assertEquals(14, sharePartition.startOffset());
+        assertEquals(24, sharePartition.endOffset());
+        assertEquals(3, sharePartition.cachedState().size());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(2L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(2L).batchState());
+        assertNotNull(sharePartition.cachedState().get(2L).acquisitionLockTimeoutTask());
+
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(20L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(20L).batchState());
+        assertNotNull(sharePartition.cachedState().get(20L).acquisitionLockTimeoutTask());
+
+        // Check cached state offset map.
+        Map<Long, InFlightState> expectedOffsetStateMap = new HashMap<>();
+        expectedOffsetStateMap.put(10L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(11L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(12L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(13L, new InFlightState(RecordState.ACQUIRED, (short) 1, MEMBER_ID));
+        expectedOffsetStateMap.put(14L, new InFlightState(RecordState.ACKNOWLEDGED, (short) 1, EMPTY_MEMBER_ID));
+        assertEquals(expectedOffsetStateMap, sharePartition.cachedState().get(10L).offsetState());
+
+        assertNotNull(sharePartition.cachedState().get(10L).offsetState().get(10L).acquisitionLockTimeoutTask());
+        assertNotNull(sharePartition.cachedState().get(10L).offsetState().get(11L).acquisitionLockTimeoutTask());
+        assertNotNull(sharePartition.cachedState().get(10L).offsetState().get(12L).acquisitionLockTimeoutTask());
+        assertNotNull(sharePartition.cachedState().get(10L).offsetState().get(13L).acquisitionLockTimeoutTask());
+        assertNull(sharePartition.cachedState().get(10L).offsetState().get(14L).acquisitionLockTimeoutTask());
+    }
+
+    @Test
+    public void testLsoMovementThenAcquisitionLockTimeoutThenAcknowledge() throws InterruptedException {
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        // LSO returned is 0.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));
+
+        SharePartition sharePartition = SharePartitionBuilder.builder().withReplicaManager(replicaManager)
+                .withAcquisitionLockTimeoutMs(ACQUISITION_LOCK_TIMEOUT_MS).build();
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(0, sharePartition.nextFetchOffset());
+        assertEquals(0, sharePartition.startOffset());
+        assertEquals(0, sharePartition.endOffset());
+
+        MemoryRecords records1 = memoryRecords(5, 2);
+
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(7, sharePartition.nextFetchOffset());
+        assertEquals(2, sharePartition.startOffset());
+        assertEquals(6, sharePartition.endOffset());
+
+        // LSO returned is 7.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 7, Optional.of(0))));
+
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(7, sharePartition.nextFetchOffset());
+        assertEquals(7, sharePartition.startOffset());
+        assertEquals(7, sharePartition.endOffset());
+        assertEquals(1, sharePartition.cachedState().size());
+
+        // Checked cached state map.
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(2L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(2L).batchState());
+        assertNotNull(sharePartition.cachedState().get(2L).acquisitionLockTimeoutTask());
+
+        // Allowing acquisition lock to expire.
+        Thread.sleep(200);
+        assertEquals(7, sharePartition.nextFetchOffset());
+        assertEquals(7, sharePartition.startOffset());
+        assertEquals(7, sharePartition.endOffset());
+        assertEquals(0, sharePartition.cachedState().size());
+
+        MemoryRecords records2 = memoryRecords(5, 10);
+
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records2, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertEquals(15, sharePartition.nextFetchOffset());
+        assertEquals(10, sharePartition.startOffset());
+        assertEquals(14, sharePartition.endOffset());
+        assertEquals(1, sharePartition.cachedState().size());
+
+        // Acknowledge with RELEASE action. This contains a batch that doesn't exist at all.
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(MEMBER_ID, Collections.singletonList(
+                new AcknowledgementBatch(2, 14, Collections.singletonList((byte) 2))));
+
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        assertEquals(10, sharePartition.nextFetchOffset());
+        assertEquals(10, sharePartition.startOffset());
+        assertEquals(14, sharePartition.endOffset());
+        assertEquals(1, sharePartition.cachedState().size());
+
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(10L).batchMemberId());
+        assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(10L).batchState());
+        assertNull(sharePartition.cachedState().get(10L).acquisitionLockTimeoutTask());
+    }
+
     private MemoryRecords memoryRecords(int numOfRecords) {
         return memoryRecords(numOfRecords, 0);
     }

@@ -647,6 +647,12 @@ public class SharePartition {
                     break;
                 }
 
+                if (batch.lastOffset < startOffset) {
+                    log.trace("All offsets in the acknowledgement batch {} are already archived: {}-{}",
+                        batch, groupId, topicIdPartition);
+                    continue;
+                }
+
                 // Fetch the sub-map from the cached map for the batch to acknowledge. The sub-map can
                 // be a full match, subset or spans over multiple fetched batches.
                 NavigableMap<Long, InFlightBatch> subMap;
@@ -663,6 +669,13 @@ public class SharePartition {
                 for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
                     InFlightBatch inFlightBatch = entry.getValue();
 
+                    // If startOffset has moved ahead of the in-flight batch, skip the batch.
+                    if (inFlightBatch.lastOffset < startOffset) {
+                        log.trace("All offsets in the inflight batch {} are already archived: {}-{}",
+                                inFlightBatch, groupId, topicIdPartition);
+                        continue;
+                    }
+
                     // Validate if the requested member id is the owner of the batch.
                     if (inFlightBatch.offsetState == null) {
                         throwable = validateAcknowledgementBatchMemberId(memberId, inFlightBatch).orElse(null);
@@ -674,10 +687,12 @@ public class SharePartition {
                     // Determine if the in-flight batch is a full match from the request batch.
                     boolean fullMatch = checkForFullMatch(inFlightBatch, batch.firstOffset, batch.lastOffset);
                     boolean isPerOffsetClientAck = batch.acknowledgeTypes().size() > 1;
+                    boolean hasStartOffsetMoved = checkForStartOffsetWithinBatch(inFlightBatch.firstOffset, inFlightBatch.lastOffset);
 
                     // Maintain state per offset if the inflight batch is not a full match or the
-                    // offset state is managed or client sent individual offsets state.
-                    if (!fullMatch || inFlightBatch.offsetState != null || isPerOffsetClientAck) {
+                    // offset state is managed or client sent individual offsets state or
+                    // the start offset is within this in-flight batch.
+                    if (!fullMatch || inFlightBatch.offsetState != null || isPerOffsetClientAck || hasStartOffsetMoved) {
                         log.debug("Subset or offset tracked batch record found for acknowledgement,"
                             + " batch: {}, request offsets - first: {}, last: {}, client per offset"
                             + "state {} for the share partition: {}-{}", inFlightBatch, batch.firstOffset,
@@ -949,6 +964,12 @@ public class SharePartition {
             // for a subset of the batch i.e. cached batch of offset 10-14 and request batch
             // of 12-13. Hence, floor entry is fetched to find the sub-map.
             Map.Entry<Long, InFlightBatch> floorOffset = cachedState.floorEntry(batch.firstOffset);
+            boolean hasStartOffsetMoved = checkForStartOffsetWithinBatch(batch.firstOffset, batch.lastOffset);
+            if (floorOffset == null && hasStartOffsetMoved) {
+                // If the start offset is between the first and last offset of the acknowledgment batch, then
+                // we need to get the floor offset using the last offset of the acknowledgment batch.
+                floorOffset = cachedState.floorEntry(batch.lastOffset);
+            }
             if (floorOffset == null) {
                 log.debug("Batch record {} not found for share partition: {}-{}", batch, groupId,
                     topicIdPartition);
@@ -1012,9 +1033,10 @@ public class SharePartition {
             RecordState recordStateDefault = recordStateMap.get(batch.firstOffset());
             for (Map.Entry<Long, InFlightState> offsetState : inFlightBatch.offsetState.entrySet()) {
 
-                // For the first batch which might have offsets prior to the request base
+                // 1. For the first batch which might have offsets prior to the request base
                 // offset i.e. cached batch of 10-14 offsets and request batch of 12-13.
-                if (offsetState.getKey() < batch.firstOffset) {
+                // 2. Skip the offsets which are below the start offset of the share partition
+                if (offsetState.getKey() < batch.firstOffset || offsetState.getKey() < startOffset) {
                     continue;
                 }
 
