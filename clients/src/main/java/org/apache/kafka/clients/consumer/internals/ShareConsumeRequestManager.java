@@ -248,7 +248,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         Map<Node, ShareSessionHandler> handlerMap = new HashMap<>();
 
         sessionHandlers.forEach((nodeId, sessionHandler) -> {
-            sessionHandler.notifyClose();
             Node node = cluster.nodeById(nodeId);
             if (node != null) {
                 for (TopicIdPartition tip : sessionHandler.sessionPartitions()) {
@@ -412,7 +411,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         } finally {
             log.debug("Removing pending request for node {} - success", fetchTarget);
             nodesWithPendingRequests.remove(fetchTarget.id());
-            sessionHandlers.remove(fetchTarget.id());
 
             if (inFlightRequestCount.decrementAndGet() == 0) {
                 future.complete(null);
@@ -441,7 +439,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         } finally {
             log.debug("Removing pending request for node {} - failed", fetchTarget);
             nodesWithPendingRequests.remove(fetchTarget.id());
-            sessionHandlers.remove(fetchTarget.id());
 
             if (inFlightRequestCount.decrementAndGet() == 0) {
                 future.complete(null);
@@ -520,4 +517,62 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     public void onMemberEpochUpdated(Optional<Integer> memberEpochOpt, Optional<String> memberIdOpt) {
         memberIdOpt.ifPresent(s -> memberId = Uuid.fromString(s));
     }
+
+    /**
+     * Represents a request to acknowledge delivery that can be retried or aborted.
+     * ** UNDER CONSTRUCTION **
+     */
+    class AcknowledgeRequestState extends RequestState {
+
+        /**
+         * The node to send the request to.
+         */
+        private final int node;
+
+        /**
+         * The map of acknowledgements to send
+         */
+        private final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
+
+        /**
+         * Future with the result of the request.
+         */
+        private final CompletableFuture<Void> future;
+
+        /**
+         * Time until which the request should be retried if it fails with retriable
+         * errors. If not present, the request is triggered without waiting for a response or
+         * retrying.
+         */
+        private final Optional<Long> expirationTimeMs;
+
+        /**
+         * True if the request expiration time has been reached. This is set when validating the
+         * request expiration on {@link #poll(long)} before sending it. It is used to know if a
+         * request should be retried on TimeoutException.
+         */
+        boolean isExpired;
+
+        AcknowledgeRequestState(LogContext logContext, String owner,
+                                long retryBackoffMs, long retryBackoffMaxMs,
+                                Optional<Long> expirationTimeMs,
+                                int node,
+                                Map<TopicIdPartition, Acknowledgements> acknowledgementsMap)
+        {
+            super(logContext, owner, retryBackoffMs, retryBackoffMaxMs);
+            this.expirationTimeMs = expirationTimeMs;
+            this.node = node;
+            this.acknowledgementsMap = acknowledgementsMap;
+            this.future = new CompletableFuture<>();
+        }
+
+        UnsentRequest buildRequest() {
+            return null;
+        }
+
+        boolean retryTimeoutExpired(long currentTimeMs) {
+            return expirationTimeMs.isPresent() && expirationTimeMs.get() <= currentTimeMs;
+        }
+    }
+
 }
