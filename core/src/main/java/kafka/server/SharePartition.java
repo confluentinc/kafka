@@ -431,12 +431,10 @@ public class SharePartition {
                     isAnyBatchArchived = isAnyBatchArchived || archiveCompleteBatch(inFlightBatch);
                 }
             }
-            if (isAnyOffsetArchived || isAnyBatchArchived)
-                return true;
+            return isAnyOffsetArchived || isAnyBatchArchived;
         } finally {
             lock.writeLock().unlock();
         }
-        return false;
     }
 
     private boolean archivePerOffsetBatchRecords(InFlightBatch inFlightBatch,
