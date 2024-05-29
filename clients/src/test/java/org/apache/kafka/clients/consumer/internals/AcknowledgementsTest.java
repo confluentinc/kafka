@@ -195,10 +195,6 @@ public class AcknowledgementsTest {
         List<ShareFetchRequestData.AcknowledgementBatch> ackList = acks.getShareFetchBatches();
         assertEquals(1, ackList.size());
         assertEquals(1, ackList.get(0).acknowledgeTypes().size());
-
-//        List<ShareAcknowledgeRequestData.AcknowledgementBatch> ackList2 = acks.getShareAcknowledgeBatches();
-//        assertEquals(1, ackList2.size());
-//        assertEquals(1, ackList2.get(0).acknowledgeTypes().size());
     }
 
     @Test
