@@ -1424,6 +1424,7 @@ public class SharePartition {
             if (floorOffset == null) {
                 log.debug("Base Offset {} not found for share partition: {}-{}", firstOffset, groupId, topicIdPartition);
             } else {
+                List<PersisterStateBatch> stateBatches = new ArrayList<>();
                 NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(floorOffset.getKey(), true, lastOffset, true);
                 for (Map.Entry<Long, InFlightBatch> entry : subMap.entrySet()) {
                     InFlightBatch inFlightBatch = entry.getValue();
@@ -1448,10 +1449,8 @@ public class SharePartition {
                                 log.debug("Unable to release acquisition lock on timeout for the batch: {}"
                                         + " for the share partition: {}-{}-{}", inFlightBatch, groupId, memberId, topicIdPartition);
                             } else {
-                                // Even if write share group state RPC call fails, we will still go ahead with the state transition.
-                                isWriteShareGroupStateSuccessful(Collections.singletonList(
-                                    new PersisterStateBatch(inFlightBatch.firstOffset(), inFlightBatch.lastOffset(),
-                                        updateResult.state.id, (short) updateResult.deliveryCount)));
+                                stateBatches.add(new PersisterStateBatch(inFlightBatch.firstOffset(), inFlightBatch.lastOffset(),
+                                        updateResult.state.id, (short) updateResult.deliveryCount));
                                 // Update acquisition lock timeout task for the batch to null since it is completed now.
                                 updateResult.updateAcquisitionLockTimeoutTask(null);
                                 if (updateResult.state != RecordState.ARCHIVED) {
@@ -1492,10 +1491,8 @@ public class SharePartition {
                                         groupId, memberId, topicIdPartition);
                                 continue;
                             }
-                            // Even if write share group state RPC call fails, we will still go ahead with the state transition.
-                            isWriteShareGroupStateSuccessful(Collections.singletonList(
-                                new PersisterStateBatch(offsetState.getKey(), offsetState.getKey(),
-                                    updateResult.state.id, (short) updateResult.deliveryCount)));
+                            stateBatches.add(new PersisterStateBatch(offsetState.getKey(), offsetState.getKey(),
+                                    updateResult.state.id, (short) updateResult.deliveryCount));
                             // Update acquisition lock timeout task for the offset to null since it is completed now.
                             updateResult.updateAcquisitionLockTimeoutTask(null);
                             if (updateResult.state != RecordState.ARCHIVED) {
@@ -1504,7 +1501,8 @@ public class SharePartition {
                         }
                     }
                 }
-
+                // Even if write share group state RPC call fails, we will still go ahead with the state transition.
+                isWriteShareGroupStateSuccessful(stateBatches);
                 // Update the cached state and start and end offsets after releasing the acquisition lock on timeout.
                 maybeUpdateCachedStateAndOffsets();
             }
