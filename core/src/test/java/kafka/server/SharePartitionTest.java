@@ -6206,7 +6206,7 @@ public class SharePartitionTest {
         assertEquals(14, sharePartition.endOffset());
         assertEquals(1, sharePartition.cachedState().size());
 
-        // Acknowledge with RELEASE action. This contains a batch that doesn't exist at all
+        // Acknowledge with RELEASE action. This contains a batch that doesn't exist at all.
         CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(MEMBER_ID, Collections.singletonList(
                 new AcknowledgementBatch(2, 14, Collections.singletonList((byte) 2))));
 

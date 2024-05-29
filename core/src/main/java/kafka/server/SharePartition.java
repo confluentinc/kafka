@@ -972,9 +972,9 @@ public class SharePartition {
             }
             if (floorOffset == null) {
                 log.debug("Batch record {} not found for share partition: {}-{}", batch, groupId,
-                        topicIdPartition);
+                    topicIdPartition);
                 throw new InvalidRecordStateException(
-                        "Batch record not found. The base offset is not found in the cache.");
+                    "Batch record not found. The base offset is not found in the cache.");
             }
 
             NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(floorOffset.getKey(), true, batch.lastOffset, true);
