@@ -1821,7 +1821,9 @@ public class SharePartitionManagerTest {
 
     @Test
     public void testCloseSharePartitionManager() throws Exception {
-        SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder().build();
+        Persister persister = mock(Persister.class);
+        SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
+                .withShareGroupPersister(persister).build();
 
         List<Integer> mockList = new ArrayList<>();
         sharePartitionManager.timer().add(createTimerTask(mockList));

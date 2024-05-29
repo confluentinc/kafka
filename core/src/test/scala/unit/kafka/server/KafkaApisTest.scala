@@ -83,7 +83,7 @@ import org.apache.kafka.server.authorizer.{Action, AuthorizationResult, Authoriz
 import org.apache.kafka.server.common.MetadataVersion.{IBP_0_10_2_IV0, IBP_2_2_IV1}
 import org.apache.kafka.server.common.{Features, MetadataVersion}
 import org.apache.kafka.server.config.{ConfigType, Defaults}
-import org.apache.kafka.server.group.share.Persister
+import org.apache.kafka.server.group.share.NoOpShareStatePersister
 import org.apache.kafka.server.metrics.ClientMetricsTestUtils
 import org.apache.kafka.server.util.{FutureUtils, MockTime}
 import org.apache.kafka.storage.internals.log.{AppendOrigin, FetchParams, FetchPartitionData, LogConfig}
@@ -135,7 +135,7 @@ class KafkaApisTest extends Logging {
     clientControllerQuotaManager, replicaQuotaManager, replicaQuotaManager, replicaQuotaManager, None)
   private val fetchManager: FetchManager = mock(classOf[FetchManager])
   val sharePartitionManager : SharePartitionManager =
-    new SharePartitionManager(replicaManager, new SystemTime(), new ShareSessionCache(1000, 100), 30000, 5, 200, mock(classOf[Persister]))
+    new SharePartitionManager(replicaManager, new SystemTime(), new ShareSessionCache(1000, 100), 30000, 5, 200, NoOpShareStatePersister.getInstance())
   private val clientMetricsManager: ClientMetricsManager = mock(classOf[ClientMetricsManager])
   private val brokerTopicStats = new BrokerTopicStats
   private val clusterId = "clusterId"
