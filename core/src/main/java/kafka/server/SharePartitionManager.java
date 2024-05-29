@@ -289,7 +289,7 @@ public class SharePartitionManager implements AutoCloseable {
                             .setErrorCode(fetchPartitionData.error.code())
                             .setAcquiredRecords(acquiredRecords)
                             .setAcknowledgeErrorCode(Errors.NONE.code());
-                        }
+                    }
                     return partitionData;
                 }));
         });
