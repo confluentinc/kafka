@@ -111,6 +111,13 @@
                 <allow class="org.apache.kafka.server.util.ShutdownableThread" />
             </subpackage>
         </subpackage>
+
+        <subpackage name="group">
+            <subpackage name="share">
+                <allow pkg="org.apache.kafka.clients"></allow>
+                <allow pkg="org.apache.kafka.server.util"></allow>
+            </subpackage>
+        </subpackage>
     </subpackage>
 
     <subpackage name="admin">
