@@ -322,7 +322,7 @@ public class Acknowledgements {
             if (acknowledgeType == prevAcknowledgeType && recordsWithSameAcknowledgeType >= MAX_RECORDS_WITH_SAME_ACKNOWLEDGE_TYPE) {
                 // We continue traversing until we have the same acknowledge type.
                 while (i < currentShareFetchBatch.acknowledgeTypes().size()) {
-                    byte acknowledgeType2 = currentShareFetchBatch.acknowledgeTypes().get(i) == 0 ? ACKNOWLEDGE_TYPE_GAP : currentShareFetchBatch.acknowledgeTypes().get(i);
+                    byte acknowledgeType2 = currentShareFetchBatch.acknowledgeTypes().get(i);
 
                     if (acknowledgeType2 != currentShareFetchBatch.acknowledgeTypes().get(i - 1)) break;
                     i++;
@@ -390,7 +390,7 @@ public class Acknowledgements {
             if (acknowledgeType == prevAcknowledgeType && recordsWithSameAcknowledgeType >= MAX_RECORDS_WITH_SAME_ACKNOWLEDGE_TYPE) {
                 // We continue traversing until we have the same acknowledge type.
                 while (i < currentShareAcknowledgeBatch.acknowledgeTypes().size()) {
-                    byte acknowledgeType2 = currentShareAcknowledgeBatch.acknowledgeTypes().get(i) == 0 ? ACKNOWLEDGE_TYPE_GAP : currentShareAcknowledgeBatch.acknowledgeTypes().get(i);
+                    byte acknowledgeType2 = currentShareAcknowledgeBatch.acknowledgeTypes().get(i);
 
                     if (acknowledgeType2 != currentShareAcknowledgeBatch.acknowledgeTypes().get(i - 1)) break;
                     i++;
