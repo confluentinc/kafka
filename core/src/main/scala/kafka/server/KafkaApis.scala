@@ -265,6 +265,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.SHARE_GROUP_HEARTBEAT => handleShareGroupHeartbeat(request).exceptionally(handleError)
         case ApiKeys.SHARE_GROUP_DESCRIBE => handleShareGroupDescribe(request).exceptionally(handleError)
         case ApiKeys.SHARE_ACKNOWLEDGE => handleShareAcknowledgeRequest(request)
+        case ApiKeys.READ_SHARE_GROUP_STATE => handleReadShareGroupStateRequest(request)
         case _ => throw new IllegalStateException(s"No handler for request api key ${request.header.apiKey}")
       }
     } catch {
@@ -4818,6 +4819,20 @@ class KafkaApis(val requestChannel: RequestChannel,
       request.messageConversionsTimeNanos = conversionStats.conversionTimeNanos
     }
     request.temporaryMemoryBytes = conversionStats.temporaryMemoryBytes
+  }
+
+  def handleReadShareGroupStateRequest(request: RequestChannel.Request): Unit = {
+    val readShareGroupStateRequest = request.body[ReadShareGroupStateRequest]
+    val requestData = readShareGroupStateRequest.data()
+
+    authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
+
+    // Finding the ShareGroupState data for the given request
+    val responseData : ReadShareGroupStateResponseData =
+      shareCoordinator.readShareGroupStates(request.context, requestData).get()
+
+    requestHelper.sendMaybeThrottle(request, new ReadShareGroupStateResponse(responseData))
+
   }
 }
 

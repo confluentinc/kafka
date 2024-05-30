@@ -17,14 +17,17 @@
 
 package org.apache.kafka.server.group.share;
 
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.annotation.InterfaceStability;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 /**
@@ -93,9 +96,28 @@ public class DefaultStatePersister implements Persister {
     this.stateManager.start();
     GroupTopicPartitionData<PartitionIdLeaderEpochData> gtp = request.groupTopicPartitionData();
     String groupId = gtp.groupId();
+    HashMap<Uuid, HashMap<Integer, CompletableFuture<PartitionData>>> futures = new HashMap<>();
     List<PersisterStateManager.ReadStateHandler> handlers = gtp.topicsData().stream()
         .map(topicData -> topicData.partitions().stream()
-            .map(partitionData -> stateManager.new ReadStateHandler(groupId, topicData.topicId(), partitionData.partition(), partitionData.leaderEpoch()))
+            .map(partitionData ->
+                    {
+                        CompletableFuture<PartitionData> future = new CompletableFuture<>();
+                        if (futures.containsKey(topicData.topicId())) {
+                            futures.get(topicData.topicId()).put(partitionData.partition(), future);
+                        } else {
+                            HashMap<Integer, CompletableFuture<PartitionData>> map = new HashMap<>();
+                            map.put(partitionData.partition(), future);
+                            futures.put(topicData.topicId(), map);
+                        }
+                        return stateManager.new ReadStateHandler(
+                                groupId,
+                                topicData.topicId(),
+                                partitionData.partition(),
+                                partitionData.leaderEpoch(),
+                                future
+                        );
+                    }
+            )
             .collect(Collectors.toList()))
         .flatMap(Collection::stream)
         .collect(Collectors.toList());
@@ -103,7 +125,30 @@ public class DefaultStatePersister implements Persister {
     for (PersisterStateManager.PersisterStateManagerHandler handler : handlers) {
       stateManager.enqueue(handler);
     }
-    return null;
+
+    // Combine all futures into a single CompletableFuture<Void>
+    CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.values().stream()
+            .flatMap(map -> map.values().stream()).toArray(CompletableFuture[]::new));
+
+    // Transform the combined CompletableFuture<Void> into CompletableFuture<ReadShareGroupStateResult>
+    return allOf.thenApply(v -> {
+      List<TopicData<PartitionData>> topicDataList = futures.entrySet().stream()
+              .map(topicEntry -> {
+                Uuid topicId = topicEntry.getKey();
+                List<PartitionData> partitionDataList = topicEntry.getValue().values().stream()
+                        .map(future -> {
+                          try {
+                            return future.get();
+                          } catch (InterruptedException | ExecutionException e) {
+                            throw new RuntimeException(e);
+                          }
+                        })
+                        .collect(Collectors.toList());
+                return new TopicData<>(topicId, partitionDataList);
+              })
+              .collect(Collectors.toList());
+      return ReadShareGroupStateResult.from(topicDataList);
+    });
   }
 
   /**
