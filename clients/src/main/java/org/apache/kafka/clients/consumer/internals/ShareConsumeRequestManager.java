@@ -522,7 +522,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
      * Represents a request to acknowledge delivery that can be retried or aborted.
      * ** UNDER CONSTRUCTION **
      */
-    class AcknowledgeRequestState extends RequestState {
+    static class AcknowledgeRequestState extends RequestState {
 
         /**
          * The node to send the request to.
@@ -546,19 +546,11 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
          */
         private final Optional<Long> expirationTimeMs;
 
-        /**
-         * True if the request expiration time has been reached. This is set when validating the
-         * request expiration on {@link #poll(long)} before sending it. It is used to know if a
-         * request should be retried on TimeoutException.
-         */
-        boolean isExpired;
-
         AcknowledgeRequestState(LogContext logContext, String owner,
                                 long retryBackoffMs, long retryBackoffMaxMs,
                                 Optional<Long> expirationTimeMs,
                                 int node,
-                                Map<TopicIdPartition, Acknowledgements> acknowledgementsMap)
-        {
+                                Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
             super(logContext, owner, retryBackoffMs, retryBackoffMaxMs);
             this.expirationTimeMs = expirationTimeMs;
             this.node = node;
@@ -574,5 +566,4 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return expirationTimeMs.isPresent() && expirationTimeMs.get() <= currentTimeMs;
         }
     }
-
 }
