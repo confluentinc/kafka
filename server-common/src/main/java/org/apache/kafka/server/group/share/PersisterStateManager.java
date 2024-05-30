@@ -25,12 +25,14 @@ import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
 import org.apache.kafka.common.requests.ReadShareGroupStateRequest;
+import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.util.InterBrokerSendThread;
 import org.apache.kafka.server.util.RequestAndCompletionHandler;
@@ -124,13 +126,15 @@ public class PersisterStateManager {
     private final int partition;
     private final int leaderEpoch;
     private final String coordinatorKey;
+    private final CompletableFuture<PartitionData> future;
 
-    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch) {
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<PartitionData> future) {
       this.groupId = groupId;
       this.topicId = topicId;
       this.partition = partition;
       this.leaderEpoch = leaderEpoch;
       this.coordinatorKey = groupId + ":" + topicId + ":" + partition;
+      this.future = future;
     }
 
     @Override
@@ -148,7 +152,7 @@ public class PersisterStateManager {
       List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
       if (coordinators.size() != 1) {
         log.error("ReadState coordinator response for {} is invalid", coordinatorKey);
-        //todo smjn: how to handle?
+        future.completeExceptionally(new IllegalStateException("Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId));
       }
       FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
       Errors error = Errors.forCode(coordinatorData.errorCode());
@@ -156,12 +160,46 @@ public class PersisterStateManager {
         log.info("ReadState find coordinator response received.");
         coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
         // now we want the read state call to happen
-        // enqueue(this)  //todo smjn: enable this when read RPC is working
+         enqueue(this);
       }
     }
 
+    private PartitionData returnErrorPartitionData(int partition, short errorCode, String errorMessage) {
+      return new PartitionData(
+              partition,
+              0,
+              0,
+              errorCode,
+              errorMessage,
+              0,
+              null
+      );
+    }
+
     private void handleReadShareGroupResponse(ClientResponse response) {
-      log.info("ReadState response");
+        ReadShareGroupStateResponse readShareGroupStateResponse = (ReadShareGroupStateResponse) response.responseBody();
+        ReadShareGroupStateResult result = ReadShareGroupStateResult.from(readShareGroupStateResponse.data());
+        String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
+        if (result.topicsData().size() != 1) {
+          // TODO cwadhwa : do not complete exceptionally, add error codes and error messages
+          log.error("ReadState response for {} is invalid", coordinatorKey);
+          future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+        }
+        TopicData<PartitionAllData> topicData = result.topicsData().get(0);
+        if (!topicData.topicId().equals(topicId)) {
+          log.error("ReadState response for {} is invalid", coordinatorKey);
+          future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+        }
+        if (topicData.partitions().size() != 1) {
+          log.error("ReadState response for {} is invalid", coordinatorKey);
+          future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+        }
+        PartitionData partitionData = (PartitionData) topicData.partitions().get(0);
+        if (!(partitionData.partition() == partition)) {
+          log.error("ReadState response for {} is invalid", coordinatorKey);
+          future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+        }
+        future.complete(partitionData);
     }
 
     @Override
@@ -245,16 +283,15 @@ public class PersisterStateManager {
               handler
           ));
         }
-        //todo smjn: handle the read RPC here when its lifecycle is complete
-//        else {
-//          // share coord node already available
-//          return Collections.singletonList(new RequestAndCompletionHandler(
-//              System.currentTimeMillis(),
-//              handler.shareCoordinatorNode(),
-//              handler.requestBuilder(),
-//              handler
-//          ));
-//        }
+        else {
+          // share coordinator node already available
+          return Collections.singletonList(new RequestAndCompletionHandler(
+              System.currentTimeMillis(),
+              handler.shareCoordinatorNode(),
+              handler.requestBuilder(),
+              handler
+          ));
+        }
       }
       return Collections.emptyList();
     }

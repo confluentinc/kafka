@@ -18,10 +18,13 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.TransactionResult;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.Record;
+import org.apache.kafka.coordinator.group.generated.ShareSnapshotValue;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetrics;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetricsShard;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorShard;
@@ -30,6 +33,7 @@ import org.apache.kafka.coordinator.group.runtime.CoordinatorTimer;
 import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.timeline.SnapshotRegistry;
+import org.apache.kafka.timeline.TimelineHashMap;
 import org.slf4j.Logger;
 
 public class ShareCoordinatorShard implements CoordinatorShard<Record> {
@@ -39,6 +43,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final ShareCoordinatorConfig config;
   private final CoordinatorMetrics coordinatorMetrics;
   private final CoordinatorMetricsShard metricsShard;
+
+  private final TimelineHashMap<String, ShareSnapshotValue> shareStateMap;
 
   public static class Builder implements CoordinatorShardBuilder<ShareCoordinatorShard, Record> {
     private ShareCoordinatorConfig config;
@@ -115,7 +121,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
           timer,
           config,
           coordinatorMetrics,
-          metricsShard
+          metricsShard,
+          snapshotRegistry
       );
     }
   }
@@ -126,7 +133,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
       CoordinatorTimer<Void, Record> timer,
       ShareCoordinatorConfig config,
       CoordinatorMetrics coordinatorMetrics,
-      CoordinatorMetricsShard metricsShard
+      CoordinatorMetricsShard metricsShard,
+      SnapshotRegistry snapshotRegistry
   ) {
     this.log = logContext.logger(ShareCoordinatorShard.class);
     this.time = time;
@@ -134,6 +142,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     this.config = config;
     this.coordinatorMetrics = coordinatorMetrics;
     this.metricsShard = metricsShard;
+    this.shareStateMap = new TimelineHashMap<>(snapshotRegistry, 0);
   }
 
   @Override
@@ -159,5 +168,29 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   @Override
   public void replayEndTransactionMarker(long producerId, short producerEpoch, TransactionResult result) throws RuntimeException {
     CoordinatorShard.super.replayEndTransactionMarker(producerId, producerEpoch, result);
+  }
+
+  public ReadShareGroupStateResponseData.PartitionResult readShareGroupState(String groupId, String topicId, int partition, Long offset) {
+    ReadShareGroupStateResponseData.PartitionResult partitionResult = new ReadShareGroupStateResponseData.PartitionResult();
+
+    String coordinatorKey = groupId + ":" + topicId + ":" + partition;
+    ShareSnapshotValue snapshotValue = shareStateMap.get(coordinatorKey, offset);
+
+    // TODO cwadhwa : Add validations
+    // TODO cwadhwa : handle cases where snapshotValue in null
+    return partitionResult
+            .setErrorCode(Errors.NONE.code())
+            .setErrorMessage("")
+            .setPartition(partition)
+            .setStartOffset(snapshotValue.startOffset())
+            .setStateEpoch(snapshotValue.stateEpoch())
+            .setStateBatches(snapshotValue.stateBatches().stream().map(
+                    stateBatch -> new ReadShareGroupStateResponseData.StateBatch()
+                            .setFirstOffset(stateBatch.firstOffset())
+                            .setLastOffset(stateBatch.lastOffset())
+                            .setDeliveryState(stateBatch.deliveryState())
+                            .setDeliveryCount(stateBatch.deliveryCount())
+            ).collect(java.util.stream.Collectors.toList()
+            ));
   }
 }

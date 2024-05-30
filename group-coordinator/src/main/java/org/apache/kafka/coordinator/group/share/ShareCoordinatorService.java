@@ -17,7 +17,14 @@
 
 package org.apache.kafka.coordinator.group.share;
 
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.config.TopicConfig;
+import org.apache.kafka.common.internals.Topic;
+import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
@@ -34,9 +41,14 @@ import org.apache.kafka.server.util.timer.Timer;
 import org.slf4j.Logger;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
+import java.util.stream.Collectors;
 
 public class ShareCoordinatorService implements ShareCoordinator {
   private final ShareCoordinatorConfig config;
@@ -166,9 +178,105 @@ public class ShareCoordinatorService implements ShareCoordinator {
     this.shareCoordinatorMetrics = shareCoordinatorMetrics;
   }
 
+  /**
+   * @return The topic partition for the given group.
+   */
+  private TopicPartition topicPartitionFor(
+          String coordinatorKey
+  ) {
+    return new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionFor(coordinatorKey));
+  }
+
   @Override
   public int partitionFor(String key) {
     return Utils.abs(key.hashCode()) % numPartitions;
+  }
+
+  @Override
+  public CompletableFuture<ReadShareGroupStateResponseData> readShareGroupStates(
+          RequestContext context,
+          ReadShareGroupStateRequestData requestData
+  ) {
+    String groupId = requestData.groupId();
+
+    // A map to store the futures for each topicId and partition.
+    HashMap<String, HashMap<Integer, CompletableFuture<ReadShareGroupStateResponseData.PartitionResult>>> futures = new HashMap<>();
+
+    requestData.topics().forEach(topicData -> {
+      String topicId = topicData.topicId().toString();
+      topicData.partitions().forEach(partitionData -> {
+        // Getting the response for Read Share State pr topic partition
+        CompletableFuture<ReadShareGroupStateResponseData.PartitionResult> future =
+                readShareGroupState(context, groupId, topicId, partitionData);
+        if (futures.containsKey(topicId)) {
+          futures.get(topicId).put(partitionData.partition(), future);
+        } else {
+          HashMap<Integer, CompletableFuture<ReadShareGroupStateResponseData.PartitionResult>> map = new HashMap<>();
+          map.put(partitionData.partition(), future);
+          futures.put(topicId, map);
+        }
+      });
+    });
+
+
+    // Combine all futures into a single CompletableFuture<Void>
+    CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.values().stream()
+            .flatMap(map -> map.values().stream()).toArray(CompletableFuture[]::new));
+
+    // Transform the combined CompletableFuture<Void> into CompletableFuture<ReadShareGroupStateResponseData>
+    return allOf.thenApply(v -> {
+      List<ReadShareGroupStateResponseData.ReadStateResult> readStateResult = futures.entrySet().stream()
+              .map(topicEntry -> {
+                Uuid topicId = Uuid.fromString(topicEntry.getKey());
+                List<ReadShareGroupStateResponseData.PartitionResult> partitionDataList =
+                        topicEntry.getValue().values().stream()
+                        .map(future -> {
+                          try {
+                            return future.get();
+                          } catch (InterruptedException | ExecutionException e) {
+                            throw new RuntimeException(e);
+                          }
+                        })
+                        .collect(Collectors.toList());
+                return new ReadShareGroupStateResponseData.ReadStateResult().setTopicId(topicId).setPartitions(partitionDataList);
+              })
+              .collect(Collectors.toList());
+      return new ReadShareGroupStateResponseData().setResults(readStateResult);
+    });
+  }
+
+  @Override
+  public CompletableFuture<ReadShareGroupStateResponseData.PartitionResult> readShareGroupState(
+          RequestContext context,
+          String groupId,
+          String topicId,
+          ReadShareGroupStateRequestData.PartitionData requestPartition
+  ) {
+    if (!isActive.get()) {
+      return CompletableFuture.completedFuture(
+              new ReadShareGroupStateResponseData.PartitionResult()
+                      .setPartition(requestPartition.partition())
+                      .setErrorCode(Errors.COORDINATOR_NOT_AVAILABLE.code())
+                      .setErrorMessage("Share coordinator is not available.")
+      );
+    }
+
+    if (!isGroupIdNotEmpty(groupId)) {
+      return CompletableFuture.completedFuture(
+              new ReadShareGroupStateResponseData.PartitionResult()
+                      .setPartition(requestPartition.partition())
+                      .setErrorCode(Errors.INVALID_GROUP_ID.code())
+                      .setErrorMessage("Invalid Group Id in the request.")
+      );
+    }
+
+    String coordinatorKey = groupId + ":" + topicId + ":" + requestPartition.partition();
+
+    return runtime.scheduleReadOperation(
+            "fetch-offsets",
+            topicPartitionFor(coordinatorKey),
+            (coordinator, offset) -> coordinator.readShareGroupState(groupId, topicId, requestPartition.partition(), offset)
+    );
   }
 
   @Override
@@ -208,4 +316,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
     Utils.closeQuietly(shareCoordinatorMetrics, "share coordinator metrics");
     log.info("Shutdown complete.");
   }
+
+  private static boolean isGroupIdNotEmpty(String groupId) {
+    return groupId != null && !groupId.isEmpty();
+  }
+
 }
