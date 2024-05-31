@@ -933,7 +933,9 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         """Return process ids associated with running processes on the given node."""
         try:
             cmd = "ps ax | grep -e %s -e %s | grep -v grep | awk '{print $1}'" % (self.java_class_name(), self.deprecated_cp_java_class_name())
+            print("MANI cmd %s" % cmd, flush=True)
             pid_arr = [pid for pid in node.account.ssh_capture(cmd, allow_fail=True, callback=int)]
+            print("MANI pid_arr %s" % pid_arr, flush=True)
             return pid_arr
         except (RemoteCommandError, ValueError) as e:
             return []
