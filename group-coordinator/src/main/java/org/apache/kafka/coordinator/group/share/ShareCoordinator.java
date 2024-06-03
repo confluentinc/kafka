@@ -18,8 +18,15 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.annotation.InterfaceStability;
+import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
+import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.requests.ReadShareGroupStateRequest;
+import org.apache.kafka.common.requests.RequestContext;
 
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.IntSupplier;
 
 @InterfaceStability.Evolving
@@ -32,6 +39,19 @@ public interface ShareCoordinator {
    * @return The partition index.
    */
   int partitionFor(String key);
+
+  /**
+   * Read Share Group States.
+   *
+   * @param context           The coordinator request context.
+   * @param requestData       The ReadShareGroupStateRequest data.
+   *
+   * @return A future yielding the states for multiple share partitions or an exception.
+   */
+  CompletableFuture<ReadShareGroupStateResponseData> readShareGroupStates(
+          RequestContext context,
+          ReadShareGroupStateRequestData requestData
+  );
 
   /**
    * Return the configuration properties of the share-group state topic.
