@@ -806,7 +806,13 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         return s
 
     def start_cmd(self, node):
-        cmd = "export JMX_PORT=%d; " % self.jmx_port
+        """
+        To bring up kafka using native image, pass following in ducktape options
+        --globals '{"kafka_mode": "native"}'
+        """
+        kafka_mode = self.context.globals.get("kafka_mode", "")
+        cmd = f"export KAFKA_MODE={kafka_mode}; "
+        cmd += "export JMX_PORT=%d; " % self.jmx_port
         cmd += "export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\"; " % self.LOG4J_CONFIG
         heap_kafka_opts = "-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=%s" % \
                           self.logs["kafka_heap_dump_file"]["path"]
@@ -994,9 +1000,9 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     def clean_node(self, node):
         JmxMixin.clean_node(self, node)
         self.security_config.clean_node(node)
-        node.account.kill_java_processes(self.java_class_name(),
+        node.account.kill_process(self.java_class_name(),
                                          clean_shutdown=False, allow_fail=True)
-        node.account.kill_java_processes(self.deprecated_cp_java_class_name(),
+        node.account.kill_process(self.deprecated_cp_java_class_name(),
                                          clean_shutdown=False, allow_fail=True)
         node.account.ssh("sudo rm -rf -- %s" % KafkaService.PERSISTENT_ROOT, allow_fail=False)
 
