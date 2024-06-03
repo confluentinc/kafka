@@ -62,7 +62,7 @@ public class ShareGroupsCommand {
       // should have exactly one action
       long actions = Stream.of(opts.listOpt, opts.describeOpt, opts.deleteOpt, opts.resetOffsetsOpt, opts.deleteOffsetsOpt).filter(opts.options::has).count();
       if (actions != 1)
-        CommandLineUtils.printUsageAndExit(opts.parser, "Command must include exactly one action: --list, --describe, --delete, --reset-offsets, --delete-offsets");
+        CommandLineUtils.printUsageAndExit(opts.parser, "Command must include exactly one action: --list, --describe, --delete, --reset-offsets, --delete-offsets.");
 
       run(opts);
     } catch (OptionException e) {
@@ -177,7 +177,7 @@ public class ShareGroupsCommand {
         printMemberDetails(description.members());
         return;
       }
-      printGroupDescriptionTable(description, shouldPrintState, shouldPrintMemDetails);
+      printGroupDescriptionTable(description, shouldPrintState);
     }
 
     ShareGroupDescription getDescribeGroup(String group) throws ExecutionException, InterruptedException {
@@ -212,9 +212,9 @@ public class ShareGroupsCommand {
       return lag;
     }
 
-    private void printGroupDescriptionTable(ShareGroupDescription description, boolean shouldPrintState, boolean shouldPrintMemDetails) throws ExecutionException, InterruptedException {
+    private void printGroupDescriptionTable(ShareGroupDescription description, boolean shouldPrintState) throws ExecutionException, InterruptedException {
       Map<TopicPartition, Long> offsets = getOffsetLag(description.members());
-      boolean notOffset = offsets == null || offsets.size() == 0;
+      boolean notOffset = offsets == null || offsets.isEmpty();
       if (notOffset) {
         offsets = new HashMap<>();
         offsets.put(new TopicPartition("SENTINEL", -1), -1L);

@@ -19,6 +19,7 @@ package org.apache.kafka.coordinator.group.share;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.UnknownMemberIdException;
+import org.apache.kafka.common.message.ListGroupsResponseData;
 import org.apache.kafka.common.message.ShareGroupDescribeResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.coordinator.group.AbstractGroup;
@@ -41,6 +42,8 @@ import static org.apache.kafka.coordinator.group.share.ShareGroup.ShareGroupStat
  * A Share Group.
  */
 public class ShareGroup extends AbstractGroup {
+
+    public static final String PROTOCOL_TYPE = "share";
 
     public enum ShareGroupState {
         EMPTY("empty"),
@@ -79,6 +82,17 @@ public class ShareGroup extends AbstractGroup {
     @Override
     public GroupType type() {
         return GroupType.SHARE;
+    }
+
+    /**
+     * @return the group formatted as a list group response based on the committed offset.
+     */
+    public ListGroupsResponseData.ListedGroup asListedGroup(long committedOffset) {
+        return new ListGroupsResponseData.ListedGroup()
+                .setGroupId(groupId)
+                .setProtocolType(PROTOCOL_TYPE)
+                .setGroupState(stateAsString(committedOffset))
+                .setGroupType(type().toString());
     }
 
     /**
