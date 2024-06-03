@@ -4827,9 +4827,43 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
 
+    val requestDataWithAuthorizedPartitions : ReadShareGroupStateRequestData = new ReadShareGroupStateRequestData()
+      .setGroupId(requestData.groupId())
+
+    val (authorizedTopics, unauthorizedTopics) = authHelper.partitionSeqByAuthorized(
+      request.context,
+      DESCRIBE,
+      TOPIC,
+      requestData.topics.asScala
+    )(_.topicId.toString())
+
+    val authorizedReadStateData : util.List[ReadShareGroupStateRequestData.ReadStateData] =
+      new util.ArrayList[ReadShareGroupStateRequestData.ReadStateData]()
+    requestData.topics().forEach(topic => {
+      if (authorizedTopics.contains(topic.topicId.toString())) {
+        authorizedReadStateData.add(topic)
+      }
+    })
+
+    requestDataWithAuthorizedPartitions.setTopics(authorizedReadStateData)
+
     // Finding the ShareGroupState data for the given request
     val responseData : ReadShareGroupStateResponseData =
-      shareCoordinator.readShareGroupStates(request.context, requestData).get()
+      shareCoordinator.readShareGroupStates(request.context, requestDataWithAuthorizedPartitions).get()
+
+    // Adding unauthorized topics to the response with TOPIC_AUTHORIZATION_FAILED error
+    requestData.topics().stream().filter(topic => {
+      unauthorizedTopics.contains(topic.topicId().toString)
+    }).forEach(topic => {
+      responseData.results.add(new ReadShareGroupStateResponseData.ReadStateResult()
+        .setTopicId(topic.topicId())
+        .setPartitions(topic.partitions().stream().map(partition => {
+        new ReadShareGroupStateResponseData.PartitionResult()
+          .setPartition(partition.partition())
+          .setErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED.code())
+          .setErrorMessage(Errors.TOPIC_AUTHORIZATION_FAILED.message())
+      }).collect(util.stream.Collectors.toList())))
+    })
 
     requestHelper.sendMaybeThrottle(request, new ReadShareGroupStateResponse(responseData))
 

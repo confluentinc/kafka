@@ -40,24 +40,17 @@ public interface ShareCoordinator {
    */
   int partitionFor(String key);
 
+  /**
+   * Read Share Group States.
+   *
+   * @param context           The coordinator request context.
+   * @param requestData       The ReadShareGroupStateRequest data.
+   *
+   * @return A future yielding the states for multiple share partitions or an exception.
+   */
   CompletableFuture<ReadShareGroupStateResponseData> readShareGroupStates(
           RequestContext context,
           ReadShareGroupStateRequestData requestData
-  );
-
-  /**
-   * Read Share Group State.
-   *
-   * @param context           The coordinator request context.
-   * @param requestPartition  The ReadShareGroupStateRequest.Partition info.
-   *
-   * @return A future yielding the results or an exception.
-   */
-  CompletableFuture<ReadShareGroupStateResponseData.PartitionResult> readShareGroupState(
-          RequestContext context,
-          String groupId,
-          String topicId,
-          ReadShareGroupStateRequestData.PartitionData requestPartition
   );
 
   /**
