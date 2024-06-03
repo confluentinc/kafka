@@ -16,7 +16,7 @@
  */
 package org.apache.kafka.clients.producer.internals;
 
-import java.util.Optional;
+import java.util.OptionalInt;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -81,7 +81,7 @@ public final class ProducerBatch {
     private boolean reopened;
 
     // Tracks the current-leader's epoch to which this batch would be sent, in the current to produce the batch.
-    private Optional<Integer> currentLeaderEpoch;
+    private OptionalInt currentLeaderEpoch;
     // Tracks the attempt in which leader was changed to currentLeaderEpoch for the 1st time.
     private int attemptsWhenLeaderLastChanged;
 
@@ -99,8 +99,8 @@ public final class ProducerBatch {
         this.retry = false;
         this.isSplitBatch = isSplitBatch;
         float compressionRatioEstimation = CompressionRatioEstimator.estimation(topicPartition.topic(),
-                                                                                recordsBuilder.compressionType());
-        this.currentLeaderEpoch = Optional.empty();
+                                                                                recordsBuilder.compression().type());
+        this.currentLeaderEpoch = OptionalInt.empty();
         this.attemptsWhenLeaderLastChanged = 0;
         recordsBuilder.setEstimatedCompressionRatio(compressionRatioEstimation);
     }
@@ -109,8 +109,9 @@ public final class ProducerBatch {
      * It will update the leader to which this batch will be produced for the ongoing attempt, if a newer leader is known.
      * @param latestLeaderEpoch latest leader's epoch.
      */
-    void maybeUpdateLeaderEpoch(Optional<Integer> latestLeaderEpoch) {
-        if (!currentLeaderEpoch.equals(latestLeaderEpoch)) {
+    void maybeUpdateLeaderEpoch(OptionalInt latestLeaderEpoch) {
+        if (latestLeaderEpoch.isPresent()
+            && (!currentLeaderEpoch.isPresent() || currentLeaderEpoch.getAsInt() < latestLeaderEpoch.getAsInt())) {
             log.trace("For {}, leader will be updated, currentLeaderEpoch: {}, attemptsWhenLeaderLastChanged:{}, latestLeaderEpoch: {}, current attempt: {}",
                 this, currentLeaderEpoch, attemptsWhenLeaderLastChanged, latestLeaderEpoch, attempts);
             attemptsWhenLeaderLastChanged = attempts();
@@ -130,9 +131,7 @@ public final class ProducerBatch {
         boolean isRetry = attempts >= 1;
         if (!isRetry)
             return false;
-        if (attempts == attemptsWhenLeaderLastChanged)
-            return true;
-        return false;
+        return attempts == attemptsWhenLeaderLastChanged;
     }
 
 
@@ -147,7 +146,7 @@ public final class ProducerBatch {
         } else {
             this.recordsBuilder.append(timestamp, key, value, headers);
             this.maxRecordSize = Math.max(this.maxRecordSize, AbstractRecords.estimateSizeInBytesUpperBound(magic(),
-                    recordsBuilder.compressionType(), key, value, headers));
+                    recordsBuilder.compression().type(), key, value, headers));
             this.lastAppendTime = now;
             FutureRecordMetadata future = new FutureRecordMetadata(this.produceFuture, this.recordCount,
                                                                    timestamp,
@@ -173,7 +172,7 @@ public final class ProducerBatch {
             // No need to get the CRC.
             this.recordsBuilder.append(timestamp, key, value, headers);
             this.maxRecordSize = Math.max(this.maxRecordSize, AbstractRecords.estimateSizeInBytesUpperBound(magic(),
-                    recordsBuilder.compressionType(), key, value, headers));
+                    recordsBuilder.compression().type(), key, value, headers));
             FutureRecordMetadata future = new FutureRecordMetadata(this.produceFuture, this.recordCount,
                                                                    timestamp,
                                                                    key == null ? -1 : key.remaining(),
@@ -378,19 +377,19 @@ public final class ProducerBatch {
 
     private ProducerBatch createBatchOffAccumulatorForRecord(Record record, int batchSize) {
         int initialSize = Math.max(AbstractRecords.estimateSizeInBytesUpperBound(magic(),
-                recordsBuilder.compressionType(), record.key(), record.value(), record.headers()), batchSize);
+                recordsBuilder.compression().type(), record.key(), record.value(), record.headers()), batchSize);
         ByteBuffer buffer = ByteBuffer.allocate(initialSize);
 
         // Note that we intentionally do not set producer state (producerId, epoch, sequence, and isTransactional)
         // for the newly created batch. This will be set when the batch is dequeued for sending (which is consistent
         // with how normal batches are handled).
-        MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, magic(), recordsBuilder.compressionType(),
+        MemoryRecordsBuilder builder = MemoryRecords.builder(buffer, magic(), recordsBuilder.compression(),
                 TimestampType.CREATE_TIME, 0L);
         return new ProducerBatch(topicPartition, builder, this.createdMs, true);
     }
 
     public boolean isCompressed() {
-        return recordsBuilder.compressionType() != CompressionType.NONE;
+        return recordsBuilder.compression().type() != CompressionType.NONE;
     }
 
     /**
@@ -492,7 +491,7 @@ public final class ProducerBatch {
         recordsBuilder.close();
         if (!recordsBuilder.isControlBatch()) {
             CompressionRatioEstimator.updateEstimation(topicPartition.topic(),
-                                                       recordsBuilder.compressionType(),
+                                                       recordsBuilder.compression().type(),
                                                        (float) recordsBuilder.compressionRatio());
         }
         reopened = false;
@@ -558,7 +557,7 @@ public final class ProducerBatch {
     }
 
     // VisibleForTesting
-    Optional<Integer> currentLeaderEpoch() {
+    OptionalInt currentLeaderEpoch() {
         return currentLeaderEpoch;
     }
 

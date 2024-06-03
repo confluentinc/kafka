@@ -53,7 +53,6 @@ import org.apache.kafka.connect.util.Callback;
 import org.apache.kafka.connect.util.ConnectUtils;
 import org.apache.kafka.connect.util.ConnectorTaskId;
 import org.apache.kafka.connect.util.KafkaBasedLog;
-import org.apache.kafka.connect.util.SharedTopicAdmin;
 import org.apache.kafka.connect.util.TopicAdmin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +66,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -294,14 +292,13 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
     private final String topic;
     // Data is passed to the log already serialized. We use a converter to handle translating to/from generic Connect
     // format to serialized form
-    private final KafkaBasedLog<String, byte[]> configLog;
+    private KafkaBasedLog<String, byte[]> configLog;
     // Connector -> # of tasks
     final Map<String, Integer> connectorTaskCounts = new HashMap<>();
     // Connector and task configs: name or id -> config map
     final Map<String, Map<String, String>> connectorConfigs = new HashMap<>();
     final Map<ConnectorTaskId, Map<String, String>> taskConfigs = new HashMap<>();
     private final Supplier<TopicAdmin> topicAdminSupplier;
-    private SharedTopicAdmin ownTopicAdmin;
     private final String clientId;
 
     // Set of connectors where we saw a task commit with an incomplete set of task config updates, indicating the data
@@ -330,9 +327,9 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
     private final Map<String, Object> fencableProducerProps;
     private final Time time;
 
-    @Deprecated
-    public KafkaConfigBackingStore(Converter converter, DistributedConfig config, WorkerConfigTransformer configTransformer) {
-        this(converter, config, configTransformer, null, "connect-distributed-");
+    //VisibleForTesting
+    void setConfigLog(KafkaBasedLog<String, byte[]> configLog) {
+        this.configLog = configLog;
     }
 
     public KafkaConfigBackingStore(Converter converter, DistributedConfig config, WorkerConfigTransformer configTransformer, Supplier<TopicAdmin> adminSupplier, String clientIdBase) {
@@ -361,7 +358,7 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
 
         this.usesFencableWriter = config.transactionalLeaderEnabled();
         this.topic = config.getString(DistributedConfig.CONFIG_TOPIC_CONFIG);
-        if (this.topic == null || this.topic.trim().length() == 0)
+        if (this.topic == null || this.topic.trim().isEmpty())
             throw new ConfigException("Must specify topic for connector configuration.");
 
         configLog = setupAndCreateKafkaBasedLog(this.topic, config);
@@ -407,7 +404,6 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
         log.info("Closing KafkaConfigBackingStore");
 
         relinquishWritePrivileges();
-        Utils.closeQuietly(ownTopicAdmin, "admin for config topic");
         Utils.closeQuietly(configLog::stop, "KafkaBasedLog for config topic");
 
         log.info("Closed KafkaConfigBackingStore");
@@ -781,7 +777,7 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
         ConnectUtils.addMetricsContextProperties(consumerProps, config, clusterId);
         if (config.exactlyOnceSourceEnabled()) {
             ConnectUtils.ensureProperty(
-                    consumerProps, ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.name().toLowerCase(Locale.ROOT),
+                    consumerProps, ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.toString(),
                     "for the worker's config topic consumer when exactly-once source support is enabled",
                     true
             );
@@ -790,14 +786,7 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
         Map<String, Object> adminProps = new HashMap<>(originals);
         ConnectUtils.addMetricsContextProperties(adminProps, config, clusterId);
         adminProps.put(CommonClientConfigs.CLIENT_ID_CONFIG, clientId);
-        Supplier<TopicAdmin> adminSupplier;
-        if (topicAdminSupplier != null) {
-            adminSupplier = topicAdminSupplier;
-        } else {
-            // Create our own topic admin supplier that we'll close when we're stopped
-            ownTopicAdmin = new SharedTopicAdmin(adminProps);
-            adminSupplier = ownTopicAdmin;
-        }
+
         Map<String, Object> topicSettings = config instanceof DistributedConfig
                                             ? ((DistributedConfig) config).configStorageTopicSettings()
                                             : Collections.emptyMap();
@@ -808,7 +797,7 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
                 .replicationFactor(config.getShort(DistributedConfig.CONFIG_STORAGE_REPLICATION_FACTOR_CONFIG))
                 .build();
 
-        return createKafkaBasedLog(topic, producerProps, consumerProps, new ConsumeCallback(), topicDescription, adminSupplier, config, time);
+        return createKafkaBasedLog(topic, producerProps, consumerProps, new ConsumeCallback(), topicDescription, topicAdminSupplier, config, time);
     }
 
     /**
@@ -1261,7 +1250,7 @@ public class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore impleme
 
         try {
             int taskNum = Integer.parseInt(parts[parts.length - 1]);
-            String connectorName = Utils.join(Arrays.copyOfRange(parts, 1, parts.length - 1), "-");
+            String connectorName = String.join("-", Arrays.copyOfRange(parts, 1, parts.length - 1));
             return new ConnectorTaskId(connectorName, taskNum);
         } catch (NumberFormatException e) {
             return null;

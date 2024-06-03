@@ -258,6 +258,10 @@ public enum MetadataVersion {
         this.didMetadataChange = didMetadataChange;
     }
 
+    public String featureName() {
+        return FEATURE_NAME;
+    }
+
     public short featureLevel() {
         return featureLevel;
     }
@@ -563,7 +567,7 @@ public enum MetadataVersion {
                 return metadataVersion;
             }
         }
-        throw new IllegalArgumentException("No MetadataVersion with metadata version " + version);
+        throw new IllegalArgumentException("No MetadataVersion with feature level " + version);
     }
 
     /**

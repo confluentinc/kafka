@@ -34,7 +34,6 @@ Vagrantfile.local
 
 config/server-*
 config/zookeeper-*
-core/data/*
 gradle/wrapper/*.jar
 gradlew.bat
 
@@ -62,3 +61,6 @@ storage/kafka-tiered-storage/
 
 docker/test/report_*.html
 __pycache__
+
+mk-include/
+.mk-include-timestamp

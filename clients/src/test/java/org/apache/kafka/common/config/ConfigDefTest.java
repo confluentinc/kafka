@@ -95,7 +95,7 @@ public class ConfigDefTest {
 
     @Test
     public void testNullDefault() {
-        ConfigDef def = new ConfigDef().define("a", Type.INT, null, null, null, "docs");
+        ConfigDef def = new ConfigDef().define("a", Type.INT, null, null, "docs");
         Map<String, Object> vals = def.parse(new Properties());
 
         assertNull(vals.get("a"));
@@ -450,7 +450,7 @@ public class ConfigDefTest {
 
     private static class IntegerRecommender implements ConfigDef.Recommender {
 
-        private boolean hasParent;
+        private final boolean hasParent;
 
         public IntegerRecommender(boolean hasParent) {
             this.hasParent = hasParent;
@@ -684,7 +684,7 @@ public class ConfigDefTest {
         }
     }
 
-    private class NestedClass {
+    private static class NestedClass {
     }
 
     @Test

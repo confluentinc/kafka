@@ -45,6 +45,7 @@ import org.apache.kafka.streams.internals.StreamsConfigUtils;
 import org.apache.kafka.streams.internals.UpgradeFromValues;
 import org.apache.kafka.streams.processor.FailOnInvalidTimestamp;
 import org.apache.kafka.streams.processor.TimestampExtractor;
+import org.apache.kafka.streams.processor.assignment.TaskAssignor;
 import org.apache.kafka.streams.processor.internals.DefaultKafkaClientSupplier;
 import org.apache.kafka.streams.processor.internals.StreamsPartitionAssignor;
 import org.apache.kafka.streams.processor.internals.assignment.RackAwareTaskAssignor;
@@ -57,7 +58,6 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -420,6 +420,12 @@ public class StreamsConfig extends AbstractConfig {
     public static final String UPGRADE_FROM_36 = UpgradeFromValues.UPGRADE_FROM_36.toString();
 
     /**
+     * Config value for parameter {@link #UPGRADE_FROM_CONFIG "upgrade.from"} for upgrading an application from version {@code 3.7.x}.
+     */
+    @SuppressWarnings("WeakerAccess")
+    public static final String UPGRADE_FROM_37 = UpgradeFromValues.UPGRADE_FROM_37.toString();
+
+    /**
      * Config value for parameter {@link #PROCESSING_GUARANTEE_CONFIG "processing.guarantee"} for at-least-once processing guarantees.
      */
     @SuppressWarnings("WeakerAccess")
@@ -432,7 +438,7 @@ public class StreamsConfig extends AbstractConfig {
      * If you enable this feature Kafka Streams will use more resources (like broker connections)
      * compared to {@link #AT_LEAST_ONCE "at_least_once"} and {@link #EXACTLY_ONCE_V2 "exactly_once_v2"}.
      *
-     * @deprecated Since 3.0.0, will be removed in 4.0. Use {@link #EXACTLY_ONCE_V2 "exactly_once_v2"} instead.
+     * @deprecated since 3.0.0, will be removed in 4.0. Use {@link #EXACTLY_ONCE_V2 "exactly_once_v2"} instead.
      */
     @SuppressWarnings("WeakerAccess")
     @Deprecated
@@ -445,7 +451,7 @@ public class StreamsConfig extends AbstractConfig {
      * If you enable this feature Kafka Streams will use fewer resources (like broker connections)
      * compared to the {@link #EXACTLY_ONCE} (deprecated) case.
      *
-     * @deprecated Since 3.0.0, will be removed in 4.0. Use {@link #EXACTLY_ONCE_V2 "exactly_once_v2"} instead.
+     * @deprecated since 3.0.0, will be removed in 4.0. Use {@link #EXACTLY_ONCE_V2 "exactly_once_v2"} instead.
      */
     @SuppressWarnings("WeakerAccess")
     @Deprecated
@@ -494,7 +500,8 @@ public class StreamsConfig extends AbstractConfig {
     public static final String BUILT_IN_METRICS_VERSION_CONFIG = "built.in.metrics.version";
     private static final String BUILT_IN_METRICS_VERSION_DOC = "Version of the built-in metrics to use.";
 
-    /** {@code cache.max.bytes.buffering} */
+    /** {@code cache.max.bytes.buffering}
+     * @deprecated since 3.4.0 Use {@link #STATESTORE_CACHE_MAX_BYTES_CONFIG "statestore.cache.max.bytes"} instead. */
     @SuppressWarnings("WeakerAccess")
     @Deprecated
     public static final String CACHE_MAX_BYTES_BUFFERING_CONFIG = "cache.max.bytes.buffering";
@@ -508,13 +515,14 @@ public class StreamsConfig extends AbstractConfig {
     /** {@code client.id} */
     @SuppressWarnings("WeakerAccess")
     public static final String CLIENT_ID_CONFIG = CommonClientConfigs.CLIENT_ID_CONFIG;
-    private static final String CLIENT_ID_DOC = "An ID prefix string used for the client IDs of internal [main-|restore-|global-]consumer, producer, and admin clients" +
-        " with pattern <code>&lt;client.id&gt;-[Global]StreamThread[-&lt;threadSequenceNumber$gt;]-&lt;consumer|producer|restore-consumer|global-consumer&gt;</code>.";
+    private static final String CLIENT_ID_DOC = "An ID prefix string used for the client IDs of internal (main, restore, and global) consumers , producers, and admin clients" +
+        " with pattern <code>&lt;client.id&gt;-[Global]StreamThread[-&lt;threadSequenceNumber&gt;]-&lt;consumer|producer|restore-consumer|global-consumer&gt;</code>.";
 
     /** {@code enable.metrics.push} */
     @SuppressWarnings("WeakerAccess")
     public static  final String ENABLE_METRICS_PUSH_CONFIG = CommonClientConfigs.ENABLE_METRICS_PUSH_CONFIG;
-    public static final String ENABLE_METRICS_PUSH_DOC = "Whether to enable pushing of internal [main-|restore-|global]consumer, producer, and admin client metrics to the cluster, if the cluster has a client metrics subscription which matches a client.";
+    public static final String ENABLE_METRICS_PUSH_DOC = "Whether to enable pushing of internal client metrics for (main, restore, and global) consumers, producers, and admin clients." + 
+        " The cluster must have a client metrics subscription which corresponds to a client.";
 
     /** {@code commit.interval.ms} */
     @SuppressWarnings("WeakerAccess")
@@ -565,14 +573,16 @@ public class StreamsConfig extends AbstractConfig {
     static final String DSL_STORE_SUPPLIERS_CLASS_DOC = "Defines which store implementations to plug in to DSL operators. Must implement the <code>org.apache.kafka.streams.state.DslStoreSuppliers</code> interface.";
     static final Class<?> DSL_STORE_SUPPLIERS_CLASS_DEFAULT = BuiltInDslStoreSuppliers.RocksDBDslStoreSuppliers.class;
 
-    /** {@code default.windowed.key.serde.inner} */
+    /** {@code default.windowed.key.serde.inner}
+     * @deprecated since 3.0.0  Use {@link #WINDOWED_INNER_CLASS_SERDE "windowed.inner.class.serde"} instead. */
     @SuppressWarnings("WeakerAccess")
     @Deprecated
     public static final String DEFAULT_WINDOWED_KEY_SERDE_INNER_CLASS = "default.windowed.key.serde.inner";
     private static final String DEFAULT_WINDOWED_KEY_SERDE_INNER_CLASS_DOC = "Default serializer / deserializer for the inner class of a windowed key. Must implement the " +
         "<code>org.apache.kafka.common.serialization.Serde</code> interface.";
 
-    /** {@code default.windowed.value.serde.inner} */
+    /** {@code default.windowed.value.serde.inner}
+     * @deprecated since 3.0.0  Use {@link #WINDOWED_INNER_CLASS_SERDE "windowed.inner.class.serde"} instead. */
     @SuppressWarnings("WeakerAccess")
     @Deprecated
     public static final String DEFAULT_WINDOWED_VALUE_SERDE_INNER_CLASS = "default.windowed.value.serde.inner";
@@ -583,7 +593,7 @@ public class StreamsConfig extends AbstractConfig {
     private static final String WINDOWED_INNER_CLASS_SERDE_DOC = " Default serializer / deserializer for the inner class of a windowed record. Must implement the " +
         "<code>org.apache.kafka.common.serialization.Serde</code> interface. Note that setting this config in KafkaStreams application would result " +
         "in an error as it is meant to be used only from Plain consumer client.";
-
+        
     /** {@code default key.serde} */
     @SuppressWarnings("WeakerAccess")
     public static final String DEFAULT_KEY_SERDE_CLASS_CONFIG = "default.key.serde";
@@ -648,7 +658,8 @@ public class StreamsConfig extends AbstractConfig {
     @SuppressWarnings("WeakerAccess")
     public static final String METRICS_SAMPLE_WINDOW_MS_CONFIG = CommonClientConfigs.METRICS_SAMPLE_WINDOW_MS_CONFIG;
 
-    /** {@code auto.include.jmx.reporter} */
+    /** {@code auto.include.jmx.reporter}
+     * @deprecated and will be removed in 4.0.0 */
     @Deprecated
     public static final String AUTO_INCLUDE_JMX_REPORTER_CONFIG = CommonClientConfigs.AUTO_INCLUDE_JMX_REPORTER_CONFIG;
 
@@ -749,7 +760,7 @@ public class StreamsConfig extends AbstractConfig {
     /** {@code state.dir} */
     @SuppressWarnings("WeakerAccess")
     public static final String STATE_DIR_CONFIG = "state.dir";
-    private static final String STATE_DIR_DOC = "Directory location for state store. This path must be unique for each streams instance sharing the same underlying filesystem.";
+    private static final String STATE_DIR_DOC = "Directory location for state store. This path must be unique for each streams instance sharing the same underlying filesystem. Note that if not configured, then the default location will be different in each environment as it is computed using System.getProperty(\"java.io.tmpdir\")";
 
     /** {@code task.timeout.ms} */
     public static final String TASK_TIMEOUT_MS_CONFIG = "task.timeout.ms";
@@ -775,7 +786,7 @@ public class StreamsConfig extends AbstractConfig {
         UPGRADE_FROM_25 + "\", \"" + UPGRADE_FROM_26 + "\", \"" + UPGRADE_FROM_27 + "\", \"" +
         UPGRADE_FROM_28 + "\", \"" + UPGRADE_FROM_30 + "\", \"" + UPGRADE_FROM_31 + "\", \"" +
         UPGRADE_FROM_32 + "\", \"" + UPGRADE_FROM_33 + "\", \"" + UPGRADE_FROM_34 + "\", \"" +
-        UPGRADE_FROM_35 + "\", \"" + UPGRADE_FROM_36 + "(for upgrading from the corresponding old version).";
+        UPGRADE_FROM_35 + "\", \"" + UPGRADE_FROM_36 + "\", \"" + UPGRADE_FROM_37 + "(for upgrading from the corresponding old version).";
 
     /** {@code windowstore.changelog.additional.retention.ms} */
     @SuppressWarnings("WeakerAccess")
@@ -810,6 +821,10 @@ public class StreamsConfig extends AbstractConfig {
         + "optimization algorithm favors minimizing cross rack traffic or minimize the movement of tasks in existing assignment. If set a larger value <code>" + RackAwareTaskAssignor.class.getName() + "</code> will "
         + "optimize to maintain the existing assignment. The default value is null which means it will use default non_overlap cost values in different assignors.";
 
+    @SuppressWarnings("WeakerAccess")
+    public static final String TASK_ASSIGNOR_CLASS_CONFIG = "task.assignor.class";
+    private static final String TASK_ASSIGNOR_CLASS_DOC = "A task assignor class or class name implementing the <code>" +
+                                                          TaskAssignor.class.getName() + "</code> interface. Defaults to the <code>HighAvailabilityTaskAssignor</code> class.";
 
     /**
      * {@code topology.optimization}
@@ -852,7 +867,8 @@ public class StreamsConfig extends AbstractConfig {
                     Type.STRING,
                     System.getProperty("java.io.tmpdir") + File.separator + "kafka-streams",
                     Importance.HIGH,
-                    STATE_DIR_DOC)
+                    STATE_DIR_DOC,
+                    "${java.io.tmpdir}")
 
             // MEDIUM
 
@@ -878,7 +894,8 @@ public class StreamsConfig extends AbstractConfig {
                     Type.STRING,
                     "",
                     Importance.MEDIUM,
-                    CLIENT_ID_DOC)
+                    CLIENT_ID_DOC,
+                    "<code>&lt;application.id&gt-&lt;random-UUID&gt</code>")
             .define(DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG,
                     Type.CLASS,
                     LogAndFailExceptionHandler.class.getName(),
@@ -968,6 +985,11 @@ public class StreamsConfig extends AbstractConfig {
                     null,
                     Importance.MEDIUM,
                     RACK_AWARE_ASSIGNMENT_TRAFFIC_COST_DOC)
+            .define(TASK_ASSIGNOR_CLASS_CONFIG,
+                    Type.STRING,
+                    null,
+                    Importance.MEDIUM,
+                    TASK_ASSIGNOR_CLASS_DOC)
             .define(REPLICATION_FACTOR_CONFIG,
                     Type.INT,
                     -1,
@@ -1207,7 +1229,7 @@ public class StreamsConfig extends AbstractConfig {
     private static final Map<String, Object> CONSUMER_EOS_OVERRIDES;
     static {
         final Map<String, Object> tempConsumerDefaultOverrides = new HashMap<>(CONSUMER_DEFAULT_OVERRIDES);
-        tempConsumerDefaultOverrides.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, READ_COMMITTED.name().toLowerCase(Locale.ROOT));
+        tempConsumerDefaultOverrides.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, READ_COMMITTED.toString());
         CONSUMER_EOS_OVERRIDES = Collections.unmodifiableMap(tempConsumerDefaultOverrides);
     }
 
@@ -1582,7 +1604,7 @@ public class StreamsConfig extends AbstractConfig {
      * Get the configs to the {@link KafkaConsumer main consumer}.
      * Properties using the prefix {@link #MAIN_CONSUMER_PREFIX} will be used in favor over
      * the properties prefixed with {@link #CONSUMER_PREFIX} and the non-prefixed versions
-     * (read the override precedence ordering in {@link #MAIN_CONSUMER_PREFIX}
+     * (read the override precedence ordering in {@link #MAIN_CONSUMER_PREFIX})
      * except in the case of {@link ConsumerConfig#BOOTSTRAP_SERVERS_CONFIG} where we always use the non-prefixed
      * version as we only support reading/writing from/to the same Kafka Cluster.
      * If not specified by {@link #MAIN_CONSUMER_PREFIX}, main consumer will share the general consumer configs
@@ -1656,7 +1678,7 @@ public class StreamsConfig extends AbstractConfig {
      * Get the configs for the {@link KafkaConsumer restore-consumer}.
      * Properties using the prefix {@link #RESTORE_CONSUMER_PREFIX} will be used in favor over
      * the properties prefixed with {@link #CONSUMER_PREFIX} and the non-prefixed versions
-     * (read the override precedence ordering in {@link #RESTORE_CONSUMER_PREFIX}
+     * (read the override precedence ordering in {@link #RESTORE_CONSUMER_PREFIX})
      * except in the case of {@link ConsumerConfig#BOOTSTRAP_SERVERS_CONFIG} where we always use the non-prefixed
      * version as we only support reading/writing from/to the same Kafka Cluster.
      * If not specified by {@link #RESTORE_CONSUMER_PREFIX}, restore consumer will share the general consumer configs
@@ -1689,7 +1711,7 @@ public class StreamsConfig extends AbstractConfig {
      * Get the configs for the {@link KafkaConsumer global consumer}.
      * Properties using the prefix {@link #GLOBAL_CONSUMER_PREFIX} will be used in favor over
      * the properties prefixed with {@link #CONSUMER_PREFIX} and the non-prefixed versions
-     * (read the override precedence ordering in {@link #GLOBAL_CONSUMER_PREFIX}
+     * (read the override precedence ordering in {@link #GLOBAL_CONSUMER_PREFIX})
      * except in the case of {@link ConsumerConfig#BOOTSTRAP_SERVERS_CONFIG} where we always use the non-prefixed
      * version as we only support reading/writing from/to the same Kafka Cluster.
      * If not specified by {@link #GLOBAL_CONSUMER_PREFIX}, global consumer will share the general consumer configs
@@ -1848,7 +1870,7 @@ public class StreamsConfig extends AbstractConfig {
      * Return an {@link Serde#configure(Map, boolean) configured} instance of {@link #DEFAULT_KEY_SERDE_CLASS_CONFIG key Serde
      * class}.
      *
-     * @return an configured instance of key Serde class
+     * @return a configured instance of key Serde class
      */
     @SuppressWarnings("WeakerAccess")
     public Serde<?> defaultKeySerde() {

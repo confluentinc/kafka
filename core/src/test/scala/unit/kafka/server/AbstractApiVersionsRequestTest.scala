@@ -16,7 +16,6 @@
  */
 package kafka.server
 
-import java.util.Properties
 import kafka.test.ClusterInstance
 import org.apache.kafka.clients.NodeApiVersions
 import org.apache.kafka.common.message.ApiMessageType.ListenerType
@@ -45,18 +44,6 @@ abstract class AbstractApiVersionsRequestTest(cluster: ClusterInstance) {
       cluster.brokerSocketServers().asScala.head
     }
     IntegrationTestUtils.connectAndReceive[ApiVersionsResponse](request, socket, listenerName)
-  }
-
-  // Configure control plane listener to make sure we have separate listeners for testing.
-  def brokerPropertyOverrides(properties: Properties): Unit = {
-    if (!cluster.isKRaftTest) {
-      val controlPlaneListenerName = "CONTROL_PLANE"
-      val securityProtocol = cluster.config().securityProtocol()
-      properties.setProperty(KafkaConfig.ControlPlaneListenerNameProp, controlPlaneListenerName)
-      properties.setProperty(KafkaConfig.ListenerSecurityProtocolMapProp, s"$controlPlaneListenerName:$securityProtocol,$securityProtocol:$securityProtocol")
-      properties.setProperty("listeners", s"$securityProtocol://localhost:0,$controlPlaneListenerName://localhost:0")
-      properties.setProperty(KafkaConfig.AdvertisedListenersProp, s"$securityProtocol://localhost:0,${controlPlaneListenerName}://localhost:0")
-    }
   }
 
   def sendUnsupportedApiVersionRequest(request: ApiVersionsRequest): ApiVersionsResponse = {
@@ -111,7 +98,7 @@ abstract class AbstractApiVersionsRequestTest(cluster: ClusterInstance) {
 
     val defaultApiVersionsResponse = if (!cluster.isKRaftTest) {
       TestUtils.defaultApiVersionsResponse(0, ListenerType.ZK_BROKER, enableUnstableLastVersion)
-    } else if(cluster.controllerListenerName().asScala.contains(listenerName)) {
+    } else if (cluster.controllerListenerName().asScala.contains(listenerName)) {
       TestUtils.defaultApiVersionsResponse(0, ListenerType.CONTROLLER, enableUnstableLastVersion)
     } else {
       TestUtils.createApiVersionsResponse(0, expectedApis)
