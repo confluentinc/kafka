@@ -43,6 +43,7 @@ import org.apache.kafka.coordinator.group.generated.ShareGroupMemberMetadataKey;
 import org.apache.kafka.coordinator.group.generated.ShareGroupMemberMetadataValue;
 import org.apache.kafka.coordinator.group.generated.ShareSnapshotKey;
 import org.apache.kafka.coordinator.group.generated.ShareSnapshotValue;
+import org.apache.kafka.coordinator.group.share.ShareCoordinator;
 import org.apache.kafka.coordinator.group.share.ShareGroupMember;
 import org.apache.kafka.coordinator.group.share.ShareGroupOffset;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
@@ -650,7 +651,7 @@ public class RecordHelpers {
                 .setGroupId(groupId)
                 .setTopicId(topicId)
                 .setPartition(partitionId),
-                (short) 0),
+                ShareCoordinator.SHARE_SNAPSHOT_RECORD_KEY_VERSION),
             new ApiMessageAndVersion(new ShareSnapshotValue()
                 .setSnapshotEpoch(offsetData.snapshotEpoch)
                 .setStateEpoch(offsetData.stateEpoch)
@@ -663,7 +664,7 @@ public class RecordHelpers {
                         .setDeliveryCount(batch.deliveryCount())
                         .setDeliveryState(batch.deliveryState()))
                     .collect(Collectors.toList())),
-                (short) 0)
+                ShareCoordinator.SHARE_SNAPSHOT_RECORD_VALUE_VERSION)
         );
     }
 

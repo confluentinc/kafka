@@ -50,8 +50,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final ShareCoordinatorConfig config;
   private final CoordinatorMetrics coordinatorMetrics;
   private final CoordinatorMetricsShard metricsShard;
-  // coord key -> ShareShap
-  private final TimelineHashMap<String, ShareSnapshotValue> shareStateMap;
+  private final TimelineHashMap<String, ShareSnapshotValue> shareStateMap;  // coord key -> ShareSnapshotValue
   private final Map<String, Integer> leaderMap;
 
   public static class Builder implements CoordinatorShardBuilder<ShareCoordinatorShard, Record> {
@@ -175,10 +174,10 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     ApiMessageAndVersion value = record.value();
 
     switch (key.version()) {
-      case 0: // ShareSnapshot
+      case ShareCoordinator.SHARE_SNAPSHOT_RECORD_KEY_VERSION: // ShareSnapshot
         handleShareSnapshot((ShareSnapshotKey) key.message(), (ShareSnapshotValue) Utils.messageOrNull(value));
         break;
-      case 1: // ShareUpdate
+      case ShareCoordinator.SHARE_UPDATE_RECORD_KEY_VERSION: // ShareUpdate
         handleShareUpdate((ShareUpdateKey) key.message(), (ShareUpdateValue) Utils.messageOrNull(value));
         break;
       default:
