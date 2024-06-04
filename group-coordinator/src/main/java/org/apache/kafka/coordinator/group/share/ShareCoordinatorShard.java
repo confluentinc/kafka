@@ -51,7 +51,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final Logger log;
@@ -227,30 +226,25 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     log.info("Shard writeState request received - {}", request);
     WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
     // records to write (with both key and value of snapshot type), response to caller
+    // only one key will be there in the request by design
     String groupId = request.groupId();
-    final Map<String, GroupTopicPartitionLeader> requestKeys = new HashMap<>();
-    List<Record> recordList = request.topics().stream()
-        .map(topicData -> topicData.partitions().stream()
-            .map(partitionData -> {
-              requestKeys.put(ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition()),
-                  new GroupTopicPartitionLeader(groupId, topicData.topicId(), partitionData.partition(), partitionData.leaderEpoch()));
-              return RecordHelpers.newShareSnapshotRecord(
-                  groupId, topicData.topicId(), partitionData.partition(), ShareGroupOffset.fromRequest(partitionData));
-            })
-            .collect(Collectors.toList()))
-        .flatMap(List::stream)
-        .collect(Collectors.toList());
+    WriteShareGroupStateRequestData.WriteStateData topicData = request.topics().get(0);
+    WriteShareGroupStateRequestData.PartitionData partitionData = topicData.partitions().get(0);
 
-    for (Map.Entry<String, GroupTopicPartitionLeader> entry : requestKeys.entrySet()) { // should only be 1 key
-      if (leaderMap.containsKey(entry.getKey()) && leaderMap.get(entry.getKey()) > entry.getValue().leaderEpoch) {
-        responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-            .setTopicId(entry.getValue().topicId)
-            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-                .setPartition(entry.getValue().partition)
-                .setErrorCode(Errors.FENCED_LEADER_EPOCH.code())
-                .setErrorMessage(Errors.FENCED_LEADER_EPOCH.message())))));
-        return new CoordinatorResult<>(Collections.emptyList(), responseData);
-      }
+    List<Record> recordList = Collections.singletonList(RecordHelpers.newShareSnapshotRecord(
+        groupId, topicData.topicId(), partitionData.partition(), ShareGroupOffset.fromRequest(partitionData)
+    ));
+
+    String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition());
+
+    if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
+      responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+          .setTopicId(topicData.topicId())
+          .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+              .setPartition(partitionData.partition())
+              .setErrorCode(Errors.FENCED_LEADER_EPOCH.code())
+              .setErrorMessage(Errors.FENCED_LEADER_EPOCH.message())))));
+      return new CoordinatorResult<>(Collections.emptyList(), responseData);
     }
 
     List<Record> validRecords = new ArrayList<>();
@@ -267,13 +261,13 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
                 .setErrorCode(Errors.NONE.code())
                 .setErrorMessage(Errors.NONE.message())))));
 
-        String mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
+        mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
 
         if (shareStateMap.containsKey(mapKey)) {
           ShareSnapshotValue oldValue = shareStateMap.get(mapKey);
           newValue.setSnapshotEpoch(oldValue.snapshotEpoch() + 1);  // increment the snapshot epoch
         }
-        validRecords.add(record);
+        validRecords.add(record); // this will have updated snapshot epoch
         shareStateMap.put(mapKey, newValue);
       }
     }
