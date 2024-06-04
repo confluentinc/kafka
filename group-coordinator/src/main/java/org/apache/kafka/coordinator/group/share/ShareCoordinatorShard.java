@@ -18,6 +18,7 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.Errors;
@@ -51,6 +52,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final Logger log;
@@ -225,40 +227,23 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
    */
   public CoordinatorResult<WriteShareGroupStateResponseData, Record> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
     log.info("Shard writeState request received - {}", request);
-    WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
     // records to write (with both key and value of snapshot type), response to caller
     // only one key will be there in the request by design
+    Optional<CoordinatorResult<WriteShareGroupStateResponseData, Record>> error = maybeGetWriteStateError(request);
+    if (error.isPresent()) {
+      return error.get();
+    }
+
     String groupId = request.groupId();
     WriteShareGroupStateRequestData.WriteStateData topicData = request.topics().get(0);
     WriteShareGroupStateRequestData.PartitionData partitionData = topicData.partitions().get(0);
-
-    String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition());
-
-    Errors error = null;
-    if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
-      error = Errors.FENCED_LEADER_EPOCH;
-    } else if (metadataImage != null && (metadataImage.topics().getTopic(topicData.topicId()) == null ||
-        metadataImage.topics().getPartition(topicData.topicId(), partitionData.partition()) == null)) {
-      error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
-    } else if (groupId == null || groupId.isEmpty()) {
-      error = Errors.INVALID_GROUP_ID;
-    }
-
-    if (error != null) {
-      responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-          .setTopicId(topicData.topicId())
-          .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-              .setPartition(partitionData.partition())
-              .setErrorCode(error.code())
-              .setErrorMessage(error.message())))));
-      return new CoordinatorResult<>(Collections.emptyList(), responseData);
-    }
 
     List<Record> recordList = Collections.singletonList(RecordHelpers.newShareSnapshotRecord(
         groupId, topicData.topicId(), partitionData.partition(), ShareGroupOffset.fromRequest(partitionData)
     ));
     List<Record> validRecords = new ArrayList<>();
 
+    WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
     for (Record record : recordList) {  // should be single record
       if (record.key().message() instanceof ShareSnapshotKey && record.value().message() instanceof ShareSnapshotValue) {
         ShareSnapshotKey newKey = (ShareSnapshotKey) record.key().message();
@@ -271,7 +256,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
                 .setErrorCode(Errors.NONE.code())
                 .setErrorMessage(Errors.NONE.message())))));
 
-        mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
+        String mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
 
         if (shareStateMap.containsKey(mapKey)) {
           ShareSnapshotValue oldValue = shareStateMap.get(mapKey);
@@ -283,5 +268,41 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     }
 
     return new CoordinatorResult<>(validRecords, responseData);
+  }
+
+  private Optional<CoordinatorResult<WriteShareGroupStateResponseData, Record>> maybeGetWriteStateError(WriteShareGroupStateRequestData request) {
+    Errors error = null;
+    String groupId = request.groupId();
+    WriteShareGroupStateRequestData.WriteStateData topicData = (request.topics() == null || request.topics().isEmpty()) ? null : request.topics().get(0);
+    WriteShareGroupStateRequestData.PartitionData partitionData = (topicData == null || topicData.partitions() == null || topicData.partitions().isEmpty()) ?
+        null : topicData.partitions().get(0);
+    Uuid topicId = topicData == null ? Uuid.ZERO_UUID : topicData.topicId();
+    int partitionId = partitionData == null ? -1 : partitionData.partition();
+
+    if (groupId == null || groupId.isEmpty()) {
+      error = Errors.INVALID_GROUP_ID;
+    } else if (topicId == null || partitionId == -1) {
+      error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
+    } else {
+      String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partitionId);
+      if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
+        error = Errors.FENCED_LEADER_EPOCH;
+      } else if (metadataImage != null && (metadataImage.topics().getTopic(topicId) == null ||
+          metadataImage.topics().getPartition(topicId, partitionId) == null)) {
+        error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
+      }
+    }
+
+    if (error != null) {
+      WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
+      responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+          .setTopicId(topicId)
+          .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+              .setPartition(partitionId)
+              .setErrorCode(error.code())
+              .setErrorMessage(error.message())))));
+      return Optional.of(new CoordinatorResult<>(Collections.emptyList(), responseData));
+    }
+    return Optional.empty();
   }
 }
