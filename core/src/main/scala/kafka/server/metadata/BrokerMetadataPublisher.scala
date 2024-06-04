@@ -178,7 +178,17 @@ class BrokerMetadataPublisher(
           case t: Throwable => metadataPublishingFaultHandler.handleFault("Error updating txn " +
             s"coordinator with local changes in $deltaName", t)
         }
-        //todo smjn: add code for share coord
+        try {
+          updateCoordinator(newImage,
+            delta,
+            Topic.SHARE_GROUP_STATE_TOPIC_NAME,
+            shareCoordinator.onElection,
+            (partitionIndex, leaderEpochOpt) => shareCoordinator.onResignation(partitionIndex, toOptionalInt(leaderEpochOpt))
+          )
+        } catch {
+          case t: Throwable => metadataPublishingFaultHandler.handleFault("Error updating share " +
+            s"coordinator with local changes in $deltaName", t)
+        }
         try {
           // Notify the group coordinator about deleted topics.
           val deletedTopicPartitions = new mutable.ArrayBuffer[TopicPartition]()

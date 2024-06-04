@@ -17,7 +17,14 @@
 
 package org.apache.kafka.coordinator.group.share;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.TopicConfig;
+import org.apache.kafka.common.internals.Topic;
+import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
@@ -34,7 +41,9 @@ import org.apache.kafka.server.util.timer.Timer;
 import org.slf4j.Logger;
 
 import java.time.Duration;
+import java.util.OptionalInt;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
 
@@ -207,5 +216,35 @@ public class ShareCoordinatorService implements ShareCoordinator {
     Utils.closeQuietly(runtime, "coordinator runtime");
     Utils.closeQuietly(shareCoordinatorMetrics, "share coordinator metrics");
     log.info("Shutdown complete.");
+  }
+
+  @Override
+  public CompletableFuture<WriteShareGroupStateResponseData> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
+    return null;
+  }
+
+  @Override
+  public CompletableFuture<ReadShareGroupStateResponseData> readState(RequestContext context, ReadShareGroupStateRequestData request) {
+    return null;
+  }
+
+  @Override
+  public void onElection(int partitionIndex, int partitionLeaderEpoch) {
+    runtime.scheduleLoadOperation(
+        new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionIndex),
+        partitionLeaderEpoch
+    );
+  }
+
+  @Override
+  public void onResignation(int partitionIndex, OptionalInt partitionLeaderEpoch) {
+    runtime.scheduleUnloadOperation(
+        new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionIndex),
+        partitionLeaderEpoch
+    );
+  }
+
+  private TopicPartition topicPartitionFor(String key) {
+    return new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionFor(key));
   }
 }

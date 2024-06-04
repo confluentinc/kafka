@@ -21,11 +21,8 @@ import org.apache.kafka.common.annotation.InterfaceStability;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 /**
  * The default implementation of the {@link Persister} interface which is used by the
@@ -90,20 +87,7 @@ public class DefaultStatePersister implements Persister {
    * @return ReadShareGroupStateResult
    */
   public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) {
-    this.stateManager.start();
-    GroupTopicPartitionData<PartitionIdLeaderEpochData> gtp = request.groupTopicPartitionData();
-    String groupId = gtp.groupId();
-    List<PersisterStateManager.ReadStateHandler> handlers = gtp.topicsData().stream()
-        .map(topicData -> topicData.partitions().stream()
-            .map(partitionData -> stateManager.new ReadStateHandler(groupId, topicData.topicId(), partitionData.partition(), partitionData.leaderEpoch()))
-            .collect(Collectors.toList()))
-        .flatMap(Collection::stream)
-        .collect(Collectors.toList());
-
-    for (PersisterStateManager.PersisterStateManagerHandler handler : handlers) {
-      stateManager.enqueue(handler);
-    }
-    return null;
+    throw new RuntimeException("not implemented");
   }
 
   /**

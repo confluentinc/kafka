@@ -22,6 +22,11 @@ import org.apache.kafka.common.requests.TransactionResult;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.Record;
+import org.apache.kafka.coordinator.group.Utils;
+import org.apache.kafka.coordinator.group.generated.ShareSnapshotKey;
+import org.apache.kafka.coordinator.group.generated.ShareSnapshotValue;
+import org.apache.kafka.coordinator.group.generated.ShareUpdateKey;
+import org.apache.kafka.coordinator.group.generated.ShareUpdateValue;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetrics;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetricsShard;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorShard;
@@ -29,8 +34,14 @@ import org.apache.kafka.coordinator.group.runtime.CoordinatorShardBuilder;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorTimer;
 import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
+import org.apache.kafka.server.common.ApiMessageAndVersion;
+import org.apache.kafka.server.group.share.ShareGroupHelper;
 import org.apache.kafka.timeline.SnapshotRegistry;
+import org.apache.kafka.timeline.TimelineHashMap;
 import org.slf4j.Logger;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final Logger log;
@@ -39,6 +50,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final ShareCoordinatorConfig config;
   private final CoordinatorMetrics coordinatorMetrics;
   private final CoordinatorMetricsShard metricsShard;
+  private final TimelineHashMap<String, ShareSnapshotValue> shareStateMap;  // coord key -> ShareSnapshotValue
+  private final Map<String, Integer> leaderMap;
 
   public static class Builder implements CoordinatorShardBuilder<ShareCoordinatorShard, Record> {
     private ShareCoordinatorConfig config;
@@ -115,7 +128,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
           timer,
           config,
           coordinatorMetrics,
-          metricsShard
+          metricsShard,
+          snapshotRegistry
       );
     }
   }
@@ -126,7 +140,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
       CoordinatorTimer<Void, Record> timer,
       ShareCoordinatorConfig config,
       CoordinatorMetrics coordinatorMetrics,
-      CoordinatorMetricsShard metricsShard
+      CoordinatorMetricsShard metricsShard,
+      SnapshotRegistry snapshotRegistry
   ) {
     this.log = logContext.logger(ShareCoordinatorShard.class);
     this.time = time;
@@ -134,6 +149,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     this.config = config;
     this.coordinatorMetrics = coordinatorMetrics;
     this.metricsShard = metricsShard;
+    this.shareStateMap = new TimelineHashMap<>(snapshotRegistry, 0);
+    this.leaderMap = new HashMap<>();
   }
 
   @Override
@@ -153,7 +170,34 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
   @Override
   public void replay(long offset, long producerId, short producerEpoch, Record record) throws RuntimeException {
+    ApiMessageAndVersion key = record.key();
+    ApiMessageAndVersion value = record.value();
 
+    switch (key.version()) {
+      case ShareCoordinator.SHARE_SNAPSHOT_RECORD_KEY_VERSION: // ShareSnapshot
+        handleShareSnapshot((ShareSnapshotKey) key.message(), (ShareSnapshotValue) Utils.messageOrNull(value));
+        break;
+      case ShareCoordinator.SHARE_UPDATE_RECORD_KEY_VERSION: // ShareUpdate
+        handleShareUpdate((ShareUpdateKey) key.message(), (ShareUpdateValue) Utils.messageOrNull(value));
+        break;
+      default:
+        // noop
+    }
+  }
+
+  private void handleShareSnapshot(ShareSnapshotKey key, ShareSnapshotValue value) {
+    String mapKey = ShareGroupHelper.coordinatorKey(key.groupId(), key.topicId(), key.partition());
+    Integer oldValue = leaderMap.get(mapKey);
+    if (oldValue == null) {
+      leaderMap.put(mapKey, value.leaderEpoch());
+    } else if (oldValue < value.leaderEpoch()) {
+      leaderMap.put(mapKey, value.leaderEpoch());
+    }
+    shareStateMap.put(mapKey, value);
+  }
+
+  private void handleShareUpdate(ShareUpdateKey key, ShareUpdateValue value) {
+    // update internal hashmaps
   }
 
   @Override
