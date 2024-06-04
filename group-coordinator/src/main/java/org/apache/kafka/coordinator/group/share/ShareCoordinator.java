@@ -18,8 +18,15 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.annotation.InterfaceStability;
+import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.requests.RequestContext;
 
+import java.util.OptionalInt;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.IntSupplier;
 
 @InterfaceStability.Evolving
@@ -51,4 +58,35 @@ public interface ShareCoordinator {
    * Stop the share coordinator
    */
   void shutdown();
+
+  /**
+   * Handle write share state call
+   * @param context
+   * @param request
+   * @return completable future comprizing of write RPC response data
+   */
+  CompletableFuture<WriteShareGroupStateResponseData> writeState(RequestContext context, WriteShareGroupStateRequestData request);
+
+
+  /**
+   * Handle read share state call
+   * @param context
+   * @param request
+   * @return completable future comprizing of write RPC response data
+   */
+  CompletableFuture<ReadShareGroupStateResponseData> readState(RequestContext context, ReadShareGroupStateRequestData request);
+
+  /**
+   * Called when new coordinator is elected
+   * @param partitionIndex
+   * @param partitionLeaderEpoch
+   */
+  void onElection(int partitionIndex, int partitionLeaderEpoch);
+
+  /**
+   * Called when coordinator goes down
+   * @param partitionIndex
+   * @param partitionLeaderEpoch
+   */
+  void onResignation(int partitionIndex, OptionalInt partitionLeaderEpoch);
 }
