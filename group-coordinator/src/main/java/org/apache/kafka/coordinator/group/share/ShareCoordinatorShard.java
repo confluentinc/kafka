@@ -61,6 +61,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final CoordinatorMetricsShard metricsShard;
   private final TimelineHashMap<String, ShareSnapshotValue> shareStateMap;  // coord key -> ShareSnapshotValue
   private final Map<String, Integer> leaderMap;
+  private MetadataImage metadataImage;
 
   public static class Builder implements CoordinatorShardBuilder<ShareCoordinatorShard, Record> {
     private ShareCoordinatorConfig config;
@@ -169,7 +170,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
   @Override
   public void onNewMetadataImage(MetadataImage newImage, MetadataDelta delta) {
-    CoordinatorShard.super.onNewMetadataImage(newImage, delta);
+    this.metadataImage = newImage;
   }
 
   @Override
@@ -233,13 +234,23 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
     String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition());
 
+    Errors error = null;
     if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
+      error = Errors.FENCED_LEADER_EPOCH;
+    } else if (metadataImage != null && (metadataImage.topics().getTopic(topicData.topicId()) == null ||
+        metadataImage.topics().getPartition(topicData.topicId(), partitionData.partition()) == null)) {
+      error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
+    } else if (groupId == null || groupId.isEmpty()) {
+      error = Errors.INVALID_GROUP_ID;
+    }
+
+    if (error != null) {
       responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
           .setTopicId(topicData.topicId())
           .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
               .setPartition(partitionData.partition())
-              .setErrorCode(Errors.FENCED_LEADER_EPOCH.code())
-              .setErrorMessage(Errors.FENCED_LEADER_EPOCH.message())))));
+              .setErrorCode(error.code())
+              .setErrorMessage(error.message())))));
       return new CoordinatorResult<>(Collections.emptyList(), responseData);
     }
 
