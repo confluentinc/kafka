@@ -231,10 +231,6 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     WriteShareGroupStateRequestData.WriteStateData topicData = request.topics().get(0);
     WriteShareGroupStateRequestData.PartitionData partitionData = topicData.partitions().get(0);
 
-    List<Record> recordList = Collections.singletonList(RecordHelpers.newShareSnapshotRecord(
-        groupId, topicData.topicId(), partitionData.partition(), ShareGroupOffset.fromRequest(partitionData)
-    ));
-
     String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition());
 
     if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
@@ -247,6 +243,9 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
       return new CoordinatorResult<>(Collections.emptyList(), responseData);
     }
 
+    List<Record> recordList = Collections.singletonList(RecordHelpers.newShareSnapshotRecord(
+        groupId, topicData.topicId(), partitionData.partition(), ShareGroupOffset.fromRequest(partitionData)
+    ));
     List<Record> validRecords = new ArrayList<>();
 
     for (Record record : recordList) {  // should be single record
