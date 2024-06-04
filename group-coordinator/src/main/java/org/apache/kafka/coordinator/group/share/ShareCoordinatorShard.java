@@ -175,10 +175,10 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     ApiMessageAndVersion value = record.value();
 
     switch (key.version()) {
-      case 0: // ShareSnapshot
+      case ShareCoordinator.SHARE_SNAPSHOT_RECORD_KEY_VERSION: // ShareSnapshot
         handleShareSnapshot((ShareSnapshotKey) key.message(), (ShareSnapshotValue) Utils.messageOrNull(value));
         break;
-      case 1: // ShareUpdate
+      case ShareCoordinator.SHARE_UPDATE_RECORD_KEY_VERSION: // ShareUpdate
         handleShareUpdate((ShareUpdateKey) key.message(), (ShareUpdateValue) Utils.messageOrNull(value));
         break;
       default:
