@@ -17,7 +17,13 @@
 
 package org.apache.kafka.coordinator.group.share;
 
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.config.TopicConfig;
+import org.apache.kafka.common.internals.Topic;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
@@ -29,14 +35,23 @@ import org.apache.kafka.coordinator.group.runtime.CoordinatorRuntime;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorShardBuilderSupplier;
 import org.apache.kafka.coordinator.group.runtime.MultiThreadedEventProcessor;
 import org.apache.kafka.coordinator.group.runtime.PartitionWriter;
+import org.apache.kafka.server.group.share.ShareGroupHelper;
 import org.apache.kafka.server.record.BrokerCompressionType;
 import org.apache.kafka.server.util.timer.Timer;
 import org.slf4j.Logger;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
+import java.util.stream.Collectors;
 
 public class ShareCoordinatorService implements ShareCoordinator {
   private final ShareCoordinatorConfig config;
@@ -207,5 +222,87 @@ public class ShareCoordinatorService implements ShareCoordinator {
     Utils.closeQuietly(runtime, "coordinator runtime");
     Utils.closeQuietly(shareCoordinatorMetrics, "share coordinator metrics");
     log.info("Shutdown complete.");
+  }
+
+  @Override
+  public CompletableFuture<WriteShareGroupStateResponseData> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
+    log.info("ShareCoordinatorService writeState request received - {}", request);
+    String groupId = request.groupId();
+    Map<Uuid, Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>>> futureMap = new HashMap<>();
+
+//     The request received here could have multiple keys of structure group:topic:partition. However,
+//     the writeState method in ShareCoordinatorShard expects a single key in the request. Hence, we will
+//     be looping over the keys below and constructing new WriteShareGroupStateRequestData objects to pass
+//     onto the shard method.
+    request.topics().forEach(topicData -> {
+      Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>> partitionFut =
+          futureMap.computeIfAbsent(topicData.topicId(), k -> new HashMap<>());
+      topicData.partitions().forEach(
+          partitionData -> partitionFut.put(partitionData.partition(), runtime.scheduleWriteOperation(
+              "write-share-group-state",
+              topicPartitionFor(ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition())),
+              Duration.ofMillis(config.writeTimeoutMs),
+              coordinator -> coordinator.writeState(context, new WriteShareGroupStateRequestData()
+                  .setGroupId(groupId)
+                  .setTopics(Collections.singletonList(new WriteShareGroupStateRequestData.WriteStateData()
+                      .setTopicId(topicData.topicId())
+                      .setPartitions(Collections.singletonList(new WriteShareGroupStateRequestData.PartitionData()
+                          .setPartition(partitionData.partition())
+                          .setStartOffset(partitionData.startOffset())
+                          .setLeaderEpoch(partitionData.leaderEpoch())
+                          .setStateEpoch(partitionData.stateEpoch())
+                          .setStateBatches(partitionData.stateBatches()))))))))
+      );
+    });
+
+
+    // Combine all futures into a single CompletableFuture<Void>
+    CompletableFuture<Void> combinedFuture = CompletableFuture.allOf(futureMap.values().stream()
+        .flatMap(partMap -> partMap.values().stream()).toArray(CompletableFuture[]::new));
+
+    return combinedFuture.thenApply(v -> {
+      List<WriteShareGroupStateResponseData.WriteStateResult> writeStateResults = futureMap.keySet().stream()
+          .map(topicId -> {
+            List<WriteShareGroupStateResponseData.PartitionResult> partitionResults = futureMap.get(topicId).values().stream()
+                .map(future -> {
+                  try {
+                    WriteShareGroupStateResponseData partitionData = future.get();
+                    // error check if the partitionData results contains only 1 row (corresponding to topicId)
+                    return partitionData.results().get(0).partitions();
+                  } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                  }
+                })
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+            return new WriteShareGroupStateResponseData.WriteStateResult()
+                .setTopicId(topicId)
+                .setPartitions(partitionResults);
+          })
+          .collect(Collectors.toList());
+      return new WriteShareGroupStateResponseData()
+          .setResults(writeStateResults);
+    });
+  }
+
+  @Override
+  public void onElection(int partitionIndex, int partitionLeaderEpoch) {
+    runtime.scheduleLoadOperation(
+        new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionIndex),
+        partitionLeaderEpoch
+    );
+  }
+
+  @Override
+  public void onResignation(int partitionIndex, OptionalInt partitionLeaderEpoch) {
+    runtime.scheduleUnloadOperation(
+        new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionIndex),
+        partitionLeaderEpoch
+    );
+  }
+
+  private TopicPartition topicPartitionFor(String key) {
+    return new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionFor(key));
   }
 }

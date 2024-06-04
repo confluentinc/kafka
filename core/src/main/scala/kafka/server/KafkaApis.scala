@@ -265,6 +265,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.SHARE_GROUP_HEARTBEAT => handleShareGroupHeartbeat(request).exceptionally(handleError)
         case ApiKeys.SHARE_GROUP_DESCRIBE => handleShareGroupDescribe(request).exceptionally(handleError)
         case ApiKeys.SHARE_ACKNOWLEDGE => handleShareAcknowledgeRequest(request)
+        case ApiKeys.WRITE_SHARE_GROUP_STATE => handleShareGroupStateWrite(request)
         case _ => throw new IllegalStateException(s"No handler for request api key ${request.header.apiKey}")
       }
     } catch {
@@ -4798,6 +4799,13 @@ class KafkaApis(val requestChannel: RequestChannel,
           requestHelper.sendMaybeThrottle(request, listClientMetricsResourcesRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
       }
     }
+  }
+
+  private def handleShareGroupStateWrite(request: RequestChannel.Request): Unit = {
+    val writeShareRequest = request.body[WriteShareGroupStateRequest]
+    //todo smjn: add auth check for group, topic
+    val writeShareData = shareCoordinator.writeState(request.context, writeShareRequest.data).get()
+    requestHelper.sendMaybeThrottle(request, new WriteShareGroupStateResponse(writeShareData))
   }
 
   private def updateRecordConversionStats(request: RequestChannel.Request,

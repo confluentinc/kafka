@@ -20,6 +20,7 @@ import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.BrokerIdNotRegisteredException;
 import org.apache.kafka.common.errors.BrokerNotAvailableException;
+import org.apache.kafka.common.errors.StaleShareLeaderEpochException;
 import org.apache.kafka.common.errors.TelemetryTooLargeException;
 import org.apache.kafka.common.errors.ClusterAuthorizationException;
 import org.apache.kafka.common.errors.ConcurrentTransactionsException;
@@ -402,7 +403,8 @@ public enum Errors {
     INVALID_RECORD_STATE(121, "The record state is invalid. The acknowledgement of delivery could not be completed.", InvalidRecordStateException::new),
     SHARE_SESSION_NOT_FOUND(122, "The share session was not found.", ShareSessionNotFoundException::new),
     INVALID_SHARE_SESSION_EPOCH(123, "The share session epoch is invalid.", InvalidShareSessionEpochException::new),
-    FENCED_STATE_EPOCH(124, "The share coordinator rejected the request because the share-group state epoch did not match.", FencedStateEpochException::new);
+    FENCED_STATE_EPOCH(124, "The share coordinator rejected the request because the share-group state epoch did not match.", FencedStateEpochException::new),
+    STALE_SHARE_STATE_LEADER_EPOCH(125, "Share state update attempt with stale leader epoch.", StaleShareLeaderEpochException::new);
 
 
     private static final Logger log = LoggerFactory.getLogger(Errors.class);
