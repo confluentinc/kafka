@@ -18,10 +18,15 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.requests.TransactionResult;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.Record;
+import org.apache.kafka.coordinator.group.RecordHelpers;
 import org.apache.kafka.coordinator.group.Utils;
 import org.apache.kafka.coordinator.group.generated.ShareSnapshotKey;
 import org.apache.kafka.coordinator.group.generated.ShareSnapshotValue;
@@ -29,6 +34,7 @@ import org.apache.kafka.coordinator.group.generated.ShareUpdateKey;
 import org.apache.kafka.coordinator.group.generated.ShareUpdateValue;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetrics;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetricsShard;
+import org.apache.kafka.coordinator.group.runtime.CoordinatorResult;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorShard;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorShardBuilder;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorTimer;
@@ -40,8 +46,12 @@ import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private final Logger log;
@@ -203,5 +213,71 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   @Override
   public void replayEndTransactionMarker(long producerId, short producerEpoch, TransactionResult result) throws RuntimeException {
     CoordinatorShard.super.replayEndTransactionMarker(producerId, producerEpoch, result);
+  }
+
+  /**
+   * This method as called by the ShareCoordinatorService will be provided with
+   * the request data which covers only key i.e. group1:topic1:partition1. The implementation
+   * below was done keeping this in mind.
+   * @param context - RequestContext
+   * @param request - WriteShareGroupStateRequestData for a single key
+   * @return CoordinatorResult(records, response)
+   */
+  public CoordinatorResult<WriteShareGroupStateResponseData, Record> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
+    log.info("Shard writeState request received - {}", request);
+    WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
+    // records to write (with both key and value of snapshot type), response to caller
+    String groupId = request.groupId();
+    final Map<String, GroupTopicPartitionLeader> requestKeys = new HashMap<>();
+    List<Record> recordList = request.topics().stream()
+        .map(topicData -> topicData.partitions().stream()
+            .map(partitionData -> {
+              requestKeys.put(ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition()),
+                  new GroupTopicPartitionLeader(groupId, topicData.topicId(), partitionData.partition(), partitionData.leaderEpoch()));
+              return RecordHelpers.newShareSnapshotRecord(
+                  groupId, topicData.topicId(), partitionData.partition(), ShareGroupOffset.fromRequest(partitionData));
+            })
+            .collect(Collectors.toList()))
+        .flatMap(List::stream)
+        .collect(Collectors.toList());
+
+    for (Map.Entry<String, GroupTopicPartitionLeader> entry : requestKeys.entrySet()) { // should only be 1 key
+      if (leaderMap.containsKey(entry.getKey()) && leaderMap.get(entry.getKey()) > entry.getValue().leaderEpoch) {
+        responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+            .setTopicId(entry.getValue().topicId)
+            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+                .setPartition(entry.getValue().partition)
+                .setErrorCode(Errors.FENCED_LEADER_EPOCH.code())
+                .setErrorMessage(Errors.FENCED_LEADER_EPOCH.message())))));
+        return new CoordinatorResult<>(Collections.emptyList(), responseData);
+      }
+    }
+
+    List<Record> validRecords = new ArrayList<>();
+
+    for (Record record : recordList) {  // should be single record
+      if (record.key().message() instanceof ShareSnapshotKey && record.value().message() instanceof ShareSnapshotValue) {
+        ShareSnapshotKey newKey = (ShareSnapshotKey) record.key().message();
+        ShareSnapshotValue newValue = (ShareSnapshotValue) record.value().message();
+
+        responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+            .setTopicId(newKey.topicId())
+            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+                .setPartition(newKey.partition())
+                .setErrorCode(Errors.NONE.code())
+                .setErrorMessage(Errors.NONE.message())))));
+
+        String mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
+
+        if (shareStateMap.containsKey(mapKey)) {
+          ShareSnapshotValue oldValue = shareStateMap.get(mapKey);
+          newValue.setSnapshotEpoch(oldValue.snapshotEpoch() + 1);  // increment the snapshot epoch
+        }
+        validRecords.add(record);
+        shareStateMap.put(mapKey, newValue);
+      }
+    }
+
+    return new CoordinatorResult<>(validRecords, responseData);
   }
 }
