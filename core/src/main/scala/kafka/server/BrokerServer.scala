@@ -38,7 +38,7 @@ import org.apache.kafka.common.utils.{LogContext, Time}
 import org.apache.kafka.common.{ClusterResource, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.coordinator.group
 import org.apache.kafka.coordinator.group.metrics.{GroupCoordinatorMetrics, GroupCoordinatorRuntimeMetrics}
-import org.apache.kafka.coordinator.group.share.{ShareCoordinator, ShareCoordinatorConfig, ShareCoordinatorMetrics, ShareCoordinatorRuntimeMetrics, ShareCoordinatorService}
+import org.apache.kafka.coordinator.group.share.{ShareCoordinator, ShareCoordinatorConfig, ShareCoordinatorMetrics, ShareCoordinatorRuntimeMetrics, ShareCoordinatorService, ShareRecordSerde}
 import org.apache.kafka.coordinator.group.{GroupCoordinator, GroupCoordinatorConfig, GroupCoordinatorService, RecordSerde}
 import org.apache.kafka.image.publisher.MetadataPublisher
 import org.apache.kafka.metadata.{BrokerState, ListenerInfo, VersionRange}
@@ -346,10 +346,8 @@ class BrokerServer(
         () => metadataCache.getAliveBrokerNodes(config.interBrokerListenerName).asJava, Time.SYSTEM)
       persister.configure(new PersisterConfig(persisterStateManager))
 
-      val serde = new RecordSerde
-
-      groupCoordinator = createGroupCoordinator(serde, persister)
-      shareCoordinator = createShareCoordinator(serde)
+      groupCoordinator = createGroupCoordinator(persister)
+      shareCoordinator = createShareCoordinator()
 
       val producerIdManagerSupplier = () => ProducerIdManager.rpc(
         config.brokerId,
@@ -580,7 +578,7 @@ class BrokerServer(
     }
   }
 
-  private def createGroupCoordinator(serde: RecordSerde, persister: Persister): GroupCoordinator = {  //todo smjn: pass persister to group coord
+  private def createGroupCoordinator(persister: Persister): GroupCoordinator = {  //todo smjn: pass persister to group coord
     // Create group coordinator, but don't start it until we've started replica manager.
     // Hardcode Time.SYSTEM for now as some Streams tests fail otherwise, it would be good
     // to fix the underlying issue.
@@ -609,6 +607,7 @@ class BrokerServer(
         "group-coordinator-reaper",
         new SystemTimer("group-coordinator")
       )
+      val serde = new RecordSerde
       val loader = new CoordinatorLoaderImpl[group.Record](
         time,
         replicaManager,
@@ -639,7 +638,7 @@ class BrokerServer(
     }
   }
 
-  private def createShareCoordinator(serde: RecordSerde): ShareCoordinator = {
+  private def createShareCoordinator(): ShareCoordinator = {
     if (!config.isShareGroupEnabled) {
       return null
     }
@@ -654,6 +653,7 @@ class BrokerServer(
       "share-coordinator-reaper",
       new SystemTimer("share-coordinator")
     )
+    val serde = new ShareRecordSerde
     val loader = new CoordinatorLoaderImpl[group.Record](
       time,
       replicaManager,

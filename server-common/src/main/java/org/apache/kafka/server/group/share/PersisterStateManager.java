@@ -25,12 +25,15 @@ import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
 import org.apache.kafka.common.requests.ReadShareGroupStateRequest;
+import org.apache.kafka.common.requests.WriteShareGroupStateRequest;
+import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.util.InterBrokerSendThread;
 import org.apache.kafka.server.util.RequestAndCompletionHandler;
@@ -46,6 +49,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public class PersisterStateManager {
 
@@ -86,8 +90,17 @@ public class PersisterStateManager {
     }
   }
 
-  public abstract static class PersisterStateManagerHandler implements RequestCompletionHandler {
+  public abstract class PersisterStateManagerHandler implements RequestCompletionHandler {
     protected Node coordinatorNode;
+    protected String groupId;
+    protected Uuid topicId;
+    protected int partition;
+
+    public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition) {
+      this.groupId = groupId;
+      this.topicId = topicId;
+      this.partition = partition;
+    }
 
     /**
      * looks for single group:topic:partition item
@@ -101,66 +114,77 @@ public class PersisterStateManager {
      *
      * @return builder for the same
      */
-    protected abstract AbstractRequest.Builder<? extends AbstractRequest> findShareCoordinatorBuilder();
+    protected AbstractRequest.Builder<? extends AbstractRequest> findShareCoordinatorBuilder() {
+      return new FindCoordinatorRequest.Builder(new FindCoordinatorRequestData()
+          .setKeyType(FindCoordinatorRequest.CoordinatorType.SHARE.id())
+          .setKey(coordinatorKey()));
+    }
 
-    protected abstract Node shareCoordinatorNode();
+    protected Node shareCoordinatorNode() {
+      return coordinatorNode;
+    }
 
     protected boolean lookupNeeded() {
       return coordinatorNode == null;
     }
 
-    protected abstract String coordinatorKey();
+    protected String coordinatorKey() {
+      return ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
+    }
 
     protected boolean isFindCoordinatorResponse(ClientResponse response) {
       return response != null && response.requestHeader().apiKey() == ApiKeys.FIND_COORDINATOR;
-    }
-  }
-
-  public class ReadStateHandler extends PersisterStateManagerHandler {
-    // result of one group:topicId:partition call
-    private CompletableFuture<TopicData<PartitionAllData>> result = new CompletableFuture<>();
-    private final String groupId;
-    private final Uuid topicId;
-    private final int partition;
-    private final int leaderEpoch;
-    private final String coordinatorKey;
-
-    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch) {
-      this.groupId = groupId;
-      this.topicId = topicId;
-      this.partition = partition;
-      this.leaderEpoch = leaderEpoch;
-      this.coordinatorKey = groupId + ":" + topicId + ":" + partition;
     }
 
     @Override
     public void onComplete(ClientResponse response) {
       if (response != null && response.hasResponse()) {
         if (isFindCoordinatorResponse(response)) {
-          handleCoordinatorResponse(response);
-        } else if (response.requestHeader().apiKey() == ApiKeys.READ_SHARE_GROUP_STATE) {
-          handleReadShareGroupResponse(response);
+          handleFindCoordinatorResponse(response);
+        } else if (isRequestResponse(response)) {
+          handleRequestResponse(response);
         }
       }
     }
 
-    private void handleCoordinatorResponse(ClientResponse response) {
+    protected void handleFindCoordinatorResponse(ClientResponse response) {
       List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
       if (coordinators.size() != 1) {
-        log.error("ReadState coordinator response for {} is invalid", coordinatorKey);
+        log.error("ReadState coordinator response for {} is invalid", coordinatorKey());
         //todo smjn: how to handle?
       }
       FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
       Errors error = Errors.forCode(coordinatorData.errorCode());
       if (error == Errors.NONE) {
-        log.info("ReadState find coordinator response received.");
+        log.info("Find coordinator response received.");
         coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
         // now we want the read state call to happen
-        // enqueue(this)  //todo smjn: enable this when read RPC is working
+        enqueue(this);  //todo smjn: enable this when read RPC is working
       }
     }
 
-    private void handleReadShareGroupResponse(ClientResponse response) {
+    protected abstract void handleRequestResponse(ClientResponse response);
+
+    protected abstract boolean isRequestResponse(ClientResponse response);
+  }
+
+  public class ReadStateHandler extends PersisterStateManagerHandler {
+    // result of one group:topicId:partition call
+    private CompletableFuture<TopicData<PartitionAllData>> result = new CompletableFuture<>();
+    private final int leaderEpoch;
+
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch) {
+      super(groupId, topicId, partition);
+      this.leaderEpoch = leaderEpoch;
+    }
+
+    @Override
+    protected boolean isRequestResponse(ClientResponse response) {
+      return response.requestHeader().apiKey() == ApiKeys.READ_SHARE_GROUP_STATE;
+    }
+
+    @Override
+    protected void handleRequestResponse(ClientResponse response) {
       log.info("ReadState response");
     }
 
@@ -176,28 +200,58 @@ public class PersisterStateManager {
                       .setLeaderEpoch(leaderEpoch))))));
     }
 
-    @Override
-    protected AbstractRequest.Builder<? extends AbstractRequest> findShareCoordinatorBuilder() {
-      return new FindCoordinatorRequest.Builder(new FindCoordinatorRequestData()
-          .setKeyType(FindCoordinatorRequest.CoordinatorType.SHARE.id())
-          .setKey(coordinatorKey()));
-    }
-
-    @Override
-    protected Node shareCoordinatorNode() {
-      if (coordinatorNode != null) {
-        return coordinatorNode;
-      }
-      return null;
-    }
-
     public CompletableFuture<TopicData<PartitionAllData>> result() {
       return this.result;
     }
+  }
+
+  public class WriteStateHandler extends PersisterStateManagerHandler {
+    private final int stateEpoch;
+    private final int leaderEpoch;
+    private final long startOffset;
+    private final List<PersisterStateBatch> batches;
+
+    private final CompletableFuture<WriteShareGroupStateResponse> result;
+
+    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result) {
+      super(groupId, topicId, partition);
+      this.stateEpoch = stateEpoch;
+      this.leaderEpoch = leaderEpoch;
+      this.startOffset = startOffset;
+      this.batches = batches;
+      this.result = result;
+    }
 
     @Override
-    protected String coordinatorKey() {
-      return this.coordinatorKey;
+    protected AbstractRequest.Builder<? extends AbstractRequest> requestBuilder() {
+      return new WriteShareGroupStateRequest.Builder(new WriteShareGroupStateRequestData()
+          .setGroupId(groupId)
+          .setTopics(Collections.singletonList(
+              new WriteShareGroupStateRequestData.WriteStateData()
+                  .setTopicId(topicId)
+                  .setPartitions(Collections.singletonList(new WriteShareGroupStateRequestData.PartitionData()
+                      .setPartition(partition)
+                      .setStateEpoch(stateEpoch)
+                      .setLeaderEpoch(leaderEpoch)
+                      .setStartOffset(startOffset)
+                      .setStateBatches(batches.stream()
+                          .map(batch -> new WriteShareGroupStateRequestData.StateBatch()
+                              .setFirstOffset(batch.firstOffset())
+                              .setLastOffset(batch.lastOffset())
+                              .setDeliveryState(batch.deliveryState())
+                              .setDeliveryCount(batch.deliveryCount()))
+                          .collect(Collectors.toList())))))));
+    }
+
+    @Override
+    protected boolean isRequestResponse(ClientResponse response) {
+      return response.requestHeader().apiKey() == ApiKeys.WRITE_SHARE_GROUP_STATE;
+    }
+
+    @Override
+    protected void handleRequestResponse(ClientResponse response) {
+      log.info("Write state response received. - {}", response);
+      this.result.complete((WriteShareGroupStateResponse) response.responseBody());
     }
   }
 
@@ -244,17 +298,15 @@ public class PersisterStateManager {
               handler.findShareCoordinatorBuilder(),
               handler
           ));
+        } else {
+          // share coord node already available
+          return Collections.singletonList(new RequestAndCompletionHandler(
+              System.currentTimeMillis(),
+              handler.shareCoordinatorNode(),
+              handler.requestBuilder(),
+              handler
+          ));
         }
-        //todo smjn: handle the read RPC here when its lifecycle is complete
-//        else {
-//          // share coord node already available
-//          return Collections.singletonList(new RequestAndCompletionHandler(
-//              System.currentTimeMillis(),
-//              handler.shareCoordinatorNode(),
-//              handler.requestBuilder(),
-//              handler
-//          ));
-//        }
       }
       return Collections.emptyList();
     }

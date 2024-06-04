@@ -18,8 +18,13 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.annotation.InterfaceStability;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.requests.RequestContext;
 
+import java.util.OptionalInt;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.IntSupplier;
 
 @InterfaceStability.Evolving
@@ -51,4 +56,10 @@ public interface ShareCoordinator {
    * Stop the share coordinator
    */
   void shutdown();
+
+  CompletableFuture<WriteShareGroupStateResponseData> writeState(RequestContext context, WriteShareGroupStateRequestData request);
+
+  void onElection(int partitionIndex, int partitionLeaderEpoch);
+
+  void onResignation(int partitionIndex, OptionalInt partitionLeaderEpoch);
 }
