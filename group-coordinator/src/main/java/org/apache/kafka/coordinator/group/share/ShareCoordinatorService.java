@@ -27,6 +27,7 @@ import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.RequestContext;
+import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
@@ -240,7 +241,6 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
     // validate groupId
     if (groupId == null || groupId.isEmpty()) {
-      WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
       if (hasElement(request.topics())) {
         return CompletableFuture.completedFuture(new WriteShareGroupStateResponseData()
             .setResults(request.topics().stream()
@@ -249,52 +249,36 @@ public class ShareCoordinatorService implements ShareCoordinator {
                   resultData.setTopicId(topicData.topicId());
                   if (hasElement(topicData.partitions())) {
                     resultData.setPartitions(topicData.partitions().stream()
-                        .map(partitionData -> new WriteShareGroupStateResponseData.PartitionResult()
-                            .setPartition(partitionData.partition())
-                            .setErrorCode(Errors.INVALID_GROUP_ID.code())
-                            .setErrorMessage("Group id must be specified and non-empty."))
+                        .map(partitionData -> WriteShareGroupStateResponse.getErrorResponsePartitionResult(
+                            partitionData.partition(), Errors.INVALID_GROUP_ID, "Group id must be specified and non-empty."))
                         .collect(Collectors.toList()));
                   } else {
-                    resultData.setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-                        .setPartition(-1)
-                        .setErrorCode(Errors.INVALID_GROUP_ID.code())
-                        .setErrorMessage("Group id must be specified and non-empty.")));
+                    resultData.setPartitions(Collections.singletonList(WriteShareGroupStateResponse.getErrorResponsePartitionResult(
+                        -1, Errors.INVALID_GROUP_ID, "Group id must be specified and non-empty.")));
                   }
                   return resultData;
                 })
                 .collect(Collectors.toList())));
       } else {
-        return CompletableFuture.completedFuture(responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-            .setTopicId(Uuid.ZERO_UUID)
-            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-                .setPartition(-1)
-                .setErrorCode(Errors.INVALID_GROUP_ID.code())
-                .setErrorMessage("Group id must be specified and non-empty."))))));
+        return CompletableFuture.completedFuture(WriteShareGroupStateResponse.getErrorResponseData(
+            Uuid.ZERO_UUID, -1, Errors.INVALID_GROUP_ID, "Group id must be specified and non-empty."));
       }
     }
 
     // validate topicsData
     if (!hasElement(request.topics())) {
-      WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
-      responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-          .setTopicId(Uuid.ZERO_UUID)
-          .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-              .setPartition(-1)
-              .setErrorCode(Errors.INVALID_REQUEST.code())
-              .setErrorMessage("Topic data must be specified.")))));
-      return CompletableFuture.completedFuture(responseData);
+      return CompletableFuture.completedFuture(WriteShareGroupStateResponse.getErrorResponseData(
+          Uuid.ZERO_UUID, -1, Errors.INVALID_REQUEST, "Topic data must be specified."));
     }
 
     // validate partitionsData
     request.topics().forEach(topicData -> {
       if (!hasElement(topicData.partitions())) {
         WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
-        responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-            .setTopicId(topicData.topicId())
-            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-                .setPartition(-1)
-                .setErrorCode(Errors.INVALID_REQUEST.code())
-                .setErrorMessage("Partition data must be specified.")))));
+        responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.getErrorResponseResult(
+            topicData.topicId(), Collections.singletonList(WriteShareGroupStateResponse.getErrorResponsePartitionResult(
+                -1, Errors.INVALID_REQUEST, "Partition data must be specified.")))));
+
         Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>> partMap = new HashMap<>();
         partMap.put(-1, CompletableFuture.completedFuture(responseData));
         futureMap.put(topicData.topicId(), partMap);
@@ -341,9 +325,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
 
-            return new WriteShareGroupStateResponseData.WriteStateResult()
-                .setTopicId(topicId)
-                .setPartitions(partitionResults);
+            return WriteShareGroupStateResponse.getErrorResponseResult(topicId, partitionResults);
           })
           .collect(Collectors.toList());
       return new WriteShareGroupStateResponseData()

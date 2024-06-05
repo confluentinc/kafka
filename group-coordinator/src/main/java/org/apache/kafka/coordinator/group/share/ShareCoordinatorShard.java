@@ -24,6 +24,7 @@ import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.requests.TransactionResult;
+import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.Record;
@@ -248,13 +249,9 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
       if (record.key().message() instanceof ShareSnapshotKey && record.value().message() instanceof ShareSnapshotValue) {
         ShareSnapshotKey newKey = (ShareSnapshotKey) record.key().message();
         ShareSnapshotValue newValue = (ShareSnapshotValue) record.value().message();
-
-        responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-            .setTopicId(newKey.topicId())
-            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-                .setPartition(newKey.partition())
-                .setErrorCode(Errors.NONE.code())
-                .setErrorMessage(Errors.NONE.message())))));
+        responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.getErrorResponseResult(
+            newKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.getErrorResponsePartitionResult(
+                newKey.partition(), Errors.NONE, Errors.NONE.message())))));
 
         String mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
 
@@ -295,13 +292,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   }
 
   private CoordinatorResult<WriteShareGroupStateResponseData, Record> getWriteErrorResponse(Errors error, Uuid topicId, int partitionId) {
-    WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
-    responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-        .setTopicId(topicId)
-        .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-            .setPartition(partitionId)
-            .setErrorCode(error.code())
-            .setErrorMessage(error.message())))));
+    WriteShareGroupStateResponseData responseData = WriteShareGroupStateResponse.getErrorResponseData(topicId, partitionId, error, error.message());
     return new CoordinatorResult<>(Collections.emptyList(), responseData);
   }
 }
