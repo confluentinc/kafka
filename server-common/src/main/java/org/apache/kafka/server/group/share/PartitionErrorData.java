@@ -17,9 +17,7 @@
 
 package org.apache.kafka.server.group.share;
 
-public interface PartitionErrorData extends PartitionInfoData {
-  int partition();
-
+public interface PartitionErrorData extends PartitionInfoData, PartitionIdData {
   short errorCode();
 
   String errorMessage();
