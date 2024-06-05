@@ -18,12 +18,14 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.internals.Topic;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
@@ -36,16 +38,23 @@ import org.apache.kafka.coordinator.group.runtime.CoordinatorRuntime;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorShardBuilderSupplier;
 import org.apache.kafka.coordinator.group.runtime.MultiThreadedEventProcessor;
 import org.apache.kafka.coordinator.group.runtime.PartitionWriter;
+import org.apache.kafka.server.group.share.ShareGroupHelper;
 import org.apache.kafka.server.record.BrokerCompressionType;
 import org.apache.kafka.server.util.timer.Timer;
 import org.slf4j.Logger;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
+import java.util.stream.Collectors;
 
 public class ShareCoordinatorService implements ShareCoordinator {
   private final ShareCoordinatorConfig config;
@@ -220,7 +229,126 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
   @Override
   public CompletableFuture<WriteShareGroupStateResponseData> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
-    return null;
+    log.info("ShareCoordinatorService writeState request received - {}", request);
+    String groupId = request.groupId();
+    Map<Uuid, Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>>> futureMap = new HashMap<>();
+
+//     The request received here could have multiple keys of structure group:topic:partition. However,
+//     the writeState method in ShareCoordinatorShard expects a single key in the request. Hence, we will
+//     be looping over the keys below and constructing new WriteShareGroupStateRequestData objects to pass
+//     onto the shard method.
+
+    // validate groupId
+    if (groupId == null || groupId.isEmpty()) {
+      WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
+      if (hasElement(request.topics())) {
+        return CompletableFuture.completedFuture(new WriteShareGroupStateResponseData()
+            .setResults(request.topics().stream()
+                .map(topicData -> {
+                  WriteShareGroupStateResponseData.WriteStateResult resultData = new WriteShareGroupStateResponseData.WriteStateResult();
+                  resultData.setTopicId(topicData.topicId());
+                  if (hasElement(topicData.partitions())) {
+                    resultData.setPartitions(topicData.partitions().stream()
+                        .map(partitionData -> new WriteShareGroupStateResponseData.PartitionResult()
+                            .setPartition(partitionData.partition())
+                            .setErrorCode(Errors.INVALID_GROUP_ID.code())
+                            .setErrorMessage("Group id must be specified and non-empty."))
+                        .collect(Collectors.toList()));
+                  } else {
+                    resultData.setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+                        .setPartition(-1)
+                        .setErrorCode(Errors.INVALID_GROUP_ID.code())
+                        .setErrorMessage("Group id must be specified and non-empty.")));
+                  }
+                  return resultData;
+                })
+                .collect(Collectors.toList())));
+      } else {
+        return CompletableFuture.completedFuture(responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+            .setTopicId(Uuid.ZERO_UUID)
+            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+                .setPartition(-1)
+                .setErrorCode(Errors.INVALID_GROUP_ID.code())
+                .setErrorMessage("Group id must be specified and non-empty."))))));
+      }
+    }
+
+    // validate topicsData
+    if (!hasElement(request.topics())) {
+      WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
+      responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+          .setTopicId(Uuid.ZERO_UUID)
+          .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+              .setPartition(-1)
+              .setErrorCode(Errors.INVALID_REQUEST.code())
+              .setErrorMessage("Topic data must be specified.")))));
+      return CompletableFuture.completedFuture(responseData);
+    }
+
+    // validate partitionsData
+    request.topics().forEach(topicData -> {
+      if (!hasElement(topicData.partitions())) {
+        WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
+        responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+            .setTopicId(topicData.topicId())
+            .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+                .setPartition(-1)
+                .setErrorCode(Errors.INVALID_REQUEST.code())
+                .setErrorMessage("Partition data must be specified.")))));
+        Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>> partMap = new HashMap<>();
+        partMap.put(-1, CompletableFuture.completedFuture(responseData));
+        futureMap.put(topicData.topicId(), partMap);
+      } else {
+        Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>> partitionFut =
+            futureMap.computeIfAbsent(topicData.topicId(), k -> new HashMap<>());
+        topicData.partitions().forEach(
+            partitionData -> partitionFut.put(partitionData.partition(), runtime.scheduleWriteOperation(
+                "write-share-group-state",
+                topicPartitionFor(ShareGroupHelper.coordinatorKey(groupId, topicData.topicId(), partitionData.partition())),
+                Duration.ofMillis(config.writeTimeoutMs),
+                coordinator -> coordinator.writeState(context, new WriteShareGroupStateRequestData()
+                    .setGroupId(groupId)
+                    .setTopics(Collections.singletonList(new WriteShareGroupStateRequestData.WriteStateData()
+                        .setTopicId(topicData.topicId())
+                        .setPartitions(Collections.singletonList(new WriteShareGroupStateRequestData.PartitionData()
+                            .setPartition(partitionData.partition())
+                            .setStartOffset(partitionData.startOffset())
+                            .setLeaderEpoch(partitionData.leaderEpoch())
+                            .setStateEpoch(partitionData.stateEpoch())
+                            .setStateBatches(partitionData.stateBatches()))))))))
+        );
+      }
+    });
+
+
+    // Combine all futures into a single CompletableFuture<Void>
+    CompletableFuture<Void> combinedFuture = CompletableFuture.allOf(futureMap.values().stream()
+        .flatMap(partMap -> partMap.values().stream()).toArray(CompletableFuture[]::new));
+
+    return combinedFuture.thenApply(v -> {
+      List<WriteShareGroupStateResponseData.WriteStateResult> writeStateResults = futureMap.keySet().stream()
+          .map(topicId -> {
+            List<WriteShareGroupStateResponseData.PartitionResult> partitionResults = futureMap.get(topicId).values().stream()
+                .map(future -> {
+                  try {
+                    WriteShareGroupStateResponseData partitionData = future.get();
+                    // error check if the partitionData results contains only 1 row (corresponding to topicId)
+                    return partitionData.results().get(0).partitions();
+                  } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                  }
+                })
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+            return new WriteShareGroupStateResponseData.WriteStateResult()
+                .setTopicId(topicId)
+                .setPartitions(partitionResults);
+          })
+          .collect(Collectors.toList());
+      return new WriteShareGroupStateResponseData()
+          .setResults(writeStateResults);
+    });
   }
 
   @Override
@@ -246,5 +374,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
   private TopicPartition topicPartitionFor(String key) {
     return new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionFor(key));
+  }
+
+  private static <P> boolean hasElement(List<P> list) {
+    return list == null || list.isEmpty() || list.get(0) == null;
   }
 }

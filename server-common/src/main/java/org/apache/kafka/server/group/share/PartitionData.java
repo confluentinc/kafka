@@ -135,4 +135,17 @@ public class PartitionData implements
       return new PartitionData(partition, stateEpoch, startOffset, errorCode, errorMessage, leaderEpoch, stateBatches);
     }
   }
+
+  @Override
+  public String toString() {
+    return "PartitionData(" +
+        "partition=" + partition + "," +
+        "stateEpoch=" + stateEpoch + "," +
+        "startOffset=" + startOffset + "," +
+        "errorCode=" + errorCode + "," +
+        "errorMessage=" + errorMessage + "," +
+        "leaderEpoch=" + leaderEpoch + "," +
+        "stateBatches=" + stateBatches +
+        ")";
+  }
 }
