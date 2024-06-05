@@ -306,7 +306,9 @@ public class RequestManagers implements Closeable {
                         subscriptions,
                         fetchConfig,
                         fetchBuffer,
-                        shareFetchMetricsManager);
+                        shareFetchMetricsManager,
+                        retryBackoffMs,
+                        retryBackoffMaxMs);
                 shareMembershipManager.registerStateListener(shareConsumeRequestManager);
 
                 return new RequestManagers(
