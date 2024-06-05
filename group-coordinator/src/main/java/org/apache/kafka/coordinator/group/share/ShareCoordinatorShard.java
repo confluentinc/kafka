@@ -272,23 +272,12 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
   private Optional<CoordinatorResult<WriteShareGroupStateResponseData, Record>> maybeGetWriteStateError(WriteShareGroupStateRequestData request) {
     String groupId = request.groupId();
-
-    if (!hasElement(request.topics())) {
-      return Optional.of(getWriteErrorResponse(Errors.INVALID_REQUEST, Uuid.ZERO_UUID, -1));
-    }
     WriteShareGroupStateRequestData.WriteStateData topicData = request.topics().get(0);
-
-    if (!hasElement(topicData.partitions())) {
-      return Optional.of(getWriteErrorResponse(Errors.INVALID_REQUEST, topicData.topicId(), -1));
-    }
     WriteShareGroupStateRequestData.PartitionData partitionData = topicData.partitions().get(0);
 
     Uuid topicId = topicData.topicId();
     int partitionId = partitionData.partition();
 
-    if (groupId == null || groupId.isEmpty()) {
-      return Optional.of(getWriteErrorResponse(Errors.INVALID_GROUP_ID, topicId, partitionId));
-    }
     if (topicId == null || partitionId == -1) {
       return Optional.of(getWriteErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
     }
@@ -314,9 +303,5 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
             .setErrorCode(error.code())
             .setErrorMessage(error.message())))));
     return new CoordinatorResult<>(Collections.emptyList(), responseData);
-  }
-
-  private static <P> boolean hasElement(List<P> list) {
-    return list == null || list.isEmpty() || list.get(0) == null;
   }
 }
