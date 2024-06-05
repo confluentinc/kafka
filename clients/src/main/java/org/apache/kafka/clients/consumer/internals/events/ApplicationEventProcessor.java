@@ -24,6 +24,7 @@ import org.apache.kafka.clients.consumer.internals.ConsumerMetadata;
 import org.apache.kafka.clients.consumer.internals.ConsumerNetworkThread;
 import org.apache.kafka.clients.consumer.internals.MembershipManager;
 import org.apache.kafka.clients.consumer.internals.RequestManagers;
+import org.apache.kafka.clients.consumer.internals.ShareConsumeRequestManager;
 import org.apache.kafka.clients.consumer.internals.ShareMembershipManager;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.PartitionInfo;
@@ -134,6 +135,14 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
 
             case LEAVE_ON_CLOSE:
                 process((LeaveOnCloseEvent) event);
+                return;
+
+            case SHARE_FETCH:
+                process((ShareFetchEvent) event);
+                return;
+
+            case SHARE_ACKNOWLEDGE_SYNC:
+                process((SyncShareAcknowledgeEvent) event);
                 return;
 
             case SHARE_SUBSCRIPTION_CHANGE:
@@ -302,6 +311,26 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
         log.debug("Leaving group before closing");
         CompletableFuture<Void> future = membershipManager.leaveGroup();
         // The future will be completed on heartbeat sent
+        future.whenComplete(complete(event.future()));
+    }
+
+    /**
+     * Process event that tells the share consume request manager to fetch more records.
+     */
+    private void process(final ShareFetchEvent event) {
+        requestManagers.shareConsumeRequestManager.ifPresent(scrm -> scrm.fetch());
+    }
+
+    /**
+     * Process event that indicates the consumer acknowledged delivery of records synchronously.
+     */
+    private void process(final SyncShareAcknowledgeEvent event) {
+        if (!requestManagers.shareConsumeRequestManager.isPresent()) {
+            return;
+        }
+
+        ShareConsumeRequestManager manager = requestManagers.shareConsumeRequestManager.get();
+        CompletableFuture<Void> future = manager.commitSync(event.deadlineMs());
         future.whenComplete(complete(event.future()));
     }
 

@@ -102,7 +102,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-public class ShareFetchRequestManagerTest {
+public class ShareConsumeRequestManagerTest {
 
     private final String topicName = "test";
     private final String groupId = "test-group";
@@ -129,7 +129,7 @@ public class ShareFetchRequestManagerTest {
     private ShareFetchMetricsManager metricsManager;
     private MockClient client;
     private Metrics metrics;
-    private TestableShareFetchRequestManager<?, ?> fetcher;
+    private TestableShareConsumeRequestManager<?, ?> fetcher;
     private TestableNetworkClientDelegate networkClientDelegate;
     private MemoryRecords records;
     private List<ShareFetchResponseData.AcquiredRecords> acquiredRecords;
@@ -649,12 +649,12 @@ public class ShareFetchRequestManagerTest {
     }
 
     private ShareFetchResponse fullFetchResponse(TopicIdPartition tp,
-                                                                    MemoryRecords records,
-                                                                    List<ShareFetchResponseData.AcquiredRecords> acquiredRecords,
-                                                                    Errors error,
-                                                                    Errors acknowledgeError) {
+                                                 MemoryRecords records,
+                                                 List<ShareFetchResponseData.AcquiredRecords> acquiredRecords,
+                                                 Errors error,
+                                                 Errors acknowledgeError) {
         Map<TopicIdPartition, ShareFetchResponseData.PartitionData> partitions = Collections.singletonMap(tp,
-               partitionData(tp, records, acquiredRecords, error, acknowledgeError));
+                partitionData(tp, records, acquiredRecords, error, acknowledgeError));
         return ShareFetchResponse.of(Errors.NONE, 0, new LinkedHashMap<>(partitions), Collections.emptyList());
     }
 
@@ -664,11 +664,11 @@ public class ShareFetchRequestManagerTest {
                                                                Errors error,
                                                                Errors acknowledgeError) {
         return new ShareFetchResponseData.PartitionData()
-                    .setPartitionIndex(tp.topicPartition().partition())
-                    .setErrorCode(error.code())
-                    .setAcknowledgeErrorCode(acknowledgeError.code())
-                    .setRecords(records)
-                    .setAcquiredRecords(acquiredRecords);
+                .setPartitionIndex(tp.topicPartition().partition())
+                .setErrorCode(error.code())
+                .setAcknowledgeErrorCode(acknowledgeError.code())
+                .setRecords(records)
+                .setAcquiredRecords(acquiredRecords);
     }
 
     /**
@@ -738,7 +738,7 @@ public class ShareFetchRequestManagerTest {
                 subscriptions,
                 fetchConfig,
                 deserializers);
-        fetcher = spy(new TestableShareFetchRequestManager<>(
+        fetcher = spy(new TestableShareConsumeRequestManager<>(
                 logContext,
                 groupId,
                 metadata,
@@ -747,7 +747,7 @@ public class ShareFetchRequestManagerTest {
                 new ShareFetchBuffer(logContext),
                 metricsManager,
                 shareFetchCollector
-                ));
+        ));
     }
 
     private void buildDependencies(MetricConfig metricConfig,
@@ -771,18 +771,18 @@ public class ShareFetchRequestManagerTest {
         networkClientDelegate = spy(new TestableNetworkClientDelegate(time, config, logContext, client));
     }
 
-    private class TestableShareFetchRequestManager<K, V> extends ShareFetchRequestManager {
+    private class TestableShareConsumeRequestManager<K, V> extends ShareConsumeRequestManager {
 
         private final ShareFetchCollector<K, V> shareFetchCollector;
 
-        public TestableShareFetchRequestManager(LogContext logContext,
-                                           String groupId,
-                                           ConsumerMetadata metadata,
-                                           SubscriptionState subscriptions,
-                                           FetchConfig fetchConfig,
-                                           ShareFetchBuffer shareFetchBuffer,
-                                           ShareFetchMetricsManager metricsManager,
-                                           ShareFetchCollector<K, V> fetchCollector) {
+        public TestableShareConsumeRequestManager(LogContext logContext,
+                                                  String groupId,
+                                                  ConsumerMetadata metadata,
+                                                  SubscriptionState subscriptions,
+                                                  FetchConfig fetchConfig,
+                                                  ShareFetchBuffer shareFetchBuffer,
+                                                  ShareFetchMetricsManager metricsManager,
+                                                  ShareFetchCollector<K, V> fetchCollector) {
             super(logContext, groupId, metadata, subscriptions, fetchConfig, shareFetchBuffer, metricsManager);
             this.shareFetchCollector = fetchCollector;
             onMemberEpochUpdated(Optional.empty(), Optional.of(Uuid.randomUuid().toString()));
@@ -793,6 +793,7 @@ public class ShareFetchRequestManagerTest {
         }
 
         private int sendFetches() {
+            fetch();
             NetworkClientDelegate.PollResult pollResult = poll(time.milliseconds());
             networkClientDelegate.addAll(pollResult.unsentRequests);
             return pollResult.unsentRequests.size();

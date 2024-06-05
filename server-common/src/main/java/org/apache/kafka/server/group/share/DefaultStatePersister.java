@@ -99,8 +99,7 @@ public class DefaultStatePersister implements Persister {
     HashMap<Uuid, HashMap<Integer, CompletableFuture<PartitionData>>> futures = new HashMap<>();
     List<PersisterStateManager.ReadStateHandler> handlers = gtp.topicsData().stream()
         .map(topicData -> topicData.partitions().stream()
-            .map(partitionData ->
-                    {
+            .map(partitionData -> {
                         CompletableFuture<PartitionData> future = new CompletableFuture<>();
                         if (futures.containsKey(topicData.topicId())) {
                             futures.get(topicData.topicId()).put(partitionData.partition(), future);

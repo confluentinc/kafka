@@ -41,7 +41,11 @@ import org.apache.kafka.coordinator.group.generated.OffsetCommitValue;
 import org.apache.kafka.coordinator.group.classic.ClassicGroup;
 import org.apache.kafka.coordinator.group.generated.ShareGroupMemberMetadataKey;
 import org.apache.kafka.coordinator.group.generated.ShareGroupMemberMetadataValue;
+import org.apache.kafka.coordinator.group.generated.ShareSnapshotKey;
+import org.apache.kafka.coordinator.group.generated.ShareSnapshotValue;
+import org.apache.kafka.coordinator.group.share.ShareCoordinator;
 import org.apache.kafka.coordinator.group.share.ShareGroupMember;
+import org.apache.kafka.coordinator.group.share.ShareGroupOffset;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
 import org.apache.kafka.server.common.MetadataVersion;
 
@@ -638,6 +642,29 @@ public class RecordHelpers {
                 (short) 10
             ),
             null // Tombstone.
+        );
+    }
+
+    public static Record newShareSnapshotRecord(String groupId, Uuid topicId, int partitionId, ShareGroupOffset offsetData) {
+        return new Record(
+            new ApiMessageAndVersion(new ShareSnapshotKey()
+                .setGroupId(groupId)
+                .setTopicId(topicId)
+                .setPartition(partitionId),
+                ShareCoordinator.SHARE_SNAPSHOT_RECORD_KEY_VERSION),
+            new ApiMessageAndVersion(new ShareSnapshotValue()
+                .setSnapshotEpoch(offsetData.snapshotEpoch)
+                .setStateEpoch(offsetData.stateEpoch)
+                .setLeaderEpoch(offsetData.leaderEpoch)
+                .setStartOffset(offsetData.startOffset)
+                .setStateBatches(offsetData.stateBatches.stream()
+                    .map(batch -> new ShareSnapshotValue.StateBatch()
+                        .setFirstOffset(batch.firstOffset())
+                        .setLastOffset(batch.lastOffset())
+                        .setDeliveryCount(batch.deliveryCount())
+                        .setDeliveryState(batch.deliveryState()))
+                    .collect(Collectors.toList())),
+                ShareCoordinator.SHARE_SNAPSHOT_RECORD_VALUE_VERSION)
         );
     }
 

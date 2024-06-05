@@ -19,6 +19,8 @@ package kafka.test.api;
 import kafka.api.AbstractShareConsumerTest;
 import kafka.api.BaseConsumerTest;
 import kafka.utils.TestUtils;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.RecordsToDelete;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.AcknowledgementCommitCallback;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -29,6 +31,7 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
@@ -54,6 +57,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -422,6 +426,26 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
+    public void testExplicitAcknowledgeCommitSuccess(String quorum) throws Exception {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        producer.send(record);
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
+        assertEquals(1, records.count());
+        records.forEach(consumedRecord -> shareConsumer.acknowledge(consumedRecord));
+        producer.send(record);
+        Map<TopicIdPartition, Optional<KafkaException>> result = shareConsumer.commitSync();
+        assertEquals(1, result.size());
+        records = shareConsumer.poll(Duration.ofMillis(5000));
+        assertEquals(1, records.count());
+        shareConsumer.close();
+    }
+
+    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
+    @ValueSource(strings = {"kraft+kip932"})
     public void testExplicitAcknowledgeReleasePollAccept(String quorum) throws Exception {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
@@ -508,6 +532,26 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
         assertThrows(IllegalStateException.class, () -> shareConsumer.acknowledge(consumedRecord));
+        shareConsumer.close();
+    }
+
+    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
+    @ValueSource(strings = {"kraft+kip932"})
+    public void testImplicitAcknowledgeCommitSync(String quorum) throws Exception {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        producer.send(record);
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
+                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
+        assertEquals(1, records.count());
+        Map<TopicIdPartition, Optional<KafkaException>> result = shareConsumer.commitSync();
+        assertEquals(1, result.size());
+        result = shareConsumer.commitSync();
+        assertEquals(0, result.size());
+        records = shareConsumer.poll(Duration.ofMillis(5000));
+        assertEquals(0, records.count());
         shareConsumer.close();
     }
 
@@ -656,11 +700,20 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         int messagesConsumed = 0;
         int retries = 0;
         try {
-            while (totalMessagesConsumed.get() < totalMessages && retries < maxPolls) {
-                ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
-                messagesConsumed += records.count();
-                totalMessagesConsumed.addAndGet(records.count());
-                retries++;
+            if (totalMessages > 0) {
+                while (totalMessagesConsumed.get() < totalMessages && retries < maxPolls) {
+                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+                    messagesConsumed += records.count();
+                    totalMessagesConsumed.addAndGet(records.count());
+                    retries++;
+                }
+            } else {
+                while (retries < maxPolls) {
+                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+                    messagesConsumed += records.count();
+                    totalMessagesConsumed.addAndGet(records.count());
+                    retries++;
+                }
             }
             // One final poll to complete acknowledgement of the records (will be commit once we have that)
             shareConsumer.poll(Duration.ofMillis(2000));
@@ -1206,5 +1259,68 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
         shareConsumer.close();
+    }
+
+    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
+    @ValueSource(strings = {"kraft+kip932"})
+    public void testLsoMovementByRecordsDeletion(String quorum) {
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), 0, null, "key".getBytes(), "value".getBytes());
+
+        // We write 10 records to the topic, so they would be written from offsets 0-9 on the topic.
+        try {
+            for (int i = 0; i < 10; i++) {
+                producer.send(record).get();
+            }
+        } catch (Exception e) {
+            fail("Failed to send records: " + e);
+        }
+        Admin adminClient = createAdminClient(listenerName(), new Properties());
+        // We delete records before offset 5, so the LSO should move to 5.
+        adminClient.deleteRecords(Collections.singletonMap(tp(), RecordsToDelete.beforeOffset(5L)));
+
+        AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
+        CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, 5, "group1", 1, 10);
+        // The records returned belong to offsets 5-9.
+        assertEquals(5, totalMessagesConsumed.get());
+        try {
+            assertEquals(5, future.get());
+        } catch (Exception e) {
+            fail("Exception occurred : " + e.getMessage());
+        }
+
+        // We write 5 records to the topic, so they would be written from offsets 10-14 on the topic.
+        try {
+            for (int i = 0; i < 5; i++) {
+                producer.send(record).get();
+            }
+        } catch (Exception e) {
+            fail("Failed to send records: " + e);
+        }
+
+        // We delete records before offset 14, so the LSO should move to 14.
+        adminClient.deleteRecords(Collections.singletonMap(tp(), RecordsToDelete.beforeOffset(14L)));
+
+        totalMessagesConsumed = new AtomicInteger(0);
+        future = consumeMessages(totalMessagesConsumed, 1, "group1", 1, 10);
+        // The record returned belong to offset 14.
+        assertEquals(1, totalMessagesConsumed.get());
+        try {
+            assertEquals(1, future.get());
+        } catch (Exception e) {
+            fail("Exception occurred : " + e.getMessage());
+        }
+
+        // We delete records before offset 15, so the LSO should move to 15 and now no records should be returned.
+        adminClient.deleteRecords(Collections.singletonMap(tp(), RecordsToDelete.beforeOffset(15L)));
+
+        totalMessagesConsumed = new AtomicInteger(0);
+        future = consumeMessages(totalMessagesConsumed, 0, "group1", 1, 5);
+        assertEquals(0, totalMessagesConsumed.get());
+        try {
+            assertEquals(0, future.get());
+        } catch (Exception e) {
+            fail("Exception occurred : " + e.getMessage());
+        }
     }
 }

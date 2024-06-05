@@ -8301,7 +8301,7 @@ public class GroupMetadataManagerTest {
                     .setGroupType(Group.GroupType.CONSUMER.toString()),
                 new ListGroupsResponseData.ListedGroup()
                     .setGroupId(shareGroupId)
-                    .setProtocolType(ConsumerProtocol.PROTOCOL_TYPE)
+                    .setProtocolType(ShareGroup.PROTOCOL_TYPE)
                     .setGroupState(ShareGroup.ShareGroupState.EMPTY.toString())
                     .setGroupType(Group.GroupType.SHARE.toString())
             ).collect(Collectors.toMap(ListGroupsResponseData.ListedGroup::groupId, Function.identity()));
@@ -8342,7 +8342,7 @@ public class GroupMetadataManagerTest {
                 .setGroupType(Group.GroupType.CLASSIC.toString()),
             new ListGroupsResponseData.ListedGroup()
                 .setGroupId(shareGroupId)
-                .setProtocolType(ConsumerProtocol.PROTOCOL_TYPE)
+                .setProtocolType(ShareGroup.PROTOCOL_TYPE)
                 .setGroupState(ShareGroup.ShareGroupState.EMPTY.toString())
                 .setGroupType(Group.GroupType.SHARE.toString())
         ).collect(Collectors.toMap(ListGroupsResponseData.ListedGroup::groupId, Function.identity()));
@@ -8380,7 +8380,7 @@ public class GroupMetadataManagerTest {
         expectAllGroupMap = Stream.of(
             new ListGroupsResponseData.ListedGroup()
                 .setGroupId(shareGroupId)
-                .setProtocolType(ConsumerProtocol.PROTOCOL_TYPE)
+                .setProtocolType(ShareGroup.PROTOCOL_TYPE)
                 .setGroupState(ShareGroup.ShareGroupState.EMPTY.toString())
                 .setGroupType(GroupType.SHARE.toString())
         ).collect(Collectors.toMap(ListGroupsResponseData.ListedGroup::groupId, Function.identity()));
@@ -8402,7 +8402,7 @@ public class GroupMetadataManagerTest {
                 .setGroupType(Group.GroupType.CONSUMER.toString()),
             new ListGroupsResponseData.ListedGroup()
                 .setGroupId(shareGroupId)
-                .setProtocolType(ConsumerProtocol.PROTOCOL_TYPE)
+                .setProtocolType(ShareGroup.PROTOCOL_TYPE)
                 .setGroupState(ShareGroup.ShareGroupState.EMPTY.toString())
                 .setGroupType(GroupType.SHARE.toString())
         ).collect(Collectors.toMap(ListGroupsResponseData.ListedGroup::groupId, Function.identity()));

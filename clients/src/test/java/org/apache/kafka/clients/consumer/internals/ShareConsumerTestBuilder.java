@@ -79,7 +79,7 @@ public class ShareConsumerTestBuilder implements Closeable {
     final Timer pollTimer;
     final ShareFetchMetricsManager metricsManager;
     final NetworkClientDelegate networkClientDelegate;
-    final Optional<ShareFetchRequestManager> shareFetchRequestManager;
+    final Optional<ShareConsumeRequestManager> shareConsumeRequestManager;
     final Optional<CoordinatorRequestManager> coordinatorRequestManager;
     final Optional<ShareHeartbeatRequestManager> heartbeatRequestManager;
     final Optional<ShareMembershipManager> shareMembershipManager;
@@ -145,7 +145,7 @@ public class ShareConsumerTestBuilder implements Closeable {
                 client));
 
         ShareFetchBuffer fetchBuffer = new ShareFetchBuffer(logContext);
-        ShareFetchRequestManager fetchRequestManager = spy(new ShareFetchRequestManager(
+        ShareConsumeRequestManager consumeRequestManager = spy(new ShareConsumeRequestManager(
                 logContext,
                 groupRebalanceConfig.groupId,
                 metadata,
@@ -193,7 +193,7 @@ public class ShareConsumerTestBuilder implements Closeable {
                 backgroundEventHandler,
                 metrics));
 
-        this.shareFetchRequestManager = Optional.of(fetchRequestManager);
+        this.shareConsumeRequestManager = Optional.of(consumeRequestManager);
         this.coordinatorRequestManager = Optional.of(coordinator);
         this.heartbeatRequestManager = Optional.of(heartbeat);
         this.heartbeatState = Optional.of(heartbeatState);
@@ -201,7 +201,7 @@ public class ShareConsumerTestBuilder implements Closeable {
         this.shareMembershipManager = Optional.of(membershipManager);
 
         this.requestManagers = new RequestManagers(logContext,
-                fetchRequestManager,
+                consumeRequestManager,
                 coordinatorRequestManager,
                 heartbeatRequestManager,
                 shareMembershipManager);

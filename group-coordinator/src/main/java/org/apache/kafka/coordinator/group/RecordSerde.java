@@ -121,7 +121,7 @@ public class RecordSerde implements PartitionWriter.Serializer<Record>, Coordina
         }
     }
 
-    private ApiMessage apiMessageKeyFor(short recordType) {
+    protected ApiMessage apiMessageKeyFor(short recordType) {
         switch (recordType) {
             case 0:
             case 1:
@@ -147,7 +147,7 @@ public class RecordSerde implements PartitionWriter.Serializer<Record>, Coordina
         }
     }
 
-    private ApiMessage apiMessageValueFor(short recordType) {
+    protected ApiMessage apiMessageValueFor(short recordType) {
         switch (recordType) {
             case 0:
             case 1:

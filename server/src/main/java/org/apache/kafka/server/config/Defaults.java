@@ -36,7 +36,6 @@ import org.apache.kafka.coordinator.transaction.TransactionStateManagerConfig;
 import org.apache.kafka.raft.RaftConfig;
 import org.apache.kafka.security.PasswordEncoderConfigs;
 import org.apache.kafka.server.common.MetadataVersion;
-import org.apache.kafka.server.group.share.DefaultStatePersister;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -180,7 +179,7 @@ public class Defaults {
     public static final int SHARE_COORDINATOR_STATE_TOPIC_SEGMENT_BYTES = 100 * 1024 * 1024;
     public static final int SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR = 2;
     public static final int SHARE_COORDINATOR_NUM_THREADS = 1;
-    public static final String DEFAULT_SHARE_GROUP_PERSISTER_CLASS_NAME = DefaultStatePersister.class.getName();
+    public static final String DEFAULT_SHARE_GROUP_PERSISTER_CLASS_NAME = "org.apache.kafka.server.group.share.DefaultStatePersister";
 
     /** ********* Offset management configuration *********/
     public static final int OFFSET_METADATA_MAX_SIZE = OffsetConfig.DEFAULT_MAX_METADATA_SIZE;

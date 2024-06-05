@@ -1,4 +1,4 @@
-// Licensed to the Apache Software Foundation (ASF) under one or more
+  // Licensed to the Apache Software Foundation (ASF) under one or more
 // contributor license agreements.  See the NOTICE file distributed with
 // this work for additional information regarding copyright ownership.
 // The ASF licenses this file to You under the Apache License, Version 2.0
@@ -25,6 +25,8 @@
       "about": "The snapshot epoch." },
     { "name": "StateEpoch", "type": "int32", "versions": "0+",
       "about": "The state epoch for this share-partition." },
+    { "name": "LeaderEpoch", "type": "int32", "versions": "0+",
+      "about": "The leader epoch of the share-partition." },
     { "name": "StartOffset", "type": "int64", "versions": "0",
       "about": "The share-partition start offset." },
     { "name": "StateBatches", "type": "[]StateBatch", "versions": "0", "fields": [

@@ -23,6 +23,8 @@ import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.internals.Topic;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
+import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.utils.LogContext;
@@ -44,6 +46,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -203,8 +206,6 @@ public class ShareCoordinatorService implements ShareCoordinator {
         // A map to store the futures for each topicId and partition.
         HashMap<Uuid, HashMap<Integer, CompletableFuture<ReadShareGroupStateResponseData>>> futures = new HashMap<>();
 
-        CompletableFuture<ReadShareGroupStateResponseData> response = new CompletableFuture<>();
-
         if (!isActive.get()) {
             return CompletableFuture.completedFuture(
                     new ReadShareGroupStateResponseData()
@@ -332,4 +333,30 @@ public class ShareCoordinatorService implements ShareCoordinator {
         return groupId != null && !groupId.isEmpty();
     }
 
+
+  @Override
+  public CompletableFuture<WriteShareGroupStateResponseData> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
+    return null;
+  }
+
+  @Override
+  public CompletableFuture<ReadShareGroupStateResponseData> readState(RequestContext context, ReadShareGroupStateRequestData request) {
+    return null;
+  }
+
+  @Override
+  public void onElection(int partitionIndex, int partitionLeaderEpoch) {
+    runtime.scheduleLoadOperation(
+        new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionIndex),
+        partitionLeaderEpoch
+    );
+  }
+
+  @Override
+  public void onResignation(int partitionIndex, OptionalInt partitionLeaderEpoch) {
+    runtime.scheduleUnloadOperation(
+        new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionIndex),
+        partitionLeaderEpoch
+    );
+  }
 }
