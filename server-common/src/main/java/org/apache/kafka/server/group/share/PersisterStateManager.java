@@ -32,6 +32,7 @@ import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
 import org.apache.kafka.common.requests.WriteShareGroupStateRequest;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
+import org.apache.kafka.common.utils.ExponentialBackoff;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.util.InterBrokerSendThread;
 import org.apache.kafka.server.util.RequestAndCompletionHandler;
@@ -93,6 +94,8 @@ public class PersisterStateManager {
     protected final String groupId;
     protected final Uuid topicId;
     protected final int partition;
+    private final ExponentialBackoff findCoordbackoff = new ExponentialBackoff(1_000, 2, 30_000, 100);
+    private int findCoordattempts = 0;
 
     public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition) {
       this.groupId = groupId;
@@ -170,27 +173,28 @@ public class PersisterStateManager {
       List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
       if (coordinators.size() != 1) {
         log.error("Find coordinator response for {} is invalid", coordinatorKey());
-        //todo smjn: how to handle?
+        findCoordinatorErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new IllegalStateException("Invalid response with multiple coordinators."));
       }
       FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
       Errors error = Errors.forCode(coordinatorData.errorCode());
       if (error == Errors.NONE) {
+        findCoordattempts = 0;
         log.info("Find coordinator response received.");
         coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
         // now we want the actual share state RPC call to happen
         enqueue(this);
       } else if (isFindCoordinatorRetryable(error)) {
+        log.warn("Received retryable error in find coordinator {}", error.message());
+        log.info("Waiting before retrying find coordinator response.");
         try {
-          log.info("Waiting before retrying find coordinator response.");
-          TimeUnit.MILLISECONDS.sleep(100L);
+          TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(++findCoordattempts));
         } catch (InterruptedException e) {
           log.warn("Interrupted waiting before retrying find coordinator request", e);
         }
-        log.warn("Received retryable error in find coordinator {}", error.message());
         enqueue(this);
       } else {
         log.error("Unable to find coordinator.");
-        findCoordinatorErrorResponse(error);
+        findCoordinatorErrorResponse(error, null);
       }
     }
 
@@ -212,7 +216,13 @@ public class PersisterStateManager {
      */
     protected abstract boolean isRequestResponse(ClientResponse response);
 
-    protected abstract void findCoordinatorErrorResponse(Errors error);
+    /**
+     * Handle invalid find coordinator response. If error is UNKNOWN_SERVER_ERROR. Look at the
+     * exception details to figure out the problem.
+     * @param error
+     * @param exception
+     */
+    protected abstract void findCoordinatorErrorResponse(Errors error, Exception exception);
   }
 
   public class WriteStateHandler extends PersisterStateManagerHandler {
@@ -264,7 +274,11 @@ public class PersisterStateManager {
     }
 
     @Override
-    protected void findCoordinatorErrorResponse(Errors error) {
+    protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
+      if (error == Errors.UNKNOWN_SERVER_ERROR && exception != null) {
+        this.result.complete(new WriteShareGroupStateResponse(
+            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, exception.getMessage())));
+      }
       this.result.complete(new WriteShareGroupStateResponse(
           WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " + error.message())));
     }
