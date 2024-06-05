@@ -278,6 +278,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
             );
         }
 
+        // validate group Id
         if (!isGroupIdNotEmpty(groupId)) {
             return CompletableFuture.completedFuture(
                     generateErrorReadStateResponse(
@@ -288,30 +289,56 @@ public class ShareCoordinatorService implements ShareCoordinator {
             );
         }
 
+        // validate topicsData
+        if (!hasElement(request.topics())) {
+            ReadShareGroupStateResponseData responseData = new ReadShareGroupStateResponseData();
+            responseData.setResults(Collections.singletonList(new ReadShareGroupStateResponseData.ReadStateResult()
+                    .setTopicId(Uuid.ZERO_UUID)
+                    .setPartitions(Collections.singletonList(new ReadShareGroupStateResponseData.PartitionResult()
+                            .setPartition(-1)
+                            .setErrorCode(Errors.INVALID_REQUEST.code())
+                            .setErrorMessage("Topic data must be specified.")))));
+            return CompletableFuture.completedFuture(responseData);
+        }
+
         request.topics().forEach(topicData -> {
             Uuid topicId = topicData.topicId();
-            topicData.partitions().forEach(partitionData -> {
-                // Request object containing information of a single topic partition
-                ReadShareGroupStateRequestData requestForCurrentPartition = new ReadShareGroupStateRequestData()
-                        .setGroupId(groupId)
-                        .setTopics(Collections.singletonList(new ReadShareGroupStateRequestData.ReadStateData()
-                                .setTopicId(topicId)
-                                .setPartitions(Collections.singletonList(partitionData))));
-                String coordinatorKey = request.groupId() + ":" + topicId + ":" + partitionData.partition();
-                // Scheduling a runtime read operation to read share partition state from the coordinator in memory state
-                CompletableFuture<ReadShareGroupStateResponseData> future = runtime.scheduleReadOperation(
-                        "fetch-offsets",
-                        topicPartitionFor(coordinatorKey),
-                        (coordinator, offset) -> coordinator.readState(requestForCurrentPartition, offset)
-                );
-                if (futureMap.containsKey(topicId)) {
-                    futureMap.get(topicId).put(partitionData.partition(), future);
-                } else {
-                    HashMap<Integer, CompletableFuture<ReadShareGroupStateResponseData>> map = new HashMap<>();
-                    map.put(partitionData.partition(), future);
-                    futureMap.put(topicId, map);
-                }
-            });
+            // validate partitionsData
+            if (!hasElement(topicData.partitions())) {
+                ReadShareGroupStateResponseData responseData = new ReadShareGroupStateResponseData();
+                responseData.setResults(Collections.singletonList(new ReadShareGroupStateResponseData.ReadStateResult()
+                        .setTopicId(topicId)
+                        .setPartitions(Collections.singletonList(new ReadShareGroupStateResponseData.PartitionResult()
+                                .setPartition(-1)
+                                .setErrorCode(Errors.INVALID_REQUEST.code())
+                                .setErrorMessage("Partition data must be specified.")))));
+                HashMap<Integer, CompletableFuture<ReadShareGroupStateResponseData>> partMap = new HashMap<>();
+                partMap.put(-1, CompletableFuture.completedFuture(responseData));
+                futureMap.put(topicData.topicId(), partMap);
+            } else {
+                topicData.partitions().forEach(partitionData -> {
+                    // Request object containing information of a single topic partition
+                    ReadShareGroupStateRequestData requestForCurrentPartition = new ReadShareGroupStateRequestData()
+                            .setGroupId(groupId)
+                            .setTopics(Collections.singletonList(new ReadShareGroupStateRequestData.ReadStateData()
+                                    .setTopicId(topicId)
+                                    .setPartitions(Collections.singletonList(partitionData))));
+                    String coordinatorKey = request.groupId() + ":" + topicId + ":" + partitionData.partition();
+                    // Scheduling a runtime read operation to read share partition state from the coordinator in memory state
+                    CompletableFuture<ReadShareGroupStateResponseData> future = runtime.scheduleReadOperation(
+                            "fetch-offsets",
+                            topicPartitionFor(coordinatorKey),
+                            (coordinator, offset) -> coordinator.readState(requestForCurrentPartition, offset)
+                    );
+                    if (futureMap.containsKey(topicId)) {
+                        futureMap.get(topicId).put(partitionData.partition(), future);
+                    } else {
+                        HashMap<Integer, CompletableFuture<ReadShareGroupStateResponseData>> map = new HashMap<>();
+                        map.put(partitionData.partition(), future);
+                        futureMap.put(topicId, map);
+                    }
+                });
+            }
         });
 
 
@@ -355,5 +382,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionIndex),
                 partitionLeaderEpoch
         );
+    }
+
+    private static <P> boolean hasElement(List<P> list) {
+        return list == null || list.isEmpty() || list.get(0) == null;
     }
 }

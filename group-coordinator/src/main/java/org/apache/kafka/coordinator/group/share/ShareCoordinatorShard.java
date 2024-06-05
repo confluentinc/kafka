@@ -46,7 +46,6 @@ import org.slf4j.Logger;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -253,23 +252,12 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
     private Optional<ReadShareGroupStateResponseData> maybeGetReadStateError(ReadShareGroupStateRequestData request) {
         String groupId = request.groupId();
-
-        if (!hasElement(request.topics())) {
-            return Optional.of(getReadErrorResponse(Errors.INVALID_REQUEST, Uuid.ZERO_UUID, -1));
-        }
         ReadShareGroupStateRequestData.ReadStateData topicData = request.topics().get(0);
-
-        if (!hasElement(topicData.partitions())) {
-            return Optional.of(getReadErrorResponse(Errors.INVALID_REQUEST, topicData.topicId(), -1));
-        }
         ReadShareGroupStateRequestData.PartitionData partitionData = topicData.partitions().get(0);
 
         Uuid topicId = topicData.topicId();
         int partitionId = partitionData.partition();
 
-        if (groupId == null || groupId.isEmpty()) {
-            return Optional.of(getReadErrorResponse(Errors.INVALID_GROUP_ID, topicId, partitionId));
-        }
         if (topicId == null || partitionId == -1) {
             return Optional.of(getReadErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
         }
@@ -298,9 +286,5 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
                                 .setPartition(partitionId)
                                 .setErrorCode(error.code())
                                 .setErrorMessage(error.message())))));
-    }
-
-    private static <P> boolean hasElement(List<P> list) {
-        return list == null || list.isEmpty() || list.get(0) == null;
     }
 }
