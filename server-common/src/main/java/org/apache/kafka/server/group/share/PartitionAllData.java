@@ -19,9 +19,7 @@ package org.apache.kafka.server.group.share;
 
 import java.util.List;
 
-public interface PartitionAllData extends PartitionInfoData {
-  int partition();
-
+public interface PartitionAllData extends PartitionInfoData, PartitionIdData {
   int stateEpoch();
 
   long startOffset();
