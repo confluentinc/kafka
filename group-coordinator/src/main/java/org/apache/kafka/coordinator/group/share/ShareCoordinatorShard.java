@@ -271,38 +271,52 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   }
 
   private Optional<CoordinatorResult<WriteShareGroupStateResponseData, Record>> maybeGetWriteStateError(WriteShareGroupStateRequestData request) {
-    Errors error = null;
     String groupId = request.groupId();
-    WriteShareGroupStateRequestData.WriteStateData topicData = (request.topics() == null || request.topics().isEmpty()) ? null : request.topics().get(0);
-    WriteShareGroupStateRequestData.PartitionData partitionData = (topicData == null || topicData.partitions() == null || topicData.partitions().isEmpty()) ?
-        null : topicData.partitions().get(0);
-    Uuid topicId = topicData == null ? Uuid.ZERO_UUID : topicData.topicId();
-    int partitionId = partitionData == null ? -1 : partitionData.partition();
+
+    if (!hasElement(request.topics())) {
+      return Optional.of(getWriteErrorResponse(Errors.INVALID_REQUEST, Uuid.ZERO_UUID, -1));
+    }
+    WriteShareGroupStateRequestData.WriteStateData topicData = request.topics().get(0);
+
+    if (!hasElement(topicData.partitions())) {
+      return Optional.of(getWriteErrorResponse(Errors.INVALID_REQUEST, topicData.topicId(), -1));
+    }
+    WriteShareGroupStateRequestData.PartitionData partitionData = topicData.partitions().get(0);
+
+    Uuid topicId = topicData.topicId();
+    int partitionId = partitionData.partition();
 
     if (groupId == null || groupId.isEmpty()) {
-      error = Errors.INVALID_GROUP_ID;
-    } else if (topicId == null || partitionId == -1) {
-      error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
-    } else {
-      String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partitionId);
-      if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
-        error = Errors.FENCED_LEADER_EPOCH;
-      } else if (metadataImage != null && (metadataImage.topics().getTopic(topicId) == null ||
-          metadataImage.topics().getPartition(topicId, partitionId) == null)) {
-        error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
-      }
+      return Optional.of(getWriteErrorResponse(Errors.INVALID_GROUP_ID, topicId, partitionId));
+    }
+    if (topicId == null || partitionId == -1) {
+      return Optional.of(getWriteErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
     }
 
-    if (error != null) {
-      WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
-      responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
-          .setTopicId(topicId)
-          .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
-              .setPartition(partitionId)
-              .setErrorCode(error.code())
-              .setErrorMessage(error.message())))));
-      return Optional.of(new CoordinatorResult<>(Collections.emptyList(), responseData));
+    String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partitionId);
+    if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
+      return Optional.of(getWriteErrorResponse(Errors.FENCED_LEADER_EPOCH, topicId, partitionId));
     }
+    if (metadataImage != null && (metadataImage.topics().getTopic(topicId) == null ||
+        metadataImage.topics().getPartition(topicId, partitionId) == null)) {
+      return Optional.of(getWriteErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
+    }
+
     return Optional.empty();
+  }
+
+  private CoordinatorResult<WriteShareGroupStateResponseData, Record> getWriteErrorResponse(Errors error, Uuid topicId, int partitionId) {
+    WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
+    responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
+        .setTopicId(topicId)
+        .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
+            .setPartition(partitionId)
+            .setErrorCode(error.code())
+            .setErrorMessage(error.message())))));
+    return new CoordinatorResult<>(Collections.emptyList(), responseData);
+  }
+
+  private static <P> boolean hasElement(List<P> list) {
+    return list == null || list.isEmpty() || list.get(0) == null;
   }
 }
