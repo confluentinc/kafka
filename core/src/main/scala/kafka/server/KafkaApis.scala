@@ -4803,9 +4803,49 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   private def handleWriteShareGroupState(request: RequestChannel.Request): Unit = {
     val writeShareRequest = request.body[WriteShareGroupStateRequest]
-    //todo smjn: add auth check for group, topic
-    val writeShareData = shareCoordinator.writeState(request.context, writeShareRequest.data).get()
-    requestHelper.sendMaybeThrottle(request, new WriteShareGroupStateResponse(writeShareData))
+    val requestData = writeShareRequest.data()
+
+    authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
+
+    val requestDataWithAuthorizedPartitions: WriteShareGroupStateRequestData = new WriteShareGroupStateRequestData()
+      .setGroupId(requestData.groupId())
+
+    val (authorizedTopics, unauthorizedTopics) = authHelper.partitionSeqByAuthorized(
+      request.context,
+      DESCRIBE,
+      TOPIC,
+      requestData.topics.asScala
+    )(_.topicId.toString())
+
+    val authorizedWriteStateData: util.List[WriteShareGroupStateRequestData.WriteStateData] =
+      new util.ArrayList[WriteShareGroupStateRequestData.WriteStateData]()
+    requestData.topics().forEach(topic => {
+      if (authorizedTopics.contains(topic.topicId.toString())) {
+        authorizedWriteStateData.add(topic)
+      }
+    })
+
+    requestDataWithAuthorizedPartitions.setTopics(authorizedWriteStateData)
+
+    // Finding the ShareGroupState data for the given request
+    val responseData: WriteShareGroupStateResponseData =
+      shareCoordinator.writeState(request.context, requestDataWithAuthorizedPartitions).get()
+
+    // Adding unauthorized topics to the response with TOPIC_AUTHORIZATION_FAILED error
+    requestData.topics().stream().filter(topic => {
+      unauthorizedTopics.contains(topic.topicId().toString)
+    }).forEach(topic => {
+      responseData.results.add(new WriteShareGroupStateResponseData.WriteStateResult()
+        .setTopicId(topic.topicId())
+        .setPartitions(topic.partitions().stream().map(partition => {
+          new WriteShareGroupStateResponseData.PartitionResult()
+            .setPartition(partition.partition())
+            .setErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED.code())
+            .setErrorMessage(Errors.TOPIC_AUTHORIZATION_FAILED.message())
+        }).collect(util.stream.Collectors.toList())))
+    })
+
+    requestHelper.sendMaybeThrottle(request, new WriteShareGroupStateResponse(responseData))
   }
 
   private def updateRecordConversionStats(request: RequestChannel.Request,
