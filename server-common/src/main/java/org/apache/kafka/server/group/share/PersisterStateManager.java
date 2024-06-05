@@ -25,6 +25,7 @@ import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.AbstractRequest;
@@ -205,12 +206,12 @@ public class PersisterStateManager {
     public class ReadStateHandler extends PersisterStateManagerHandler {
         private final int leaderEpoch;
         private final String coordinatorKey;
-        private final CompletableFuture<PartitionData> future;
+        private final CompletableFuture<ReadShareGroupStateResponse> future;
 
-        public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<PartitionData> future) {
+        public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> future) {
             super(groupId, topicId, partition);
             this.leaderEpoch = leaderEpoch;
-            this.coordinatorKey = groupId + ":" + topicId + ":" + partition;
+            this.coordinatorKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
             this.future = future;
         }
 
@@ -231,42 +232,39 @@ public class PersisterStateManager {
             return response.requestHeader().apiKey() == ApiKeys.READ_SHARE_GROUP_STATE;
         }
 
-        private PartitionData returnErrorPartitionData(int partition, short errorCode, String errorMessage) {
-            return new PartitionData(
-                    partition,
-                    0,
-                    0,
-                    errorCode,
-                    errorMessage,
-                    0,
-                    null
-            );
+        private ReadShareGroupStateResponse returnErrorResponse(short errorCode, String errorMessage) {
+            return new ReadShareGroupStateResponse(new ReadShareGroupStateResponseData()
+                    .setResults(Collections.singletonList(new ReadShareGroupStateResponseData.ReadStateResult()
+                            .setTopicId(topicId)
+                            .setPartitions(Collections.singletonList(new ReadShareGroupStateResponseData.PartitionResult()
+                                    .setPartition(partition)
+                                    .setErrorCode(errorCode)
+                                    .setErrorMessage(errorMessage))))));
         }
 
         @Override
         protected void handleRequestResponse(ClientResponse response) {
-            ReadShareGroupStateResponse readShareGroupStateResponse = (ReadShareGroupStateResponse) response.responseBody();
-            ReadShareGroupStateResult result = ReadShareGroupStateResult.from(readShareGroupStateResponse.data());
+            ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
             String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
-            if (result.topicsData().size() != 1) {
+            if (readShareGroupStateResponseData.results().size() != 1) {
                 log.error("ReadState response for {} is invalid", coordinatorKey);
-                future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+                future.complete(returnErrorResponse(Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
             }
-            TopicData<PartitionAllData> topicData = result.topicsData().get(0);
+            ReadShareGroupStateResponseData.ReadStateResult topicData = readShareGroupStateResponseData.results().get(0);
             if (!topicData.topicId().equals(topicId)) {
                 log.error("ReadState response for {} is invalid", coordinatorKey);
-                future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+                future.complete(returnErrorResponse(Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
             }
             if (topicData.partitions().size() != 1) {
                 log.error("ReadState response for {} is invalid", coordinatorKey);
-                future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+                future.complete(returnErrorResponse(Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
             }
-            PartitionData partitionData = (PartitionData) topicData.partitions().get(0);
-            if (!(partitionData.partition() == partition)) {
+            ReadShareGroupStateResponseData.PartitionResult partitionResponse = topicData.partitions().get(0);
+            if (partitionResponse.partition() != partition) {
                 log.error("ReadState response for {} is invalid", coordinatorKey);
-                future.complete(returnErrorPartitionData(partition, Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
+                future.complete(returnErrorResponse(Errors.forException(new IllegalStateException(errorMessage)).code(), errorMessage));
             }
-            future.complete(partitionData);
+            future.complete((ReadShareGroupStateResponse) response.responseBody());
         }
     }
 

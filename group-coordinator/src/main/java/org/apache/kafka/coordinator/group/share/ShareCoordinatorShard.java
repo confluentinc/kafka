@@ -46,7 +46,9 @@ import org.slf4j.Logger;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     private final Logger log;
@@ -57,6 +59,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     private final CoordinatorMetricsShard metricsShard;
     private final TimelineHashMap<String, ShareSnapshotValue> shareStateMap;  // coord key -> ShareSnapshotValue
     private final Map<String, Integer> leaderMap;
+    private MetadataImage metadataImage;
 
     public static class Builder implements CoordinatorShardBuilder<ShareCoordinatorShard, Record> {
         private ShareCoordinatorConfig config;
@@ -139,60 +142,6 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
         }
     }
 
-    public ReadShareGroupStateResponseData readShareGroupState(ReadShareGroupStateRequestData requestData, Long offset) {
-
-        Uuid topicId = requestData.topics().get(0).topicId();
-        int partition = requestData.topics().get(0).partitions().get(0).partition();
-
-        String coordinatorKey = requestData.groupId() +
-                ":" +
-                topicId.toString() +
-                ":" +
-                partition;
-
-        int leaderEpoch = requestData.topics().get(0).partitions().get(0).leaderEpoch();
-
-        // If the incoming leader epoch is less than the last know leader epoch, then return FENCED_LEADER_EPOCH error
-        if (leaderMap.containsKey(coordinatorKey) && leaderEpoch < leaderMap.get(coordinatorKey)) {
-            return new ReadShareGroupStateResponseData()
-                    .setResults(Collections.singletonList(
-                            new ReadShareGroupStateResponseData.ReadStateResult()
-                                    .setTopicId(topicId)
-                                    .setPartitions(Collections.singletonList(
-                                            new ReadShareGroupStateResponseData.PartitionResult()
-                                                    .setErrorCode(Errors.FENCED_LEADER_EPOCH.code())
-                                                    .setErrorMessage("Leader epoch is smaller than the last known leader epoch of the share partition.")
-                                                    .setPartition(partition)
-                                    ))
-                    ));
-        } else {
-            leaderMap.put(coordinatorKey, leaderEpoch);
-        }
-
-        ShareSnapshotValue snapshotValue = shareStateMap.get(coordinatorKey, offset);
-
-        return new ReadShareGroupStateResponseData()
-                .setResults(Collections.singletonList(
-                        new ReadShareGroupStateResponseData.ReadStateResult()
-                                .setTopicId(topicId)
-                                .setPartitions(Collections.singletonList(
-                                        new ReadShareGroupStateResponseData.PartitionResult()
-                                                .setErrorCode(Errors.NONE.code())
-                                                .setErrorMessage("")
-                                                .setPartition(partition)
-                                                .setStartOffset(snapshotValue.startOffset())
-                                                .setStateEpoch(snapshotValue.stateEpoch())
-                                                .setStateBatches(snapshotValue.stateBatches().stream().map(
-                                                        stateBatch -> new ReadShareGroupStateResponseData.StateBatch()
-                                                                .setFirstOffset(stateBatch.firstOffset())
-                                                                .setLastOffset(stateBatch.lastOffset())
-                                                                .setDeliveryState(stateBatch.deliveryState())
-                                                                .setDeliveryCount(stateBatch.deliveryCount())
-                                                ).collect(java.util.stream.Collectors.toList()))
-                                ))
-                ));
-    }
-
     ShareCoordinatorShard(
             LogContext logContext,
             Time time,
@@ -219,7 +168,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
     @Override
     public void onNewMetadataImage(MetadataImage newImage, MetadataDelta delta) {
-        CoordinatorShard.super.onNewMetadataImage(newImage, delta);
+        this.metadataImage = newImage;
     }
 
     @Override
@@ -262,5 +211,96 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     @Override
     public void replayEndTransactionMarker(long producerId, short producerEpoch, TransactionResult result) throws RuntimeException {
         CoordinatorShard.super.replayEndTransactionMarker(producerId, producerEpoch, result);
+    }
+
+    public ReadShareGroupStateResponseData readState(ReadShareGroupStateRequestData request, Long offset) {
+        log.info("Shard readState request received - {}", request);
+        // records to write (with both key and value of snapshot type), response to caller
+        // only one key will be there in the request by design
+        Optional<ReadShareGroupStateResponseData> error = maybeGetReadStateError(request);
+        if (error.isPresent()) {
+            return error.get();
+        }
+
+        Uuid topicId = request.topics().get(0).topicId();
+        int partition = request.topics().get(0).partitions().get(0).partition();
+
+        String coordinatorKey = ShareGroupHelper.coordinatorKey(request.groupId(), topicId, partition);
+
+        ShareSnapshotValue snapshotValue = shareStateMap.get(coordinatorKey, offset);
+
+        return new ReadShareGroupStateResponseData()
+                .setResults(Collections.singletonList(
+                        new ReadShareGroupStateResponseData.ReadStateResult()
+                                .setTopicId(topicId)
+                                .setPartitions(Collections.singletonList(
+                                        new ReadShareGroupStateResponseData.PartitionResult()
+                                                .setErrorCode(Errors.NONE.code())
+                                                .setErrorMessage("")
+                                                .setPartition(partition)
+                                                .setStartOffset(snapshotValue.startOffset())
+                                                .setStateEpoch(snapshotValue.stateEpoch())
+                                                .setStateBatches(snapshotValue.stateBatches().stream().map(
+                                                        stateBatch -> new ReadShareGroupStateResponseData.StateBatch()
+                                                                .setFirstOffset(stateBatch.firstOffset())
+                                                                .setLastOffset(stateBatch.lastOffset())
+                                                                .setDeliveryState(stateBatch.deliveryState())
+                                                                .setDeliveryCount(stateBatch.deliveryCount())
+                                                ).collect(java.util.stream.Collectors.toList()))
+                                ))
+                ));
+    }
+
+    private Optional<ReadShareGroupStateResponseData> maybeGetReadStateError(ReadShareGroupStateRequestData request) {
+        String groupId = request.groupId();
+
+        if (!hasElement(request.topics())) {
+            return Optional.of(getReadErrorResponse(Errors.INVALID_REQUEST, Uuid.ZERO_UUID, -1));
+        }
+        ReadShareGroupStateRequestData.ReadStateData topicData = request.topics().get(0);
+
+        if (!hasElement(topicData.partitions())) {
+            return Optional.of(getReadErrorResponse(Errors.INVALID_REQUEST, topicData.topicId(), -1));
+        }
+        ReadShareGroupStateRequestData.PartitionData partitionData = topicData.partitions().get(0);
+
+        Uuid topicId = topicData.topicId();
+        int partitionId = partitionData.partition();
+
+        if (groupId == null || groupId.isEmpty()) {
+            return Optional.of(getReadErrorResponse(Errors.INVALID_GROUP_ID, topicId, partitionId));
+        }
+        if (topicId == null || partitionId == -1) {
+            return Optional.of(getReadErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
+        }
+
+        String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partitionId);
+        if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
+            return Optional.of(getReadErrorResponse(Errors.FENCED_LEADER_EPOCH, topicId, partitionId));
+        }
+
+        // Updating the leader map with the new leader epoch
+        leaderMap.put(mapKey, partitionData.leaderEpoch());
+
+        if (metadataImage != null && (metadataImage.topics().getTopic(topicId) == null ||
+                metadataImage.topics().getPartition(topicId, partitionId) == null)) {
+            return Optional.of(getReadErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
+        }
+
+        return Optional.empty();
+    }
+
+    private ReadShareGroupStateResponseData getReadErrorResponse(Errors error, Uuid topicId, int partitionId) {
+        return new ReadShareGroupStateResponseData()
+                .setResults(Collections.singletonList(new ReadShareGroupStateResponseData.ReadStateResult()
+                        .setTopicId(topicId)
+                        .setPartitions(Collections.singletonList(new ReadShareGroupStateResponseData.PartitionResult()
+                                .setPartition(partitionId)
+                                .setErrorCode(error.code())
+                                .setErrorMessage(error.message())))));
+    }
+
+    private static <P> boolean hasElement(List<P> list) {
+        return list == null || list.isEmpty() || list.get(0) == null;
     }
 }

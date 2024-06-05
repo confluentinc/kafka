@@ -47,19 +47,6 @@ public interface ShareCoordinator {
   int partitionFor(String key);
 
   /**
-   * Read Share Group States.
-   *
-   * @param context           The coordinator request context.
-   * @param requestData       The ReadShareGroupStateRequest data.
-   *
-   * @return A future yielding the states for multiple share partitions or an exception.
-   */
-  CompletableFuture<ReadShareGroupStateResponseData> readShareGroupStates(
-          RequestContext context,
-          ReadShareGroupStateRequestData requestData
-  );
-
-  /**
    * Return the configuration properties of the share-group state topic.
    *
    * @return Properties of the share-group state topic.

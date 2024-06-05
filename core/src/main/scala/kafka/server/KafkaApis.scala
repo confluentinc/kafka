@@ -4849,7 +4849,7 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     // Finding the ShareGroupState data for the given request
     val responseData : ReadShareGroupStateResponseData =
-      shareCoordinator.readShareGroupStates(request.context, requestDataWithAuthorizedPartitions).get()
+      shareCoordinator.readState(request.context, requestDataWithAuthorizedPartitions).get()
 
     // Adding unauthorized topics to the response with TOPIC_AUTHORIZATION_FAILED error
     requestData.topics().stream().filter(topic => {
