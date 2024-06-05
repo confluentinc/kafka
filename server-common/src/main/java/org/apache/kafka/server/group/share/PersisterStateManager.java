@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -178,7 +179,24 @@ public class PersisterStateManager {
         coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
         // now we want the actual share state RPC call to happen
         enqueue(this);
+      } else if (isFindCoordinatorRetryable(error)) {
+        try {
+          log.info("Waiting before retrying find coordinator response.");
+          TimeUnit.MILLISECONDS.sleep(100L);
+        } catch (InterruptedException e) {
+          log.warn("Interrupted waiting before retrying find coordinator request", e);
+        }
+        log.warn("Received retryable error in find coordinator {}", error.message());
+        enqueue(this);
+      } else {
+        log.error("Unable to find coordinator.");
+        findCoordinatorErrorResponse(error);
       }
+    }
+
+    private boolean isFindCoordinatorRetryable(Errors error) {
+      return error == Errors.COORDINATOR_NOT_AVAILABLE ||
+          error == Errors.COORDINATOR_LOAD_IN_PROGRESS;
     }
 
     /**
@@ -193,6 +211,8 @@ public class PersisterStateManager {
      * @return - boolean
      */
     protected abstract boolean isRequestResponse(ClientResponse response);
+
+    protected abstract void findCoordinatorErrorResponse(Errors error);
   }
 
   public class WriteStateHandler extends PersisterStateManagerHandler {
@@ -241,6 +261,12 @@ public class PersisterStateManager {
     protected void handleRequestResponse(ClientResponse response) {
       log.info("Write state response received. - {}", response);
       this.result.complete((WriteShareGroupStateResponse) response.responseBody());
+    }
+
+    @Override
+    protected void findCoordinatorErrorResponse(Errors error) {
+      this.result.complete(new WriteShareGroupStateResponse(
+          WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " + error.message())));
     }
   }
 

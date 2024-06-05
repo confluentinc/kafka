@@ -4803,18 +4803,17 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   private def handleWriteShareGroupState(request: RequestChannel.Request): Unit = {
     val writeShareRequest = request.body[WriteShareGroupStateRequest]
-    val requestData = writeShareRequest.data()
 
     authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
 
-    val requestDataWithAuthorizedPartitions: WriteShareGroupStateRequestData = new WriteShareGroupStateRequestData()
+    /*val requestDataWithAuthorizedPartitions: WriteShareGroupStateRequestData = new WriteShareGroupStateRequestData()
       .setGroupId(requestData.groupId())
 
     val (authorizedTopics, unauthorizedTopics) = authHelper.partitionSeqByAuthorized(
       request.context,
       DESCRIBE,
       TOPIC,
-      requestData.topics.asScala
+      requestData.topics.asScala.toSeq
     )(_.topicId.toString())
 
     val authorizedWriteStateData: util.List[WriteShareGroupStateRequestData.WriteStateData] =
@@ -4843,9 +4842,10 @@ class KafkaApis(val requestChannel: RequestChannel,
             .setErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED.code())
             .setErrorMessage(Errors.TOPIC_AUTHORIZATION_FAILED.message())
         }).collect(util.stream.Collectors.toList())))
-    })
+    })*/
 
-    requestHelper.sendMaybeThrottle(request, new WriteShareGroupStateResponse(responseData))
+    val writeShareData = shareCoordinator.writeState(request.context, writeShareRequest.data).get()
+    requestHelper.sendMaybeThrottle(request, new WriteShareGroupStateResponse(writeShareData))
   }
 
   private def updateRecordConversionStats(request: RequestChannel.Request,

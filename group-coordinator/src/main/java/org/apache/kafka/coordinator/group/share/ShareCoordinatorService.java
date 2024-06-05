@@ -241,13 +241,13 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
     // validate groupId
     if (groupId == null || groupId.isEmpty()) {
-      if (hasElement(request.topics())) {
+      if (!isEmpty(request.topics())) {
         return CompletableFuture.completedFuture(new WriteShareGroupStateResponseData()
             .setResults(request.topics().stream()
                 .map(topicData -> {
                   WriteShareGroupStateResponseData.WriteStateResult resultData = new WriteShareGroupStateResponseData.WriteStateResult();
                   resultData.setTopicId(topicData.topicId());
-                  if (hasElement(topicData.partitions())) {
+                  if (!isEmpty(topicData.partitions())) {
                     resultData.setPartitions(topicData.partitions().stream()
                         .map(partitionData -> WriteShareGroupStateResponse.getErrorResponsePartitionResult(
                             partitionData.partition(), Errors.INVALID_GROUP_ID, "Group id must be specified and non-empty."))
@@ -266,14 +266,14 @@ public class ShareCoordinatorService implements ShareCoordinator {
     }
 
     // validate topicsData
-    if (!hasElement(request.topics())) {
+    if (isEmpty(request.topics())) {
       return CompletableFuture.completedFuture(WriteShareGroupStateResponse.getErrorResponseData(
           Uuid.ZERO_UUID, -1, Errors.INVALID_REQUEST, "Topic data must be specified."));
     }
 
     // validate partitionsData
     request.topics().forEach(topicData -> {
-      if (!hasElement(topicData.partitions())) {
+      if (isEmpty(topicData.partitions())) {
         WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
         responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.getErrorResponseResult(
             topicData.topicId(), Collections.singletonList(WriteShareGroupStateResponse.getErrorResponsePartitionResult(
@@ -358,7 +358,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
     return new TopicPartition(Topic.SHARE_GROUP_STATE_TOPIC_NAME, partitionFor(key));
   }
 
-  private static <P> boolean hasElement(List<P> list) {
+  private static <P> boolean isEmpty(List<P> list) {
     return list == null || list.isEmpty() || list.get(0) == null;
   }
 }
