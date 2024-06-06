@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,7 +97,20 @@ public class DefaultStatePersister implements Persister {
    * @return ReadShareGroupStateResult
    */
   public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) {
-    throw new RuntimeException("not implemented");
+    log.info("Read share state request received: {}", request);
+    TopicData<PartitionIdLeaderEpochData> requestTopicData = request.groupTopicPartitionData().topicsData().get(0);
+    PartitionIdLeaderEpochData requestPartitionData = requestTopicData.partitions().get(0);
+    PartitionAllData resultPartitionData = PartitionFactory.newPartitionAllData(
+        requestPartitionData.partition(),
+        PartitionFactory.DEFAULT_STATE_EPOCH,
+        PartitionFactory.DEFAULT_START_OFFSET,
+        PartitionFactory.DEFAULT_ERROR_CODE,
+        PartitionFactory.DEFAULT_ERR_MESSAGE,
+        Collections.emptyList()
+    );
+    ReadShareGroupStateResult.Builder builder = new ReadShareGroupStateResult.Builder();
+    TopicData<PartitionAllData> topicData = new TopicData<>(requestTopicData.topicId(), Collections.singletonList(resultPartitionData));
+    return CompletableFuture.completedFuture(builder.setTopicsData(Collections.singletonList(topicData)).build());
   }
 
   /**

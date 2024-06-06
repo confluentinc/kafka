@@ -96,7 +96,7 @@ public class PersisterStateManager {
     protected final int partition;
     private final ExponentialBackoff findCoordbackoff = new ExponentialBackoff(1_000, 2, 30_000, 100);
     private int findCoordattempts = 0;
-    private final int maxFindCoordAttempts = 5;
+    private static final int MAX_FIND_COORD_ATTEMPTS = 5;
 
     public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition) {
       this.groupId = groupId;
@@ -186,12 +186,12 @@ public class PersisterStateManager {
         enqueue(this);
       } else if (isFindCoordinatorRetryable(error)) {
         log.warn("Received retryable error in find coordinator {}", error.message());
-        if (findCoordattempts > maxFindCoordAttempts) {
+        if (findCoordattempts > MAX_FIND_COORD_ATTEMPTS) {
           log.error("Exhausted max retries to find coordinator without success.");
           findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
           return;
         }
-        log.info("Waiting before retrying find coordinator response.");
+        log.info("Waiting before retrying find coordinator RPC.");
         try {
           TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(++findCoordattempts));
         } catch (InterruptedException e) {
@@ -329,6 +329,7 @@ public class PersisterStateManager {
         queue.poll();
         if (handler.lookupNeeded()) {
           // we need to find the coordinator node
+          log.info("Sending find coordinator RPC");
           return Collections.singletonList(new RequestAndCompletionHandler(
               System.currentTimeMillis(),
               randomNode(),
@@ -336,6 +337,7 @@ public class PersisterStateManager {
               handler
           ));
         } else {
+          log.info("Sending share state RPC");
           // share coord node already available
           return Collections.singletonList(new RequestAndCompletionHandler(
               System.currentTimeMillis(),
