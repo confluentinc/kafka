@@ -28,19 +28,12 @@ import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 
 /**
- * A cached share partition.
- * <p>
- * The broker maintains a set of these objects for each share session.
- * When a share fetch request is made, any partitions which are not explicitly
- * enumerated in the fetch request are loaded from the cache. Similarly, when a
- * share fetch response is being prepared, any partitions that have not changed and
- * do not have errors are left out of the response.
+ * A cached share partition. The broker maintains a set of these objects for each share session.
  * <p>
  * We store many of these objects, so it is important for them to be memory-efficient.
  * That is why we store topic and partition separately rather than storing a TopicPartition
  * object. The TP object takes up more memory because it is a separate JVM object, and
  * because it stores the cached hash code in memory.
- *
  */
 public class CachedSharePartition implements ImplicitLinkedHashCollection.Element {
 

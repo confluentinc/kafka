@@ -59,7 +59,7 @@ public class FetchPartitionData {
     @Override
     public String toString() {
         return "FetchPartitionData(" +
-            "  error=" + error +
+            "error=" + error +
             ", highWatermark=" + highWatermark +
             ", logStartOffset=" + logStartOffset +
             ", records=" + records +
