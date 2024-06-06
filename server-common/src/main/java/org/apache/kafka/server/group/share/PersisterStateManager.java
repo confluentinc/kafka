@@ -278,9 +278,10 @@ public class PersisterStateManager {
       if (error == Errors.UNKNOWN_SERVER_ERROR && exception != null) {
         this.result.complete(new WriteShareGroupStateResponse(
             WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, exception.getMessage())));
+      } else {
+        this.result.complete(new WriteShareGroupStateResponse(
+            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " + error.message())));
       }
-      this.result.complete(new WriteShareGroupStateResponse(
-          WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " + error.message())));
     }
   }
 
