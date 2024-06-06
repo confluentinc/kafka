@@ -27,6 +27,7 @@ public class GroupTopicPartitionData<P extends PartitionInfoData> {
   public GroupTopicPartitionData(String groupId, List<TopicData<P>> topicsData) {
     this.groupId = groupId;
     this.topicsData = topicsData;
+    validate();
   }
 
   public String groupId() {
@@ -73,5 +74,37 @@ public class GroupTopicPartitionData<P extends PartitionInfoData> {
     public GroupTopicPartitionData<P> build() {
       return new GroupTopicPartitionData<P>(this.groupId, this.topicsData);
     }
+  }
+
+  private void validate() throws IllegalArgumentException {
+    if (groupId == null || groupId.isEmpty()) {
+      throw new IllegalArgumentException("GroupId must be specified.");
+    }
+    if (topicsData.isEmpty()) {
+      throw new IllegalArgumentException("Topic-partition data must be specified groupId:" + groupId);
+    }
+    for (TopicData<P> topicData : topicsData) {
+      if (topicData.topicId() == null) {
+        throw new IllegalArgumentException(String.format("TopicId must be specified groupId: %s, topicData: %s", groupId, topicData));
+      }
+      if (topicData.partitions().isEmpty()) {
+        throw new IllegalArgumentException(String.format("Partition data must be specified groupId: %s, topicData: %s", groupId, topicData));
+      }
+      for (P partitionData : topicData.partitions()) {
+        if (!(partitionData instanceof PartitionIdData)) {
+          throw new IllegalArgumentException(String.format("Partition data must have partition id groupId: %s, topicId: %s, partitionData: %s",
+              groupId, topicData.topicId(), partitionData));
+        }
+        if (((PartitionIdData) partitionData).partition() < 0) {
+          throw new IllegalArgumentException(String.format("Partition id must be non-negative integer groupId: %s, topicId: %s, partitionData: %s",
+              groupId, topicData.topicId(), ((PartitionIdData) partitionData).partition()));
+        }
+      }
+    }
+  }
+
+  @Override
+  public String toString() {
+    return "GroupTopicPartitionData(" + groupId + ", " + topicsData + ")";
   }
 }

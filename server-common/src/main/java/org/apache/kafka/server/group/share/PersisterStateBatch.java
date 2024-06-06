@@ -79,4 +79,14 @@ public class PersisterStateBatch {
   public int hashCode() {
     return Objects.hash(firstOffset, lastOffset, deliveryState, deliveryCount);
   }
+
+  @Override
+  public String toString() {
+    return "PersisterStateBatch(" +
+        "firstOffset=" + firstOffset + "," +
+        "lastOffset=" + lastOffset + "," +
+        "deliveryState=" + deliveryState + "," +
+        "deliveryCount=" + deliveryCount +
+        ")";
+  }
 }

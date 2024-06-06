@@ -17,9 +17,7 @@
 
 package org.apache.kafka.server.group.share;
 
-public interface PartitionStateErrorData extends PartitionInfoData {
-  int partition();
-
+public interface PartitionStateErrorData extends PartitionInfoData, PartitionIdData {
   int stateEpoch();
 
   long startOffset();

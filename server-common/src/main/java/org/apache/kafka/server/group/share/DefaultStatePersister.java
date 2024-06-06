@@ -17,12 +17,21 @@
 
 package org.apache.kafka.server.group.share;
 
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.annotation.InterfaceStability;
+import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 /**
  * The default implementation of the {@link Persister} interface which is used by the
@@ -57,6 +66,7 @@ public class DefaultStatePersister implements Persister {
   public void configure(PersisterConfig config) {
     this.persisterConfig = Objects.requireNonNull(config);
     this.stateManager = Objects.requireNonNull(config.stateManager);
+    this.stateManager.start();
   }
 
   @Override
@@ -87,7 +97,20 @@ public class DefaultStatePersister implements Persister {
    * @return ReadShareGroupStateResult
    */
   public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) {
-    throw new RuntimeException("not implemented");
+    log.info("Read share state request received: {}", request);
+    TopicData<PartitionIdLeaderEpochData> requestTopicData = request.groupTopicPartitionData().topicsData().get(0);
+    PartitionIdLeaderEpochData requestPartitionData = requestTopicData.partitions().get(0);
+    PartitionAllData resultPartitionData = PartitionFactory.newPartitionAllData(
+        requestPartitionData.partition(),
+        PartitionFactory.DEFAULT_STATE_EPOCH,
+        PartitionFactory.DEFAULT_START_OFFSET,
+        PartitionFactory.DEFAULT_ERROR_CODE,
+        PartitionFactory.DEFAULT_ERR_MESSAGE,
+        Collections.emptyList()
+    );
+    ReadShareGroupStateResult.Builder builder = new ReadShareGroupStateResult.Builder();
+    TopicData<PartitionAllData> topicData = new TopicData<>(requestTopicData.topicId(), Collections.singletonList(resultPartitionData));
+    return CompletableFuture.completedFuture(builder.setTopicsData(Collections.singletonList(topicData)).build());
   }
 
   /**
@@ -98,7 +121,57 @@ public class DefaultStatePersister implements Persister {
    * @return WriteShareGroupStateResult
    */
   public CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters request) {
-    throw new RuntimeException("not implemented");
+    log.info("Write share group state request received - {}", request);
+    GroupTopicPartitionData<PartitionStateBatchData> gtp = request.groupTopicPartitionData();
+    String groupId = gtp.groupId();
+
+    Map<Uuid, Map<Integer, CompletableFuture<WriteShareGroupStateResponse>>> futureMap = new HashMap<>();
+
+    List<PersisterStateManager.WriteStateHandler> handlers = gtp.topicsData().stream()
+        .map(topicData -> topicData.partitions().stream()
+            .map(partitionData -> {
+              Map<Integer, CompletableFuture<WriteShareGroupStateResponse>> partMap = futureMap.computeIfAbsent(topicData.topicId(), k -> new HashMap<>());
+              if (!partMap.containsKey(partitionData.partition())) {
+                partMap.put(partitionData.partition(), new CompletableFuture<>());
+              }
+              return stateManager.new WriteStateHandler(
+                  groupId, topicData.topicId(), partitionData.partition(), partitionData.stateEpoch(), partitionData.leaderEpoch(), partitionData.startOffset(), partitionData.stateBatches(),
+                  partMap.get(partitionData.partition()));
+            })
+            .collect(Collectors.toList()))
+        .flatMap(Collection::stream)
+        .collect(Collectors.toList());
+
+    for (PersisterStateManager.PersisterStateManagerHandler handler : handlers) {
+      stateManager.enqueue(handler);
+    }
+
+    CompletableFuture<Void> combinedFuture = CompletableFuture.allOf(futureMap.values().stream()
+        .flatMap(partMap -> partMap.values().stream()).toArray(CompletableFuture[]::new));
+
+    return combinedFuture.thenApply(v -> {
+      List<TopicData<PartitionErrorData>> topicsData = futureMap.keySet().stream()
+          .map(topicId -> {
+            List<PartitionErrorData> partitionErrData = futureMap.get(topicId).values().stream()
+                .map(future -> {
+                  try {
+                    WriteShareGroupStateResponse partitionResponse = future.get();
+                    return partitionResponse.data().results().get(0).partitions().stream()
+                        .map(partitionResult -> PartitionFactory.newPartitionErrorData(partitionResult.partition(), partitionResult.errorCode(), partitionResult.errorMessage()))
+                        .collect(Collectors.toList());
+                  } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                  }
+                })
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+            return new TopicData<>(topicId, partitionErrData);
+          })
+          .collect(Collectors.toList());
+      return new WriteShareGroupStateResult.Builder()
+          .setTopicsData(topicsData)
+          .build();
+    });
   }
 
   /**
