@@ -107,7 +107,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         if (memberId == null) {
             return PollResult.EMPTY;
         }
-        PollResult pollResult = processAcknowledgements(currentTimeMs);
+        PollResult pollResult = processAcknowledgements(currentTimeMs, false);
 
         if (pollResult != null) {
             return pollResult;
@@ -183,7 +183,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return PollResult.EMPTY;
         }
         long currentTimeMs = Time.SYSTEM.milliseconds();
-        PollResult pollResult = processAcknowledgementsOnClose(currentTimeMs);
+        PollResult pollResult = processAcknowledgements(currentTimeMs, true);
         if (pollResult != null) {
             return pollResult;
         }
@@ -246,15 +246,19 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         }
     }
 
-    private PollResult processAcknowledgementsOnClose(long currentTimeMs) {
+    private PollResult processAcknowledgements(long currentTimeMs, boolean onClose) {
         List<UnsentRequest> unsentRequests = new ArrayList<>();
         for (AcknowledgeRequestState acknowledgeRequestState : acknowledgeRequestStates) {
-            if (acknowledgeRequestState.isExpired()) {
+            if (acknowledgeRequestState.isProcessed()) {
                 acknowledgeRequestStates.remove(acknowledgeRequestState);
             } else if (!acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
                 if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
                     acknowledgeRequestState.onSendAttempt(currentTimeMs);
-                    unsentRequests.add(acknowledgeRequestState.buildRequestOnClose(currentTimeMs));
+                    if (onClose) {
+                        unsentRequests.add(acknowledgeRequestState.buildRequestOnClose(currentTimeMs));
+                    } else {
+                        unsentRequests.add(acknowledgeRequestState.buildRequest(currentTimeMs));
+                    }
                 }
             } else {
                 // Fill in TimeoutException
@@ -272,40 +276,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             // Complete the future.
             if (commitSyncFuture != null) {
                 commitSyncFuture.complete(null);
-            }
-        } else {
-            // Return empty result until all the acknowledgement request states are processed.
-            pollResult = PollResult.EMPTY;
-        }
-        return pollResult;
-    }
-
-    private PollResult processAcknowledgements(long currentTimeMs) {
-        List<UnsentRequest> unsentRequests = new ArrayList<>();
-        for (AcknowledgeRequestState acknowledgeRequestState : acknowledgeRequestStates) {
-            if (acknowledgeRequestState.isExpired()) {
-                acknowledgeRequestStates.remove(acknowledgeRequestState);
-            } else if (!acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
-                if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
-                    acknowledgeRequestState.onSendAttempt(currentTimeMs);
-                    unsentRequests.add(acknowledgeRequestState.buildRequest(currentTimeMs));
-                }
-            } else {
-                // Fill in TimeoutException
-                for (TopicIdPartition tip : acknowledgeRequestState.acknowledgementsMap.keySet()) {
-                    metricsManager.recordFailedAcknowledgements(shareFetchBuffer.getPendingAcknowledgementsCount(tip));
-                    shareFetchBuffer.handleAcknowledgementResponses(tip, Errors.REQUEST_TIMED_OUT);
-                }
-                acknowledgeRequestStates.remove(acknowledgeRequestState);
-            }
-        }
-        PollResult pollResult = null;
-        if (!unsentRequests.isEmpty()) {
-            pollResult = new PollResult(unsentRequests);
-        } else if (acknowledgeRequestStates.isEmpty()) {
-            // Complete the future.
-            if (commitSyncFuture != null) {
-                commitSyncFuture.complete(null);
+                commitSyncFuture = null;
             }
         } else {
             // Return empty result until all the acknowledgement request states are processed.
@@ -315,6 +286,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     }
 
     public CompletableFuture<Void> commitSync(final long retryExpirationTimeMs) {
+        if (commitSyncFuture != null) return commitSyncFuture;
         commitSyncFuture = new CompletableFuture<>();
 
         // Build a list of ShareAcknowledge requests to be picked up on the next poll
@@ -341,7 +313,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         nodeId,
                         acknowledgementsMap
                 ));
-
             }
         });
 
@@ -459,7 +430,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                     return;
                 } else {
                     // We pop this request of the queue as the error was not retriable.
-                    acknowledgeRequestState.isExpired = true;
+                    acknowledgeRequestState.isProcessed = true;
                 }
             }
 
@@ -474,7 +445,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }));
 
             metricsManager.recordLatency(resp.requestLatencyMs());
-            acknowledgeRequestState.isExpired = true;
+            acknowledgeRequestState.isProcessed = true;
         } finally {
             log.debug("Removing pending request for node {} - success", fetchTarget);
             nodesWithPendingRequests.remove(fetchTarget.id());
@@ -597,7 +568,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
          * retrying.
          */
         private final Optional<Long> expirationTimeMs;
-        private boolean isExpired = false;
+        private boolean isProcessed = false;
 
         AcknowledgeRequestState(LogContext logContext, String owner,
                                 long retryBackoffMs, long retryBackoffMaxMs,
@@ -628,7 +599,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 if (error != null) {
                     onFailedAttempt(currentTimeMs);
                     handleShareAcknowledgeFailure(nodeToSend, requestBuilder.data(), error);
-                    isExpired = true;
+                    isProcessed = true;
                 } else {
                     handleShareAcknowledgeSuccess(nodeToSend, requestBuilder.data(), clientResponse, this, currentTimeMs);
                 }
@@ -658,7 +629,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 if (error != null) {
                     onFailedAttempt(currentTimeMs);
                     handleShareAcknowledgeCloseFailure(nodeToSend, requestBuilder.data(), error);
-                    isExpired = true;
+                    isProcessed = true;
                 } else {
                     handleShareAcknowledgeCloseSuccess(nodeToSend, requestBuilder.data(), clientResponse);
                 }
@@ -674,8 +645,8 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return expirationTimeMs.isPresent() && expirationTimeMs.get() <= currentTimeMs;
         }
 
-        boolean isExpired() {
-            return isExpired;
+        boolean isProcessed() {
+            return isProcessed;
         }
     }
 }
