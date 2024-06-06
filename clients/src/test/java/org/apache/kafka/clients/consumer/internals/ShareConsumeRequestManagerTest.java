@@ -37,6 +37,7 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
 import org.apache.kafka.common.message.RequestHeaderData;
+import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
@@ -53,6 +54,7 @@ import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.requests.MetadataResponse;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.apache.kafka.common.requests.RequestTestUtils;
+import org.apache.kafka.common.requests.ShareAcknowledgeResponse;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.Deserializer;
@@ -276,6 +278,35 @@ public class ShareConsumeRequestManagerTest {
     }
 
     @Test
+    public void testCommitSync() {
+        buildFetcher();
+
+        assignFromSubscribed(Collections.singleton(tp0));
+
+        // normal fetch
+        assertEquals(1, sendFetches());
+        assertFalse(fetcher.hasCompletedFetches());
+
+        client.prepareResponse(fullFetchResponse(tip0, records, acquiredRecords, Errors.NONE));
+        networkClientDelegate.poll(time.timer(0));
+        assertTrue(fetcher.hasCompletedFetches());
+
+        Acknowledgements acknowledgements = Acknowledgements.empty();
+        acknowledgements.add(1L, AcknowledgeType.ACCEPT);
+        acknowledgements.add(2L, AcknowledgeType.ACCEPT);
+        acknowledgements.add(3L, AcknowledgeType.REJECT);
+        fetcher.shareFetchBuffer.acknowledgementsReadyToSend(Collections.singletonMap(tip0, acknowledgements));
+
+        fetcher.commitSync(time.milliseconds() + 2000);
+
+        assertEquals(1, fetcher.sendAcks());
+
+        client.prepareResponse(fullAcknowledgeResponse(tip0, Errors.NONE));
+        networkClientDelegate.poll(time.timer(0));
+        assertTrue(fetcher.hasCompletedFetches());
+    }
+
+    @Test
     public void testMultipleTopicsFetch() {
         buildFetcher();
         Set<TopicPartition> partitions = new HashSet<>();
@@ -288,8 +319,8 @@ public class ShareConsumeRequestManagerTest {
         assertFalse(fetcher.hasCompletedFetches());
 
         LinkedHashMap<TopicIdPartition, ShareFetchResponseData.PartitionData> partitionDataMap = new LinkedHashMap<>();
-        partitionDataMap.put(tip0, partitionData(tip0, records, acquiredRecords, Errors.NONE, Errors.NONE));
-        partitionDataMap.put(tip1, partitionData(tip1, records, emptyAcquiredRecords, Errors.TOPIC_AUTHORIZATION_FAILED, Errors.NONE));
+        partitionDataMap.put(tip0, partitionDataForFetch(tip0, records, acquiredRecords, Errors.NONE, Errors.NONE));
+        partitionDataMap.put(tip1, partitionDataForFetch(tip1, records, emptyAcquiredRecords, Errors.TOPIC_AUTHORIZATION_FAILED, Errors.NONE));
         client.prepareResponse(ShareFetchResponse.of(Errors.NONE, 0, partitionDataMap, Collections.emptyList()));
 
         networkClientDelegate.poll(time.timer(0));
@@ -317,8 +348,8 @@ public class ShareConsumeRequestManagerTest {
         assertFalse(fetcher.hasCompletedFetches());
 
         LinkedHashMap<TopicIdPartition, ShareFetchResponseData.PartitionData> partitionDataMap = new LinkedHashMap<>();
-        partitionDataMap.put(tip1, partitionData(tip1, records, emptyAcquiredRecords, Errors.TOPIC_AUTHORIZATION_FAILED, Errors.NONE));
-        partitionDataMap.put(tip0, partitionData(tip0, records, acquiredRecords, Errors.NONE, Errors.NONE));
+        partitionDataMap.put(tip1, partitionDataForFetch(tip1, records, emptyAcquiredRecords, Errors.TOPIC_AUTHORIZATION_FAILED, Errors.NONE));
+        partitionDataMap.put(tip0, partitionDataForFetch(tip0, records, acquiredRecords, Errors.NONE, Errors.NONE));
         client.prepareResponse(ShareFetchResponse.of(Errors.NONE, 0, partitionDataMap, Collections.emptyList()));
 
         networkClientDelegate.poll(time.timer(0));
@@ -654,21 +685,33 @@ public class ShareConsumeRequestManagerTest {
                                                  Errors error,
                                                  Errors acknowledgeError) {
         Map<TopicIdPartition, ShareFetchResponseData.PartitionData> partitions = Collections.singletonMap(tp,
-                partitionData(tp, records, acquiredRecords, error, acknowledgeError));
+                partitionDataForFetch(tp, records, acquiredRecords, error, acknowledgeError));
         return ShareFetchResponse.of(Errors.NONE, 0, new LinkedHashMap<>(partitions), Collections.emptyList());
     }
 
-    private ShareFetchResponseData.PartitionData partitionData(TopicIdPartition tp,
-                                                               MemoryRecords records,
-                                                               List<ShareFetchResponseData.AcquiredRecords> acquiredRecords,
-                                                               Errors error,
-                                                               Errors acknowledgeError) {
+    private ShareAcknowledgeResponse fullAcknowledgeResponse(TopicIdPartition tp, Errors error) {
+        Map<TopicIdPartition, ShareAcknowledgeResponseData.PartitionData> partitions = Collections.singletonMap(tp,
+                partitionDataForAcknowledge(tp, error));
+        return ShareAcknowledgeResponse.of(Errors.NONE, 0, new LinkedHashMap<>(partitions), Collections.emptyList());
+    }
+
+    private ShareFetchResponseData.PartitionData partitionDataForFetch(TopicIdPartition tp,
+                                                                       MemoryRecords records,
+                                                                       List<ShareFetchResponseData.AcquiredRecords> acquiredRecords,
+                                                                       Errors error,
+                                                                       Errors acknowledgeError) {
         return new ShareFetchResponseData.PartitionData()
                 .setPartitionIndex(tp.topicPartition().partition())
                 .setErrorCode(error.code())
                 .setAcknowledgeErrorCode(acknowledgeError.code())
                 .setRecords(records)
                 .setAcquiredRecords(acquiredRecords);
+    }
+
+    private ShareAcknowledgeResponseData.PartitionData partitionDataForAcknowledge(TopicIdPartition tp, Errors error) {
+        return new ShareAcknowledgeResponseData.PartitionData()
+                .setPartitionIndex(tp.topicPartition().partition())
+                .setErrorCode(error.code());
     }
 
     /**
@@ -783,7 +826,7 @@ public class ShareConsumeRequestManagerTest {
                                                   ShareFetchBuffer shareFetchBuffer,
                                                   ShareFetchMetricsManager metricsManager,
                                                   ShareFetchCollector<K, V> fetchCollector) {
-            super(logContext, groupId, metadata, subscriptions, fetchConfig, shareFetchBuffer, metricsManager);
+            super(logContext, groupId, metadata, subscriptions, fetchConfig, shareFetchBuffer, metricsManager, retryBackoffMs, 1000);
             this.shareFetchCollector = fetchCollector;
             onMemberEpochUpdated(Optional.empty(), Optional.of(Uuid.randomUuid().toString()));
         }
@@ -794,6 +837,12 @@ public class ShareConsumeRequestManagerTest {
 
         private int sendFetches() {
             fetch();
+            NetworkClientDelegate.PollResult pollResult = poll(time.milliseconds());
+            networkClientDelegate.addAll(pollResult.unsentRequests);
+            return pollResult.unsentRequests.size();
+        }
+
+        private int sendAcks() {
             NetworkClientDelegate.PollResult pollResult = poll(time.milliseconds());
             networkClientDelegate.addAll(pollResult.unsentRequests);
             return pollResult.unsentRequests.size();

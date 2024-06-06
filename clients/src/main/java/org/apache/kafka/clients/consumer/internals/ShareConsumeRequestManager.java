@@ -35,9 +35,11 @@ import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -45,9 +47,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
@@ -67,11 +69,14 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     protected final ShareFetchBuffer shareFetchBuffer;
     private final Map<Integer, ShareSessionHandler> sessionHandlers;
     private final Set<Integer> nodesWithPendingRequests;
-    private final List<UnsentRequest> pendingRequests;
     private final ShareFetchMetricsManager metricsManager;
     private final IdempotentCloser idempotentCloser = new IdempotentCloser();
     private Uuid memberId;
     private boolean fetchMoreRecords = false;
+    private final Queue<AcknowledgeRequestState> acknowledgeRequestStates;
+    private final long retryBackoffMs;
+    private final long retryBackoffMaxMs;
+    private CompletableFuture<Void> commitSyncFuture;
 
     ShareConsumeRequestManager(final LogContext logContext,
                                final String groupId,
@@ -79,7 +84,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                                final SubscriptionState subscriptions,
                                final FetchConfig fetchConfig,
                                final ShareFetchBuffer shareFetchBuffer,
-                               final ShareFetchMetricsManager metricsManager) {
+                               final ShareFetchMetricsManager metricsManager,
+                               final long retryBackoffMs,
+                               final long retryBackoffMaxMs) {
         this.log = logContext.logger(ShareConsumeRequestManager.class);
         this.logContext = logContext;
         this.groupId = groupId;
@@ -88,9 +95,11 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         this.fetchConfig = fetchConfig;
         this.shareFetchBuffer = shareFetchBuffer;
         this.metricsManager = metricsManager;
+        this.retryBackoffMs = retryBackoffMs;
+        this.retryBackoffMaxMs = retryBackoffMaxMs;
         this.sessionHandlers = new HashMap<>();
         this.nodesWithPendingRequests = new HashSet<>();
-        this.pendingRequests = new LinkedList<>();
+        this.acknowledgeRequestStates = new LinkedList<>();
     }
 
     @Override
@@ -98,11 +107,10 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         if (memberId == null) {
             return PollResult.EMPTY;
         }
+        PollResult pollResult = processAcknowledgements(currentTimeMs, false);
 
-        if (!pendingRequests.isEmpty()) {
-            List<UnsentRequest> inFlightRequests = new LinkedList<>(pendingRequests);
-            pendingRequests.clear();
-            return new PollResult(inFlightRequests);
+        if (pollResult != null) {
+            return pollResult;
         }
 
         if (!fetchMoreRecords) {
@@ -174,11 +182,10 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         if (memberId == null) {
             return PollResult.EMPTY;
         }
-
-        if (!pendingRequests.isEmpty()) {
-            List<UnsentRequest> inFlightRequests = new LinkedList<>(pendingRequests);
-            pendingRequests.clear();
-            return new PollResult(inFlightRequests);
+        long currentTimeMs = Time.SYSTEM.milliseconds();
+        PollResult pollResult = processAcknowledgements(currentTimeMs, true);
+        if (pollResult != null) {
+            return pollResult;
         }
 
         final Cluster cluster = metadata.fetch();
@@ -239,66 +246,77 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         }
     }
 
+    private PollResult processAcknowledgements(long currentTimeMs, boolean onClose) {
+        List<UnsentRequest> unsentRequests = new ArrayList<>();
+        for (AcknowledgeRequestState acknowledgeRequestState : acknowledgeRequestStates) {
+            if (acknowledgeRequestState.isProcessed()) {
+                acknowledgeRequestStates.remove(acknowledgeRequestState);
+            } else if (!acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
+                if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
+                    acknowledgeRequestState.onSendAttempt(currentTimeMs);
+                    if (onClose) {
+                        unsentRequests.add(acknowledgeRequestState.buildRequestOnClose(currentTimeMs));
+                    } else {
+                        unsentRequests.add(acknowledgeRequestState.buildRequest(currentTimeMs));
+                    }
+                }
+            } else {
+                // Fill in TimeoutException
+                for (TopicIdPartition tip : acknowledgeRequestState.acknowledgementsMap.keySet()) {
+                    metricsManager.recordFailedAcknowledgements(shareFetchBuffer.getPendingAcknowledgementsCount(tip));
+                    shareFetchBuffer.handleAcknowledgementResponses(tip, Errors.REQUEST_TIMED_OUT);
+                }
+                acknowledgeRequestStates.remove(acknowledgeRequestState);
+            }
+        }
+        PollResult pollResult = null;
+        if (!unsentRequests.isEmpty()) {
+            pollResult = new PollResult(unsentRequests);
+        } else if (acknowledgeRequestStates.isEmpty()) {
+            // Complete the future.
+            if (commitSyncFuture != null) {
+                commitSyncFuture.complete(null);
+                commitSyncFuture = null;
+            }
+        } else {
+            // Return empty result until all the acknowledgement request states are processed.
+            pollResult = PollResult.EMPTY;
+        }
+        return pollResult;
+    }
+
     public CompletableFuture<Void> commitSync(final long retryExpirationTimeMs) {
-        final CompletableFuture<Void> result = new CompletableFuture<>();
+        if (commitSyncFuture != null) return commitSyncFuture;
+        commitSyncFuture = new CompletableFuture<>();
 
         // Build a list of ShareAcknowledge requests to be picked up on the next poll
         final Cluster cluster = metadata.fetch();
 
-        Map<Node, ShareSessionHandler> handlerMap = new HashMap<>();
-
         sessionHandlers.forEach((nodeId, sessionHandler) -> {
             Node node = cluster.nodeById(nodeId);
             if (node != null) {
+                Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = new HashMap<>();
                 for (TopicIdPartition tip : sessionHandler.sessionPartitions()) {
                     Acknowledgements acknowledgements = shareFetchBuffer.getAcknowledgementsToSend(tip);
                     if (acknowledgements != null) {
-                        metricsManager.recordAcknowledgementSent(acknowledgements.size());
-                        sessionHandler.addPartitionToFetch(tip, acknowledgements);
-                        handlerMap.put(node, sessionHandler);
+                        acknowledgementsMap.put(tip, acknowledgements);
 
+                        metricsManager.recordAcknowledgementSent(acknowledgements.size());
                         log.debug("Added acknowledge request for partition {} to node {}", tip.topicPartition(), node);
                     }
                 }
+                acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
+                        ShareConsumeRequestManager.class.getSimpleName(),
+                        retryBackoffMs,
+                        retryBackoffMaxMs,
+                        Optional.of(retryExpirationTimeMs),
+                        nodeId,
+                        acknowledgementsMap
+                ));
             }
         });
 
-        Map<Node, ShareAcknowledgeRequest.Builder> builderMap = new LinkedHashMap<>();
-        for (Map.Entry<Node, ShareSessionHandler> entry : handlerMap.entrySet()) {
-            Node target = entry.getKey();
-            ShareSessionHandler handler = entry.getValue();
-            ShareAcknowledgeRequest.Builder builder = handler.newShareAcknowledgeBuilder(groupId, fetchConfig);
-            if (builder != null) {
-                builderMap.put(target, builder);
-            }
-        }
-
-        final AtomicInteger inFlightRequestCount = new AtomicInteger();
-
-        List<UnsentRequest> requests = builderMap.entrySet().stream().map(entry -> {
-            Node target = entry.getKey();
-            ShareAcknowledgeRequest.Builder requestBuilder = entry.getValue();
-
-            nodesWithPendingRequests.add(target.id());
-
-            BiConsumer<ClientResponse, Throwable> responseHandler = (clientResponse, error) -> {
-                if (error != null) {
-                    handleShareAcknowledgeFailure(target, requestBuilder.data(), inFlightRequestCount, result, error);
-                } else {
-                    handleShareAcknowledgeSuccess(target, requestBuilder.data(), inFlightRequestCount, result, clientResponse);
-                }
-            };
-            return new UnsentRequest(requestBuilder, Optional.of(target)).whenComplete(responseHandler);
-        }).collect(Collectors.toList());
-
-        if (requests.isEmpty()) {
-            result.complete(null);
-        } else {
-            inFlightRequestCount.set(requests.size());
-            pendingRequests.addAll(requests);
-        }
-
-        return result;
+        return commitSyncFuture;
     }
 
     private void handleShareFetchSuccess(Node fetchTarget,
@@ -391,11 +409,30 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
     private void handleShareAcknowledgeSuccess(Node fetchTarget,
                                                ShareAcknowledgeRequestData requestData,
-                                               AtomicInteger inFlightRequestCount,
-                                               CompletableFuture<Void> future,
-                                               ClientResponse resp) {
+                                               ClientResponse resp,
+                                               AcknowledgeRequestState acknowledgeRequestState,
+                                               long currentTimeMs) {
         try {
             final ShareAcknowledgeResponse response = (ShareAcknowledgeResponse) resp.responseBody();
+            final ShareSessionHandler handler = sessionHandler(fetchTarget.id());
+
+            if (handler == null) {
+                log.error("Unable to find ShareSessionHandler for node {}. Ignoring ShareAcknowledge response.",
+                        fetchTarget.id());
+                acknowledgeRequestState.onFailedAttempt(currentTimeMs);
+                return;
+            }
+            final short requestVersion = resp.requestHeader().apiVersion();
+
+            if (!handler.handleResponse(response, requestVersion)) {
+                acknowledgeRequestState.onFailedAttempt(currentTimeMs);
+                if (response.error() != Errors.INVALID_SHARE_SESSION_EPOCH) {
+                    return;
+                } else {
+                    // We pop this request of the queue as the error was not retriable.
+                    acknowledgeRequestState.isProcessed = true;
+                }
+            }
 
             response.data().responses().forEach(topic -> topic.partitions().forEach(partition -> {
                 TopicIdPartition tip = new TopicIdPartition(topic.topicId(),
@@ -408,20 +445,15 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }));
 
             metricsManager.recordLatency(resp.requestLatencyMs());
+            acknowledgeRequestState.isProcessed = true;
         } finally {
             log.debug("Removing pending request for node {} - success", fetchTarget);
             nodesWithPendingRequests.remove(fetchTarget.id());
-
-            if (inFlightRequestCount.decrementAndGet() == 0) {
-                future.complete(null);
-            }
         }
     }
 
     private void handleShareAcknowledgeFailure(Node fetchTarget,
                                                ShareAcknowledgeRequestData requestData,
-                                               AtomicInteger inFlightRequestCount,
-                                               CompletableFuture<Void> future,
                                                Throwable error) {
         try {
             final ShareSessionHandler handler = sessionHandler(fetchTarget.id());
@@ -439,10 +471,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         } finally {
             log.debug("Removing pending request for node {} - failed", fetchTarget);
             nodesWithPendingRequests.remove(fetchTarget.id());
-
-            if (inFlightRequestCount.decrementAndGet() == 0) {
-                future.complete(null);
-            }
         }
     }
 
@@ -522,12 +550,12 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
      * Represents a request to acknowledge delivery that can be retried or aborted.
      * ** UNDER CONSTRUCTION **
      */
-    static class AcknowledgeRequestState extends RequestState {
+    class AcknowledgeRequestState extends RequestState {
 
         /**
          * The node to send the request to.
          */
-        private final int node;
+        private final int nodeId;
 
         /**
          * The map of acknowledgements to send
@@ -535,35 +563,90 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         private final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
 
         /**
-         * Future with the result of the request.
-         */
-        private final CompletableFuture<Void> future;
-
-        /**
          * Time until which the request should be retried if it fails with retriable
          * errors. If not present, the request is triggered without waiting for a response or
          * retrying.
          */
         private final Optional<Long> expirationTimeMs;
+        private boolean isProcessed = false;
 
         AcknowledgeRequestState(LogContext logContext, String owner,
                                 long retryBackoffMs, long retryBackoffMaxMs,
                                 Optional<Long> expirationTimeMs,
-                                int node,
+                                int nodeId,
                                 Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
             super(logContext, owner, retryBackoffMs, retryBackoffMaxMs);
             this.expirationTimeMs = expirationTimeMs;
-            this.node = node;
+            this.nodeId = nodeId;
             this.acknowledgementsMap = acknowledgementsMap;
-            this.future = new CompletableFuture<>();
         }
 
-        UnsentRequest buildRequest() {
-            return null;
+        UnsentRequest buildRequest(long currentTimeMs) {
+
+            ShareSessionHandler handler = sessionHandlers.get(nodeId);
+
+            if (handler == null) return null;
+
+            for (Map.Entry<TopicIdPartition, Acknowledgements> entry : acknowledgementsMap.entrySet()) {
+                handler.addPartitionToFetch(entry.getKey(), entry.getValue());
+            }
+            ShareAcknowledgeRequest.Builder requestBuilder = handler.newShareAcknowledgeBuilder(groupId, fetchConfig);
+            Node nodeToSend = metadata.fetch().nodeById(nodeId);
+
+            nodesWithPendingRequests.add(nodeId);
+
+            BiConsumer<ClientResponse, Throwable> responseHandler = (clientResponse, error) -> {
+                if (error != null) {
+                    onFailedAttempt(currentTimeMs);
+                    handleShareAcknowledgeFailure(nodeToSend, requestBuilder.data(), error);
+                    isProcessed = true;
+                } else {
+                    handleShareAcknowledgeSuccess(nodeToSend, requestBuilder.data(), clientResponse, this, currentTimeMs);
+                }
+            };
+            if (requestBuilder == null) {
+                return null;
+            } else {
+                return new UnsentRequest(requestBuilder, Optional.of(nodeToSend)).whenComplete(responseHandler);
+            }
+        }
+
+        UnsentRequest buildRequestOnClose(long currentTimeMs) {
+
+            ShareSessionHandler handler = sessionHandlers.get(nodeId);
+
+            if (handler == null) return null;
+
+            for (Map.Entry<TopicIdPartition, Acknowledgements> entry : acknowledgementsMap.entrySet()) {
+                handler.addPartitionToFetch(entry.getKey(), entry.getValue());
+            }
+            ShareAcknowledgeRequest.Builder requestBuilder = handler.newShareAcknowledgeBuilder(groupId, fetchConfig);
+            Node nodeToSend = metadata.fetch().nodeById(nodeId);
+
+            nodesWithPendingRequests.add(nodeId);
+
+            BiConsumer<ClientResponse, Throwable> responseHandler = (clientResponse, error) -> {
+                if (error != null) {
+                    onFailedAttempt(currentTimeMs);
+                    handleShareAcknowledgeCloseFailure(nodeToSend, requestBuilder.data(), error);
+                    isProcessed = true;
+                } else {
+                    handleShareAcknowledgeCloseSuccess(nodeToSend, requestBuilder.data(), clientResponse);
+                }
+            };
+            if (requestBuilder == null) {
+                return null;
+            } else {
+                return new UnsentRequest(requestBuilder, Optional.of(nodeToSend)).whenComplete(responseHandler);
+            }
         }
 
         boolean retryTimeoutExpired(long currentTimeMs) {
             return expirationTimeMs.isPresent() && expirationTimeMs.get() <= currentTimeMs;
+        }
+
+        boolean isProcessed() {
+            return isProcessed;
         }
     }
 }
