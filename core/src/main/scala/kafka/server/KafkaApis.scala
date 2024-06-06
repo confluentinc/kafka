@@ -266,6 +266,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.SHARE_GROUP_DESCRIBE => handleShareGroupDescribe(request).exceptionally(handleError)
         case ApiKeys.SHARE_ACKNOWLEDGE => handleShareAcknowledgeRequest(request)
         case ApiKeys.WRITE_SHARE_GROUP_STATE => handleWriteShareGroupState(request)
+        case ApiKeys.READ_SHARE_GROUP_STATE => handleReadShareGroupStateRequest(request)
         case _ => throw new IllegalStateException(s"No handler for request api key ${request.header.apiKey}")
       }
     } catch {
@@ -4846,6 +4847,54 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     val writeShareData = shareCoordinator.writeState(request.context, writeShareRequest.data).get()
     requestHelper.sendMaybeThrottle(request, new WriteShareGroupStateResponse(writeShareData))
+  }
+
+  private def handleReadShareGroupStateRequest(request: RequestChannel.Request): Unit = {
+    val readShareGroupStateRequest = request.body[ReadShareGroupStateRequest]
+
+    authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
+
+//    val requestDataWithAuthorizedPartitions : ReadShareGroupStateRequestData = new ReadShareGroupStateRequestData()
+//      .setGroupId(requestData.groupId())
+//
+//    val (authorizedTopics, unauthorizedTopics) = authHelper.partitionSeqByAuthorized(
+//      request.context,
+//      DESCRIBE,
+//      TOPIC,
+//      requestData.topics.asScala
+//    )(_.topicId.toString())
+//
+//    val authorizedReadStateData : util.List[ReadShareGroupStateRequestData.ReadStateData] =
+//      new util.ArrayList[ReadShareGroupStateRequestData.ReadStateData]()
+//    requestData.topics().forEach(topic => {
+//      if (authorizedTopics.contains(topic.topicId.toString())) {
+//        authorizedReadStateData.add(topic)
+//      }
+//    })
+//
+//    requestDataWithAuthorizedPartitions.setTopics(authorizedReadStateData)
+//
+//    // Finding the ShareGroupState data for the given request
+//    val responseData : ReadShareGroupStateResponseData =
+//      shareCoordinator.readState(request.context, requestDataWithAuthorizedPartitions).get()
+//
+//    // Adding unauthorized topics to the response with TOPIC_AUTHORIZATION_FAILED error
+//    requestData.topics().stream().filter(topic => {
+//      unauthorizedTopics.contains(topic.topicId().toString)
+//    }).forEach(topic => {
+//      responseData.results.add(new ReadShareGroupStateResponseData.ReadStateResult()
+//        .setTopicId(topic.topicId())
+//        .setPartitions(topic.partitions().stream().map(partition => {
+//          new ReadShareGroupStateResponseData.PartitionResult()
+//            .setPartition(partition.partition())
+//            .setErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED.code())
+//            .setErrorMessage(Errors.TOPIC_AUTHORIZATION_FAILED.message())
+//        }).collect(util.stream.Collectors.toList())))
+//    })
+
+    val readShareData = shareCoordinator.readState(request.context, readShareGroupStateRequest.data).get()
+    requestHelper.sendMaybeThrottle(request, new ReadShareGroupStateResponse(readShareData))
+
   }
 
   private def updateRecordConversionStats(request: RequestChannel.Request,

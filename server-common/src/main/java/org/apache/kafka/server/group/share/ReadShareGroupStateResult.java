@@ -39,9 +39,15 @@ public class ReadShareGroupStateResult implements PersisterResult {
             .map(topicData -> new TopicData<>(topicData.topicId(),
                 topicData.partitions().stream()
                     .map(partitionResult -> PartitionFactory.newPartitionAllData(
-                        partitionResult.partition(), partitionResult.stateEpoch(), partitionResult.startOffset(), partitionResult.errorCode(), partitionResult.errorMessage(), partitionResult.stateBatches().stream()
+                        partitionResult.partition(),
+                        partitionResult.stateEpoch(),
+                        partitionResult.startOffset(),
+                        partitionResult.errorCode(),
+                        partitionResult.errorMessage(),
+                        partitionResult.stateBatches().stream()
                             .map(PersisterStateBatch::from)
-                            .collect(Collectors.toList())))
+                            .collect(Collectors.toList())
+                    ))
                     .collect(Collectors.toList())))
             .collect(Collectors.toList()))
         .build();
