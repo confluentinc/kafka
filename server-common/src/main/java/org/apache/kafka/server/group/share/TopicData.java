@@ -51,4 +51,12 @@ public class TopicData<P extends PartitionInfoData> {
   public List<P> partitions() {
     return partitions;
   }
+
+  @Override
+  public String toString() {
+    return "TopicData(" +
+        "topicId=" + topicId +
+        "partitions" + partitions +
+        ")";
+  }
 }
