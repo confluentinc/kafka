@@ -75,6 +75,7 @@ import org.apache.kafka.server.authorizer._
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.{IBP_0_11_0_IV0, IBP_2_3_IV0}
 import org.apache.kafka.server.record.BrokerCompressionType
+import org.apache.kafka.server.share.ShareAcknowledgementBatch
 import org.apache.kafka.storage.internals.log.{AppendOrigin, FetchIsolation, FetchParams, FetchPartitionData}
 
 import java.lang.{Long => JLong}
@@ -1080,9 +1081,9 @@ class KafkaApis(val requestChannel: RequestChannel,
                                                   shareFetchRequest : ShareFetchRequest,
                                                   topicNames : util.Map[Uuid, String],
                                                   erroneous : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
-                                                ) : mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]] = {
+                                                ) : mutable.Map[TopicIdPartition, util.List[ShareAcknowledgementBatch]] = {
 
-    val acknowledgeBatchesMap = mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]]()
+    val acknowledgeBatchesMap = mutable.Map[TopicIdPartition, util.List[ShareAcknowledgementBatch]]()
     shareFetchRequest.data().topics().forEach ( topic => {
 
       if(!topicNames.asScala.contains(topic.topicId)) {
@@ -1101,11 +1102,11 @@ class KafkaApis(val requestChannel: RequestChannel,
             new TopicPartition(topicNames.get(topic.topicId()), partition.partitionIndex())
           )
           var exceptionThrown = false
-          val acknowledgeBatches = new util.ArrayList[SharePartition.AcknowledgementBatch]()
+          val acknowledgeBatches = new util.ArrayList[ShareAcknowledgementBatch]()
           breakable{
             partition.acknowledgementBatches().forEach( batch => {
               try {
-                acknowledgeBatches.add(new SharePartition.AcknowledgementBatch(
+                acknowledgeBatches.add(new ShareAcknowledgementBatch(
                   batch.firstOffset(),
                   batch.lastOffset(),
                   batch.acknowledgeTypes()
@@ -1143,10 +1144,10 @@ class KafkaApis(val requestChannel: RequestChannel,
       request.body[ShareAcknowledgeRequest]
     }
     val clientId = request.header.clientId
-    val interesting = mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]]()
+    val interesting = mutable.Map[TopicIdPartition, util.List[ShareAcknowledgementBatch]]()
     val erroneous = mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]()
 
-    var acknowledgementDataFromRequest : mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]] = null
+    var acknowledgementDataFromRequest : mutable.Map[TopicIdPartition, util.List[ShareAcknowledgementBatch]] = null
     if(areAcknowledgementsPiggyBacked) {
       acknowledgementDataFromRequest = getAcknowledgeBatchesFromShareFetchRequest(requestData.asInstanceOf[ShareFetchRequest], topicNames, erroneous)
     } else {
@@ -1159,7 +1160,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     })
 
     acknowledgementDataFromRequest.foreach{
-      case (topicIdPartition : TopicIdPartition, acknowledgeBatches : util.List[SharePartition.AcknowledgementBatch]) =>
+      case (topicIdPartition : TopicIdPartition, acknowledgeBatches : util.List[ShareAcknowledgementBatch]) =>
         if (!authorizedTopics.contains(topicIdPartition.topicPartition.topic))
           erroneous += topicIdPartition ->
             ShareAcknowledgeResponse.partitionResponse(topicIdPartition, Errors.TOPIC_AUTHORIZATION_FAILED)
@@ -4552,9 +4553,9 @@ class KafkaApis(val requestChannel: RequestChannel,
                                                   shareAcknowledgeRequest : ShareAcknowledgeRequest,
                                                   topicNames : util.Map[Uuid, String],
                                                   erroneous : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData],
-                                                ) : mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]] = {
+                                                ) : mutable.Map[TopicIdPartition, util.List[ShareAcknowledgementBatch]] = {
 
-    val acknowledgeBatchesMap = mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]]()
+    val acknowledgeBatchesMap = mutable.Map[TopicIdPartition, util.List[ShareAcknowledgementBatch]]()
     shareAcknowledgeRequest.data().topics().forEach ( topic => {
 
       if(!topicNames.asScala.contains(topic.topicId)) {
@@ -4573,11 +4574,11 @@ class KafkaApis(val requestChannel: RequestChannel,
             new TopicPartition(topicNames.get(topic.topicId()), partition.partitionIndex())
           )
           var exceptionThrown = false
-          val acknowledgeBatches = new util.ArrayList[SharePartition.AcknowledgementBatch]()
+          val acknowledgeBatches = new util.ArrayList[ShareAcknowledgementBatch]()
           breakable{
             partition.acknowledgementBatches().forEach( batch => {
               try {
-                acknowledgeBatches.add(new SharePartition.AcknowledgementBatch(
+                acknowledgeBatches.add(new ShareAcknowledgementBatch(
                   batch.firstOffset(),
                   batch.lastOffset(),
                   batch.acknowledgeTypes()
@@ -4600,11 +4601,11 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   def validateAcknowledgementBatches(
-                                    acknowledgementDataFromRequest : mutable.Map[TopicIdPartition, util.List[SharePartition.AcknowledgementBatch]],
+                                    acknowledgementDataFromRequest : mutable.Map[TopicIdPartition, util.List[ShareAcknowledgementBatch]],
                                     erroneous : mutable.Map[TopicIdPartition, ShareAcknowledgeResponseData.PartitionData]
                                     ) : mutable.Set[TopicIdPartition] = {
     val erroneousTopicIdPartitions: mutable.Set[TopicIdPartition] = mutable.Set.empty[TopicIdPartition]
-    acknowledgementDataFromRequest.foreach{ case (tp : TopicIdPartition, acknowledgeBatches : util.List[SharePartition.AcknowledgementBatch]) =>
+    acknowledgementDataFromRequest.foreach{ case (tp : TopicIdPartition, acknowledgeBatches : util.List[ShareAcknowledgementBatch]) =>
       var prevEndOffset = -1L
       breakable {
         acknowledgeBatches.forEach(batch => {
