@@ -102,4 +102,9 @@ public class GroupTopicPartitionData<P extends PartitionInfoData> {
       }
     }
   }
+
+  @Override
+  public String toString() {
+    return "GroupTopicPartitionData(" + groupId + ", " + topicsData + ")";
+  }
 }

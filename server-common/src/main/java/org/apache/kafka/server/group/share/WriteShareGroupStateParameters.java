@@ -59,4 +59,9 @@ public class WriteShareGroupStateParameters implements PersisterParameters {
       return new WriteShareGroupStateParameters(groupTopicPartitionData);
     }
   }
+
+  @Override
+  public String toString() {
+    return "WriteShareGroupStateParameters(" + groupTopicPartitionData + ")";
+  }
 }
