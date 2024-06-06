@@ -152,7 +152,9 @@ public class ShareConsumerTestBuilder implements Closeable {
                 subscriptions,
                 fetchConfig,
                 fetchBuffer,
-                metricsManager));
+                metricsManager,
+                retryBackoffMs,
+                retryBackoffMs));
 
         ShareMembershipManager membershipManager = spy(new ShareMembershipManager(
                 logContext,
