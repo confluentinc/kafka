@@ -96,6 +96,7 @@ public class PersisterStateManager {
     protected final int partition;
     private final ExponentialBackoff findCoordbackoff = new ExponentialBackoff(1_000, 2, 30_000, 100);
     private int findCoordattempts = 0;
+    private final int maxFindCoordAttempts = 5;
 
     public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition) {
       this.groupId = groupId;
@@ -185,6 +186,11 @@ public class PersisterStateManager {
         enqueue(this);
       } else if (isFindCoordinatorRetryable(error)) {
         log.warn("Received retryable error in find coordinator {}", error.message());
+        if (findCoordattempts > maxFindCoordAttempts) {
+          log.error("Exhausted max retries to find coordinator without success.");
+          findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
+          return;
+        }
         log.info("Waiting before retrying find coordinator response.");
         try {
           TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(++findCoordattempts));
@@ -280,7 +286,8 @@ public class PersisterStateManager {
             WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, exception.getMessage())));
       } else {
         this.result.complete(new WriteShareGroupStateResponse(
-            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " + error.message())));
+            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+                (exception == null ? error.message() : exception.getMessage()))));
       }
     }
   }
