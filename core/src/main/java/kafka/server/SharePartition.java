@@ -39,6 +39,7 @@ import org.apache.kafka.server.group.share.ReadShareGroupStateResult;
 import org.apache.kafka.server.group.share.TopicData;
 import org.apache.kafka.server.group.share.WriteShareGroupStateParameters;
 import org.apache.kafka.server.group.share.WriteShareGroupStateResult;
+import org.apache.kafka.server.share.ShareAcknowledgementBatch;
 import org.apache.kafka.server.util.timer.Timer;
 import org.apache.kafka.server.util.timer.TimerTask;
 import org.apache.kafka.storage.internals.log.FetchPartitionData;
@@ -79,6 +80,7 @@ public class SharePartition {
      * The state of the records determines if the records should be re-delivered, move the next fetch
      * offset, or be state persisted to disk.
      */
+    // Visible for testing
     public enum RecordState {
         AVAILABLE((byte) 0),
         ACQUIRED((byte) 1),
@@ -247,22 +249,6 @@ public class SharePartition {
         this.replicaManager = replicaManager;
         // Initialize the partition.
         initialize();
-    }
-
-    long startOffset() {
-        long startOffset;
-        lock.readLock().lock();
-        startOffset = this.startOffset;
-        lock.readLock().unlock();
-        return startOffset;
-    }
-
-    long endOffset() {
-        long endOffset;
-        lock.readLock().lock();
-        endOffset = this.endOffset;
-        lock.readLock().unlock();
-        return endOffset;
     }
 
     /**
@@ -621,7 +607,7 @@ public class SharePartition {
      */
     public CompletableFuture<Optional<Throwable>> acknowledge(
         String memberId,
-        List<AcknowledgementBatch> acknowledgementBatch
+        List<ShareAcknowledgementBatch> acknowledgementBatch
     ) {
         log.trace("Acknowledgement batch request for share partition: {}-{}", groupId, topicIdPartition);
 
@@ -633,7 +619,7 @@ public class SharePartition {
             // Avoided using enhanced for loop as need to check if the last batch have offsets
             // in the range.
             for (int i = 0; i < acknowledgementBatch.size(); i++) {
-                AcknowledgementBatch batch = acknowledgementBatch.get(i);
+                ShareAcknowledgementBatch batch = acknowledgementBatch.get(i);
 
                 // Client can either send a single entry in acknowledgeTypes which represents the state
                 // of the complete batch or can send individual offsets state.
@@ -647,7 +633,7 @@ public class SharePartition {
                     break;
                 }
 
-                if (batch.lastOffset < startOffset) {
+                if (batch.lastOffset() < startOffset) {
                     log.trace("All offsets in the acknowledgement batch {} are already archived: {}-{}",
                         batch, groupId, topicIdPartition);
                     continue;
@@ -685,7 +671,7 @@ public class SharePartition {
                     }
 
                     // Determine if the in-flight batch is a full match from the request batch.
-                    boolean fullMatch = checkForFullMatch(inFlightBatch, batch.firstOffset, batch.lastOffset);
+                    boolean fullMatch = checkForFullMatch(inFlightBatch, batch.firstOffset(), batch.lastOffset());
                     boolean isPerOffsetClientAck = batch.acknowledgeTypes().size() > 1;
                     boolean hasStartOffsetMoved = checkForStartOffsetWithinBatch(inFlightBatch.firstOffset, inFlightBatch.lastOffset);
 
@@ -695,8 +681,8 @@ public class SharePartition {
                     if (!fullMatch || inFlightBatch.offsetState != null || isPerOffsetClientAck || hasStartOffsetMoved) {
                         log.debug("Subset or offset tracked batch record found for acknowledgement,"
                             + " batch: {}, request offsets - first: {}, last: {}, client per offset"
-                            + "state {} for the share partition: {}-{}", inFlightBatch, batch.firstOffset,
-                            batch.lastOffset, isPerOffsetClientAck, groupId, topicIdPartition);
+                            + "state {} for the share partition: {}-{}", inFlightBatch, batch.firstOffset(),
+                            batch.lastOffset(), isPerOffsetClientAck, groupId, topicIdPartition);
                         if (inFlightBatch.offsetState == null) {
                             // Though the request is a subset of in-flight batch but the offset
                             // tracking has not been initialized yet which means that we could only
@@ -722,7 +708,7 @@ public class SharePartition {
                     } else {
                         // The in-flight batch is a full match hence change the state of the complete batch.
                         throwable = acknowledgeCompleteBatch(batch, inFlightBatch,
-                            recordStateMap.get(batch.firstOffset), updatedStates, stateBatches).orElse(null);
+                            recordStateMap.get(batch.firstOffset()), updatedStates, stateBatches).orElse(null);
                         if (throwable != null) {
                             break;
                         }
@@ -942,12 +928,13 @@ public class SharePartition {
         }
     }
 
-    private Map<Long, RecordState> fetchRecordStateMapForAcknowledgementBatch(AcknowledgementBatch batch) {
+    private Map<Long, RecordState> fetchRecordStateMapForAcknowledgementBatch(
+        ShareAcknowledgementBatch batch) {
         // Client can either send a single entry in acknowledgeTypes which represents the state
         // of the complete batch or can send individual offsets state. Construct a map with record state
         // for each offset in the batch, if single acknowledge type is sent, the map will have only one entry.
         Map<Long, RecordState> recordStateMap = new HashMap<>();
-        for (int index = 0; index < batch.acknowledgeTypes.size(); index++) {
+        for (int index = 0; index < batch.acknowledgeTypes().size(); index++) {
             recordStateMap.put(batch.firstOffset() + index,
                 fetchRecordState(batch.acknowledgeTypes().get(index)));
         }
@@ -955,7 +942,7 @@ public class SharePartition {
     }
 
     private NavigableMap<Long, InFlightBatch> fetchSubMapForAcknowledgementBatch(
-        AcknowledgementBatch batch,
+        ShareAcknowledgementBatch batch,
         boolean isLastBatch
     ) {
         lock.writeLock().lock();
@@ -963,12 +950,12 @@ public class SharePartition {
             // Find the floor batch record for the request batch. The request batch could be
             // for a subset of the batch i.e. cached batch of offset 10-14 and request batch
             // of 12-13. Hence, floor entry is fetched to find the sub-map.
-            Map.Entry<Long, InFlightBatch> floorOffset = cachedState.floorEntry(batch.firstOffset);
-            boolean hasStartOffsetMoved = checkForStartOffsetWithinBatch(batch.firstOffset, batch.lastOffset);
+            Map.Entry<Long, InFlightBatch> floorOffset = cachedState.floorEntry(batch.firstOffset());
+            boolean hasStartOffsetMoved = checkForStartOffsetWithinBatch(batch.firstOffset(), batch.lastOffset());
             if (floorOffset == null && hasStartOffsetMoved) {
                 // If the start offset is between the first and last offset of the acknowledgment batch, then
                 // we need to get the floor offset using the last offset of the acknowledgment batch.
-                floorOffset = cachedState.floorEntry(batch.lastOffset);
+                floorOffset = cachedState.floorEntry(batch.lastOffset());
             }
             if (floorOffset == null) {
                 log.debug("Batch record {} not found for share partition: {}-{}", batch, groupId,
@@ -977,10 +964,10 @@ public class SharePartition {
                     "Batch record not found. The base offset is not found in the cache.");
             }
 
-            NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(floorOffset.getKey(), true, batch.lastOffset, true);
+            NavigableMap<Long, InFlightBatch> subMap = cachedState.subMap(floorOffset.getKey(), true, batch.lastOffset(), true);
             // Validate if the request batch has the first offset less than the last offset of the last
             // fetched cached batch, then there will be offsets in the request that are already acquired.
-            if (subMap.lastEntry().getValue().lastOffset < batch.firstOffset) {
+            if (subMap.lastEntry().getValue().lastOffset < batch.firstOffset()) {
                 log.debug("Request batch: {} has offsets which are not found for share partition: {}-{}", batch, groupId, topicIdPartition);
                 throw new InvalidRequestException("Batch record not found. The first offset in request is past acquired records.");
             }
@@ -988,7 +975,7 @@ public class SharePartition {
             // Validate if the request batch has the last offset greater than the last offset of
             // the last fetched cached batch, then there will be offsets in the request than cannot
             // be found in the fetched batches.
-            if (isLastBatch && batch.lastOffset > subMap.lastEntry().getValue().lastOffset) {
+            if (isLastBatch && batch.lastOffset() > subMap.lastEntry().getValue().lastOffset) {
                 log.debug("Request batch: {} has offsets which are not found for share partition: {}-{}", batch, groupId, topicIdPartition);
                 throw new InvalidRequestException("Batch record not found. The last offset in request is past acquired records.");
             }
@@ -1020,7 +1007,7 @@ public class SharePartition {
 
     private Optional<Throwable> acknowledgePerOffsetBatchRecords(
         String memberId,
-        AcknowledgementBatch batch,
+        ShareAcknowledgementBatch batch,
         InFlightBatch inFlightBatch,
         Map<Long, RecordState> recordStateMap,
         List<InFlightState> updatedStates,
@@ -1036,11 +1023,11 @@ public class SharePartition {
                 // 1. For the first batch which might have offsets prior to the request base
                 // offset i.e. cached batch of 10-14 offsets and request batch of 12-13.
                 // 2. Skip the offsets which are below the start offset of the share partition
-                if (offsetState.getKey() < batch.firstOffset || offsetState.getKey() < startOffset) {
+                if (offsetState.getKey() < batch.firstOffset() || offsetState.getKey() < startOffset) {
                     continue;
                 }
 
-                if (offsetState.getKey() > batch.lastOffset) {
+                if (offsetState.getKey() > batch.lastOffset()) {
                     // No further offsets to process.
                     break;
                 }
@@ -1098,7 +1085,7 @@ public class SharePartition {
     }
 
     private Optional<Throwable> acknowledgeCompleteBatch(
-        AcknowledgementBatch batch,
+        ShareAcknowledgementBatch batch,
         InFlightBatch inFlightBatch,
         RecordState recordState,
         List<InFlightState> updatedStates,
@@ -1389,6 +1376,26 @@ public class SharePartition {
 
     private TimerTask acquisitionLockTimerTask(String memberId, long firstOffset, long lastOffset, long delayMs) {
         return new AcquisitionLockTimerTask(delayMs, memberId, firstOffset, lastOffset);
+    }
+
+    // Visible for testing
+    long startOffset() {
+        lock.readLock().lock();
+        try {
+            return this.startOffset;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    // Visible for testing
+    long endOffset() {
+        lock.readLock().lock();
+        try {
+            return this.endOffset;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     private final class AcquisitionLockTimerTask extends TimerTask {
@@ -1881,43 +1888,6 @@ public class SharePartition {
                 " state=" + state.toString() +
                 ", deliveryCount=" + deliveryCount +
                 ", memberId=" + memberId +
-                ")";
-        }
-    }
-
-    /**
-     * The AcknowledgementBatch containing the fields required to acknowledge the fetched records.
-     */
-    public static class AcknowledgementBatch {
-
-        private final long firstOffset;
-        private final long lastOffset;
-        private final List<Byte> acknowledgeTypes;
-
-        public AcknowledgementBatch(long firstOffset, long lastOffset, List<Byte> acknowledgeTypes) {
-            this.firstOffset = firstOffset;
-            this.lastOffset = lastOffset;
-            this.acknowledgeTypes = acknowledgeTypes;
-        }
-
-        public long firstOffset() {
-            return firstOffset;
-        }
-
-        public long lastOffset() {
-            return lastOffset;
-        }
-
-        public List<Byte> acknowledgeTypes() {
-            return acknowledgeTypes;
-        }
-
-        @Override
-        public String toString() {
-            return "AcknowledgementBatch(" +
-                " firstOffset=" + firstOffset +
-                ", lastOffset=" + lastOffset +
-                ", acknowledgeTypes=" + ((acknowledgeTypes == null) ? "" : acknowledgeTypes) +
                 ")";
         }
     }
