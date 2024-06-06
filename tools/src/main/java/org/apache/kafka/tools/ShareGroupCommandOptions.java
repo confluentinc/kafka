@@ -149,6 +149,8 @@ public class ShareGroupCommandOptions extends CommandDefaultOptions {
 
     @SuppressWarnings({"CyclomaticComplexity", "NPathComplexity"})
     public void checkArgs() {
+        CommandLineUtils.maybePrintHelpOrVersion(this, "This tool helps to list, describe, reset and delete share groups.");
+
         CommandLineUtils.checkRequiredArgs(parser, options, bootstrapServerOpt);
 
         if (options.has(describeOpt)) {
