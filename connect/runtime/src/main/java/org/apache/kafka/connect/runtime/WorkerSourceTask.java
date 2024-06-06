@@ -53,10 +53,12 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
 
 /**
  * WorkerTask that uses a SourceTask to ingest data into Kafka.
@@ -93,6 +95,7 @@ class WorkerSourceTask extends WorkerTask {
     private boolean finishedStart = false;
     private boolean startedShutdownBeforeStartCompleted = false;
     private boolean stopped = false;
+    private boolean isParallelTransformEnabled;
 
     public WorkerSourceTask(ConnectorTaskId id,
                             SourceTask task,
@@ -133,6 +136,7 @@ class WorkerSourceTask extends WorkerTask {
         this.flushing = false;
         this.stopRequestedLatch = new CountDownLatch(1);
         this.sourceTaskMetricsGroup = new SourceTaskMetricsGroup(id, connectMetrics);
+        this.isParallelTransformEnabled = workerConfig.getBoolean(WorkerConfig.PARALLEL_TRANSFORMATION_ENABLED_CONFIG);
     }
 
     @Override
@@ -266,7 +270,6 @@ class WorkerSourceTask extends WorkerTask {
 
         byte[] key = retryWithToleranceOperator.execute(() -> keyConverter.fromConnectData(record.topic(), record.keySchema(), record.key()),
                 Stage.KEY_CONVERTER, keyConverter.getClass());
-
         byte[] value = retryWithToleranceOperator.execute(() -> valueConverter.fromConnectData(record.topic(), record.valueSchema(), record.value()),
                 Stage.VALUE_CONVERTER, valueConverter.getClass());
 
@@ -286,11 +289,28 @@ class WorkerSourceTask extends WorkerTask {
     private boolean sendRecords() {
         int processed = 0;
         recordBatch(toSend.size());
+        Map<SourceRecord, SourceRecord> transformedRecordMap = new ConcurrentHashMap<>(toSend.size());
         final SourceRecordWriteCounter counter = new SourceRecordWriteCounter(toSend.size(), sourceTaskMetricsGroup);
-        for (final SourceRecord preTransformRecord : toSend) {
 
+        if (isParallelTransformEnabled) {
+            toSend.parallelStream().forEach(record -> {
+                SourceRecord transformedRecord = transformationChain.apply(record);
+                if (transformedRecord != null) {
+                    transformedRecordMap.put(record, transformationChain.apply(record));
+                }
+            });
+        }
+
+        for (final SourceRecord preTransformRecord : toSend) {
             retryWithToleranceOperator.sourceRecord(preTransformRecord);
-            final SourceRecord record = transformationChain.apply(preTransformRecord);
+
+            final SourceRecord record;
+            if (isParallelTransformEnabled) {
+                record = transformedRecordMap.get(preTransformRecord);
+            } else {
+                record = transformationChain.apply(preTransformRecord);
+            }
+
             final ProducerRecord<byte[], byte[]> producerRecord = convertTransformedRecord(record);
             if (producerRecord == null || retryWithToleranceOperator.failed()) {
                 counter.skipRecord();
