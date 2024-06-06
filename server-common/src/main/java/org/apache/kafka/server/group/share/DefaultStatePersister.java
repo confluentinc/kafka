@@ -232,7 +232,7 @@ public class DefaultStatePersister implements Persister {
                 })
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
-            return new TopicData<>((Uuid) topicId, partitionAllData);
+            return new TopicData<>(topicId, partitionAllData);
           })
           .collect(Collectors.toList());
       return new ReadShareGroupStateResult.Builder()
