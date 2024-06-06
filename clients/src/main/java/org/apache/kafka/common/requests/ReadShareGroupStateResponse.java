@@ -17,13 +17,16 @@
 
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ReadShareGroupStateResponse extends AbstractResponse {
@@ -64,5 +67,28 @@ public class ReadShareGroupStateResponse extends AbstractResponse {
     return new ReadShareGroupStateResponse(
         new ReadShareGroupStateResponseData(new ByteBufferAccessor(buffer), version)
     );
+  }
+
+  public static ReadShareGroupStateResponseData getErrorResponseData(Uuid topicId, int partitionId, Errors error, String errorMessage) {
+    return new ReadShareGroupStateResponseData().setResults(
+            Collections.singletonList(new ReadShareGroupStateResponseData.ReadStateResult()
+                    .setTopicId(topicId)
+                    .setPartitions(Collections.singletonList(new ReadShareGroupStateResponseData.PartitionResult()
+                            .setPartition(partitionId)
+                            .setErrorCode(error.code())
+                            .setErrorMessage(errorMessage)))));
+  }
+
+  public static ReadShareGroupStateResponseData.PartitionResult getErrorResponsePartitionResult(int partitionId, Errors error, String errorMessage) {
+    return new ReadShareGroupStateResponseData.PartitionResult()
+            .setPartition(partitionId)
+            .setErrorCode(error.code())
+            .setErrorMessage(errorMessage);
+  }
+
+  public static ReadShareGroupStateResponseData.ReadStateResult getErrorResponseResult(Uuid topicId, List<ReadShareGroupStateResponseData.PartitionResult> partitionResults) {
+    return new ReadShareGroupStateResponseData.ReadStateResult()
+            .setTopicId(topicId)
+            .setPartitions(partitionResults);
   }
 }

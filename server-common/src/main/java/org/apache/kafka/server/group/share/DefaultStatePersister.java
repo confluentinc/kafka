@@ -20,6 +20,7 @@ package org.apache.kafka.server.group.share;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.annotation.InterfaceStability;
 import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
+import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +87,67 @@ public class DefaultStatePersister implements Persister {
      */
     public CompletableFuture<InitializeShareGroupStateResult> initializeState(InitializeShareGroupStateParameters request) {
         throw new RuntimeException("not implemented");
+    }
+
+    /**
+     * Used by share-partition leaders to write share-partition state to a share coordinator.
+     * This is an inter-broker RPC authorized as a cluster action.
+     *
+     * @param request WriteShareGroupStateParameters
+     * @return WriteShareGroupStateResult
+     */
+    public CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters request) {
+        log.info("Write share group state request received - {}", request);
+        GroupTopicPartitionData<PartitionStateBatchData> gtp = request.groupTopicPartitionData();
+        String groupId = gtp.groupId();
+
+        Map<Uuid, Map<Integer, CompletableFuture<WriteShareGroupStateResponse>>> futureMap = new HashMap<>();
+
+        List<PersisterStateManager.WriteStateHandler> handlers = gtp.topicsData().stream()
+                .map(topicData -> topicData.partitions().stream()
+                        .map(partitionData -> {
+                            Map<Integer, CompletableFuture<WriteShareGroupStateResponse>> partMap = futureMap.computeIfAbsent(topicData.topicId(), k -> new HashMap<>());
+                            if (!partMap.containsKey(partitionData.partition())) {
+                                partMap.put(partitionData.partition(), new CompletableFuture<>());
+                            }
+                            return stateManager.new WriteStateHandler(
+                                    groupId, topicData.topicId(), partitionData.partition(), partitionData.stateEpoch(), partitionData.leaderEpoch(), partitionData.startOffset(), partitionData.stateBatches(),
+                                    partMap.get(partitionData.partition()));
+                        })
+                        .collect(Collectors.toList()))
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
+
+        for (PersisterStateManager.PersisterStateManagerHandler handler : handlers) {
+            stateManager.enqueue(handler);
+        }
+
+        CompletableFuture<Void> combinedFuture = CompletableFuture.allOf(futureMap.values().stream()
+                .flatMap(partMap -> partMap.values().stream()).toArray(CompletableFuture[]::new));
+
+        return combinedFuture.thenApply(v -> {
+            List<TopicData<PartitionErrorData>> topicsData = futureMap.keySet().stream()
+                    .map(topicId -> {
+                        List<PartitionErrorData> partitionErrData = futureMap.get(topicId).values().stream()
+                                .map(future -> {
+                                    try {
+                                        WriteShareGroupStateResponse partitionResponse = future.get();
+                                        return partitionResponse.data().results().get(0).partitions().stream()
+                                                .map(partitionResult -> PartitionFactory.newPartitionErrorData(partitionResult.partition(), partitionResult.errorCode(), partitionResult.errorMessage()))
+                                                .collect(Collectors.toList());
+                                    } catch (InterruptedException | ExecutionException e) {
+                                        throw new RuntimeException(e);
+                                    }
+                                })
+                                .flatMap(List::stream)
+                                .collect(Collectors.toList());
+                        return new TopicData<>(topicId, partitionErrData);
+                    })
+                    .collect(Collectors.toList());
+            return new WriteShareGroupStateResult.Builder()
+                    .setTopicsData(topicsData)
+                    .build();
+        });
     }
 
     /**
@@ -158,17 +220,6 @@ public class DefaultStatePersister implements Persister {
                     .setTopicsData(topicsData)
                     .build();
         });
-    }
-
-    /**
-     * Used by share-partition leaders to write share-partition state to a share coordinator.
-     * This is an inter-broker RPC authorized as a cluster action.
-     *
-     * @param request WriteShareGroupStateParameters
-     * @return WriteShareGroupStateResult
-     */
-    public CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters request) {
-        throw new RuntimeException("not implemented");
     }
 
     /**
