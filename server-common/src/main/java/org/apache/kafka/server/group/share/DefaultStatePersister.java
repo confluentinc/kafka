@@ -161,12 +161,12 @@ public class DefaultStatePersister implements Persister {
         log.info("Shard readState request received - {}", request);
         GroupTopicPartitionData<PartitionIdLeaderEpochData> gtp = request.groupTopicPartitionData();
         String groupId = gtp.groupId();
-        HashMap<Uuid, HashMap<Integer, CompletableFuture<ReadShareGroupStateResponse>>> futureMap = new HashMap<>();
+        Map<Uuid, HashMap<Integer, CompletableFuture<ReadShareGroupStateResponse>>> futureMap = new HashMap<>();
         List<PersisterStateManager.ReadStateHandler> handlers = gtp.topicsData().stream()
                 .map(topicData -> topicData.partitions().stream()
                         .map(partitionData -> {
-
-                            Map<Integer, CompletableFuture<ReadShareGroupStateResponse>> partMap = futureMap.computeIfAbsent(topicData.topicId(), k -> new HashMap<>());
+                            Map<Integer, CompletableFuture<ReadShareGroupStateResponse>> partMap =
+                                    futureMap.computeIfAbsent(topicData.topicId(), k -> new HashMap<>());
                             if (!partMap.containsKey(partitionData.partition())) {
                                 partMap.put(partitionData.partition(), new CompletableFuture<>());
                             }
@@ -191,7 +191,7 @@ public class DefaultStatePersister implements Persister {
 
         // Transform the combined CompletableFuture<Void> into CompletableFuture<ReadShareGroupStateResult>
         return combinedFuture.thenApply(v -> {
-            List<TopicData<PartitionAllData>> topicsData = futureMap.entrySet().stream()
+            List<TopicData<PartitionAllData>> topicsData = futureMap.keySet().stream()
                     .map(topicId -> {
                         List<PartitionAllData> partitionAllData = futureMap.get(topicId).values().stream()
                                 .map(future -> {

@@ -24,6 +24,7 @@ import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.requests.TransactionResult;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
@@ -270,9 +271,18 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
         return new CoordinatorResult<>(validRecords, responseData);
     }
 
+    /**
+     * This method as called by the ShareCoordinatorService will be provided with
+     * the request data which covers only key i.e. group1:topic1:partition1. The implementation
+     * below was done keeping this in mind.
+     *
+     * @param request - WriteShareGroupStateRequestData for a single key
+     * @param offset  - offset to read from the __share_group_state topic partition
+     * @return CoordinatorResult(records, response)
+     */
     public ReadShareGroupStateResponseData readState(ReadShareGroupStateRequestData request, Long offset) {
         log.info("Shard readState request received - {}", request);
-        // records to write (with both key and value of snapshot type), response to caller
+        // records to read (with the key of snapshot type), response to caller
         // only one key will be there in the request by design
         Optional<ReadShareGroupStateResponseData> error = maybeGetReadStateError(request);
         if (error.isPresent()) {
@@ -286,26 +296,27 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
         ShareSnapshotValue snapshotValue = shareStateMap.get(coordinatorKey, offset);
 
-        return new ReadShareGroupStateResponseData()
-                .setResults(Collections.singletonList(
-                        new ReadShareGroupStateResponseData.ReadStateResult()
-                                .setTopicId(topicId)
-                                .setPartitions(Collections.singletonList(
-                                        new ReadShareGroupStateResponseData.PartitionResult()
-                                                .setErrorCode(Errors.NONE.code())
-                                                .setErrorMessage("")
-                                                .setPartition(partition)
-                                                .setStartOffset(snapshotValue.startOffset())
-                                                .setStateEpoch(snapshotValue.stateEpoch())
-                                                .setStateBatches(snapshotValue.stateBatches().stream().map(
-                                                        stateBatch -> new ReadShareGroupStateResponseData.StateBatch()
-                                                                .setFirstOffset(stateBatch.firstOffset())
-                                                                .setLastOffset(stateBatch.lastOffset())
-                                                                .setDeliveryState(stateBatch.deliveryState())
-                                                                .setDeliveryCount(stateBatch.deliveryCount())
-                                                ).collect(java.util.stream.Collectors.toList()))
-                                ))
-                ));
+        if (snapshotValue == null) {
+            // Returning an error response as the snapshot value was not found
+            return ReadShareGroupStateResponse.getErrorResponseData(
+                    topicId,
+                    partition,
+                    Errors.UNKNOWN_SERVER_ERROR,
+                    "Data not found for topic {}, partition {} for group {}, in the in-memory state of share coordinator"
+            );
+        }
+
+        List<ReadShareGroupStateResponseData.StateBatch> stateBatches = (snapshotValue.stateBatches() != null && !snapshotValue.stateBatches().isEmpty()) ?
+                snapshotValue.stateBatches().stream().map(
+                        stateBatch -> new ReadShareGroupStateResponseData.StateBatch()
+                                .setFirstOffset(stateBatch.firstOffset())
+                                .setLastOffset(stateBatch.lastOffset())
+                                .setDeliveryState(stateBatch.deliveryState())
+                                .setDeliveryCount(stateBatch.deliveryCount())
+                ).collect(java.util.stream.Collectors.toList()) : Collections.emptyList();
+
+        // Returning the successfully retrieved snapshot value
+        return ReadShareGroupStateResponse.getSuccessResponse(topicId, partition, snapshotValue.startOffset(), snapshotValue.stateEpoch(), stateBatches);
     }
 
     private Optional<CoordinatorResult<WriteShareGroupStateResponseData, Record>> maybeGetWriteStateError(WriteShareGroupStateRequestData request) {
@@ -341,12 +352,12 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
         int partitionId = partitionData.partition();
 
         if (topicId == null || partitionId == -1) {
-            return Optional.of(getReadErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
+            return Optional.of(ReadShareGroupStateResponse.getErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
         }
 
         String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partitionId);
         if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
-            return Optional.of(getReadErrorResponse(Errors.FENCED_LEADER_EPOCH, topicId, partitionId));
+            return Optional.of(ReadShareGroupStateResponse.getErrorResponseData(topicId, partitionId, Errors.FENCED_LEADER_EPOCH, Errors.FENCED_LEADER_EPOCH.message()));
         }
 
         // Updating the leader map with the new leader epoch
@@ -354,7 +365,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
         if (metadataImage != null && (metadataImage.topics().getTopic(topicId) == null ||
                 metadataImage.topics().getPartition(topicId, partitionId) == null)) {
-            return Optional.of(getReadErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
+            return Optional.of(ReadShareGroupStateResponse.getErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
         }
 
         return Optional.empty();
@@ -363,15 +374,5 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     private CoordinatorResult<WriteShareGroupStateResponseData, Record> getWriteErrorResponse(Errors error, Uuid topicId, int partitionId) {
         WriteShareGroupStateResponseData responseData = WriteShareGroupStateResponse.getErrorResponseData(topicId, partitionId, error, error.message());
         return new CoordinatorResult<>(Collections.emptyList(), responseData);
-    }
-
-    private ReadShareGroupStateResponseData getReadErrorResponse(Errors error, Uuid topicId, int partitionId) {
-        return new ReadShareGroupStateResponseData()
-                .setResults(Collections.singletonList(new ReadShareGroupStateResponseData.ReadStateResult()
-                        .setTopicId(topicId)
-                        .setPartitions(Collections.singletonList(new ReadShareGroupStateResponseData.PartitionResult()
-                                .setPartition(partitionId)
-                                .setErrorCode(error.code())
-                                .setErrorMessage(error.message())))));
     }
 }

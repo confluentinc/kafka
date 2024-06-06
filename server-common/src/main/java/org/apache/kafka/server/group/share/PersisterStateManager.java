@@ -179,6 +179,7 @@ public class PersisterStateManager {
             if (coordinators.size() != 1) {
                 log.error("Find coordinator response for {} is invalid", coordinatorKey());
                 findCoordinatorErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new IllegalStateException("Invalid response with multiple coordinators."));
+                return;
             }
             FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
             Errors error = Errors.forCode(coordinatorData.errorCode());
