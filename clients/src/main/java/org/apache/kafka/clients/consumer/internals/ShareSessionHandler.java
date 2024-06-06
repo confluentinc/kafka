@@ -238,7 +238,7 @@ public class ShareSessionHandler {
                 (response.error() == Errors.INVALID_SHARE_SESSION_EPOCH)) {
             log.info("Node {} was unable to process the ShareAcknowledge request with {}: {}.",
                     node, nextMetadata, response.error());
-            //nextMetadata = nextMetadata.nextCloseExistingAttemptNew();
+            nextMetadata = nextMetadata.nextCloseExistingAttemptNew();
             return false;
         }
 
