@@ -4807,44 +4807,6 @@ class KafkaApis(val requestChannel: RequestChannel,
 
     authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
 
-    /*val requestDataWithAuthorizedPartitions: WriteShareGroupStateRequestData = new WriteShareGroupStateRequestData()
-      .setGroupId(requestData.groupId())
-
-    val (authorizedTopics, unauthorizedTopics) = authHelper.partitionSeqByAuthorized(
-      request.context,
-      DESCRIBE,
-      TOPIC,
-      requestData.topics.asScala.toSeq
-    )(_.topicId.toString())
-
-    val authorizedWriteStateData: util.List[WriteShareGroupStateRequestData.WriteStateData] =
-      new util.ArrayList[WriteShareGroupStateRequestData.WriteStateData]()
-    requestData.topics().forEach(topic => {
-      if (authorizedTopics.contains(topic.topicId.toString())) {
-        authorizedWriteStateData.add(topic)
-      }
-    })
-
-    requestDataWithAuthorizedPartitions.setTopics(authorizedWriteStateData)
-
-    // Finding the ShareGroupState data for the given request
-    val responseData: WriteShareGroupStateResponseData =
-      shareCoordinator.writeState(request.context, requestDataWithAuthorizedPartitions).get()
-
-    // Adding unauthorized topics to the response with TOPIC_AUTHORIZATION_FAILED error
-    requestData.topics().stream().filter(topic => {
-      unauthorizedTopics.contains(topic.topicId().toString)
-    }).forEach(topic => {
-      responseData.results.add(new WriteShareGroupStateResponseData.WriteStateResult()
-        .setTopicId(topic.topicId())
-        .setPartitions(topic.partitions().stream().map(partition => {
-          new WriteShareGroupStateResponseData.PartitionResult()
-            .setPartition(partition.partition())
-            .setErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED.code())
-            .setErrorMessage(Errors.TOPIC_AUTHORIZATION_FAILED.message())
-        }).collect(util.stream.Collectors.toList())))
-    })*/
-
     val writeShareData = shareCoordinator.writeState(request.context, writeShareRequest.data).get()
     requestHelper.sendMaybeThrottle(request, new WriteShareGroupStateResponse(writeShareData))
   }
@@ -4853,44 +4815,6 @@ class KafkaApis(val requestChannel: RequestChannel,
     val readShareGroupStateRequest = request.body[ReadShareGroupStateRequest]
 
     authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
-
-//    val requestDataWithAuthorizedPartitions : ReadShareGroupStateRequestData = new ReadShareGroupStateRequestData()
-//      .setGroupId(requestData.groupId())
-//
-//    val (authorizedTopics, unauthorizedTopics) = authHelper.partitionSeqByAuthorized(
-//      request.context,
-//      DESCRIBE,
-//      TOPIC,
-//      requestData.topics.asScala
-//    )(_.topicId.toString())
-//
-//    val authorizedReadStateData : util.List[ReadShareGroupStateRequestData.ReadStateData] =
-//      new util.ArrayList[ReadShareGroupStateRequestData.ReadStateData]()
-//    requestData.topics().forEach(topic => {
-//      if (authorizedTopics.contains(topic.topicId.toString())) {
-//        authorizedReadStateData.add(topic)
-//      }
-//    })
-//
-//    requestDataWithAuthorizedPartitions.setTopics(authorizedReadStateData)
-//
-//    // Finding the ShareGroupState data for the given request
-//    val responseData : ReadShareGroupStateResponseData =
-//      shareCoordinator.readState(request.context, requestDataWithAuthorizedPartitions).get()
-//
-//    // Adding unauthorized topics to the response with TOPIC_AUTHORIZATION_FAILED error
-//    requestData.topics().stream().filter(topic => {
-//      unauthorizedTopics.contains(topic.topicId().toString)
-//    }).forEach(topic => {
-//      responseData.results.add(new ReadShareGroupStateResponseData.ReadStateResult()
-//        .setTopicId(topic.topicId())
-//        .setPartitions(topic.partitions().stream().map(partition => {
-//          new ReadShareGroupStateResponseData.PartitionResult()
-//            .setPartition(partition.partition())
-//            .setErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED.code())
-//            .setErrorMessage(Errors.TOPIC_AUTHORIZATION_FAILED.message())
-//        }).collect(util.stream.Collectors.toList())))
-//    })
 
     val readShareData = shareCoordinator.readState(request.context, readShareGroupStateRequest.data).get()
     requestHelper.sendMaybeThrottle(request, new ReadShareGroupStateResponse(readShareData))
