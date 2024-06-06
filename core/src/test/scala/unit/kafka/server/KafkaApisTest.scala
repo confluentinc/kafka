@@ -24,7 +24,7 @@ import kafka.coordinator.transaction.{InitProducerIdResult, TransactionCoordinat
 import kafka.log.UnifiedLog
 import kafka.network.{RequestChannel, RequestMetrics}
 import kafka.server.QuotaFactory.QuotaManagers
-import kafka.server.SharePartitionManager.{ErroneousAndValidPartitionData, ShareSessionCache}
+import kafka.server.SharePartitionManager.ErroneousAndValidPartitionData
 import kafka.server.metadata.{ConfigRepository, KRaftMetadataCache, MockConfigRepository, ZkMetadataCache}
 import kafka.utils.{CoreUtils, Log4jController, Logging, TestUtils}
 import kafka.zk.KafkaZkClient
@@ -85,6 +85,7 @@ import org.apache.kafka.server.common.{Features, MetadataVersion}
 import org.apache.kafka.server.config.{ConfigType, Defaults}
 import org.apache.kafka.server.group.share.NoOpShareStatePersister
 import org.apache.kafka.server.metrics.ClientMetricsTestUtils
+import org.apache.kafka.server.share.{ShareAcknowledgementBatch, ShareSessionCache}
 import org.apache.kafka.server.util.{FutureUtils, MockTime}
 import org.apache.kafka.storage.internals.log.{AppendOrigin, FetchParams, FetchPartitionData, LogConfig}
 import org.junit.jupiter.api.Assertions._
@@ -10792,7 +10793,7 @@ class KafkaApisTest extends Logging {
                                      baseOffset : Long,
                                      endOffset : Long,
                                      acknowledgementType : Byte,
-                                     acknowledgementBatch: SharePartition.AcknowledgementBatch
+                                     acknowledgementBatch: ShareAcknowledgementBatch
                                    ) : Boolean = {
     if (baseOffset == acknowledgementBatch.firstOffset()
       && endOffset == acknowledgementBatch.lastOffset()

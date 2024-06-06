@@ -55,4 +55,19 @@ public class FetchPartitionData {
         this.preferredReadReplica = preferredReadReplica;
         this.isReassignmentFetch = isReassignmentFetch;
     }
+
+    @Override
+    public String toString() {
+        return "FetchPartitionData(" +
+            "error=" + error +
+            ", highWatermark=" + highWatermark +
+            ", logStartOffset=" + logStartOffset +
+            ", records=" + records +
+            ", divergingEpoch=" + divergingEpoch +
+            ", lastStableOffset=" + lastStableOffset +
+            ", abortedTransactions=" + abortedTransactions +
+            ", preferredReadReplica=" + preferredReadReplica +
+            ", isReassignmentFetch=" + isReassignmentFetch +
+            ')';
+    }
 }
