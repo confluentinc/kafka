@@ -294,27 +294,22 @@ public class PersisterStateManager {
 
     @Override
     protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
-      if (error == Errors.UNKNOWN_SERVER_ERROR && exception != null) {
-        this.result.complete(new WriteShareGroupStateResponse(
-            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, exception.getMessage())));
-      } else {
-        this.result.complete(new WriteShareGroupStateResponse(
-            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
-                (exception == null ? error.message() : exception.getMessage()))));
-      }
+      this.result.complete(new WriteShareGroupStateResponse(
+          WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+              (exception == null ? error.message() : exception.getMessage()))));
     }
   }
 
   public class ReadStateHandler extends PersisterStateManagerHandler {
     private final int leaderEpoch;
     private final String coordinatorKey;
-    private final CompletableFuture<ReadShareGroupStateResponse> future;
+    private final CompletableFuture<ReadShareGroupStateResponse> result;
 
-    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> future) {
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result) {
       super(groupId, topicId, partition);
       this.leaderEpoch = leaderEpoch;
       this.coordinatorKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
-      this.future = future;
+      this.result = result;
     }
 
     @Override
@@ -342,39 +337,34 @@ public class PersisterStateManager {
       String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
       if (readShareGroupStateResponseData.results().size() != 1) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
-        this.future.complete(new ReadShareGroupStateResponse(
+        this.result.complete(new ReadShareGroupStateResponse(
             ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
       ReadShareGroupStateResponseData.ReadStateResult topicData = readShareGroupStateResponseData.results().get(0);
       if (!topicData.topicId().equals(topicId)) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
-        this.future.complete(new ReadShareGroupStateResponse(
+        this.result.complete(new ReadShareGroupStateResponse(
             ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
       if (topicData.partitions().size() != 1) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
-        this.future.complete(new ReadShareGroupStateResponse(
+        this.result.complete(new ReadShareGroupStateResponse(
             ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
       ReadShareGroupStateResponseData.PartitionResult partitionResponse = topicData.partitions().get(0);
       if (partitionResponse.partition() != partition) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
-        this.future.complete(new ReadShareGroupStateResponse(
+        this.result.complete(new ReadShareGroupStateResponse(
             ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
-      future.complete((ReadShareGroupStateResponse) response.responseBody());
+      result.complete((ReadShareGroupStateResponse) response.responseBody());
     }
 
     @Override
     protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
-      if (error == Errors.UNKNOWN_SERVER_ERROR && exception != null) {
-        this.future.complete(new ReadShareGroupStateResponse(
-            ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, error, exception.getMessage())));
-      } else {
-        this.future.complete(new ReadShareGroupStateResponse(
-            ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
-                (exception == null ? error.message() : exception.getMessage()))));
-      }
+      this.result.complete(new ReadShareGroupStateResponse(
+          ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+              (exception == null ? error.message() : exception.getMessage()))));
     }
   }
 
