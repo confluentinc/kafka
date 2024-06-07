@@ -65,4 +65,9 @@ public class ReadShareGroupStateParameters implements PersisterParameters {
       return new ReadShareGroupStateParameters(groupTopicPartitionData);
     }
   }
+
+  @Override
+  public String toString() {
+    return "ReadShareGroupStateParameters(" + groupTopicPartitionData + ")";
+  }
 }

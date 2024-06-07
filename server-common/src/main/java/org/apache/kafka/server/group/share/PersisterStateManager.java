@@ -24,12 +24,16 @@ import org.apache.kafka.common.Node;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
+import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
+import org.apache.kafka.common.requests.ReadShareGroupStateRequest;
+import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
 import org.apache.kafka.common.requests.WriteShareGroupStateRequest;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.ExponentialBackoff;
@@ -124,6 +128,7 @@ public class PersisterStateManager {
 
     /**
      * Return the share coordinator node
+     *
      * @return Node
      */
     protected Node shareCoordinatorNode() {
@@ -132,6 +137,7 @@ public class PersisterStateManager {
 
     /**
      * Returns true is coordinator node is not yet set
+     *
      * @return boolean
      */
     protected boolean lookupNeeded() {
@@ -140,6 +146,7 @@ public class PersisterStateManager {
 
     /**
      * Returns the String key to be used as share coordinator key
+     *
      * @return String
      */
     protected String coordinatorKey() {
@@ -148,6 +155,7 @@ public class PersisterStateManager {
 
     /**
      * Returns true if the RPC response if for Find Coordinator RPC.
+     *
      * @param response - Client response object
      * @return boolean
      */
@@ -168,6 +176,7 @@ public class PersisterStateManager {
 
     /**
      * Handles the response for find coordinator RPC and sets appropriate state.
+     *
      * @param response - Client response for find coordinator RPC
      */
     protected void handleFindCoordinatorResponse(ClientResponse response) {
@@ -175,6 +184,7 @@ public class PersisterStateManager {
       if (coordinators.size() != 1) {
         log.error("Find coordinator response for {} is invalid", coordinatorKey());
         findCoordinatorErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new IllegalStateException("Invalid response with multiple coordinators."));
+        return;
       }
       FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
       Errors error = Errors.forCode(coordinatorData.errorCode());
@@ -211,12 +221,14 @@ public class PersisterStateManager {
 
     /**
      * Handles the response for an RPC.
+     *
      * @param response - Client response
      */
     protected abstract void handleRequestResponse(ClientResponse response);
 
     /**
      * Returns true if the response if valid for the respective child class.
+     *
      * @param response - Client response
      * @return - boolean
      */
@@ -225,6 +237,7 @@ public class PersisterStateManager {
     /**
      * Handle invalid find coordinator response. If error is UNKNOWN_SERVER_ERROR. Look at the
      * exception details to figure out the problem.
+     *
      * @param error
      * @param exception
      */
@@ -281,14 +294,77 @@ public class PersisterStateManager {
 
     @Override
     protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
-      if (error == Errors.UNKNOWN_SERVER_ERROR && exception != null) {
-        this.result.complete(new WriteShareGroupStateResponse(
-            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, exception.getMessage())));
-      } else {
-        this.result.complete(new WriteShareGroupStateResponse(
-            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
-                (exception == null ? error.message() : exception.getMessage()))));
+      this.result.complete(new WriteShareGroupStateResponse(
+          WriteShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+              (exception == null ? error.message() : exception.getMessage()))));
+    }
+  }
+
+  public class ReadStateHandler extends PersisterStateManagerHandler {
+    private final int leaderEpoch;
+    private final String coordinatorKey;
+    private final CompletableFuture<ReadShareGroupStateResponse> result;
+
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result) {
+      super(groupId, topicId, partition);
+      this.leaderEpoch = leaderEpoch;
+      this.coordinatorKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
+      this.result = result;
+    }
+
+    @Override
+    protected AbstractRequest.Builder<? extends AbstractRequest> requestBuilder() {
+      return new ReadShareGroupStateRequest.Builder(new ReadShareGroupStateRequestData()
+          .setGroupId(groupId)
+          .setTopics(Collections.singletonList(
+              new ReadShareGroupStateRequestData.ReadStateData()
+                  .setTopicId(topicId)
+                  .setPartitions(Collections.singletonList(
+                      new ReadShareGroupStateRequestData.PartitionData()
+                          .setPartition(partition)
+                          .setLeaderEpoch(leaderEpoch))))));
+    }
+
+    @Override
+    protected boolean isRequestResponse(ClientResponse response) {
+      return response.requestHeader().apiKey() == ApiKeys.READ_SHARE_GROUP_STATE;
+    }
+
+    @Override
+    protected void handleRequestResponse(ClientResponse response) {
+      log.info("Read state response received. - {}", response);
+      ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
+      String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
+      if (readShareGroupStateResponseData.results().size() != 1) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
+      ReadShareGroupStateResponseData.ReadStateResult topicData = readShareGroupStateResponseData.results().get(0);
+      if (!topicData.topicId().equals(topicId)) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+      }
+      if (topicData.partitions().size() != 1) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+      }
+      ReadShareGroupStateResponseData.PartitionResult partitionResponse = topicData.partitions().get(0);
+      if (partitionResponse.partition() != partition) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+      }
+      result.complete((ReadShareGroupStateResponse) response.responseBody());
+    }
+
+    @Override
+    protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
+      this.result.complete(new ReadShareGroupStateResponse(
+          ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+              (exception == null ? error.message() : exception.getMessage()))));
     }
   }
 
