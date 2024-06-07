@@ -16,11 +16,25 @@
  */
 package org.apache.kafka.clients.consumer.internals.events;
 
+import org.apache.kafka.clients.consumer.internals.Acknowledgements;
+import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.utils.Timer;
 
-public abstract class ShareAcknowledgeEvent extends CompletableApplicationEvent<Void> {
+import java.util.Map;
 
-    public ShareAcknowledgeEvent(final Type type, final Timer timer) {
+public abstract class ShareAcknowledgeEvent extends CompletableApplicationEvent<Map<TopicIdPartition, Acknowledgements>> {
+
+    private Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
+
+    public ShareAcknowledgeEvent(
+            final Type type,
+            final Timer timer,
+            final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         super(type, timer);
+        this.acknowledgementsMap = acknowledgementsMap;
+    }
+
+    public Map<TopicIdPartition, Acknowledgements> acknowledgementsMap() {
+        return acknowledgementsMap;
     }
 }
