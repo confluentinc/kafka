@@ -18,7 +18,6 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.annotation.InterfaceStability;
-
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;

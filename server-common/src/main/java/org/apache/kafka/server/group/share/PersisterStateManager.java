@@ -295,7 +295,7 @@ public class PersisterStateManager {
     @Override
     protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
       this.result.complete(new WriteShareGroupStateResponse(
-          WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+          WriteShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
               (exception == null ? error.message() : exception.getMessage()))));
     }
   }
@@ -338,24 +338,24 @@ public class PersisterStateManager {
       if (readShareGroupStateResponseData.results().size() != 1) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
         this.result.complete(new ReadShareGroupStateResponse(
-            ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
       ReadShareGroupStateResponseData.ReadStateResult topicData = readShareGroupStateResponseData.results().get(0);
       if (!topicData.topicId().equals(topicId)) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
         this.result.complete(new ReadShareGroupStateResponse(
-            ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
       if (topicData.partitions().size() != 1) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
         this.result.complete(new ReadShareGroupStateResponse(
-            ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
       ReadShareGroupStateResponseData.PartitionResult partitionResponse = topicData.partitions().get(0);
       if (partitionResponse.partition() != partition) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
         this.result.complete(new ReadShareGroupStateResponse(
-            ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
       result.complete((ReadShareGroupStateResponse) response.responseBody());
     }
@@ -363,7 +363,7 @@ public class PersisterStateManager {
     @Override
     protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
       this.result.complete(new ReadShareGroupStateResponse(
-          ReadShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+          ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
               (exception == null ? error.message() : exception.getMessage()))));
     }
   }

@@ -253,8 +253,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
       if (record.key().message() instanceof ShareSnapshotKey && record.value().message() instanceof ShareSnapshotValue) {
         ShareSnapshotKey newKey = (ShareSnapshotKey) record.key().message();
         ShareSnapshotValue newValue = (ShareSnapshotValue) record.value().message();
-        responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.getErrorResponseResult(
-            newKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.getErrorResponsePartitionResult(
+        responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.toResponseWriteStateResult(
+            newKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.toErrorResponsePartitionResult(
                 newKey.partition(), Errors.NONE, Errors.NONE.message())))));
 
         String mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
@@ -298,7 +298,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
     if (snapshotValue == null) {
       // Returning an error response as the snapshot value was not found
-      return ReadShareGroupStateResponse.getErrorResponseData(
+      return ReadShareGroupStateResponse.toErrorResponseData(
           topicId,
           partition,
           Errors.UNKNOWN_SERVER_ERROR,
@@ -316,7 +316,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
         ).collect(java.util.stream.Collectors.toList()) : Collections.emptyList();
 
     // Returning the successfully retrieved snapshot value
-    return ReadShareGroupStateResponse.getSuccessResponse(topicId, partition, snapshotValue.startOffset(), snapshotValue.stateEpoch(), stateBatches);
+    return ReadShareGroupStateResponse.toResponseData(topicId, partition, snapshotValue.startOffset(), snapshotValue.stateEpoch(), stateBatches);
   }
 
   private Optional<CoordinatorResult<WriteShareGroupStateResponseData, Record>> maybeGetWriteStateError(WriteShareGroupStateRequestData request) {
@@ -352,12 +352,12 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     int partitionId = partitionData.partition();
 
     if (topicId == null || partitionId == -1) {
-      return Optional.of(ReadShareGroupStateResponse.getErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
+      return Optional.of(ReadShareGroupStateResponse.toErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
     }
 
     String mapKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partitionId);
     if (leaderMap.containsKey(mapKey) && leaderMap.get(mapKey) > partitionData.leaderEpoch()) {
-      return Optional.of(ReadShareGroupStateResponse.getErrorResponseData(topicId, partitionId, Errors.FENCED_LEADER_EPOCH, Errors.FENCED_LEADER_EPOCH.message()));
+      return Optional.of(ReadShareGroupStateResponse.toErrorResponseData(topicId, partitionId, Errors.FENCED_LEADER_EPOCH, Errors.FENCED_LEADER_EPOCH.message()));
     }
 
     // Updating the leader map with the new leader epoch
@@ -365,14 +365,14 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
     if (metadataImage != null && (metadataImage.topics().getTopic(topicId) == null ||
         metadataImage.topics().getPartition(topicId, partitionId) == null)) {
-      return Optional.of(ReadShareGroupStateResponse.getErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
+      return Optional.of(ReadShareGroupStateResponse.toErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
     }
 
     return Optional.empty();
   }
 
   private CoordinatorResult<WriteShareGroupStateResponseData, Record> getWriteErrorResponse(Errors error, Uuid topicId, int partitionId) {
-    WriteShareGroupStateResponseData responseData = WriteShareGroupStateResponse.getErrorResponseData(topicId, partitionId, error, error.message());
+    WriteShareGroupStateResponseData responseData = WriteShareGroupStateResponse.toErrorResponseData(topicId, partitionId, error, error.message());
     return new CoordinatorResult<>(Collections.emptyList(), responseData);
   }
 }

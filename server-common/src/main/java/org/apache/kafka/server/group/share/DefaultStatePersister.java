@@ -143,8 +143,8 @@ public class DefaultStatePersister implements Persister {
                     log.error("Unexpected exception while getting data from share coordinator", e);
                     return Collections.singletonList(PartitionFactory.newPartitionErrorData(
                         partition,
-                        Errors.forException(e).code(),
-                        "Error reading state from share coordinator")
+                        Errors.UNKNOWN_SERVER_ERROR.code(),   // No specific public error code exists for InterruptedException / ExecutionException
+                        "Error reading state from share coordinator: " + e.getMessage())
                     );
                   }
                 })
@@ -224,8 +224,8 @@ public class DefaultStatePersister implements Persister {
                         partition,
                         -1,
                         -1,
-                        Errors.forException(e).code(),
-                        "Error reading state from share coordinator",
+                        Errors.UNKNOWN_SERVER_ERROR.code(),   // No specific public error code exists for InterruptedException / ExecutionException
+                        "Error reading state from share coordinator: " + e.getMessage(),
                         Collections.emptyList())
                     );
                   }

@@ -69,7 +69,7 @@ public class ReadShareGroupStateResponse extends AbstractResponse {
     );
   }
 
-  public static ReadShareGroupStateResponseData getSuccessResponse(
+  public static ReadShareGroupStateResponseData toResponseData(
       Uuid topicId,
       int partition,
       long startOffset,
@@ -82,8 +82,6 @@ public class ReadShareGroupStateResponse extends AbstractResponse {
                 .setTopicId(topicId)
                 .setPartitions(Collections.singletonList(
                     new ReadShareGroupStateResponseData.PartitionResult()
-                        .setErrorCode(Errors.NONE.code())
-                        .setErrorMessage("")
                         .setPartition(partition)
                         .setStartOffset(startOffset)
                         .setStateEpoch(stateEpoch)
@@ -92,7 +90,7 @@ public class ReadShareGroupStateResponse extends AbstractResponse {
         ));
   }
 
-  public static ReadShareGroupStateResponseData getErrorResponseData(Uuid topicId, int partitionId, Errors error, String errorMessage) {
+  public static ReadShareGroupStateResponseData toErrorResponseData(Uuid topicId, int partitionId, Errors error, String errorMessage) {
     return new ReadShareGroupStateResponseData().setResults(
         Collections.singletonList(new ReadShareGroupStateResponseData.ReadStateResult()
             .setTopicId(topicId)
@@ -102,14 +100,14 @@ public class ReadShareGroupStateResponse extends AbstractResponse {
                 .setErrorMessage(errorMessage)))));
   }
 
-  public static ReadShareGroupStateResponseData.PartitionResult getErrorResponsePartitionResult(int partitionId, Errors error, String errorMessage) {
+  public static ReadShareGroupStateResponseData.PartitionResult toErrorResponsePartitionResult(int partitionId, Errors error, String errorMessage) {
     return new ReadShareGroupStateResponseData.PartitionResult()
         .setPartition(partitionId)
         .setErrorCode(error.code())
         .setErrorMessage(errorMessage);
   }
 
-  public static ReadShareGroupStateResponseData.ReadStateResult getErrorResponseResult(Uuid topicId, List<ReadShareGroupStateResponseData.PartitionResult> partitionResults) {
+  public static ReadShareGroupStateResponseData.ReadStateResult toResponseReadStateResult(Uuid topicId, List<ReadShareGroupStateResponseData.PartitionResult> partitionResults) {
     return new ReadShareGroupStateResponseData.ReadStateResult()
         .setTopicId(topicId)
         .setPartitions(partitionResults);
