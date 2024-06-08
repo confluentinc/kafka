@@ -21,7 +21,6 @@ import org.apache.kafka.common.Node
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.MetadataResponse
-import org.apache.kafka.coordinator.group.share.ShareCoordinator
 import org.apache.kafka.server.group.share.ShareCoordinatorMetadataCacheHelper
 
 import java.util
@@ -29,7 +28,7 @@ import scala.jdk.CollectionConverters._
 
 class ShareCoordinatorMetadataCacheHelperImpl(
                                                val metadataCache: KRaftMetadataCache,
-                                               val shareCoordinator: ShareCoordinator,
+                                               val keyToPartitionSupplier: (String) => Int,
                                                val interBrokerListenerName: ListenerName
                                              ) extends ShareCoordinatorMetadataCacheHelper {
   override def containsTopic(topicName: String): Boolean = {
@@ -43,7 +42,7 @@ class ShareCoordinatorMetadataCacheHelperImpl(
       if (topicMetadata.headOption.isEmpty || topicMetadata.head.errorCode != Errors.NONE.code) {
         Node.noNode
       } else {
-        val partition = shareCoordinator.partitionFor(key)
+        val partition = keyToPartitionSupplier(key)
         val coordinatorEndpoint = topicMetadata.head.partitions.asScala
           .find(_.partitionIndex == partition)
           .filter(_.leaderId != MetadataResponse.NO_LEADER_ID)

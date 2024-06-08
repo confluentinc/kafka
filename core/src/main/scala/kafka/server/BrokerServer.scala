@@ -346,7 +346,7 @@ class BrokerServer(
 
       val persisterStateManager = new PersisterStateManager(
         NetworkUtils.buildNetworkClient("Persister", config, metrics, Time.SYSTEM, new LogContext(s"[PersisterStateManager broker=${config.brokerId}]")),
-        Time.SYSTEM, new ShareCoordinatorMetadataCacheHelperImpl(metadataCache, shareCoordinator, config.interBrokerListenerName))
+        Time.SYSTEM, new ShareCoordinatorMetadataCacheHelperImpl(metadataCache, key => shareCoordinator.partitionFor(key), config.interBrokerListenerName))
       persister.configure(new PersisterConfig(persisterStateManager))
 
       groupCoordinator = createGroupCoordinator(persister)
