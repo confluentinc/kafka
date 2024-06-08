@@ -168,7 +168,7 @@ public class DefaultStatePersister implements Persister {
    * @return ReadShareGroupStateResult
    */
   public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) throws IllegalArgumentException {
-    log.info("Shard readState request received - {}", request);
+    log.info("Read share group request received - {}", request);
     validate(request);
     GroupTopicPartitionData<PartitionIdLeaderEpochData> gtp = request.groupTopicPartitionData();
     String groupId = gtp.groupId();
