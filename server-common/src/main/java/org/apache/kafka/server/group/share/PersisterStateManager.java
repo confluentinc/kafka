@@ -38,7 +38,6 @@ import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
 import org.apache.kafka.common.requests.WriteShareGroupStateRequest;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.ExponentialBackoff;
-import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.util.InterBrokerSendThread;
 import org.apache.kafka.server.util.RequestAndCompletionHandler;
@@ -65,7 +64,7 @@ public class PersisterStateManager {
     if (client == null) {
       throw new IllegalArgumentException("Kafkaclient must not be null.");
     }
-    if(cacheHelper == null) {
+    if (cacheHelper == null) {
       throw new IllegalArgumentException("ShareCoordinatorMetadataCacheHelper must not be null.");
     }
     this.cacheHelper = cacheHelper;
@@ -74,7 +73,8 @@ public class PersisterStateManager {
         client,
         30_000,  //30 seconds
         time == null ? Time.SYSTEM : time,
-        true);
+        true,
+        new Random(System.currentTimeMillis()));
   }
 
   public void enqueue(PersisterStateManagerHandler handler) {
@@ -394,15 +394,16 @@ public class PersisterStateManager {
 
   private class SendThread extends InterBrokerSendThread {
     private final ConcurrentLinkedQueue<PersisterStateManagerHandler> queue = new ConcurrentLinkedQueue<>();
-    private final Random RAND = new Random(System.currentTimeMillis());
+    private final Random random;
 
-    public SendThread(String name, KafkaClient networkClient, int requestTimeoutMs, Time time, boolean isInterruptible) {
+    public SendThread(String name, KafkaClient networkClient, int requestTimeoutMs, Time time, boolean isInterruptible, Random random) {
       super(name, networkClient, requestTimeoutMs, time, isInterruptible);
+      this.random = random;
     }
 
     private Node randomNode() {
       List<Node> nodes = cacheHelper.getClusterNodes();
-      return nodes.get(RAND.nextInt(nodes.size()));
+      return nodes.get(random.nextInt(nodes.size()));
     }
 
     /**
