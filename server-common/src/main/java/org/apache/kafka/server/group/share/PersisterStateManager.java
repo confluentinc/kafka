@@ -403,6 +403,9 @@ public class PersisterStateManager {
 
     private Node randomNode() {
       List<Node> nodes = cacheHelper.getClusterNodes();
+      if (nodes == null || nodes.isEmpty()) {
+        return Node.noNode();
+      }
       return nodes.get(random.nextInt(nodes.size()));
     }
 
@@ -428,10 +431,15 @@ public class PersisterStateManager {
         queue.poll();
         if (handler.lookupNeeded()) {
           // we need to find the coordinator node
+          Node randomNode = randomNode();
+          if (randomNode == Node.noNode()) {
+            log.error("Unable to find node to use for coordinator lookup.");
+            return Collections.emptyList();
+          }
           log.info("Sending find coordinator RPC");
           return Collections.singletonList(new RequestAndCompletionHandler(
               System.currentTimeMillis(),
-              randomNode(),
+              randomNode,
               handler.findShareCoordinatorBuilder(),
               handler
           ));
