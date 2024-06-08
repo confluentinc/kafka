@@ -139,6 +139,12 @@ public class PersisterStateManager {
     protected abstract void findCoordinatorErrorResponse(Errors error, Exception exception);
 
     /**
+     * Child class must provide a descriptive name for the implementation.
+     * @return String
+     */
+    protected abstract String name();
+
+    /**
      * Returns builder for share coordinator
      *
      * @return builder for find coordinator
@@ -285,6 +291,11 @@ public class PersisterStateManager {
     }
 
     @Override
+    protected String name() {
+      return "WriteStateHandler";
+    }
+
+    @Override
     protected AbstractRequest.Builder<? extends AbstractRequest> requestBuilder() {
       return new WriteShareGroupStateRequest.Builder(new WriteShareGroupStateRequestData()
           .setGroupId(groupId)
@@ -334,6 +345,11 @@ public class PersisterStateManager {
       this.leaderEpoch = leaderEpoch;
       this.coordinatorKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
       this.result = result;
+    }
+
+    @Override
+    protected String name() {
+      return "ReadStateHandler";
     }
 
     @Override
@@ -444,7 +460,7 @@ public class PersisterStateManager {
               handler
           ));
         } else {
-          log.info("Sending share state RPC");
+          log.info("Sending share state RPC - {}", handler.name());
           // share coord node already available
           return Collections.singletonList(new RequestAndCompletionHandler(
               System.currentTimeMillis(),
