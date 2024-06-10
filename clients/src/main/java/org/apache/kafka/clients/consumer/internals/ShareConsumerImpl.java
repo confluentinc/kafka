@@ -793,7 +793,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     void prepareShutdown(final Timer timer, final AtomicReference<Throwable> firstException) {
         completeQuietly(
             () -> {
-//                maybeSendAcknowledgementsOnClose2();
                 applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(timer, acknowledgementsToSend()), timer);
             },
             "Failed to send leaveGroup heartbeat with a timeout(ms)=" + timer.timeoutMs(), firstException);
@@ -914,37 +913,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             return Collections.emptyMap();
         }
     }
-
-//    /**
-//     * If the acknowledgement mode is IMPLICIT, acknowledges the current batch and puts them into the fetch
-//     * buffer for the background thread to pick up.
-//     * If the acknowledgement mode is EXPLICIT, puts any ready acknowledgements into the fetch buffer for the
-//     * background thread to pick up.
-//     */
-//    private void sendAcknowledgements2() {
-//        if (currentFetch != null) {
-//            // If IMPLICIT, acknowledge all records and send
-//            if ((acknowledgementMode == AcknowledgementMode.PENDING) ||
-//                    (acknowledgementMode == AcknowledgementMode.IMPLICIT)) {
-//                currentFetch.acknowledgeAll(AcknowledgeType.ACCEPT);
-//                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
-//            } else if (acknowledgementMode == AcknowledgementMode.EXPLICIT) {
-//                // If EXPLICIT, send any acknowledgements which are ready
-//                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
-//            }
-//
-//            currentFetch = null;
-//        }
-//    }
-//
-//    /**
-//     * Called to send any outstanding acknowledgements during close.
-//     */
-//    private void maybeSendAcknowledgementsOnClose() {
-//        if (currentFetch != null) {
-//            fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
-//        }
-//    }
 
     /**
      * Called to move the acknowledgement mode into EXPLICIT, if it is not known to be IMPLICIT.

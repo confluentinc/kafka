@@ -377,6 +377,8 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
             return;
         }
 
+        requestManagers.shareConsumeRequestManager.ifPresent(scrm -> scrm.acknowledgeOnClose(event.acknowledgementsMap()));
+
         ShareMembershipManager membershipManager =
                 Objects.requireNonNull(requestManagers.shareHeartbeatRequestManager.get().membershipManager(),
                         "Expecting membership manager to be non-null");
