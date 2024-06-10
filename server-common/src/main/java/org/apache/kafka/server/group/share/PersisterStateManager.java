@@ -293,7 +293,7 @@ public class PersisterStateManager {
     private final CompletableFuture<WriteShareGroupStateResponse> result;
 
     public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result, long backoffMs, long backoffMaxMs) {
-      super(groupId, topicId, partition, REQUEST_BACKOFF_MS, REQUEST_BACKOFF_MAX_MS);
+      super(groupId, topicId, partition, backoffMs, backoffMaxMs);
       this.stateEpoch = stateEpoch;
       this.leaderEpoch = leaderEpoch;
       this.startOffset = startOffset;
