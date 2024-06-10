@@ -18,6 +18,7 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.clients.ClientResponse;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.RequestCompletionHandler;
 import org.apache.kafka.common.Node;
@@ -59,6 +60,10 @@ public class PersisterStateManager {
   private SendThread sender;
   private final AtomicBoolean isStarted = new AtomicBoolean(false);
   private final ShareCoordinatorMetadataCacheHelper cacheHelper;
+  public static final long REQUEST_BACKOFF_MS = 1_000L;
+  public static final long REQUEST_BACKOFF_MAX_MS = 30_000L;
+  private final Time time;
+
 
   public PersisterStateManager(KafkaClient client, Time time, ShareCoordinatorMetadataCacheHelper cacheHelper) {
     if (client == null) {
@@ -68,13 +73,14 @@ public class PersisterStateManager {
       throw new IllegalArgumentException("ShareCoordinatorMetadataCacheHelper must not be null.");
     }
     this.cacheHelper = cacheHelper;
+    this.time = time == null ? Time.SYSTEM : time;
     this.sender = new SendThread(
         "PersisterStateManager",
         client,
         30_000,  //30 seconds
-        time == null ? Time.SYSTEM : time,
+        this.time,
         true,
-        new Random(System.currentTimeMillis()));
+        new Random(this.time.milliseconds()));
   }
 
   public void enqueue(PersisterStateManagerHandler handler) {
@@ -99,15 +105,20 @@ public class PersisterStateManager {
     protected final String groupId;
     protected final Uuid topicId;
     protected final int partition;
-    private final ExponentialBackoff findCoordbackoff = new ExponentialBackoff(1_000, 2, 30_000, 100);
+    private final ExponentialBackoff findCoordbackoff;
     private int findCoordattempts = 0;
     private static final int MAX_FIND_COORD_ATTEMPTS = 5;
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
-    public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition) {
+    public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition, long backoffMs, long backoffMaxMs) {
       this.groupId = groupId;
       this.topicId = topicId;
       this.partition = partition;
+      this.findCoordbackoff = new ExponentialBackoff(
+          backoffMs,
+          CommonClientConfigs.RETRY_BACKOFF_EXP_BASE,
+          backoffMaxMs,
+          CommonClientConfigs.RETRY_BACKOFF_JITTER);
     }
 
     /**
@@ -252,7 +263,7 @@ public class PersisterStateManager {
         case COORDINATOR_NOT_AVAILABLE: // retryable error codes
         case COORDINATOR_LOAD_IN_PROGRESS:
           log.warn("Received retryable error in find coordinator {}", error.message());
-          if (findCoordattempts > MAX_FIND_COORD_ATTEMPTS) {
+          if (findCoordattempts >= MAX_FIND_COORD_ATTEMPTS) {
             log.error("Exhausted max retries to find coordinator without success.");
             findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
             break;
@@ -281,13 +292,17 @@ public class PersisterStateManager {
     private final List<PersisterStateBatch> batches;
     private final CompletableFuture<WriteShareGroupStateResponse> result;
 
-    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result) {
-      super(groupId, topicId, partition);
+    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result, long backoffMs, long backoffMaxMs) {
+      super(groupId, topicId, partition, backoffMs, backoffMaxMs);
       this.stateEpoch = stateEpoch;
       this.leaderEpoch = leaderEpoch;
       this.startOffset = startOffset;
       this.batches = batches;
       this.result = result;
+    }
+
+    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result) {
+      this(groupId, topicId, partition, stateEpoch, leaderEpoch, startOffset, batches, result, REQUEST_BACKOFF_MS, REQUEST_BACKOFF_MAX_MS);
     }
 
     @Override
@@ -340,11 +355,15 @@ public class PersisterStateManager {
     private final String coordinatorKey;
     private final CompletableFuture<ReadShareGroupStateResponse> result;
 
-    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result) {
-      super(groupId, topicId, partition);
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result, long backoffMs, long backoffMaxMs) {
+      super(groupId, topicId, partition, backoffMs, backoffMaxMs);
       this.leaderEpoch = leaderEpoch;
       this.coordinatorKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
       this.result = result;
+    }
+
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result) {
+      this(groupId, topicId, partition, leaderEpoch, result, REQUEST_BACKOFF_MS, REQUEST_BACKOFF_MAX_MS);
     }
 
     @Override
@@ -454,7 +473,7 @@ public class PersisterStateManager {
           }
           log.info("Sending find coordinator RPC");
           return Collections.singletonList(new RequestAndCompletionHandler(
-              System.currentTimeMillis(),
+              time.milliseconds(),
               randomNode,
               handler.findShareCoordinatorBuilder(),
               handler
@@ -463,7 +482,7 @@ public class PersisterStateManager {
           log.info("Sending share state RPC - {}", handler.name());
           // share coord node already available
           return Collections.singletonList(new RequestAndCompletionHandler(
-              System.currentTimeMillis(),
+              time.milliseconds(),
               handler.shareCoordinatorNode(),
               handler.requestBuilder(),
               handler
