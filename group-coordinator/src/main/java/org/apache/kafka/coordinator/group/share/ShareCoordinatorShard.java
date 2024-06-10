@@ -327,7 +327,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     Uuid topicId = topicData.topicId();
     int partitionId = partitionData.partition();
 
-    if (topicId == null || partitionId == -1) {
+    if (topicId == null || partitionId < 0) {
       return Optional.of(getWriteErrorResponse(Errors.UNKNOWN_TOPIC_OR_PARTITION, topicId, partitionId));
     }
 
@@ -351,7 +351,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     Uuid topicId = topicData.topicId();
     int partitionId = partitionData.partition();
 
-    if (topicId == null || partitionId == -1) {
+    if (topicId == null || partitionId < 0) {
       return Optional.of(ReadShareGroupStateResponse.toErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
     }
 

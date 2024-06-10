@@ -308,7 +308,7 @@ public class DefaultStatePersister implements Persister {
         throw new IllegalArgumentException(prefix + " partitions cannot be null or empty.");
       }
       for (PartitionIdData partitionData : topicData.partitions()) {
-        if (partitionData.partition() == -1) {
+        if (partitionData.partition() < 0) {
           throw new IllegalArgumentException(
               String.format("%s has invalid partitionId - %s %s %d", prefix, groupId, topicData.topicId(), partitionData.partition()));
         }
