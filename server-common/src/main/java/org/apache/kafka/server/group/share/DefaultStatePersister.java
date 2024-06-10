@@ -87,7 +87,7 @@ public class DefaultStatePersister implements Persister {
    * @param request InitializeShareGroupStateParameters
    * @return InitializeShareGroupStateResult
    */
-  public CompletableFuture<InitializeShareGroupStateResult> initializeState(InitializeShareGroupStateParameters request) {
+  public CompletableFuture<InitializeShareGroupStateResult> initializeState(InitializeShareGroupStateParameters request) throws IllegalArgumentException {
     throw new RuntimeException("not implemented");
   }
 
@@ -98,8 +98,9 @@ public class DefaultStatePersister implements Persister {
    * @param request WriteShareGroupStateParameters
    * @return WriteShareGroupStateResult
    */
-  public CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters request) {
+  public CompletableFuture<WriteShareGroupStateResult> writeState(WriteShareGroupStateParameters request) throws IllegalArgumentException {
     log.info("Write share group state request received - {}", request);
+    validate(request);
     GroupTopicPartitionData<PartitionStateBatchData> gtp = request.groupTopicPartitionData();
     String groupId = gtp.groupId();
 
@@ -166,8 +167,9 @@ public class DefaultStatePersister implements Persister {
    * @param request ReadShareGroupStateParameters
    * @return ReadShareGroupStateResult
    */
-  public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) {
-    log.info("Shard readState request received - {}", request);
+  public CompletableFuture<ReadShareGroupStateResult> readState(ReadShareGroupStateParameters request) throws IllegalArgumentException {
+    log.info("Read share group request received - {}", request);
+    validate(request);
     GroupTopicPartitionData<PartitionIdLeaderEpochData> gtp = request.groupTopicPartitionData();
     String groupId = gtp.groupId();
     Map<Uuid, HashMap<Integer, CompletableFuture<ReadShareGroupStateResponse>>> futureMap = new HashMap<>();
@@ -248,7 +250,7 @@ public class DefaultStatePersister implements Persister {
    * @param request DeleteShareGroupStateParameters
    * @return DeleteShareGroupStateResult
    */
-  public CompletableFuture<DeleteShareGroupStateResult> deleteState(DeleteShareGroupStateParameters request) {
+  public CompletableFuture<DeleteShareGroupStateResult> deleteState(DeleteShareGroupStateParameters request) throws IllegalArgumentException {
     throw new RuntimeException("not implemented");
   }
 
@@ -259,7 +261,62 @@ public class DefaultStatePersister implements Persister {
    * @param request ReadShareGroupStateSummaryParameters
    * @return ReadShareGroupStateSummaryResult
    */
-  public CompletableFuture<ReadShareGroupStateSummaryResult> readSummary(ReadShareGroupStateSummaryParameters request) {
+  public CompletableFuture<ReadShareGroupStateSummaryResult> readSummary(ReadShareGroupStateSummaryParameters request) throws IllegalArgumentException {
     throw new RuntimeException("not implemented");
+  }
+
+  private static void validate(WriteShareGroupStateParameters params) {
+    String prefix = "Write share group parameters";
+    if (params == null) {
+      throw new IllegalArgumentException(prefix + " cannot be null.");
+    }
+    if (params.groupTopicPartitionData() == null) {
+      throw new IllegalArgumentException(prefix + " data cannot be null.");
+    }
+
+    validateGroupTopicPartitionData(prefix, params.groupTopicPartitionData());
+  }
+
+  private static void validate(ReadShareGroupStateParameters params) {
+    String prefix = "Read share group parameters";
+    if (params == null) {
+      throw new IllegalArgumentException(prefix + " cannot be null.");
+    }
+    if (params.groupTopicPartitionData() == null) {
+      throw new IllegalArgumentException(prefix + " data cannot be null.");
+    }
+
+    validateGroupTopicPartitionData(prefix, params.groupTopicPartitionData());
+  }
+
+  private static void validateGroupTopicPartitionData(String prefix, GroupTopicPartitionData<? extends PartitionIdData> data) {
+    String groupId = data.groupId();
+    if (groupId == null || groupId.isEmpty()) {
+      throw new IllegalArgumentException(prefix + " groupId cannot be null or empty.");
+    }
+
+    List<? extends TopicData<? extends PartitionIdData>> topicsData = data.topicsData();
+    if (isEmpty(topicsData)) {
+      throw new IllegalArgumentException(prefix + " topics data cannot be null or empty.");
+    }
+
+    for (TopicData<? extends PartitionIdData> topicData : topicsData) {
+      if (topicData.topicId() == null) {
+        throw new IllegalArgumentException(prefix + " topicId cannot be null.");
+      }
+      if (isEmpty(topicData.partitions())) {
+        throw new IllegalArgumentException(prefix + " partitions cannot be null or empty.");
+      }
+      for (PartitionIdData partitionData : topicData.partitions()) {
+        if (partitionData.partition() < 0) {
+          throw new IllegalArgumentException(
+              String.format("%s has invalid partitionId - %s %s %d", prefix, groupId, topicData.topicId(), partitionData.partition()));
+        }
+      }
+    }
+  }
+
+  private static boolean isEmpty(List<?> list) {
+    return list == null || list.isEmpty();
   }
 }
