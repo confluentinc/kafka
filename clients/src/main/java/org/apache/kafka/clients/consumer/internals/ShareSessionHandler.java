@@ -41,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 /**
  * ShareSessionHandler maintains the share session state for connecting to a broker.
@@ -161,7 +162,9 @@ public class ShareSessionHandler {
         removed.addAll(replaced);
 
         Map<TopicIdPartition, List<ShareFetchRequestData.AcknowledgementBatch>> acknowledgementBatches = new HashMap<>();
-        nextAcknowledgements.forEach((partition, acknowledgements) -> acknowledgementBatches.put(partition, acknowledgements.getShareFetchBatches()));
+        nextAcknowledgements.forEach((partition, acknowledgements) -> acknowledgementBatches.put(partition, acknowledgements.getAcknowledgementBatches()
+                .stream().map(AcknowledgementBatch::toShareFetchRequest)
+                .collect(Collectors.toList())));
 
         nextPartitions = new LinkedHashMap<>();
         nextAcknowledgements = new LinkedHashMap<>();
@@ -179,7 +182,10 @@ public class ShareSessionHandler {
         }
 
         Map<TopicIdPartition, List<ShareAcknowledgeRequestData.AcknowledgementBatch>> acknowledgementBatches = new HashMap<>();
-        nextAcknowledgements.forEach((partition, acknowledgements) -> acknowledgementBatches.put(partition, acknowledgements.getShareAcknowledgeBatches()));
+        nextAcknowledgements.forEach((partition, acknowledgements) ->
+                acknowledgementBatches.put(partition, acknowledgements.getAcknowledgementBatches()
+                        .stream().map(AcknowledgementBatch::toShareAcknowledgeRequest)
+                        .collect(Collectors.toList())));
 
         nextAcknowledgements = new LinkedHashMap<>();
 
