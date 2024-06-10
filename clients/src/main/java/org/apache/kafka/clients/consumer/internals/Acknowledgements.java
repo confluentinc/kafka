@@ -17,8 +17,6 @@
 package org.apache.kafka.clients.consumer.internals;
 
 import org.apache.kafka.clients.consumer.AcknowledgeType;
-import org.apache.kafka.common.message.ShareAcknowledgeRequestData;
-import org.apache.kafka.common.message.ShareFetchRequestData;
 import org.apache.kafka.common.protocol.Errors;
 
 import java.util.ArrayList;
@@ -154,13 +152,13 @@ public class Acknowledgements {
         return acknowledgements;
     }
 
-    public List<ShareFetchRequestData.AcknowledgementBatch> getShareFetchBatches() {
-        List<ShareFetchRequestData.AcknowledgementBatch> batches = new ArrayList<>();
+    public List<AcknowledgementBatch> getAcknowledgementBatches() {
+        List<AcknowledgementBatch> batches = new ArrayList<>();
         if (acknowledgements.isEmpty()) return batches;
-        ShareFetchRequestData.AcknowledgementBatch currentBatch = null;
+        AcknowledgementBatch currentBatch = null;
         for (Map.Entry<Long, AcknowledgeType> entry : acknowledgements.entrySet()) {
             if (currentBatch == null) {
-                currentBatch = new ShareFetchRequestData.AcknowledgementBatch();
+                currentBatch = new AcknowledgementBatch();
                 currentBatch.setFirstOffset(entry.getKey());
                 currentBatch.setLastOffset(entry.getKey());
                 if (entry.getValue() != null) {
@@ -174,28 +172,7 @@ public class Acknowledgements {
                         currentBatch.setLastOffset(entry.getKey());
                         currentBatch.acknowledgeTypes().add(entry.getValue().id);
                     } else {
-                        List<ShareFetchRequestData.AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypesForFetch(currentBatch);
-
-                        optimalBatches.forEach(batch -> {
-                            if (canOptimiseForSingleAcknowledgeType(batch)) {
-                                // If the batch had a single acknowledgement type, we optimise the array further independent
-                                // of the number of records.
-                                batch.acknowledgeTypes().subList(1, batch.acknowledgeTypes().size()).clear();
-                            }
-                            batches.add(batch);
-                        });
-
-                        currentBatch = new ShareFetchRequestData.AcknowledgementBatch();
-                        currentBatch.setFirstOffset(entry.getKey());
-                        currentBatch.setLastOffset(entry.getKey());
-                        currentBatch.acknowledgeTypes().add(entry.getValue().id);
-                    }
-                } else {
-                    if (entry.getKey() == currentBatch.lastOffset() + 1) {
-                        currentBatch.setLastOffset(entry.getKey());
-                        currentBatch.acknowledgeTypes().add(ACKNOWLEDGE_TYPE_GAP);
-                    } else {
-                        List<ShareFetchRequestData.AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypesForFetch(currentBatch);
+                        List<AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypes(currentBatch);
 
                         optimalBatches.forEach(batch -> {
                             if (canOptimiseForSingleAcknowledgeType(batch)) {
@@ -206,7 +183,28 @@ public class Acknowledgements {
                             batches.add(batch);
                         });
 
-                        currentBatch = new ShareFetchRequestData.AcknowledgementBatch();
+                        currentBatch = new AcknowledgementBatch();
+                        currentBatch.setFirstOffset(entry.getKey());
+                        currentBatch.setLastOffset(entry.getKey());
+                        currentBatch.acknowledgeTypes().add(entry.getValue().id);
+                    }
+                } else {
+                    if (entry.getKey() == currentBatch.lastOffset() + 1) {
+                        currentBatch.setLastOffset(entry.getKey());
+                        currentBatch.acknowledgeTypes().add(ACKNOWLEDGE_TYPE_GAP);
+                    } else {
+                        List<AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypes(currentBatch);
+
+                        optimalBatches.forEach(batch -> {
+                            if (canOptimiseForSingleAcknowledgeType(batch)) {
+                                // If the batch had a single acknowledgement type, we optimise the array independent
+                                // of the number of records.
+                                batch.acknowledgeTypes().subList(1, batch.acknowledgeTypes().size()).clear();
+                            }
+                            batches.add(batch);
+                        });
+
+                        currentBatch = new AcknowledgementBatch();
                         currentBatch.setFirstOffset(entry.getKey());
                         currentBatch.setLastOffset(entry.getKey());
                         currentBatch.acknowledgeTypes().add(ACKNOWLEDGE_TYPE_GAP);
@@ -214,80 +212,7 @@ public class Acknowledgements {
                 }
             }
         }
-        List<ShareFetchRequestData.AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypesForFetch(currentBatch);
-
-        optimalBatches.forEach(batch -> {
-            if (canOptimiseForSingleAcknowledgeType(batch)) {
-                // If the batch had a single acknowledgement type, we optimise the array independent
-                // of the number of records.
-                batch.acknowledgeTypes().subList(1, batch.acknowledgeTypes().size()).clear();
-            }
-            batches.add(batch);
-        });
-        return batches;
-    }
-
-    public List<ShareAcknowledgeRequestData.AcknowledgementBatch> getShareAcknowledgeBatches() {
-        List<ShareAcknowledgeRequestData.AcknowledgementBatch> batches = new ArrayList<>();
-        if (acknowledgements.isEmpty()) return batches;
-        ShareAcknowledgeRequestData.AcknowledgementBatch currentBatch = null;
-        for (Map.Entry<Long, AcknowledgeType> entry : acknowledgements.entrySet()) {
-            if (currentBatch == null) {
-                currentBatch = new ShareAcknowledgeRequestData.AcknowledgementBatch();
-                currentBatch.setFirstOffset(entry.getKey());
-                currentBatch.setLastOffset(entry.getKey());
-                if (entry.getValue() != null) {
-                    currentBatch.acknowledgeTypes().add(entry.getValue().id);
-                } else {
-                    currentBatch.acknowledgeTypes().add(ACKNOWLEDGE_TYPE_GAP);
-                }
-            } else {
-                if (entry.getValue() != null) {
-                    if (entry.getKey() == currentBatch.lastOffset() + 1) {
-                        currentBatch.setLastOffset(entry.getKey());
-                        currentBatch.acknowledgeTypes().add(entry.getValue().id);
-                    } else {
-                        List<ShareAcknowledgeRequestData.AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypesForAcknowledge(currentBatch);
-
-                        optimalBatches.forEach(batch -> {
-                            if (canOptimiseForSingleAcknowledgeType(batch)) {
-                                // If the batch had a single acknowledgement type, we optimise the array independent
-                                // of the number of records.
-                                batch.acknowledgeTypes().subList(1, batch.acknowledgeTypes().size()).clear();
-                            }
-                            batches.add(batch);
-                        });
-
-                        currentBatch = new ShareAcknowledgeRequestData.AcknowledgementBatch();
-                        currentBatch.setFirstOffset(entry.getKey());
-                        currentBatch.setLastOffset(entry.getKey());
-                        currentBatch.acknowledgeTypes().add(entry.getValue().id);
-                    }
-                } else {
-                    if (entry.getKey() == currentBatch.lastOffset() + 1) {
-                        currentBatch.setLastOffset(entry.getKey());
-                        currentBatch.acknowledgeTypes().add(ACKNOWLEDGE_TYPE_GAP);
-                    } else {
-                        List<ShareAcknowledgeRequestData.AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypesForAcknowledge(currentBatch);
-
-                        optimalBatches.forEach(batch -> {
-                            if (canOptimiseForSingleAcknowledgeType(batch)) {
-                                // If the batch had a single acknowledgement type, we optimise the array independent
-                                // of the number of records.
-                                batch.acknowledgeTypes().subList(1, batch.acknowledgeTypes().size()).clear();
-                            }
-                            batches.add(batch);
-                        });
-
-                        currentBatch = new ShareAcknowledgeRequestData.AcknowledgementBatch();
-                        currentBatch.setFirstOffset(entry.getKey());
-                        currentBatch.setLastOffset(entry.getKey());
-                        currentBatch.acknowledgeTypes().add(ACKNOWLEDGE_TYPE_GAP);
-                    }
-                }
-            }
-        }
-        List<ShareAcknowledgeRequestData.AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypesForAcknowledge(currentBatch);
+        List<AcknowledgementBatch> optimalBatches = maybeOptimiseAcknowledgementTypes(currentBatch);
 
         optimalBatches.forEach(batch -> {
             if (canOptimiseForSingleAcknowledgeType(batch)) {
@@ -301,46 +226,45 @@ public class Acknowledgements {
     }
 
     /**
-     * Traverses the shareFetchBatch and splits it into optimal batches wherever possible.
+     * Traverses the acknowledgementBatch and splits it into optimal batches wherever possible.
      * Optimisation happens when a batch has continuous records of the same acknowledge type
      * whose count exceeds the default value. In this case, the batch is split into 2 such that the
      * batch with the continuous records has only 1 acknowledge type in its array.
      */
-    private List<ShareFetchRequestData.AcknowledgementBatch> maybeOptimiseAcknowledgementTypesForFetch(ShareFetchRequestData.AcknowledgementBatch currentShareFetchBatch) {
-        List<ShareFetchRequestData.AcknowledgementBatch> batches = new ArrayList<>();
-        if (currentShareFetchBatch == null) return batches;
+    private List<AcknowledgementBatch> maybeOptimiseAcknowledgementTypes(AcknowledgementBatch currentAcknowledgeBatch) {
+        List<AcknowledgementBatch> batches = new ArrayList<>();
+        if (currentAcknowledgeBatch == null) return batches;
 
-        long currentOffset = currentShareFetchBatch.firstOffset();
+        long currentOffset = currentAcknowledgeBatch.firstOffset();
         int currentStartIndex = 0;
         int recordsWithSameAcknowledgeType = 1;
-        for (int i = 1; i < currentShareFetchBatch.acknowledgeTypes().size(); i++) {
-            byte acknowledgeType = currentShareFetchBatch.acknowledgeTypes().get(i);
-
+        for (int i = 1; i < currentAcknowledgeBatch.acknowledgeTypes().size(); i++) {
+            byte acknowledgeType = currentAcknowledgeBatch.acknowledgeTypes().get(i);
             // If we have a continuous set of records with the same acknowledgement type exceeding the default count,
             // then we optimise the batches to include only start and end offset and have only 1 acknowledge type in the array.
-            byte prevAcknowledgeType = currentShareFetchBatch.acknowledgeTypes().get(i - 1);
+            byte prevAcknowledgeType = currentAcknowledgeBatch.acknowledgeTypes().get(i - 1);
             if (acknowledgeType == prevAcknowledgeType && recordsWithSameAcknowledgeType >= MAX_RECORDS_WITH_SAME_ACKNOWLEDGE_TYPE) {
                 // We continue traversing until we have the same acknowledge type.
-                while (i < currentShareFetchBatch.acknowledgeTypes().size()) {
-                    byte acknowledgeType2 = currentShareFetchBatch.acknowledgeTypes().get(i);
+                while (i < currentAcknowledgeBatch.acknowledgeTypes().size()) {
+                    byte acknowledgeType2 = currentAcknowledgeBatch.acknowledgeTypes().get(i);
 
-                    if (acknowledgeType2 != currentShareFetchBatch.acknowledgeTypes().get(i - 1)) break;
+                    if (acknowledgeType2 != currentAcknowledgeBatch.acknowledgeTypes().get(i - 1)) break;
                     i++;
                     recordsWithSameAcknowledgeType++;
                 }
 
                 // Now we prepare 2 batches, one starting just before the batch with single acknowledge type
                 // and one with the single acknowledge type.
-                ShareFetchRequestData.AcknowledgementBatch batch1 = new ShareFetchRequestData.AcknowledgementBatch();
+                AcknowledgementBatch batch1 = new AcknowledgementBatch();
                 batch1.setFirstOffset(currentOffset);
                 batch1.setLastOffset(currentOffset + i - recordsWithSameAcknowledgeType - currentStartIndex - 1);
                 if (batch1.lastOffset() >= batch1.firstOffset()) {
-                    batch1.setAcknowledgeTypes(new ArrayList<>(currentShareFetchBatch.acknowledgeTypes().subList(currentStartIndex,
+                    batch1.setAcknowledgeTypes(new ArrayList<>(currentAcknowledgeBatch.acknowledgeTypes().subList(currentStartIndex,
                             i - recordsWithSameAcknowledgeType)));
                     batches.add(batch1);
                 }
 
-                ShareFetchRequestData.AcknowledgementBatch batch2 = new ShareFetchRequestData.AcknowledgementBatch();
+                AcknowledgementBatch batch2 = new AcknowledgementBatch();
                 batch2.setFirstOffset(currentOffset + i - recordsWithSameAcknowledgeType - currentStartIndex);
                 batch2.setLastOffset(currentOffset + i - currentStartIndex - 1);
                 batch2.acknowledgeTypes().add(acknowledgeType);
@@ -358,80 +282,12 @@ public class Acknowledgements {
                 recordsWithSameAcknowledgeType = 1;
             }
         }
-        if (currentStartIndex < currentShareFetchBatch.acknowledgeTypes().size()) {
-            ShareFetchRequestData.AcknowledgementBatch batch = new ShareFetchRequestData.AcknowledgementBatch();
+        if (currentStartIndex < currentAcknowledgeBatch.acknowledgeTypes().size()) {
+            AcknowledgementBatch batch = new AcknowledgementBatch();
             batch.setFirstOffset(currentOffset);
-            batch.setLastOffset(currentOffset + currentShareFetchBatch.acknowledgeTypes().size() - currentStartIndex - 1);
-            batch.setAcknowledgeTypes(new ArrayList<>(currentShareFetchBatch.acknowledgeTypes().subList(currentStartIndex,
-                    currentShareFetchBatch.acknowledgeTypes().size())));
-            batches.add(batch);
-        }
-        return batches;
-    }
-
-    /**
-     * Traverses the shareAcknowledgeBatch and splits it into optimal batches wherever possible.
-     * Optimisation happens when a batch has continuous records of the same acknowledge type
-     * whose count exceeds the default value. In this case, the batch is split into 2 such that the
-     * batch with the continuous records has only 1 acknowledge type in its array.
-     */
-    private List<ShareAcknowledgeRequestData.AcknowledgementBatch> maybeOptimiseAcknowledgementTypesForAcknowledge(ShareAcknowledgeRequestData.AcknowledgementBatch currentShareAcknowledgeBatch) {
-        List<ShareAcknowledgeRequestData.AcknowledgementBatch> batches = new ArrayList<>();
-        if (currentShareAcknowledgeBatch == null) return batches;
-
-        long currentOffset = currentShareAcknowledgeBatch.firstOffset();
-        int currentStartIndex = 0;
-        int recordsWithSameAcknowledgeType = 1;
-        for (int i = 1; i < currentShareAcknowledgeBatch.acknowledgeTypes().size(); i++) {
-            byte acknowledgeType = currentShareAcknowledgeBatch.acknowledgeTypes().get(i);
-            // If we have a continuous set of records with the same acknowledgement type exceeding the default count,
-            // then we optimise the batches to include only start and end offset and have only 1 acknowledge type in the array.
-            byte prevAcknowledgeType = currentShareAcknowledgeBatch.acknowledgeTypes().get(i - 1);
-            if (acknowledgeType == prevAcknowledgeType && recordsWithSameAcknowledgeType >= MAX_RECORDS_WITH_SAME_ACKNOWLEDGE_TYPE) {
-                // We continue traversing until we have the same acknowledge type.
-                while (i < currentShareAcknowledgeBatch.acknowledgeTypes().size()) {
-                    byte acknowledgeType2 = currentShareAcknowledgeBatch.acknowledgeTypes().get(i);
-
-                    if (acknowledgeType2 != currentShareAcknowledgeBatch.acknowledgeTypes().get(i - 1)) break;
-                    i++;
-                    recordsWithSameAcknowledgeType++;
-                }
-
-                // Now we prepare 2 batches, one starting just before the batch with single acknowledge type
-                // and one with the single acknowledge type.
-                ShareAcknowledgeRequestData.AcknowledgementBatch batch1 = new ShareAcknowledgeRequestData.AcknowledgementBatch();
-                batch1.setFirstOffset(currentOffset);
-                batch1.setLastOffset(currentOffset + i - recordsWithSameAcknowledgeType - currentStartIndex - 1);
-                if (batch1.lastOffset() >= batch1.firstOffset()) {
-                    batch1.setAcknowledgeTypes(new ArrayList<>(currentShareAcknowledgeBatch.acknowledgeTypes().subList(currentStartIndex,
-                            i - recordsWithSameAcknowledgeType)));
-                    batches.add(batch1);
-                }
-
-                ShareAcknowledgeRequestData.AcknowledgementBatch batch2 = new ShareAcknowledgeRequestData.AcknowledgementBatch();
-                batch2.setFirstOffset(currentOffset + i - recordsWithSameAcknowledgeType - currentStartIndex);
-                batch2.setLastOffset(currentOffset + i - currentStartIndex - 1);
-                batch2.acknowledgeTypes().add(acknowledgeType);
-
-                batches.add(batch2);
-                recordsWithSameAcknowledgeType = 1;
-
-                // Updating the offset and startIndex for further iterations.
-                currentOffset = currentOffset + i - currentStartIndex;
-                currentStartIndex = i;
-            } else if (acknowledgeType == prevAcknowledgeType) {
-                // The maximum limit has not yet been reached, we increment the count and move ahead.
-                recordsWithSameAcknowledgeType++;
-            } else {
-                recordsWithSameAcknowledgeType = 1;
-            }
-        }
-        if (currentStartIndex < currentShareAcknowledgeBatch.acknowledgeTypes().size()) {
-            ShareAcknowledgeRequestData.AcknowledgementBatch batch = new ShareAcknowledgeRequestData.AcknowledgementBatch();
-            batch.setFirstOffset(currentOffset);
-            batch.setLastOffset(currentOffset + currentShareAcknowledgeBatch.acknowledgeTypes().size() - currentStartIndex - 1);
-            batch.setAcknowledgeTypes(new ArrayList<>(currentShareAcknowledgeBatch.acknowledgeTypes().subList(currentStartIndex,
-                    currentShareAcknowledgeBatch.acknowledgeTypes().size())));
+            batch.setLastOffset(currentOffset + currentAcknowledgeBatch.acknowledgeTypes().size() - currentStartIndex - 1);
+            batch.setAcknowledgeTypes(new ArrayList<>(currentAcknowledgeBatch.acknowledgeTypes().subList(currentStartIndex,
+                    currentAcknowledgeBatch.acknowledgeTypes().size())));
             batches.add(batch);
         }
         return batches;
@@ -442,20 +298,11 @@ public class Acknowledgements {
      * and the array size can be reduced to 1.
      * Returns false when the array has more than one acknowledge type or is already optimised.
      */
-    private boolean canOptimiseForSingleAcknowledgeType(ShareFetchRequestData.AcknowledgementBatch shareFetchBatch) {
-        if (shareFetchBatch == null || shareFetchBatch.acknowledgeTypes().size() == 1) return false;
-        int firstAcknowledgeType = shareFetchBatch.acknowledgeTypes().get(0);
-        for (int i = 1; i < shareFetchBatch.acknowledgeTypes().size(); i++) {
-            if (shareFetchBatch.acknowledgeTypes().get(i) != firstAcknowledgeType) return false;
-        }
-        return true;
-    }
-
-    private boolean canOptimiseForSingleAcknowledgeType(ShareAcknowledgeRequestData.AcknowledgementBatch shareAcknowledgeBatch) {
-        if (shareAcknowledgeBatch == null || shareAcknowledgeBatch.acknowledgeTypes().size() == 1) return false;
-        int firstAcknowledgeType = shareAcknowledgeBatch.acknowledgeTypes().get(0);
-        for (int i = 1; i < shareAcknowledgeBatch.acknowledgeTypes().size(); i++) {
-            if (shareAcknowledgeBatch.acknowledgeTypes().get(i) != firstAcknowledgeType) return false;
+    private boolean canOptimiseForSingleAcknowledgeType(AcknowledgementBatch acknowledgementBatch) {
+        if (acknowledgementBatch == null || acknowledgementBatch.acknowledgeTypes().size() == 1) return false;
+        int firstAcknowledgeType = acknowledgementBatch.acknowledgeTypes().get(0);
+        for (int i = 1; i < acknowledgementBatch.acknowledgeTypes().size(); i++) {
+            if (acknowledgementBatch.acknowledgeTypes().get(i) != firstAcknowledgeType) return false;
         }
         return true;
     }
