@@ -28,8 +28,11 @@ import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -57,7 +60,7 @@ class AcknowledgementCommitCallbackHandlerTest {
     public void setup() {
         acknowledgementsMap = new HashMap<>();
         exceptionMap = new LinkedHashMap<>();
-        TestableAcknowledgeCommitCallBack callback = new TestableAcknowledgeCommitCallBack();
+        TestableAcknowledgeCommitCallback callback = new TestableAcknowledgeCommitCallback();
         acknowledgementCommitCallbackHandler = new AcknowledgementCommitCallbackHandler(callback);
     }
 
@@ -68,7 +71,7 @@ class AcknowledgementCommitCallbackHandlerTest {
         acknowledgements.add(1L, AcknowledgeType.REJECT);
         acknowledgementsMap.put(tip0, acknowledgements);
 
-        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
+        acknowledgementCommitCallbackHandler.onComplete(Collections.singletonList(acknowledgementsMap));
 
         TestUtils.retryOnExceptionWithTimeout(() -> {
             assertNull(exceptionMap.get(tpo00));
@@ -84,7 +87,7 @@ class AcknowledgementCommitCallbackHandlerTest {
         acknowledgements.setAcknowledgeErrorCode(Errors.INVALID_RECORD_STATE);
         acknowledgementsMap.put(tip0, acknowledgements);
 
-        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
+        acknowledgementCommitCallbackHandler.onComplete(Collections.singletonList(acknowledgementsMap));
         TestUtils.retryOnExceptionWithTimeout(() -> {
             assertInstanceOf(InvalidRecordStateException.class, exceptionMap.get(tpo00));
             assertInstanceOf(InvalidRecordStateException.class, exceptionMap.get(tpo01));
@@ -100,7 +103,7 @@ class AcknowledgementCommitCallbackHandlerTest {
         acknowledgements.setAcknowledgeErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED);
         acknowledgementsMap.put(tip0, acknowledgements);
 
-        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
+        acknowledgementCommitCallbackHandler.onComplete(Collections.singletonList(acknowledgementsMap));
         TestUtils.retryOnExceptionWithTimeout(() -> {
             assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo00));
             assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo01));
@@ -120,11 +123,15 @@ class AcknowledgementCommitCallbackHandlerTest {
         acknowledgements1.setAcknowledgeErrorCode(Errors.INVALID_RECORD_STATE);
         acknowledgementsMap.put(tip1, acknowledgements1);
 
+        Map<TopicIdPartition, Acknowledgements> acknowledgementsMap2 = new HashMap<>();
         Acknowledgements acknowledgements2 = Acknowledgements.empty();
         acknowledgements2.add(0L, AcknowledgeType.ACCEPT);
-        acknowledgementsMap.put(tip2, acknowledgements2);
+        acknowledgementsMap2.put(tip2, acknowledgements2);
 
-        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMap);
+        List<Map<TopicIdPartition, Acknowledgements>> acknowledgementsMapList = new LinkedList<>();
+        acknowledgementsMapList.add(acknowledgementsMap);
+        acknowledgementsMapList.add(acknowledgementsMap2);
+        acknowledgementCommitCallbackHandler.onComplete(acknowledgementsMapList);
         TestUtils.retryOnExceptionWithTimeout(() -> {
             assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo00));
             assertInstanceOf(TopicAuthorizationException.class, exceptionMap.get(tpo01));
@@ -133,7 +140,7 @@ class AcknowledgementCommitCallbackHandlerTest {
         });
     }
 
-    private class TestableAcknowledgeCommitCallBack implements AcknowledgementCommitCallback {
+    private class TestableAcknowledgeCommitCallback implements AcknowledgementCommitCallback {
         @Override
         public void onComplete(Map<TopicIdPartition, Set<Long>> offsetsMap, Exception exception) {
             offsetsMap.forEach((partition, offsets) -> offsets.forEach(offset -> {

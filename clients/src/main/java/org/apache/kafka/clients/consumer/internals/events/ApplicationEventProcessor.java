@@ -18,6 +18,7 @@ package org.apache.kafka.clients.consumer.internals.events;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
+import org.apache.kafka.clients.consumer.internals.Acknowledgements;
 import org.apache.kafka.clients.consumer.internals.CachedSupplier;
 import org.apache.kafka.clients.consumer.internals.CommitRequestManager;
 import org.apache.kafka.clients.consumer.internals.ConsumerMetadata;
@@ -28,6 +29,7 @@ import org.apache.kafka.clients.consumer.internals.ShareConsumeRequestManager;
 import org.apache.kafka.clients.consumer.internals.ShareMembershipManager;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.LogContext;
 import org.slf4j.Logger;
@@ -158,7 +160,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
                 return;
 
             default:
-                log.warn("Application event type " + event.type() + " was not expected");
+                log.warn("Application event type {} was not expected", event.type());
         }
     }
 
@@ -318,7 +320,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
      * Process event that tells the share consume request manager to fetch more records.
      */
     private void process(final ShareFetchEvent event) {
-        requestManagers.shareConsumeRequestManager.ifPresent(scrm -> scrm.fetch());
+        requestManagers.shareConsumeRequestManager.ifPresent(scrm -> scrm.fetch(event.acknowledgementsMap()));
     }
 
     /**
@@ -330,7 +332,8 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
         }
 
         ShareConsumeRequestManager manager = requestManagers.shareConsumeRequestManager.get();
-        CompletableFuture<Void> future = manager.commitSync(event.deadlineMs());
+        CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future =
+                manager.commitSync(event.deadlineMs(), event.acknowledgementsMap());
         future.whenComplete(complete(event.future()));
     }
 
@@ -373,6 +376,8 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
             event.future().complete(null);
             return;
         }
+
+        requestManagers.shareConsumeRequestManager.ifPresent(scrm -> scrm.acknowledgeOnClose(event.acknowledgementsMap()));
 
         ShareMembershipManager membershipManager =
                 Objects.requireNonNull(requestManagers.shareHeartbeatRequestManager.get().membershipManager(),
