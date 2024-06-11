@@ -498,6 +498,36 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         }
     }
 
+    @Override
+    public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
+        acquireAndEnsureOpen();
+        try {
+            maybeThrowInvalidGroupIdException();
+            if (topics == null)
+                throw new IllegalArgumentException("Topic collection to subscribe to cannot be null");
+            if (topics.isEmpty()) {
+                // treat subscribing to empty topic list as the same as unsubscribing
+                unsubscribe();
+            } else {
+                for (String topic : topics) {
+                    if (isBlank(topic))
+                        throw new IllegalArgumentException("Topic collection to subscribe to cannot contain null or empty topic");
+                }
+
+                log.info("Subscribed to topic(s): {}", join(topics, ", "));
+                if (subscriptions.subscribeToShareGroup(new HashSet<>(topics), Optional.of(callback)))
+                    metadata.requestUpdateForNewTopics();
+
+                // Trigger subscribe event to effectively join the group if not already part of it,
+                // or just send the new subscription to the broker.
+                applicationEventHandler.add(new ShareSubscriptionChangeApplicationEvent());
+            }
+        } finally {
+            release();
+        }
+
+    }
+
     /**
      * {@inheritDoc}
      */

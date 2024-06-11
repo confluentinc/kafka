@@ -463,6 +463,11 @@ public class KafkaShareConsumer<K, V> implements ShareConsumer<K, V> {
         delegate.subscribe(topics);
     }
 
+    @Override
+    public void subscribe(Collection<String> topics, ConsumerRebalanceListener listener) {
+        delegate.subscribe(topics, listener);
+    }
+
     /**
      * Unsubscribe from topics currently subscribed with {@link #subscribe(Collection)}.
      *
