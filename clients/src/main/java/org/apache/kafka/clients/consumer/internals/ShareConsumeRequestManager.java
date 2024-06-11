@@ -39,6 +39,7 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 
+import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -60,7 +61,7 @@ import java.util.stream.Collectors;
  * {@link ShareAcknowledgeRequest} to fetch and acknowledge records being delivered for a consumer
  * in a share group.
  */
-public class ShareConsumeRequestManager implements RequestManager, MemberStateListener {
+public class ShareConsumeRequestManager implements RequestManager, MemberStateListener, Closeable {
 
     private final Logger log;
     private final LogContext logContext;
