@@ -651,29 +651,35 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             prepareToSendAcknowledgements(false);
 
             Timer requestTimer = time.timer(timeout.toMillis());
-            SyncShareAcknowledgeEvent event = new SyncShareAcknowledgeEvent(requestTimer, acknowledgementsToSend());
-            applicationEventHandler.add(event);
-            CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitFuture = event.future();
-            wakeupTrigger.setActiveTask(commitFuture);
-            try {
-                Map<TopicIdPartition, Optional<KafkaException>> result = new HashMap<>();
-                Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = ConsumerUtils.getResult(commitFuture, requestTimer);
-                completedAcknowledgements.forEach((tip, acks) -> {
-                    Errors ackErrorCode = acks.getAcknowledgeErrorCode();
-                    if (ackErrorCode == null) {
-                        result.put(tip, null);
-                    } else {
-                        ApiException exception = ackErrorCode.exception();
-                        if (exception == null) {
+            Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = acknowledgementsToSend();
+            if (acknowledgementsMap.isEmpty()) {
+                return Collections.emptyMap();
+            } else {
+                SyncShareAcknowledgeEvent event = new SyncShareAcknowledgeEvent(requestTimer, acknowledgementsMap);
+                applicationEventHandler.add(event);
+                CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitFuture = event.future();
+                wakeupTrigger.setActiveTask(commitFuture);
+                try {
+                    Map<TopicIdPartition, Optional<KafkaException>> result = new HashMap<>();
+                    Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = ConsumerUtils.getResult(commitFuture, requestTimer);
+                    completedAcknowledgements.forEach((tip, acks) -> {
+                        Errors ackErrorCode = acks.getAcknowledgeErrorCode();
+                        if (ackErrorCode == null) {
                             result.put(tip, null);
                         } else {
-                            result.put(tip, Optional.of(ackErrorCode.exception()));
+                            ApiException exception = ackErrorCode.exception();
+                            if (exception == null) {
+                                result.put(tip, null);
+                            } else {
+                                result.put(tip, Optional.of(ackErrorCode.exception()));
+                            }
                         }
-                    }
-                });
-                return result;
-            } finally {
-                wakeupTrigger.clearTask();
+                    });
+                    return result;
+
+                } finally {
+                    wakeupTrigger.clearTask();
+                }
             }
         } finally {
             release();

@@ -51,6 +51,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
@@ -255,7 +256,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         List<UnsentRequest> unsentRequests = new ArrayList<>();
         for (AcknowledgeRequestState acknowledgeRequestState : acknowledgeRequestStates) {
             if (acknowledgeRequestState.isProcessed()) {
-                acknowledgeRequestState.complete();
                 acknowledgeRequestStates.remove(acknowledgeRequestState);
             } else if (!acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
                 if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
@@ -278,7 +278,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                     metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
                     acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.REQUEST_TIMED_OUT);
                 }
-                acknowledgeRequestState.complete();
                 acknowledgeRequestStates.remove(acknowledgeRequestState);
             }
         }
@@ -293,11 +292,20 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         return pollResult;
     }
 
-    // Build a list of ShareAcknowledge requests to be picked up on the next poll
+    /**
+     * Enqueue an AcknowledgeRequestState to be picked up on the next poll
+     *
+     * @param retryExpirationTimeMs The timeout for the operation
+     * @param acknowledgementsMap The acknowledgements to commit
+     *
+     * @return The future which completes when the acknowledgements finished
+     */
     public CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitSync(
             final long retryExpirationTimeMs,
             final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
+        final AtomicInteger resultCount = new AtomicInteger();
         final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitSyncFuture = new CompletableFuture<>();
+        final CommitSyncResultHandler resultHandler = new CommitSyncResultHandler(resultCount, commitSyncFuture);
 
         final Cluster cluster = metadata.fetch();
 
@@ -313,6 +321,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         metricsManager.recordAcknowledgementSent(acknowledgements.size());
                         log.debug("Added acknowledge request for partition {} to node {}", tip.topicPartition(), node);
                     }
+                    resultCount.incrementAndGet();
                 }
                 acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
                         ShareConsumeRequestManager.class.getSimpleName(),
@@ -321,7 +330,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         Optional.of(retryExpirationTimeMs),
                         nodeId,
                         acknowledgementsMapForNode,
-                        Optional.of(commitSyncFuture)
+                        Optional.of(resultHandler)
                 ));
             }
         });
@@ -599,21 +608,21 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         private boolean isProcessed = false;
 
         /**
-         * For a synchronous request, this future is completed when it's completed.
+         * For a synchronous request, this handles completing a future when all results are known.
          */
-        private final Optional<CompletableFuture<Map<TopicIdPartition, Acknowledgements>>> future;
+        private final Optional<CommitSyncResultHandler> resultHandler;
 
         AcknowledgeRequestState(LogContext logContext, String owner,
                                 long retryBackoffMs, long retryBackoffMaxMs,
                                 Optional<Long> expirationTimeMs,
                                 int nodeId,
                                 Map<TopicIdPartition, Acknowledgements> acknowledgementsMap,
-                                Optional<CompletableFuture<Map<TopicIdPartition, Acknowledgements>>> future) {
+                                Optional<CommitSyncResultHandler> resultHandler) {
             super(logContext, owner, retryBackoffMs, retryBackoffMaxMs);
             this.expirationTimeMs = expirationTimeMs;
             this.nodeId = nodeId;
             this.acknowledgementsMap = acknowledgementsMap;
-            this.future = future;
+            this.resultHandler = resultHandler;
         }
 
         UnsentRequest buildRequest(ResponseHandler<ClientResponse> successHandler,
@@ -662,6 +671,8 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             Acknowledgements acks = acknowledgementsMap.get(tip);
             if (acks != null) {
                 acks.setAcknowledgeErrorCode(acknowledgeErrorCode);
+                shareFetchBuffer.addCompletedAcknowledgements(Collections.singletonMap(tip, acks));
+                resultHandler.ifPresent(handler -> handler.complete(tip, acks));
             }
         }
 
@@ -671,15 +682,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
         boolean isProcessed() {
             return isProcessed;
-        }
-
-        void complete() {
-            if (future.isPresent()) {
-                CompletableFuture<Map<TopicIdPartition, Acknowledgements>> cf = future.get();
-                if (!cf.isDone()) {
-                    cf.complete(acknowledgementsMap);
-                }
-            }
         }
     }
 
@@ -694,5 +696,29 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
          * Handle the response from the given {@link Node target}
          */
         void handle(Node target, ShareAcknowledgeRequestData request, AcknowledgeRequestState requestState, T response, long currentTimeMs);
+    }
+
+    /**
+     * Manages completing the future for a synchronous acknowledgement commit by counting
+     * down the result as they are known and completing the future at the end.
+     */
+    static class CommitSyncResultHandler {
+        private final Map<TopicIdPartition, Acknowledgements> result;
+        private final AtomicInteger remainingResults;
+        private final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future;
+
+        CommitSyncResultHandler(final AtomicInteger remainingResults,
+                                final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future) {
+            this.result = new HashMap<>();
+            this.remainingResults = remainingResults;
+            this.future = future;
+        }
+
+        void complete(TopicIdPartition partition, Acknowledgements acknowledgements) {
+            result.put(partition, acknowledgements);
+            if (remainingResults.decrementAndGet() == 0) {
+                future.complete(result);
+            }
+        }
     }
 }
