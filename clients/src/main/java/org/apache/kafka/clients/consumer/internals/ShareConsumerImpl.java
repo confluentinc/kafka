@@ -904,11 +904,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     }
 
     /**
-     * Called to progressively move the acknowledgement mode into IMPLICIT if it is not known to be EXPLICIT.
-     * If the acknowledgement mode is IMPLICIT, acknowledges the current batch and puts them into the fetch
-     * buffer for the background thread to pick up.
-     * If the acknowledgement mode is EXPLICIT, puts any ready acknowledgements into the fetch buffer for the
-     * background thread to pick up.
+     * Returns any ready acknowledgements to be sent to the cluster.
      */
     private Map<TopicIdPartition, Acknowledgements> acknowledgementsToSend() {
         if (currentFetch != null) {
