@@ -236,10 +236,9 @@ public class ShareConsumeRequestManagerTest {
         List<ConsumerRecord<byte[], byte[]>> fetchedRecords = partitionRecords.get(tp0);
         assertEquals(1, fetchedRecords.size());
 
-
         Acknowledgements acknowledgements = Acknowledgements.empty();
         acknowledgements.add(1L, AcknowledgeType.ACCEPT);
-        fetcher.shareFetchBuffer.acknowledgementsReadyToSend(Collections.singletonMap(tip0, acknowledgements));
+        fetcher.fetch(Collections.singletonMap(tip0, acknowledgements));
 
         assertEquals(1, sendFetches());
         assertFalse(fetcher.hasCompletedFetches());
@@ -253,11 +252,11 @@ public class ShareConsumeRequestManagerTest {
 
         partitionRecords = fetchRecords();
         assertTrue(partitionRecords.containsKey(tp0));
-        assertEquals(Collections.singletonMap(tip0, acknowledgements), fetcher.shareFetchBuffer.getCompletedAcknowledgements());
+        assertEquals(Collections.singletonMap(tip0, acknowledgements), fetcher.shareFetchBuffer.getCompletedAcknowledgements().get(0));
 
         Acknowledgements acknowledgements2 = Acknowledgements.empty();
         acknowledgements2.add(2L, AcknowledgeType.REJECT);
-        fetcher.shareFetchBuffer.acknowledgementsReadyToSend(Collections.singletonMap(tip0, acknowledgements2));
+        fetcher.fetch(Collections.singletonMap(tip0, acknowledgements2));
 
         assertEquals(1, sendFetches());
         assertFalse(fetcher.hasCompletedFetches());
@@ -274,7 +273,7 @@ public class ShareConsumeRequestManagerTest {
 
         partitionRecords = fetchRecords();
         assertTrue(partitionRecords.isEmpty());
-        assertEquals(Collections.singletonMap(tip0, acknowledgements2), fetcher.shareFetchBuffer.getCompletedAcknowledgements());
+        assertEquals(Collections.singletonMap(tip0, acknowledgements2), fetcher.shareFetchBuffer.getCompletedAcknowledgements().get(0));
     }
 
     @Test
@@ -295,9 +294,8 @@ public class ShareConsumeRequestManagerTest {
         acknowledgements.add(1L, AcknowledgeType.ACCEPT);
         acknowledgements.add(2L, AcknowledgeType.ACCEPT);
         acknowledgements.add(3L, AcknowledgeType.REJECT);
-        fetcher.shareFetchBuffer.acknowledgementsReadyToSend(Collections.singletonMap(tip0, acknowledgements));
 
-        fetcher.commitSync(time.milliseconds() + 2000);
+        fetcher.commitSync(time.milliseconds() + 2000, Collections.singletonMap(tip0, acknowledgements));
 
         assertEquals(1, fetcher.sendAcks());
 
@@ -836,7 +834,7 @@ public class ShareConsumeRequestManagerTest {
         }
 
         private int sendFetches() {
-            fetch();
+            fetch(new HashMap<>());
             NetworkClientDelegate.PollResult pollResult = poll(time.milliseconds());
             networkClientDelegate.addAll(pollResult.unsentRequests);
             return pollResult.unsentRequests.size();

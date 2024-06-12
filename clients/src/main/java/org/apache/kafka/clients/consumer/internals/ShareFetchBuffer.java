@@ -19,13 +19,13 @@ package org.apache.kafka.clients.consumer.internals;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.internals.IdempotentCloser;
-import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Timer;
 import org.slf4j.Logger;
 
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -54,43 +54,22 @@ public class ShareFetchBuffer implements AutoCloseable {
     private final AtomicBoolean wokenUp = new AtomicBoolean(false);
     private ShareCompletedFetch nextInLineFetch;
 
-    // These are the acknowledgements being accumulated to send to the brokers
-    private Map<TopicIdPartition, Acknowledgements> readyAcknowledgements;
-    // These are the acknowledgements that the ShareFetchRequestManager has sent to the brokers
-    private Map<TopicIdPartition, Acknowledgements> pendingAcknowledgements;
-    // These are the acknowledgements that the ShareFetchRequestManager has received responses
-    private Map<TopicIdPartition, Acknowledgements> completeAcknowledgements;
+    // These are the acknowledgements for which the ShareConsumeRequestManager has received responses
+    private List<Map<TopicIdPartition, Acknowledgements>> completeAcknowledgements;
 
     public ShareFetchBuffer(final LogContext logContext) {
         this.log = logContext.logger(ShareFetchBuffer.class);
         this.completedFetches = new ConcurrentLinkedQueue<>();
         this.lock = new ReentrantLock();
         this.notEmptyCondition = lock.newCondition();
-        this.readyAcknowledgements = new HashMap<>();
-        this.pendingAcknowledgements = new HashMap<>();
-        this.completeAcknowledgements = new HashMap<>();
+        this.completeAcknowledgements = new LinkedList<>();
     }
 
-    public void acknowledgementsReadyToSend(Map<TopicIdPartition, Acknowledgements> acknowledgements) {
+    List<Map<TopicIdPartition, Acknowledgements>> getCompletedAcknowledgements() {
         lock.lock();
         try {
-            acknowledgements.forEach((tip, partAcknowledgements) ->  {
-                if (readyAcknowledgements.get(tip) != null) {
-                    readyAcknowledgements.computeIfPresent(tip, (__, ready) -> ready.merge(partAcknowledgements));
-                } else {
-                    readyAcknowledgements.put(tip, partAcknowledgements);
-                }
-            });
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    Map<TopicIdPartition, Acknowledgements> getCompletedAcknowledgements() {
-        lock.lock();
-        try {
-            Map<TopicIdPartition, Acknowledgements> complete = completeAcknowledgements;
-            completeAcknowledgements = new HashMap<>();
+            List<Map<TopicIdPartition, Acknowledgements>> complete = completeAcknowledgements;
+            completeAcknowledgements = new LinkedList<>();
             return complete;
         } finally {
             lock.unlock();
@@ -98,59 +77,14 @@ public class ShareFetchBuffer implements AutoCloseable {
     }
 
     /**
-     * Gets the ready acknowledgements for a topic-partition, so they can be sent to the broker.
-     * Moves the acknowledgements into the pending map awaiting responses.
+     * Add a completed acknowledgements map to the list to be picked up by the consumer.
      *
-     * @param partition the topic-partition
-     * @return the acknowledgements for the topic-partition to send to the leader
+     * @param acknowledgementsMap Map of completed acknowledgements
      */
-    public Acknowledgements getAcknowledgementsToSend(TopicIdPartition partition) {
+    public void addCompletedAcknowledgements(Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         lock.lock();
         try {
-            Acknowledgements acknowledgements = readyAcknowledgements.remove(partition);
-            if (acknowledgements != null) {
-                pendingAcknowledgements.put(partition, acknowledgements);
-            }
-            return acknowledgements;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     *
-     */
-    public void handleAcknowledgementResponses(TopicIdPartition partition, Errors acknowledgeErrorCode) {
-        lock.lock();
-        try {
-            Acknowledgements pending = pendingAcknowledgements.remove(partition);
-            if (pending != null) {
-                pending.setAcknowledgeErrorCode(acknowledgeErrorCode);
-                Acknowledgements complete = completeAcknowledgements.get(partition);
-                if (complete != null) {
-                    complete.merge(pending);
-                } else {
-                    completeAcknowledgements.put(partition, pending);
-                }
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Returns the number of acknowledgements which have been sent
-     * to the broker and are still in pending state.
-     */
-    public int getPendingAcknowledgementsCount(TopicIdPartition partition) {
-        lock.lock();
-        try {
-            Acknowledgements pending = pendingAcknowledgements.get(partition);
-            if (pending != null) {
-                return pending.size();
-            } else {
-                return 0;
-            }
+            completeAcknowledgements.add(acknowledgementsMap);
         } finally {
             lock.unlock();
         }

@@ -16,9 +16,21 @@
  */
 package org.apache.kafka.clients.consumer.internals.events;
 
+import org.apache.kafka.clients.consumer.internals.Acknowledgements;
+import org.apache.kafka.common.TopicIdPartition;
+
+import java.util.Map;
+
 public class ShareFetchEvent extends ApplicationEvent {
 
-    public ShareFetchEvent() {
+    private Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
+
+    public ShareFetchEvent(Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         super(Type.SHARE_FETCH);
+        this.acknowledgementsMap = acknowledgementsMap;
+    }
+
+    public Map<TopicIdPartition, Acknowledgements> acknowledgementsMap() {
+        return acknowledgementsMap;
     }
 }

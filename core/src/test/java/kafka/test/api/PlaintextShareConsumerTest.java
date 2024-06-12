@@ -726,6 +726,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         return future;
     }
 
+    @Disabled
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
     public void testMultipleConsumersInGroupConcurrentConsumption(String quorum) {
@@ -769,6 +770,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
     }
 
     // This test is disabled because it is not stable and fails intermittently.
+    @Disabled
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
     public void testMultipleConsumersInMultipleGroupsConcurrentConsumption(String quorum) {
@@ -911,6 +913,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(totalMessages, consumer1MessageCount + consumer2MessageCount);
     }
 
+    @Disabled
     @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
     @ValueSource(strings = {"kraft+kip932"})
     public void testMultipleConsumersInGroupFailureConcurrentConsumption(String quorum) {

@@ -527,7 +527,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             handleCompletedAcknowledgements();
 
             // If using implicit acknowledgement, acknowledge the previously fetched records
-            maybeSendAcknowledgements();
+            prepareToSendAcknowledgements(true);
 
             kafkaShareConsumerMetrics.recordPollStart(timer.currentTimeMs());
 
@@ -594,7 +594,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         final ShareFetch<K, V> fetch = fetchCollector.collect(fetchBuffer);
         if (fetch.isEmpty()) {
             // Make sure the network thread can tell the application is actively polling
-            applicationEventHandler.add(new ShareFetchEvent());
+            applicationEventHandler.add(new ShareFetchEvent(acknowledgementsToSend()));
 
             // Notify the network thread to wake up and start the next round of fetching
             applicationEventHandler.wakeupNetworkThread();
@@ -648,33 +648,38 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             handleCompletedAcknowledgements();
 
             // Acknowledge the previously fetched records
-            sendAcknowledgements();
+            prepareToSendAcknowledgements(false);
 
             Timer requestTimer = time.timer(timeout.toMillis());
-            SyncShareAcknowledgeEvent event = new SyncShareAcknowledgeEvent(requestTimer);
-            applicationEventHandler.add(event);
-            CompletableFuture<Void> commitFuture = event.future();
-            wakeupTrigger.setActiveTask(commitFuture);
-            try {
-                Map<TopicIdPartition, Optional<KafkaException>> result = new HashMap<>();
-                ConsumerUtils.getResult(commitFuture, requestTimer);
-                Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
-                completedAcknowledgements.forEach((tip, acks) -> {
-                    Errors ackErrorCode = acks.getAcknowledgeErrorCode();
-                    if (ackErrorCode == null) {
-                        result.put(tip, null);
-                    } else {
-                        ApiException exception = ackErrorCode.exception();
-                        if (exception == null) {
+            Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = acknowledgementsToSend();
+            if (acknowledgementsMap.isEmpty()) {
+                return Collections.emptyMap();
+            } else {
+                SyncShareAcknowledgeEvent event = new SyncShareAcknowledgeEvent(requestTimer, acknowledgementsMap);
+                applicationEventHandler.add(event);
+                CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitFuture = event.future();
+                wakeupTrigger.setActiveTask(commitFuture);
+                try {
+                    Map<TopicIdPartition, Optional<KafkaException>> result = new HashMap<>();
+                    Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = ConsumerUtils.getResult(commitFuture, requestTimer);
+                    completedAcknowledgements.forEach((tip, acks) -> {
+                        Errors ackErrorCode = acks.getAcknowledgeErrorCode();
+                        if (ackErrorCode == null) {
                             result.put(tip, null);
                         } else {
-                            result.put(tip, Optional.of(ackErrorCode.exception()));
+                            ApiException exception = ackErrorCode.exception();
+                            if (exception == null) {
+                                result.put(tip, null);
+                            } else {
+                                result.put(tip, Optional.of(ackErrorCode.exception()));
+                            }
                         }
-                    }
-                });
-                return result;
-            } finally {
-                wakeupTrigger.clearTask();
+                    });
+                    return result;
+
+                } finally {
+                    wakeupTrigger.clearTask();
+                }
             }
         } finally {
             release();
@@ -794,8 +799,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     void prepareShutdown(final Timer timer, final AtomicReference<Throwable> firstException) {
         completeQuietly(
             () -> {
-                maybeSendAcknowledgementsOnClose();
-                applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(timer), timer);
+                applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(timer, acknowledgementsToSend()), timer);
             },
             "Failed to send leaveGroup heartbeat with a timeout(ms)=" + timer.timeoutMs(), firstException);
     }
@@ -869,7 +873,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      */
     private void handleCompletedAcknowledgements() {
         if (fetchBuffer != null) {
-            Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
+            List<Map<TopicIdPartition, Acknowledgements>> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
             if (!completedAcknowledgements.isEmpty() && acknowledgementCommitCallbackHandler != null) {
                 acknowledgementCommitCallbackHandler.onComplete(completedAcknowledgements);
             }
@@ -878,62 +882,37 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
 
     /**
      * Called to progressively move the acknowledgement mode into IMPLICIT if it is not known to be EXPLICIT.
-     * If the acknowledgement mode is IMPLICIT, acknowledges the current batch and puts them into the fetch
-     * buffer for the background thread to pick up.
-     * If the acknowledgement mode is EXPLICIT, puts any ready acknowledgements into the fetch buffer for the
-     * background thread to pick up.
+     * If the acknowledgement mode is IMPLICIT, acknowledges the current batch.
      */
-    private void maybeSendAcknowledgements() {
-        if (acknowledgementMode == AcknowledgementMode.UNKNOWN) {
-            // The first call to poll(Duration) moves into PENDING
-            acknowledgementMode = AcknowledgementMode.PENDING;
-        } else if (acknowledgementMode == AcknowledgementMode.PENDING) {
-            // The second call to poll(Duration) if PENDING moves into IMPLICIT
-            acknowledgementMode = AcknowledgementMode.IMPLICIT;
+    private void prepareToSendAcknowledgements(boolean calledOnPoll) {
+        if (calledOnPoll) {
+            if (acknowledgementMode == AcknowledgementMode.UNKNOWN) {
+                // The first call to poll(Duration) moves into PENDING
+                acknowledgementMode = AcknowledgementMode.PENDING;
+            } else if (acknowledgementMode == AcknowledgementMode.PENDING) {
+                // The second call to poll(Duration) if PENDING moves into IMPLICIT
+                acknowledgementMode = AcknowledgementMode.IMPLICIT;
+            }
         }
 
         if (currentFetch != null) {
             // If IMPLICIT, acknowledge all records and send
             if (acknowledgementMode == AcknowledgementMode.IMPLICIT) {
                 currentFetch.acknowledgeAll(AcknowledgeType.ACCEPT);
-                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
-            } else if (acknowledgementMode == AcknowledgementMode.EXPLICIT) {
-                // If EXPLICIT, send any acknowledgements which are ready
-                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
             }
-
-            currentFetch = null;
         }
     }
 
     /**
-     * If the acknowledgement mode is IMPLICIT, acknowledges the current batch and puts them into the fetch
-     * buffer for the background thread to pick up.
-     * If the acknowledgement mode is EXPLICIT, puts any ready acknowledgements into the fetch buffer for the
-     * background thread to pick up.
+     * Returns any ready acknowledgements to be sent to the cluster.
      */
-    private void sendAcknowledgements() {
+    private Map<TopicIdPartition, Acknowledgements> acknowledgementsToSend() {
         if (currentFetch != null) {
-            // If IMPLICIT, acknowledge all records and send
-            if ((acknowledgementMode == AcknowledgementMode.PENDING) ||
-                    (acknowledgementMode == AcknowledgementMode.IMPLICIT)) {
-                currentFetch.acknowledgeAll(AcknowledgeType.ACCEPT);
-                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
-            } else if (acknowledgementMode == AcknowledgementMode.EXPLICIT) {
-                // If EXPLICIT, send any acknowledgements which are ready
-                fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
-            }
-
+            Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = currentFetch.acknowledgementsByPartition();
             currentFetch = null;
-        }
-    }
-
-    /**
-     * Called to send any outstanding acknowledgements during close.
-     */
-    private void maybeSendAcknowledgementsOnClose() {
-        if (currentFetch != null) {
-            fetchBuffer.acknowledgementsReadyToSend(currentFetch.acknowledgementsByPartition());
+            return acknowledgementsMap;
+        } else {
+            return Collections.emptyMap();
         }
     }
 
