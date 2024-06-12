@@ -62,6 +62,7 @@ public class PersisterStateManager {
   private final ShareCoordinatorMetadataCacheHelper cacheHelper;
   public static final long REQUEST_BACKOFF_MS = 1_000L;
   public static final long REQUEST_BACKOFF_MAX_MS = 30_000L;
+  private static final int MAX_FIND_COORD_ATTEMPTS = 5;
   private final Time time;
 
 
@@ -107,10 +108,17 @@ public class PersisterStateManager {
     protected final int partition;
     private final ExponentialBackoff findCoordbackoff;
     private int findCoordattempts = 0;
-    private static final int MAX_FIND_COORD_ATTEMPTS = 5;
+    private final int maxFindCoordAttempts;
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
-    public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition, long backoffMs, long backoffMaxMs) {
+    public PersisterStateManagerHandler(
+        String groupId,
+        Uuid topicId,
+        int partition,
+        long backoffMs,
+        long backoffMaxMs,
+        int maxFindCoordAttempts
+    ) {
       this.groupId = groupId;
       this.topicId = topicId;
       this.partition = partition;
@@ -119,6 +127,7 @@ public class PersisterStateManager {
           CommonClientConfigs.RETRY_BACKOFF_EXP_BASE,
           backoffMaxMs,
           CommonClientConfigs.RETRY_BACKOFF_JITTER);
+      this.maxFindCoordAttempts = maxFindCoordAttempts;
     }
 
     /**
@@ -241,6 +250,8 @@ public class PersisterStateManager {
      */
     protected void handleFindCoordinatorResponse(ClientResponse response) {
       log.info("Find coordinator response received.");
+      // Incrementing the number of find coordinator attempts
+      findCoordattempts++;
       List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
       if (coordinators.size() != 1) {
         log.error("Find coordinator response for {} is invalid", coordinatorKey());
@@ -263,14 +274,14 @@ public class PersisterStateManager {
         case COORDINATOR_NOT_AVAILABLE: // retryable error codes
         case COORDINATOR_LOAD_IN_PROGRESS:
           log.warn("Received retryable error in find coordinator {}", error.message());
-          if (findCoordattempts >= MAX_FIND_COORD_ATTEMPTS) {
+          if (findCoordattempts >= this.maxFindCoordAttempts) {
             log.error("Exhausted max retries to find coordinator without success.");
             findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
             break;
           }
           log.info("Waiting before retrying find coordinator RPC.");
           try {
-            TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(++findCoordattempts));
+            TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(findCoordattempts));
           } catch (InterruptedException e) {
             log.warn("Interrupted waiting before retrying find coordinator request", e);
           }
@@ -283,6 +294,11 @@ public class PersisterStateManager {
           findCoordinatorErrorResponse(error, null);
       }
     }
+
+    // Visible for testing
+    public Node getCoordinatorNode() {
+      return coordinatorNode;
+    }
   }
 
   public class WriteStateHandler extends PersisterStateManagerHandler {
@@ -292,8 +308,20 @@ public class PersisterStateManager {
     private final List<PersisterStateBatch> batches;
     private final CompletableFuture<WriteShareGroupStateResponse> result;
 
-    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result, long backoffMs, long backoffMaxMs) {
-      super(groupId, topicId, partition, backoffMs, backoffMaxMs);
+    public WriteStateHandler(
+        String groupId,
+        Uuid topicId,
+        int partition,
+        int stateEpoch,
+        int leaderEpoch,
+        long startOffset,
+        List<PersisterStateBatch> batches,
+        CompletableFuture<WriteShareGroupStateResponse> result,
+        long backoffMs,
+        long backoffMaxMs,
+        int maxFindCoordAttempts
+        ) {
+      super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxFindCoordAttempts);
       this.stateEpoch = stateEpoch;
       this.leaderEpoch = leaderEpoch;
       this.startOffset = startOffset;
@@ -301,8 +329,29 @@ public class PersisterStateManager {
       this.result = result;
     }
 
-    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result) {
-      this(groupId, topicId, partition, stateEpoch, leaderEpoch, startOffset, batches, result, REQUEST_BACKOFF_MS, REQUEST_BACKOFF_MAX_MS);
+    public WriteStateHandler(
+        String groupId,
+        Uuid topicId,
+        int partition,
+        int stateEpoch,
+        int leaderEpoch,
+        long startOffset,
+        List<PersisterStateBatch> batches,
+        CompletableFuture<WriteShareGroupStateResponse> result
+    ) {
+      this(
+          groupId,
+          topicId,
+          partition,
+          stateEpoch,
+          leaderEpoch,
+          startOffset,
+          batches,
+          result,
+          REQUEST_BACKOFF_MS,
+          REQUEST_BACKOFF_MAX_MS,
+          MAX_FIND_COORD_ATTEMPTS
+      );
     }
 
     @Override
@@ -348,6 +397,11 @@ public class PersisterStateManager {
           WriteShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
               (exception == null ? error.message() : exception.getMessage()))));
     }
+
+    // Visible for testing
+    public CompletableFuture<WriteShareGroupStateResponse> getResult() {
+      return result;
+    }
   }
 
   public class ReadStateHandler extends PersisterStateManagerHandler {
@@ -355,15 +409,39 @@ public class PersisterStateManager {
     private final String coordinatorKey;
     private final CompletableFuture<ReadShareGroupStateResponse> result;
 
-    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result, long backoffMs, long backoffMaxMs) {
-      super(groupId, topicId, partition, backoffMs, backoffMaxMs);
+    public ReadStateHandler(
+        String groupId,
+        Uuid topicId,
+        int partition,
+        int leaderEpoch,
+        CompletableFuture<ReadShareGroupStateResponse> result,
+        long backoffMs,
+        long backoffMaxMs,
+        int maxFindCoordAttempts
+    ) {
+      super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxFindCoordAttempts);
       this.leaderEpoch = leaderEpoch;
       this.coordinatorKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
       this.result = result;
     }
 
-    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result) {
-      this(groupId, topicId, partition, leaderEpoch, result, REQUEST_BACKOFF_MS, REQUEST_BACKOFF_MAX_MS);
+    public ReadStateHandler(
+        String groupId,
+        Uuid topicId,
+        int partition,
+        int leaderEpoch,
+        CompletableFuture<ReadShareGroupStateResponse> result
+    ) {
+      this(
+          groupId,
+          topicId,
+          partition,
+          leaderEpoch,
+          result,
+          REQUEST_BACKOFF_MS,
+          REQUEST_BACKOFF_MAX_MS,
+          MAX_FIND_COORD_ATTEMPTS
+      );
     }
 
     @Override
@@ -390,7 +468,7 @@ public class PersisterStateManager {
     }
 
     @Override
-    protected void handleRequestResponse(ClientResponse response) {
+protected void handleRequestResponse(ClientResponse response) {
       log.info("Read state response received. - {}", response);
       ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
       String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
@@ -424,6 +502,11 @@ public class PersisterStateManager {
       this.result.complete(new ReadShareGroupStateResponse(
           ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
               (exception == null ? error.message() : exception.getMessage()))));
+    }
+
+    // Visible for testing
+    public CompletableFuture<ReadShareGroupStateResponse> getResult() {
+      return result;
     }
   }
 
