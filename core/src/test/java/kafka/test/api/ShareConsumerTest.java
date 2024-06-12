@@ -16,10 +16,12 @@
  */
 package kafka.test.api;
 
-import kafka.api.AbstractShareConsumerTest;
 import kafka.api.BaseConsumerTest;
+import kafka.testkit.KafkaClusterTestKit;
+import kafka.testkit.TestKitNodes;
 import kafka.utils.TestUtils;
 import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.admin.RecordsToDelete;
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.AcknowledgementCommitCallback;
@@ -44,26 +46,26 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import scala.collection.mutable.ArrayBuffer;
-import scala.jdk.javaapi.CollectionConverters;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -71,6 +73,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.apache.kafka.test.TestUtils.DEFAULT_MAX_WAIT_MS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -78,26 +81,55 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 @Timeout(600)
-public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
-    public static final String TEST_WITH_PARAMETERIZED_QUORUM_NAME = "{displayName}.quorum={argumentsWithNames}";
+@Tag("integration")
+public class ShareConsumerTest {
+    private KafkaClusterTestKit cluster;
+    private final TopicPartition tp = new TopicPartition("topic", 0);
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testPollNoSubscribeFails(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+    @BeforeEach
+    public void createCluster() throws Exception {
+        cluster = new KafkaClusterTestKit.Builder(
+                new TestKitNodes.Builder()
+                        .setNumBrokerNodes(1)
+                        .setNumControllerNodes(1)
+                        .build())
+                .setConfigProp("auto.create.topics.enable", "false")
+                .setConfigProp("group.coordinator.rebalance.protocols", "classic,consumer,share")
+                .setConfigProp("group.share.enable", "true")
+                .setConfigProp("group.share.partition.max.record.locks", "10000")
+                .setConfigProp("group.share.record.lock.duration.ms", "10000")
+                .setConfigProp("offsets.topic.replication.factor", "1")
+                .setConfigProp("share.coordinator.state.topic.min.isr", "1")
+                .setConfigProp("share.coordinator.state.topic.replication.factor", "1")
+                .setConfigProp("transaction.state.log.min.isr", "1")
+                .setConfigProp("transaction.state.log.replication.factor", "1")
+                .setConfigProp("unstable.api.versions.enable", "true")
+                .build();
+        cluster.format();
+        cluster.startup();
+        cluster.waitForActiveController();
+        cluster.waitForReadyBrokers();
+        createTopic("topic");
+    }
+
+    @AfterEach
+    public void destroyCluster() throws Exception {
+        cluster.close();
+    }
+
+    @Test
+    public void testPollNoSubscribeFails() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         assertEquals(Collections.emptySet(), shareConsumer.subscription());
         // "Consumer is not subscribed to any topics."
         assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscribeAndPollNoRecords(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        Set<String> subscription = Collections.singleton(tp().topic());
+    @Test
+    public void testSubscribeAndPollNoRecords() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
@@ -105,12 +137,10 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(0, records.count());
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscribePollUnsubscribe(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        Set<String> subscription = Collections.singleton(tp().topic());
+    @Test
+    public void testSubscribePollUnsubscribe() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
@@ -120,12 +150,10 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(0, records.count());
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscribePollSubscribe(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        Set<String> subscription = Collections.singleton(tp().topic());
+    @Test
+    public void testSubscribePollSubscribe() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
@@ -137,12 +165,10 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(0, records.count());
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscribeUnsubscribePollFails(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        Set<String> subscription = Collections.singleton(tp().topic());
+    @Test
+    public void testSubscribeUnsubscribePollFails() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
@@ -154,12 +180,10 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(0, records.count());
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscribeSubscribeEmptyPollFails(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        Set<String> subscription = Collections.singleton(tp().topic());
+    @Test
+    public void testSubscribeSubscribeEmptyPollFails() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
@@ -171,29 +195,26 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(0, records.count());
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscriptionAndPoll(String quorum) {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testSubscriptionAndPoll() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         shareConsumer.close();
+        producer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscriptionAndPollMultiple(String quorum) {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testSubscriptionAndPollMultiple() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         producer.send(record);
@@ -205,42 +226,38 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testAcknowledgementCommitCallbackSuccessfulAcknowledgement(String quorum) throws Exception {
+    @Test
+    public void testAcknowledgementCommitCallbackSuccessfulAcknowledgement() {
         Map<TopicPartition, Exception> partitionExceptionMap = new HashMap<>();
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap));
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgment error code after the second poll.
-        // When we start the 3rd poll, the acknowledgment commit callback is invoked
+        // When we start the 3rd poll, the acknowledgment commit callback is invoked.
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.poll(Duration.ofMillis(2000));
         // We expect null exception as the acknowledgment error code is null.
-        assertTrue(partitionExceptionMap.containsKey(tp()));
-        assertNull(partitionExceptionMap.get(tp()));
+        assertTrue(partitionExceptionMap.containsKey(tp));
+        assertNull(partitionExceptionMap.get(tp));
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testAcknowledgementCommitCallbackOnClose(String quorum) throws Exception {
+    @Test
+    public void testAcknowledgementCommitCallbackOnClose() {
         Map<TopicPartition, Exception> partitionExceptionMap = new HashMap<>();
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap));
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
@@ -250,21 +267,19 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.close();
         // We expect null exception as the acknowledgment error code is null.
-        assertTrue(partitionExceptionMap.containsKey(tp()));
-        assertNull(partitionExceptionMap.get(tp()));
+        assertTrue(partitionExceptionMap.containsKey(tp));
+        assertNull(partitionExceptionMap.get(tp));
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testAcknowledgementCommitCallbackInvalidRecordException(String quorum) throws Exception {
+    @Test
+    public void testAcknowledgementCommitCallbackInvalidRecordException() throws Exception {
         Map<TopicPartition, Exception> partitionExceptionMap = new HashMap<>();
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap));
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
@@ -277,11 +292,11 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.poll(Duration.ofMillis(2000));
         // As we tried to acknowledge a record after acquisition lock expired,
         // we wil get an InvalidRecordStateException.
-        assertTrue(partitionExceptionMap.get(tp()) instanceof InvalidRecordStateException);
+        assertInstanceOf(InvalidRecordStateException.class, partitionExceptionMap.get(tp));
         shareConsumer.close();
     }
 
-    private class TestableAcknowledgeCommitCallback implements AcknowledgementCommitCallback {
+    private static class TestableAcknowledgeCommitCallback implements AcknowledgementCommitCallback {
         private final Map<TopicPartition, Exception> partitionExceptionMap;
 
         public TestableAcknowledgeCommitCallback(Map<TopicPartition, Exception> partitionExceptionMap) {
@@ -294,27 +309,21 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testHeaders(String quorum) {
+    @Test
+    public void testHeaders() {
         int numRecords = 1;
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
         record.headers().add("headerKey", "headerValue".getBytes());
-
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
 
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        ArrayBuffer<ConsumerRecord<byte[], byte[]>> records = consumeRecords(shareConsumer, numRecords, Integer.MAX_VALUE);
-
+        List<ConsumerRecord<byte[], byte[]>> records = consumeRecords(shareConsumer, numRecords);
         assertEquals(numRecords, records.size());
 
-        for (Iterator<ConsumerRecord<byte[], byte[]>> iter = CollectionConverters.asJava(records.toIterator()); iter.hasNext();) {
-            ConsumerRecord<byte[], byte[]> consumerRecord = iter.next();
+        for (ConsumerRecord<byte[], byte[]> consumerRecord : records) {
             Header header = consumerRecord.headers().lastHeader("headerKey");
             if (header != null)
                 assertEquals("headerValue", new String(header.value()));
@@ -323,57 +332,64 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
     private void testHeadersSerializeDeserialize(Serializer<byte[]> serializer, Deserializer<byte[]> deserializer) {
         int numRecords = 1;
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
 
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), serializer, new Properties());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), serializer);
         producer.send(record);
 
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), deserializer,
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        ArrayBuffer<ConsumerRecord<byte[], byte[]>> records = consumeRecords(shareConsumer, numRecords, Integer.MAX_VALUE);
-
+        List<ConsumerRecord<byte[], byte[]>> records = consumeRecords(shareConsumer, numRecords);
         assertEquals(numRecords, records.size());
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testHeadersSerializerDeserializer(String quorum) {
+    @Test
+    public void testHeadersSerializerDeserializer() {
         testHeadersSerializeDeserialize(new BaseConsumerTest.SerializerImpl(), new BaseConsumerTest.DeserializerImpl());
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testMaxPollRecords(String quorum) {
+    @Test
+    public void testMaxPollRecords() {
         int maxPollRecords = 2;
         int numRecords = 10000;
 
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         long startingTimestamp = System.currentTimeMillis();
-        sendRecords(producer, numRecords, tp(), startingTimestamp);
+        produceMessagesWithTimestamp(numRecords, startingTimestamp);
 
-        consumerConfig().setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, String.valueOf(maxPollRecords));
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
-        consumeAndVerifyRecords(shareConsumer, numRecords, 0, 0, startingTimestamp,
-                TimestampType.CREATE_TIME, tp(), maxPollRecords);
+                "group1", Collections.singletonMap(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, String.valueOf(maxPollRecords)));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
+        List<ConsumerRecord<byte[], byte[]>> records = consumeRecords(shareConsumer, numRecords);
+        long i = 0L;
+        for (ConsumerRecord<byte[], byte[]> record : records) {
+            assertEquals(tp.topic(), record.topic());
+            assertEquals(tp.partition(), record.partition());
+            assertEquals(TimestampType.CREATE_TIME, record.timestampType());
+            assertEquals(startingTimestamp + i, record.timestamp());
+            assertEquals("key " + i, new String(record.key()));
+            assertEquals("value " + i, new String(record.value()));
+            // this is true only because K and V are byte arrays
+            assertEquals(("key " + i).length(), record.serializedKeySize());
+            assertEquals(("value " + i).length(), record.serializedValueSize());
+
+            i++;
+        }
+        shareConsumer.close();
+        producer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testControlRecordsSkipped(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
+    @Test
+    public void testControlRecordsSkipped() throws Exception {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
 
-        Properties transactionProducerProps = new Properties();
-        transactionProducerProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "T1");
-        KafkaProducer<byte[], byte[]> transactionalProducer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), transactionProducerProps);
+        KafkaProducer<byte[], byte[]> transactionalProducer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), "T1");
         transactionalProducer.initTransactions();
         transactionalProducer.beginTransaction();
         RecordMetadata transactional1 = transactionalProducer.send(record).get();
 
-        KafkaProducer<byte[], byte[]> nonTransactionalProducer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        KafkaProducer<byte[], byte[]> nonTransactionalProducer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         RecordMetadata nonTransactional1 = nonTransactionalProducer.send(record).get();
 
         transactionalProducer.commitTransaction();
@@ -387,15 +403,14 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         transactionalProducer.close();
         nonTransactionalProducer.close();
 
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(4, records.count());
-        assertEquals(transactional1.offset(), records.records(tp()).get(0).offset());
-        assertEquals(nonTransactional1.offset(), records.records(tp()).get(1).offset());
-        assertEquals(transactional2.offset(), records.records(tp()).get(2).offset());
-        assertEquals(nonTransactional2.offset(), records.records(tp()).get(3).offset());
+        assertEquals(transactional1.offset(), records.records(tp).get(0).offset());
+        assertEquals(nonTransactional1.offset(), records.records(tp).get(1).offset());
+        assertEquals(transactional2.offset(), records.records(tp).get(2).offset());
+        assertEquals(nonTransactional2.offset(), records.records(tp).get(3).offset());
 
         // There will be control records on the topic-partition, so the offsets of the non-control records
         // are not 0, 1, 2, 3. Just assert that the offset of the final one is not 3.
@@ -406,36 +421,32 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testExplicitAcknowledgeSuccess(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testExplicitAcknowledgeSuccess() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
-        records.forEach(consumedRecord -> shareConsumer.acknowledge(consumedRecord));
+        records.forEach(shareConsumer::acknowledge);
         producer.send(record);
         records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testExplicitAcknowledgeCommitSuccess(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testExplicitAcknowledgeCommitSuccess() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
-        records.forEach(consumedRecord -> shareConsumer.acknowledge(consumedRecord));
+        records.forEach(shareConsumer::acknowledge);
         producer.send(record);
         Map<TopicIdPartition, Optional<KafkaException>> result = shareConsumer.commitSync();
         assertEquals(1, result.size());
@@ -444,15 +455,13 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testExplicitAcknowledgeReleasePollAccept(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testExplicitAcknowledgeReleasePollAccept() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         records.forEach(consumedRecord -> shareConsumer.acknowledge(consumedRecord, AcknowledgeType.RELEASE));
@@ -464,15 +473,13 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testExplicitAcknowledgeReleaseAccept(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testExplicitAcknowledgeReleaseAccept() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         records.forEach(consumedRecord -> shareConsumer.acknowledge(consumedRecord, AcknowledgeType.RELEASE));
@@ -482,15 +489,13 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testExplicitAcknowledgeReleaseClose(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testExplicitAcknowledgeReleaseClose() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         records.forEach(consumedRecord -> shareConsumer.acknowledge(consumedRecord, AcknowledgeType.RELEASE));
@@ -498,18 +503,16 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
     }
 
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testExplicitAcknowledgeThrowsNotInBatch(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testExplicitAcknowledgeThrowsNotInBatch() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
-        ConsumerRecord<byte[], byte[]> consumedRecord = records.records(tp()).get(0);
+        ConsumerRecord<byte[], byte[]> consumedRecord = records.records(tp).get(0);
         shareConsumer.acknowledge(consumedRecord);
         records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
@@ -517,33 +520,29 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testImplicitAcknowledgeFailsExplicit(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testImplicitAcknowledgeFailsExplicit() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
-        ConsumerRecord<byte[], byte[]> consumedRecord = records.records(tp()).get(0);
+        ConsumerRecord<byte[], byte[]> consumedRecord = records.records(tp).get(0);
         records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
         assertThrows(IllegalStateException.class, () -> shareConsumer.acknowledge(consumedRecord));
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testImplicitAcknowledgeCommitSync(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testImplicitAcknowledgeCommitSync() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         Map<TopicIdPartition, Optional<KafkaException>> result = shareConsumer.commitSync();
@@ -555,41 +554,33 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testFetchRecordLargerThanMaxPartitionFetchBytes(String quorum) throws Exception {
+    @Test
+    public void testFetchRecordLargerThanMaxPartitionFetchBytes() throws Exception {
         int maxPartitionFetchBytes = 10000;
-        ProducerRecord<byte[], byte[]> smallRecord = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        ProducerRecord<byte[], byte[]> bigRecord = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), new byte[maxPartitionFetchBytes]);
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+        ProducerRecord<byte[], byte[]> smallRecord = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> bigRecord = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), new byte[maxPartitionFetchBytes]);
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(smallRecord).get();
-        RecordMetadata rm = producer.send(bigRecord).get();
+        producer.send(bigRecord).get();
 
-        consumerConfig().setProperty(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, String.valueOf(maxPartitionFetchBytes));
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+                "group1", Collections.singletonMap(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, String.valueOf(maxPartitionFetchBytes)));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersWithDifferentGroupIds(String quorum) {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        Properties props1 = new Properties();
-        props1.put(ConsumerConfig.GROUP_ID_CONFIG, "group1");
-        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props1, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer1.subscribe(Collections.singleton(tp().topic()));
+    @Test
+    public void testMultipleConsumersWithDifferentGroupIds() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
 
-        Properties props2 = new Properties();
-        props2.put(ConsumerConfig.GROUP_ID_CONFIG, "group2");
-        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props2, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer2.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer1.subscribe(Collections.singleton(tp.topic()));
+
+        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group2");
+        shareConsumer2.subscribe(Collections.singleton(tp.topic()));
 
         // producing 3 records to the topic
         producer.send(record);
@@ -629,19 +620,14 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer2.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersInGroupSequentialConsumption(String quorum) {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        Properties props = new Properties();
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group1");
-        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer1.subscribe(Collections.singleton(tp().topic()));
-        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer2.subscribe(Collections.singleton(tp().topic()));
+    @Test
+    public void testMultipleConsumersInGroupSequentialConsumption() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer1.subscribe(Collections.singleton(tp.topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer2.subscribe(Collections.singleton(tp.topic()));
 
         int totalMessages = 2000;
         for (int i = 0; i < totalMessages; i++) {
@@ -658,90 +644,30 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
             consumer1MessageCount += records1.count();
             ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(2000));
             consumer2MessageCount += records2.count();
-            if (records1.count() + records2.count() == 0) break;
+            if (records1.count() + records2.count() == 0)
+                break;
             retries++;
         }
 
         assertEquals(totalMessages, consumer1MessageCount + consumer2MessageCount);
         shareConsumer1.close();
         shareConsumer2.close();
+        producer.close();
     }
 
-    private CompletableFuture<Integer> produceMessages(int messageCount) {
-        CompletableFuture<Integer> future = new CompletableFuture<>();
-        Future<?>[] recordFutures = new Future<?>[messageCount];
-        int messagesSent = 0;
-        try (KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties())) {
-            ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-            for (int i = 0; i < messageCount; i++) {
-                recordFutures[i] = producer.send(record);
-            }
-            for (int i = 0; i < messageCount; i++) {
-                try {
-                    recordFutures[i].get();
-                    messagesSent++;
-                } catch (Exception e) {
-                    fail("Failed to send record: " + e);
-                }
-            }
-        } finally {
-            future.complete(messagesSent);
-        }
-        return future;
-    }
-
-    private CompletableFuture<Integer> consumeMessages(AtomicInteger totalMessagesConsumed, int totalMessages, String groupId, int consumerNumber, int maxPolls) {
-        CompletableFuture<Integer> future = new CompletableFuture<>();
-        Properties props = new Properties();
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
-        int messagesConsumed = 0;
-        int retries = 0;
-        try {
-            if (totalMessages > 0) {
-                while (totalMessagesConsumed.get() < totalMessages && retries < maxPolls) {
-                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
-                    messagesConsumed += records.count();
-                    totalMessagesConsumed.addAndGet(records.count());
-                    retries++;
-                }
-            } else {
-                while (retries < maxPolls) {
-                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
-                    messagesConsumed += records.count();
-                    totalMessagesConsumed.addAndGet(records.count());
-                    retries++;
-                }
-            }
-            // One final poll to complete acknowledgement of the records (will be commit once we have that)
-            shareConsumer.poll(Duration.ofMillis(2000));
-        } catch (Exception e) {
-            fail("Consumer " + consumerNumber + " failed with exception: " + e);
-        } finally {
-            shareConsumer.close();
-            future.complete(messagesConsumed);
-        }
-        return future;
-    }
-
-    @Disabled
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersInGroupConcurrentConsumption(String quorum) {
+    @Test
+    public void testMultipleConsumersInGroupConcurrentConsumption() {
         AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
 
-        int consumerCount = 5;
-        int producerCount = 5;
+        int consumerCount = 4;
+        int producerCount = 4;
         int messagesPerProducer = 2000;
 
-        ExecutorService consumerExecutorService = Executors.newFixedThreadPool(consumerCount);
         ExecutorService producerExecutorService = Executors.newFixedThreadPool(producerCount);
+        ExecutorService consumerExecutorService = Executors.newFixedThreadPool(consumerCount);
 
         for (int i = 0; i < producerCount; i++) {
-            Runnable task = () -> produceMessages(messagesPerProducer);
-            producerExecutorService.submit(task);
+            producerExecutorService.submit(() -> produceMessages(messagesPerProducer));
         }
 
         ConcurrentLinkedQueue<CompletableFuture<Integer>> futures = new ConcurrentLinkedQueue<>();
@@ -749,15 +675,18 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
             consumerExecutorService.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 30);
+                CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures.add(future);
+                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 30, future);
             });
         }
+
         producerExecutorService.shutdown();
         consumerExecutorService.shutdown();
+
         try {
-            producerExecutorService.awaitTermination(60, TimeUnit.SECONDS); // Wait for all producer threads to complete
-            consumerExecutorService.awaitTermination(60, TimeUnit.SECONDS); // Wait for all consumer threads to complete
+            assertTrue(producerExecutorService.awaitTermination(60, TimeUnit.SECONDS)); // Wait for all producer threads to complete
+            assertTrue(consumerExecutorService.awaitTermination(60, TimeUnit.SECONDS)); // Wait for all consumer threads to complete
             int totalResult = 0;
             for (CompletableFuture<Integer> future : futures) {
                 totalResult += future.get();
@@ -769,18 +698,15 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
     }
 
-    // This test is disabled because it is not stable and fails intermittently.
-    @Disabled
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersInMultipleGroupsConcurrentConsumption(String quorum) {
+    @Test
+    public void testMultipleConsumersInMultipleGroupsConcurrentConsumption() {
         AtomicInteger totalMessagesConsumedGroup1 = new AtomicInteger(0);
         AtomicInteger totalMessagesConsumedGroup2 = new AtomicInteger(0);
         AtomicInteger totalMessagesConsumedGroup3 = new AtomicInteger(0);
 
-        int producerCount = 5;
-        int consumerCount = 5;
-        int messagesPerProducer = 10000;
+        int producerCount = 4;
+        int consumerCount = 4;
+        int messagesPerProducer = 2000;
         final int totalMessagesSent = producerCount * messagesPerProducer;
 
         ExecutorService producerExecutorService = Executors.newFixedThreadPool(producerCount);
@@ -820,16 +746,19 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
             shareGroupExecutorService1.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup1, totalMessagesSent, "group1", consumerNumber, 100);
+                CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures1.add(future);
+                consumeMessages(totalMessagesConsumedGroup1, totalMessagesSent, "group1", consumerNumber, 100, future);
             });
             shareGroupExecutorService2.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup2, totalMessagesSent, "group2", consumerNumber, 100);
+                CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures2.add(future);
+                consumeMessages(totalMessagesConsumedGroup2, totalMessagesSent, "group2", consumerNumber, 100, future);
             });
             shareGroupExecutorService3.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumedGroup3, totalMessagesSent, "group3", consumerNumber, 100);
+                CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures3.add(future);
+                consumeMessages(totalMessagesConsumedGroup3, totalMessagesSent, "group3", consumerNumber, 100, future);
             });
         }
         shareGroupExecutorService1.shutdown();
@@ -866,19 +795,14 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testConsumerCloseInGroupSequential(String quorum) {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        Properties props = new Properties();
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group1");
-        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer1.subscribe(Collections.singleton(tp().topic()));
-        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer2.subscribe(Collections.singleton(tp().topic()));
+    @Test
+    public void testConsumerCloseInGroupSequential() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer1.subscribe(Collections.singleton(tp.topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer2.subscribe(Collections.singleton(tp.topic()));
 
         int totalMessages = 3000;
         for (int i = 0; i < totalMessages; i++) {
@@ -913,23 +837,19 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(totalMessages, consumer1MessageCount + consumer2MessageCount);
     }
 
-    @Disabled
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testMultipleConsumersInGroupFailureConcurrentConsumption(String quorum) {
+    @Test
+    public void testMultipleConsumersInGroupFailureConcurrentConsumption() {
         AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
 
-        int consumerCount = 5;
-        int producerCount = 5;
+        int consumerCount = 4;
+        int producerCount = 4;
         int messagesPerProducer = 2000;
 
         ExecutorService consumerExecutorService = Executors.newFixedThreadPool(consumerCount);
         ExecutorService producerExecutorService = Executors.newFixedThreadPool(producerCount);
 
         for (int i = 0; i < producerCount; i++) {
-            Runnable task = () -> {
-                produceMessages(messagesPerProducer);
-            };
+            Runnable task = () -> produceMessages(messagesPerProducer);
             producerExecutorService.submit(task);
         }
 
@@ -938,13 +858,15 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
 
         consumerExecutorService.submit(() -> {
             // The "failing" consumer polls but immediately closes, which releases the records for the other consumers
-            CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", 0, 0);
+            CompletableFuture<Integer> future = new CompletableFuture<>();
+            consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", 0, 0, future);
             futuresFail.add(future);
         });
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
             consumerExecutorService.submit(() -> {
-                CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 25);
+                CompletableFuture<Integer> future = new CompletableFuture<>();
+                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 25, future);
                 futuresSuccess.add(future);
             });
         }
@@ -968,19 +890,15 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testAcquisitionLockTimeoutOnConsumer(String quorum) throws InterruptedException {
-        ProducerRecord<byte[], byte[]> producerRecord1 = new ProducerRecord<>(tp().topic(), tp().partition(), null,
+    @Test
+    public void testAcquisitionLockTimeoutOnConsumer() throws InterruptedException {
+        ProducerRecord<byte[], byte[]> producerRecord1 = new ProducerRecord<>(tp.topic(), tp.partition(), null,
                 "key_1".getBytes(), "value_1".getBytes());
-        ProducerRecord<byte[], byte[]> producerRecord2 = new ProducerRecord<>(tp().topic(), tp().partition(), null,
+        ProducerRecord<byte[], byte[]> producerRecord2 = new ProducerRecord<>(tp.topic(), tp.partition(), null,
                 "key_2".getBytes(), "value_2".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        Properties props = new Properties();
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group1");
-        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                props, CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer1.subscribe(Collections.singleton(tp().topic()));
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer1.subscribe(Collections.singleton(tp.topic()));
 
         producer.send(producerRecord1);
 
@@ -1020,20 +938,18 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
      * Test to verify that the acknowledgement commit callback cannot invoke methods of KafkaShareConsumer.
      * The exception thrown is verified in {@link TestableAcknowledgeCommitCallbackWithShareConsumer}
      */
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testAcknowledgeCommitCallbackCallsShareConsumerDisallowed(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testAcknowledgeCommitCallbackCallsShareConsumerDisallowed() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
 
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallbackWithShareConsumer<>(shareConsumer));
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(2000));
         // The second poll sends the acknowledgments implicitly.
         shareConsumer.poll(Duration.ofMillis(2000));
         // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
@@ -1053,7 +969,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         public void onComplete(Map<TopicIdPartition, Set<Long>> offsetsMap, Exception exception) {
             // Accessing methods of KafkaShareConsumer should throw an exception.
             assertThrows(IllegalStateException.class, shareConsumer::close);
-            assertThrows(IllegalStateException.class, () -> shareConsumer.subscribe(Collections.singleton(tp().topic())));
+            assertThrows(IllegalStateException.class, () -> shareConsumer.subscribe(Collections.singleton(tp.topic())));
             assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
         }
     }
@@ -1062,20 +978,18 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
      * Test to verify that the acknowledgement commit callback can invoke KafkaShareConsumer.wakeup() and it
      * wakes up the enclosing poll.
      */
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testAcknowledgeCommitCallbackCallsShareConsumerWakeup(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testAcknowledgeCommitCallbackCallsShareConsumerWakeup() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
 
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallbackWakeup<>(shareConsumer));
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(2000));
         // The second poll sends the acknowledgments implicitly.
         shareConsumer.poll(Duration.ofMillis(2000));
         // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
@@ -1084,7 +998,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    private class TestableAcknowledgeCommitCallbackWakeup<K, V> implements AcknowledgementCommitCallback {
+    private static class TestableAcknowledgeCommitCallbackWakeup<K, V> implements AcknowledgementCommitCallback {
         private final KafkaShareConsumer<K, V> shareConsumer;
 
         TestableAcknowledgeCommitCallbackWakeup(KafkaShareConsumer<K, V> shareConsumer) {
@@ -1101,20 +1015,18 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
      * Test to verify that the acknowledgement commit callback can throw an exception, and it is propagated
      * to the caller of poll().
      */
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testAcknowledgeCommitCallbackThrowsException(String quorum) throws Exception {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testAcknowledgeCommitCallbackThrowsException() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
 
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallbackThrows<>());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(2000));
         // The second poll sends the acknowledgments implicitly.
         shareConsumer.poll(Duration.ofMillis(2000));
         // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
@@ -1123,7 +1035,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    private class TestableAcknowledgeCommitCallbackThrows<K, V> implements AcknowledgementCommitCallback {
+    private static class TestableAcknowledgeCommitCallbackThrows<K, V> implements AcknowledgementCommitCallback {
         @Override
         public void onComplete(Map<TopicIdPartition, Set<Long>> offsetsMap, Exception exception) {
             throw new org.apache.kafka.common.errors.OutOfOrderSequenceException("Hello from TestableAcknowledgeCommitCallbackThrows.onComplete");
@@ -1134,12 +1046,10 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
      * Test to verify that calling Thread.interrupt() before KafkaShareConsumer.poll(Duration)
      * causes it to throw InterruptException
      */
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testPollThrowsInterruptExceptionIfInterrupted(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+    @Test
+    public void testPollThrowsInterruptExceptionIfInterrupted() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         // interrupt the thread and call poll
         try {
@@ -1158,11 +1068,9 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
      * Test to verify that InvalidTopicException is thrown if the consumer subscribes
      * to an invalid topic.
      */
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscribeOnInvalidTopicThrowsInvalidTopicException(String quorum) {
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+    @Test
+    public void testSubscribeOnInvalidTopicThrowsInvalidTopicException() {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer.subscribe(Collections.singleton("topic abc"));
 
         // The exception depends upon a metadata response which arrives asynchronously. If the delay is
@@ -1175,15 +1083,13 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
      * Test to ensure that a wakeup when records are buffered doesn't prevent the records
      * being returned on the next poll.
      */
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testWakeupWithFetchedRecordsAvailable(String quorum) {
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), tp().partition(), null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
+    @Test
+    public void testWakeupWithFetchedRecordsAvailable() {
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
-        shareConsumer.subscribe(Collections.singleton(tp().topic()));
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         shareConsumer.wakeup();
         assertThrows(WakeupException.class, () -> shareConsumer.poll(Duration.ZERO));
@@ -1194,16 +1100,15 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testSubscriptionFollowedByTopicCreation(String quorum) {
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+    @Test
+    public void testSubscriptionFollowedByTopicCreation() {
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         String topic = "foo";
         shareConsumer.subscribe(Collections.singleton(topic));
-        // Topic is created post creation of share consumer and subscription.
-        createTopic(topic, 1, 1, new Properties(), listenerName(), new Properties());
+
+        // Topic is created post creation of share consumer and subscription
+        createTopic(topic);
 
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(topic, 0, null, "key".getBytes(), "value".getBytes());
         producer.send(record);
@@ -1222,20 +1127,18 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    @Disabled
-    // This test is under development and disabled while it is still flaky
-    public void testSubscriptionAndPollFollowedByTopicDeletion(String quorum) {
+    @Test
+    public void testSubscriptionAndPollFollowedByTopicDeletion() {
         String topic1 = "bar";
         String topic2 = "baz";
-        createTopic(topic1, 1, 1, new Properties(), listenerName(), new Properties());
-        createTopic(topic2, 1, 1, new Properties(), listenerName(), new Properties());
+        createTopic(topic1);
+        createTopic(topic2);
+
         ProducerRecord<byte[], byte[]> recordTopic1 = new ProducerRecord<>(topic1, 0, null, "key".getBytes(), "value".getBytes());
         ProducerRecord<byte[], byte[]> recordTopic2 = new ProducerRecord<>(topic2, 0, null, "key".getBytes(), "value".getBytes());
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(),
-                new Properties(), CollectionConverters.asScala(Collections.<String>emptyList()).toList());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         // Consumer subscribes to the topics -> bar and baz.
         shareConsumer.subscribe(Arrays.asList(topic1, topic2));
 
@@ -1248,7 +1151,7 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         assertEquals(1, records.count());
 
         // Topic bar is deleted, hence poll should not give any results.
-        deleteTopic(topic1, listenerName());
+        deleteTopic(topic1);
         records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(0, records.count());
 
@@ -1258,17 +1161,17 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
             int recordCount = shareConsumer.poll(Duration.ofMillis(2000)).count();
             return recordCount == 1;
         }, () -> "Failed to consume records for share consumer, metadata sync failed", DEFAULT_MAX_WAIT_MS, 100L);
+
         producer.send(recordTopic2);
         records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
         shareConsumer.close();
     }
 
-    @ParameterizedTest(name = TEST_WITH_PARAMETERIZED_QUORUM_NAME)
-    @ValueSource(strings = {"kraft+kip932"})
-    public void testLsoMovementByRecordsDeletion(String quorum) {
-        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer(), new Properties());
-        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp().topic(), 0, null, "key".getBytes(), "value".getBytes());
+    @Test
+    public void testLsoMovementByRecordsDeletion() {
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), 0, null, "key".getBytes(), "value".getBytes());
 
         // We write 10 records to the topic, so they would be written from offsets 0-9 on the topic.
         try {
@@ -1278,12 +1181,14 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         } catch (Exception e) {
             fail("Failed to send records: " + e);
         }
-        Admin adminClient = createAdminClient(listenerName(), new Properties());
+
+        Admin adminClient = createAdminClient();
         // We delete records before offset 5, so the LSO should move to 5.
-        adminClient.deleteRecords(Collections.singletonMap(tp(), RecordsToDelete.beforeOffset(5L)));
+        adminClient.deleteRecords(Collections.singletonMap(tp, RecordsToDelete.beforeOffset(5L)));
 
         AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
-        CompletableFuture<Integer> future = consumeMessages(totalMessagesConsumed, 5, "group1", 1, 10);
+        CompletableFuture<Integer> future = new CompletableFuture<>();
+        consumeMessages(totalMessagesConsumed, 5, "group1", 1, 10, future);
         // The records returned belong to offsets 5-9.
         assertEquals(5, totalMessagesConsumed.get());
         try {
@@ -1302,10 +1207,11 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
 
         // We delete records before offset 14, so the LSO should move to 14.
-        adminClient.deleteRecords(Collections.singletonMap(tp(), RecordsToDelete.beforeOffset(14L)));
+        adminClient.deleteRecords(Collections.singletonMap(tp, RecordsToDelete.beforeOffset(14L)));
 
         totalMessagesConsumed = new AtomicInteger(0);
-        future = consumeMessages(totalMessagesConsumed, 1, "group1", 1, 10);
+        future = new CompletableFuture<>();
+        consumeMessages(totalMessagesConsumed, 1, "group1", 1, 10, future);
         // The record returned belong to offset 14.
         assertEquals(1, totalMessagesConsumed.get());
         try {
@@ -1315,15 +1221,157 @@ public class PlaintextShareConsumerTest extends AbstractShareConsumerTest {
         }
 
         // We delete records before offset 15, so the LSO should move to 15 and now no records should be returned.
-        adminClient.deleteRecords(Collections.singletonMap(tp(), RecordsToDelete.beforeOffset(15L)));
+        adminClient.deleteRecords(Collections.singletonMap(tp, RecordsToDelete.beforeOffset(15L)));
 
         totalMessagesConsumed = new AtomicInteger(0);
-        future = consumeMessages(totalMessagesConsumed, 0, "group1", 1, 5);
+        future = new CompletableFuture<>();
+        consumeMessages(totalMessagesConsumed, 0, "group1", 1, 5, future);
         assertEquals(0, totalMessagesConsumed.get());
         try {
             assertEquals(0, future.get());
         } catch (Exception e) {
             fail("Exception occurred : " + e.getMessage());
         }
+        adminClient.close();
+    }
+
+    private CompletableFuture<Integer> produceMessages(int messageCount) {
+        CompletableFuture<Integer> future = new CompletableFuture<>();
+        Future<?>[] recordFutures = new Future<?>[messageCount];
+        int messagesSent = 0;
+        try (KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer())) {
+            ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+            for (int i = 0; i < messageCount; i++) {
+                recordFutures[i] = producer.send(record);
+            }
+            for (int i = 0; i < messageCount; i++) {
+                try {
+                    recordFutures[i].get();
+                    messagesSent++;
+                } catch (Exception e) {
+                    fail("Failed to send record: " + e);
+                }
+            }
+        } finally {
+            future.complete(messagesSent);
+        }
+        return future;
+    }
+
+    private void produceMessagesWithTimestamp(int messageCount, long startingTimestamp) {
+        try (KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer())) {
+            for (int i = 0; i < messageCount; i++) {
+                ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), startingTimestamp + i,
+                        ("key " + i).getBytes(), ("value " + i).getBytes());
+                producer.send(record);
+            }
+            producer.flush();
+        }
+    }
+
+    private void consumeMessages(AtomicInteger totalMessagesConsumed,
+                                 int totalMessages,
+                                 String groupId,
+                                 int consumerNumber,
+                                 int maxPolls,
+                                 CompletableFuture<Integer> future) {
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), groupId);
+        shareConsumer.subscribe(Collections.singleton(tp.topic()));
+        int messagesConsumed = 0;
+        int retries = 0;
+        try {
+            if (totalMessages > 0) {
+                while (totalMessagesConsumed.get() < totalMessages && retries < maxPolls) {
+                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+                    messagesConsumed += records.count();
+                    totalMessagesConsumed.addAndGet(records.count());
+                    retries++;
+                }
+            } else {
+                while (retries < maxPolls) {
+                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+                    messagesConsumed += records.count();
+                    totalMessagesConsumed.addAndGet(records.count());
+                    retries++;
+                }
+            }
+            // Complete acknowledgement of the records
+            shareConsumer.commitSync(Duration.ofMillis(2000));
+        } catch (Exception e) {
+            fail("Consumer " + consumerNumber + " failed with exception: " + e);
+        } finally {
+            shareConsumer.close();
+            future.complete(messagesConsumed);
+        }
+    }
+
+    private <K, V> List<ConsumerRecord<K, V>> consumeRecords(KafkaShareConsumer<K, V> consumer,
+                                                             int numRecords) {
+        ArrayList<ConsumerRecord<K, V>> accumulatedRecords = new ArrayList<>();
+        long startTimeMs = System.currentTimeMillis();
+        while (accumulatedRecords.size() < numRecords) {
+            ConsumerRecords<K, V> records = consumer.poll(Duration.ofMillis(100));
+            records.forEach(accumulatedRecords::add);
+            long currentTimeMs = System.currentTimeMillis();
+            if (currentTimeMs - startTimeMs > 60000) {
+                fail("Timed out before consuming expected records.");
+            }
+        }
+        return accumulatedRecords;
+    }
+
+    private void createTopic(String topicName) {
+        Properties props = cluster.clientProperties();
+        try (Admin admin = Admin.create(props)) {
+            admin.createTopics(Collections.singleton(new NewTopic(topicName, 1, (short) 1))).all().get();
+        } catch (Exception e) {
+            fail("Failed to create topic");
+        }
+    }
+
+    private void deleteTopic(String topicName) {
+        Properties props = cluster.clientProperties();
+        try (Admin admin = Admin.create(props)) {
+            admin.deleteTopics(Collections.singleton(topicName)).all().get();
+        } catch (Exception e) {
+            fail("Failed to create topic");
+        }
+    }
+
+    private Admin createAdminClient() {
+        Properties props = cluster.clientProperties();
+        return Admin.create(props);
+    }
+
+    private <K, V> KafkaProducer<K, V> createProducer(Serializer<K> keySerializer,
+                                                      Serializer<V> valueSerializer) {
+        Properties props = cluster.clientProperties();
+        return new KafkaProducer<>(props, keySerializer, valueSerializer);
+    }
+
+    private <K, V> KafkaProducer<K, V> createProducer(Serializer<K> keySerializer,
+                                                      Serializer<V> valueSerializer,
+                                                      String transactionalId) {
+        Properties props = cluster.clientProperties();
+        props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId);
+        return new KafkaProducer<>(props, keySerializer, valueSerializer);
+    }
+
+    private <K, V> KafkaShareConsumer<K, V> createShareConsumer(Deserializer<K> keyDeserializer,
+                                                                Deserializer<V> valueDeserializer,
+                                                                String groupId) {
+        Properties props = cluster.clientProperties();
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        return new KafkaShareConsumer<>(props, keyDeserializer, valueDeserializer);
+    }
+
+    private <K, V> KafkaShareConsumer<K, V> createShareConsumer(Deserializer<K> keyDeserializer,
+                                                                Deserializer<V> valueDeserializer,
+                                                                String groupId,
+                                                                Map<?, ?> additionalProperties) {
+        Properties props = cluster.clientProperties();
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        props.putAll(additionalProperties);
+        return new KafkaShareConsumer<>(props, keyDeserializer, valueDeserializer);
     }
 }

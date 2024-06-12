@@ -518,9 +518,11 @@ public class ShareHeartbeatRequestManager implements RequestManager {
                 sentFields.rackId = shareMembershipManager.rackId();
             }
 
-            // SubscribedTopicNames - only sent if changed since the last heartbeat
+            boolean sendAllFields = shareMembershipManager.state() == MemberState.JOINING;
+
+            // SubscribedTopicNames - only sent when joining or if it has changed since the last heartbeat
             TreeSet<String> subscribedTopicNames = new TreeSet<>(this.subscriptions.subscription());
-            if (!subscribedTopicNames.equals(sentFields.subscribedTopicNames)) {
+            if (sendAllFields || !subscribedTopicNames.equals(sentFields.subscribedTopicNames)) {
                 data.setSubscribedTopicNames(new ArrayList<>(this.subscriptions.subscription()));
                 sentFields.subscribedTopicNames = subscribedTopicNames;
             }
