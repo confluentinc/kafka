@@ -339,6 +339,35 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         return commitSyncFuture;
     }
 
+    public void commitAsync(final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
+        final Cluster cluster = metadata.fetch();
+
+        sessionHandlers.forEach((nodeId, sessionHandler) -> {
+            Node node = cluster.nodeById(nodeId);
+            if (node != null) {
+                Map<TopicIdPartition, Acknowledgements> acknowledgementsMapForNode = new HashMap<>();
+                for (TopicIdPartition tip : sessionHandler.sessionPartitions()) {
+                    Acknowledgements acknowledgements = acknowledgementsMap.get(tip);
+                    if (acknowledgements != null) {
+                        acknowledgementsMapForNode.put(tip, acknowledgements);
+
+                        metricsManager.recordAcknowledgementSent(acknowledgements.size());
+                        log.debug("Added acknowledge request for partition {} to node {}", tip.topicPartition(), node);
+                    }
+                }
+                acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
+                        ShareConsumeRequestManager.class.getSimpleName(),
+                        retryBackoffMs,
+                        retryBackoffMaxMs,
+                        Optional.empty(),
+                        nodeId,
+                        acknowledgementsMapForNode,
+                        Optional.empty()
+                ));
+            }
+        });
+    }
+
     private void handleShareFetchSuccess(Node fetchTarget,
                                          ShareFetchRequestData requestData,
                                          ClientResponse resp) {
@@ -453,13 +482,11 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }
 
             final short requestVersion = resp.requestHeader().apiVersion();
-            if (!handler.handleResponse(response, requestVersion)) {
+            if (acknowledgeRequestState.isCommitSync() && !handler.handleResponse(response, requestVersion)) {
                 acknowledgeRequestState.onFailedAttempt(currentTimeMs);
                 if (response.error() != Errors.INVALID_SHARE_SESSION_EPOCH) {
+                    // We retry the request until the timer in commitSync expires.
                     return;
-                } else {
-                    // We pop this request off the queue as the error was not retriable.
-                    acknowledgeRequestState.isProcessed = true;
                 }
             }
 
@@ -683,6 +710,10 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
         boolean isProcessed() {
             return isProcessed;
+        }
+
+        boolean isCommitSync() {
+            return expirationTimeMs.isPresent() && resultHandler.isPresent();
         }
     }
 

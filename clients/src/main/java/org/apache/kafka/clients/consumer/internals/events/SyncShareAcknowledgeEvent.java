@@ -22,9 +22,16 @@ import org.apache.kafka.common.utils.Timer;
 
 import java.util.Map;
 
-public class SyncShareAcknowledgeEvent extends ShareAcknowledgeEvent {
+public class SyncShareAcknowledgeEvent extends CompletableApplicationEvent<Map<TopicIdPartition, Acknowledgements>> {
+
+    private Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
 
     public SyncShareAcknowledgeEvent(final Timer timer, final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
-        super(Type.SHARE_ACKNOWLEDGE_SYNC, timer, acknowledgementsMap);
+        super(Type.SHARE_ACKNOWLEDGE_SYNC, timer);
+        this.acknowledgementsMap = acknowledgementsMap;
+    }
+
+    public Map<TopicIdPartition, Acknowledgements> acknowledgementsMap() {
+        return acknowledgementsMap;
     }
 }
