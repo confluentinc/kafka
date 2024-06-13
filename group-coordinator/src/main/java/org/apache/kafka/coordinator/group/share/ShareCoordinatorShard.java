@@ -251,20 +251,18 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
     for (Record record : recordList) {  // should be single record
       if (record.key().message() instanceof ShareSnapshotKey && record.value().message() instanceof ShareSnapshotValue) {
-        ShareSnapshotKey newKey = (ShareSnapshotKey) record.key().message();
-        ShareSnapshotValue newValue = (ShareSnapshotValue) record.value().message();
+        ShareSnapshotKey recordKeyKey = (ShareSnapshotKey) record.key().message();
         responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.toResponseWriteStateResult(
-            newKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.toErrorResponsePartitionResult(
-                newKey.partition(), Errors.NONE, Errors.NONE.message())))));
+            recordKeyKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.toResponsePartitionResult(
+                recordKeyKey.partition())))));
 
-        String mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
+        String mapKey = ShareGroupHelper.coordinatorKey(recordKeyKey.groupId(), recordKeyKey.topicId(), recordKeyKey.partition());
 
         if (shareStateMap.containsKey(mapKey)) {
           ShareSnapshotValue oldValue = shareStateMap.get(mapKey);
-          newValue.setSnapshotEpoch(oldValue.snapshotEpoch() + 1);  // increment the snapshot epoch
+          ((ShareSnapshotValue) record.value().message()).setSnapshotEpoch(oldValue.snapshotEpoch() + 1);  // increment the snapshot epoch
         }
         validRecords.add(record); // this will have updated snapshot epoch
-        shareStateMap.put(mapKey, newValue);
       }
     }
 
