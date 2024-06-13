@@ -46,6 +46,7 @@ import org.apache.kafka.coordinator.group.runtime.CoordinatorTimer;
 import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
+import org.apache.kafka.server.group.share.PartitionFactory;
 import org.apache.kafka.server.group.share.ShareGroupHelper;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
@@ -293,6 +294,16 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     int partition = request.topics().get(0).partitions().get(0).partition();
 
     String coordinatorKey = ShareGroupHelper.coordinatorKey(request.groupId(), topicId, partition);
+
+    if (!shareStateMap.containsKey(coordinatorKey)) {
+      return ReadShareGroupStateResponse.toResponseData(
+          topicId,
+          partition,
+          PartitionFactory.DEFAULT_START_OFFSET,
+          PartitionFactory.DEFAULT_STATE_EPOCH,
+          Collections.emptyList()
+      );
+    }
 
     ShareSnapshotValue snapshotValue = shareStateMap.get(coordinatorKey, offset);
 
