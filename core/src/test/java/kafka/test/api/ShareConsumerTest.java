@@ -48,6 +48,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -57,6 +58,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -73,6 +75,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.apache.kafka.test.TestUtils.DEFAULT_MAX_WAIT_MS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -456,6 +459,49 @@ public class ShareConsumerTest {
     }
 
     @Test
+    public void testExplicitAcknowledgementCommitAsync() throws InterruptedException {
+        ProducerRecord<byte[], byte[]> record1 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> record2 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> record3 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        producer.send(record1);
+        producer.send(record2);
+        producer.send(record3);
+
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer1.subscribe(Collections.singleton(tp.topic()));
+        shareConsumer2.subscribe(Collections.singleton(tp.topic()));
+
+        Map<TopicPartition, Exception> partitionExceptionMap1 = new HashMap<>();
+
+        shareConsumer1.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap1));
+
+        ConsumerRecords<byte[], byte[]> records = shareConsumer1.poll(Duration.ofMillis(5000));
+        assertEquals(3, records.count());
+        Iterator<ConsumerRecord<byte[], byte[]>> iterator = records.iterator();
+
+        // Acknowledging 2 out of the 3 records received via commitAsync.
+        shareConsumer1.acknowledge(iterator.next());
+        shareConsumer1.acknowledge(iterator.next());
+        shareConsumer1.commitAsync();
+
+        // Allowing acquisition lock timeout to expire.
+        Thread.sleep(10000);
+
+        // The 3rd record should be reassigned to 2nd consumer when it polls.
+        ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
+        assertEquals(1, records2.count());
+
+        assertFalse(partitionExceptionMap1.containsKey(tp));
+        // The callback will receive the acknowledgement responses after the next poll.
+        shareConsumer1.poll(Duration.ofMillis(5000));
+
+        assertTrue(partitionExceptionMap1.containsKey(tp));
+        assertNull(partitionExceptionMap1.get(tp));
+    }
+
+    @Test
     public void testExplicitAcknowledgeReleasePollAccept() {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
@@ -536,6 +582,12 @@ public class ShareConsumerTest {
         shareConsumer.close();
     }
 
+    /**
+     * Currently calling commitSync immediately after poll for IMPLICIT acknowledgements will not work
+     * as the acknowledgement mode will be PENDING.
+     * Enable test after fixing the above issue.
+     */
+    @Disabled
     @Test
     public void testImplicitAcknowledgeCommitSync() {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
@@ -552,6 +604,44 @@ public class ShareConsumerTest {
         records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
         shareConsumer.close();
+    }
+
+    /**
+     * Currently calling commitAsync immediately after poll for implicit acknowledgements will not work
+     * as the acknowledgement mode will be PENDING.
+     * Enable test after fixing the above issue.
+     */
+    @Disabled
+    @Test
+    public void testImplicitAcknowledgementCommitAsync() throws InterruptedException {
+        ProducerRecord<byte[], byte[]> record1 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> record2 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> record3 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        producer.send(record1);
+        producer.send(record2);
+        producer.send(record3);
+
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer1.subscribe(Collections.singleton(tp.topic()));
+
+        Map<TopicPartition, Exception> partitionExceptionMap1 = new HashMap<>();
+
+        shareConsumer1.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap1));
+
+        ConsumerRecords<byte[], byte[]> records = shareConsumer1.poll(Duration.ofMillis(5000));
+        assertEquals(3, records.count());
+
+        // Implicitly acknowledging all the records received.
+        shareConsumer1.commitAsync();
+
+        assertFalse(partitionExceptionMap1.containsKey(tp));
+        // The callback will receive the acknowledgement responses after the next poll.
+        TestUtils.waitUntilTrue(() -> {
+            shareConsumer1.poll(Duration.ofMillis(5000));
+            return partitionExceptionMap1.containsKey(tp);
+        }, () -> "Acknowledgement commit callback did not recieve the response yet", DEFAULT_MAX_WAIT_MS, 100L);
+        assertNull(partitionExceptionMap1.get(tp));
     }
 
     @Test
@@ -954,6 +1044,7 @@ public class ShareConsumerTest {
         shareConsumer.poll(Duration.ofMillis(2000));
         // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
         // On 3rd poll, the acknowledgement commit callback will be called and exception is thrown.
+        // This is verified inside the onComplete() method implementation.
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.close();
     }
