@@ -69,7 +69,7 @@ public class WriteShareGroupStateResponse extends AbstractResponse {
     );
   }
 
-  public static WriteShareGroupStateResponseData getErrorResponseData(Uuid topicId, int partitionId, Errors error, String errorMessage) {
+  public static WriteShareGroupStateResponseData toErrorResponseData(Uuid topicId, int partitionId, Errors error, String errorMessage) {
     WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
     responseData.setResults(Collections.singletonList(new WriteShareGroupStateResponseData.WriteStateResult()
         .setTopicId(topicId)
@@ -80,14 +80,14 @@ public class WriteShareGroupStateResponse extends AbstractResponse {
     return responseData;
   }
 
-  public static WriteShareGroupStateResponseData.PartitionResult getErrorResponsePartitionResult(int partitionId, Errors error, String errorMessage) {
+  public static WriteShareGroupStateResponseData.PartitionResult toErrorResponsePartitionResult(int partitionId, Errors error, String errorMessage) {
     return new WriteShareGroupStateResponseData.PartitionResult()
         .setPartition(partitionId)
         .setErrorCode(error.code())
         .setErrorMessage(errorMessage);
   }
 
-  public static WriteShareGroupStateResponseData.WriteStateResult getErrorResponseResult(Uuid topicId, List<WriteShareGroupStateResponseData.PartitionResult> partitionResults) {
+  public static WriteShareGroupStateResponseData.WriteStateResult toResponseWriteStateResult(Uuid topicId, List<WriteShareGroupStateResponseData.PartitionResult> partitionResults) {
     return new WriteShareGroupStateResponseData.WriteStateResult()
         .setTopicId(topicId)
         .setPartitions(partitionResults);

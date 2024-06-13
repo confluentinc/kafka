@@ -338,16 +338,18 @@ class BrokerServer(
       tokenManager = new DelegationTokenManager(config, tokenCache, time)
       tokenManager.startup()
 
+      shareCoordinator = createShareCoordinator()
+
       /* setup and configure the persister */
       persister = if (config.shareGroupPersisterClassName.nonEmpty)
         CoreUtils.createObject[Persister](config.shareGroupPersisterClassName) else NoOpShareStatePersister.getInstance()
+
       val persisterStateManager = new PersisterStateManager(
         NetworkUtils.buildNetworkClient("Persister", config, metrics, Time.SYSTEM, new LogContext(s"[PersisterStateManager broker=${config.brokerId}]")),
-        () => metadataCache.getAliveBrokerNodes(config.interBrokerListenerName).asJava, Time.SYSTEM)
+        Time.SYSTEM, new ShareCoordinatorMetadataCacheHelperImpl(metadataCache, key => shareCoordinator.partitionFor(key), config.interBrokerListenerName))
       persister.configure(new PersisterConfig(persisterStateManager))
 
       groupCoordinator = createGroupCoordinator(persister)
-      shareCoordinator = createShareCoordinator()
 
       val producerIdManagerSupplier = () => ProducerIdManager.rpc(
         config.brokerId,

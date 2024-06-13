@@ -15,20 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.kafka.coordinator.group.share;
+package org.apache.kafka.server.group.share;
 
-import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.Node;
 
-public class GroupTopicPartitionLeader {
-  public final String groupId;
-  public final Uuid topicId;
-  public final int partition;
-  public final int leaderEpoch;
+import java.util.List;
 
-  public GroupTopicPartitionLeader(String groupId, Uuid topicId, int partition, int leaderEpoch) {
-    this.groupId = groupId;
-    this.topicId = topicId;
-    this.partition = partition;
-    this.leaderEpoch = leaderEpoch;
-  }
+public interface ShareCoordinatorMetadataCacheHelper {
+  boolean containsTopic(String topic);
+
+  Node getShareCoordinator(String key, String internalTopicName);
+
+  List<Node> getClusterNodes();
 }

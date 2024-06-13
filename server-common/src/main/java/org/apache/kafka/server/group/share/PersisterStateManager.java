@@ -18,18 +18,24 @@
 package org.apache.kafka.server.group.share;
 
 import org.apache.kafka.clients.ClientResponse;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.RequestCompletionHandler;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.internals.Topic;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
+import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
+import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
+import org.apache.kafka.common.requests.ReadShareGroupStateRequest;
+import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
 import org.apache.kafka.common.requests.WriteShareGroupStateRequest;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.ExponentialBackoff;
@@ -47,29 +53,34 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class PersisterStateManager {
 
   private SendThread sender;
-  private static Logger log = LoggerFactory.getLogger(PersisterStateManager.class);
   private final AtomicBoolean isStarted = new AtomicBoolean(false);
+  private final ShareCoordinatorMetadataCacheHelper cacheHelper;
+  public static final long REQUEST_BACKOFF_MS = 1_000L;
+  public static final long REQUEST_BACKOFF_MAX_MS = 30_000L;
+  private final Time time;
 
-  public PersisterStateManager(KafkaClient client, Supplier<List<Node>> nodeSupplier, Time time) {
+
+  public PersisterStateManager(KafkaClient client, Time time, ShareCoordinatorMetadataCacheHelper cacheHelper) {
     if (client == null) {
       throw new IllegalArgumentException("Kafkaclient must not be null.");
     }
-    if (nodeSupplier == null) {
-      throw new IllegalArgumentException("NodeSupplier must not be null.");
+    if (cacheHelper == null) {
+      throw new IllegalArgumentException("ShareCoordinatorMetadataCacheHelper must not be null.");
     }
+    this.cacheHelper = cacheHelper;
+    this.time = time == null ? Time.SYSTEM : time;
     this.sender = new SendThread(
         "PersisterStateManager",
         client,
         30_000,  //30 seconds
-        time == null ? Time.SYSTEM : time,
+        this.time,
         true,
-        nodeSupplier);
+        new Random(this.time.milliseconds()));
   }
 
   public void enqueue(PersisterStateManagerHandler handler) {
@@ -94,14 +105,20 @@ public class PersisterStateManager {
     protected final String groupId;
     protected final Uuid topicId;
     protected final int partition;
-    private final ExponentialBackoff findCoordbackoff = new ExponentialBackoff(1_000, 2, 30_000, 100);
+    private final ExponentialBackoff findCoordbackoff;
     private int findCoordattempts = 0;
     private static final int MAX_FIND_COORD_ATTEMPTS = 5;
+    protected final Logger log = LoggerFactory.getLogger(getClass());
 
-    public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition) {
+    public PersisterStateManagerHandler(String groupId, Uuid topicId, int partition, long backoffMs, long backoffMaxMs) {
       this.groupId = groupId;
       this.topicId = topicId;
       this.partition = partition;
+      this.findCoordbackoff = new ExponentialBackoff(
+          backoffMs,
+          CommonClientConfigs.RETRY_BACKOFF_EXP_BASE,
+          backoffMaxMs,
+          CommonClientConfigs.RETRY_BACKOFF_JITTER);
     }
 
     /**
@@ -110,104 +127,6 @@ public class PersisterStateManager {
      * @return builder for the request
      */
     protected abstract AbstractRequest.Builder<? extends AbstractRequest> requestBuilder();
-
-    /**
-     * Returns builder for share coordinator
-     *
-     * @return builder for find coordinator
-     */
-    protected AbstractRequest.Builder<? extends AbstractRequest> findShareCoordinatorBuilder() {
-      return new FindCoordinatorRequest.Builder(new FindCoordinatorRequestData()
-          .setKeyType(FindCoordinatorRequest.CoordinatorType.SHARE.id())
-          .setKey(coordinatorKey()));
-    }
-
-    /**
-     * Return the share coordinator node
-     * @return Node
-     */
-    protected Node shareCoordinatorNode() {
-      return coordinatorNode;
-    }
-
-    /**
-     * Returns true is coordinator node is not yet set
-     * @return boolean
-     */
-    protected boolean lookupNeeded() {
-      return coordinatorNode == null;
-    }
-
-    /**
-     * Returns the String key to be used as share coordinator key
-     * @return String
-     */
-    protected String coordinatorKey() {
-      return ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
-    }
-
-    /**
-     * Returns true if the RPC response if for Find Coordinator RPC.
-     * @param response - Client response object
-     * @return boolean
-     */
-    protected boolean isFindCoordinatorResponse(ClientResponse response) {
-      return response != null && response.requestHeader().apiKey() == ApiKeys.FIND_COORDINATOR;
-    }
-
-    @Override
-    public void onComplete(ClientResponse response) {
-      if (response != null && response.hasResponse()) {
-        if (isFindCoordinatorResponse(response)) {
-          handleFindCoordinatorResponse(response);
-        } else if (isRequestResponse(response)) {
-          handleRequestResponse(response);
-        }
-      }
-    }
-
-    /**
-     * Handles the response for find coordinator RPC and sets appropriate state.
-     * @param response - Client response for find coordinator RPC
-     */
-    protected void handleFindCoordinatorResponse(ClientResponse response) {
-      List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
-      if (coordinators.size() != 1) {
-        log.error("Find coordinator response for {} is invalid", coordinatorKey());
-        findCoordinatorErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new IllegalStateException("Invalid response with multiple coordinators."));
-      }
-      FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
-      Errors error = Errors.forCode(coordinatorData.errorCode());
-      if (error == Errors.NONE) {
-        findCoordattempts = 0;
-        log.info("Find coordinator response received.");
-        coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
-        // now we want the actual share state RPC call to happen
-        enqueue(this);
-      } else if (isFindCoordinatorRetryable(error)) {
-        log.warn("Received retryable error in find coordinator {}", error.message());
-        if (findCoordattempts > MAX_FIND_COORD_ATTEMPTS) {
-          log.error("Exhausted max retries to find coordinator without success.");
-          findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
-          return;
-        }
-        log.info("Waiting before retrying find coordinator RPC.");
-        try {
-          TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(++findCoordattempts));
-        } catch (InterruptedException e) {
-          log.warn("Interrupted waiting before retrying find coordinator request", e);
-        }
-        enqueue(this);
-      } else {
-        log.error("Unable to find coordinator.");
-        findCoordinatorErrorResponse(error, null);
-      }
-    }
-
-    private boolean isFindCoordinatorRetryable(Errors error) {
-      return error == Errors.COORDINATOR_NOT_AVAILABLE ||
-          error == Errors.COORDINATOR_LOAD_IN_PROGRESS;
-    }
 
     /**
      * Handles the response for an RPC.
@@ -229,6 +148,141 @@ public class PersisterStateManager {
      * @param exception
      */
     protected abstract void findCoordinatorErrorResponse(Errors error, Exception exception);
+
+    /**
+     * Child class must provide a descriptive name for the implementation.
+     * @return String
+     */
+    protected abstract String name();
+
+    /**
+     * Returns builder for share coordinator
+     *
+     * @return builder for find coordinator
+     */
+    protected AbstractRequest.Builder<? extends AbstractRequest> findShareCoordinatorBuilder() {
+      return new FindCoordinatorRequest.Builder(new FindCoordinatorRequestData()
+          .setKeyType(FindCoordinatorRequest.CoordinatorType.SHARE.id())
+          .setKey(coordinatorKey()));
+    }
+
+    /**
+     * Return the share coordinator node
+     *
+     * @return Node
+     */
+    protected Node shareCoordinatorNode() {
+      return coordinatorNode;
+    }
+
+    /**
+     * Returns true is coordinator node is not yet set
+     *
+     * @return boolean
+     */
+    protected boolean lookupNeeded() {
+      if (coordinatorNode != null) {
+        return false;
+      }
+      if (cacheHelper.containsTopic(Topic.SHARE_GROUP_STATE_TOPIC_NAME)) {
+        log.info("{} internal topic already exists.", Topic.SHARE_GROUP_STATE_TOPIC_NAME);
+        Node node = cacheHelper.getShareCoordinator(coordinatorKey(), Topic.SHARE_GROUP_STATE_TOPIC_NAME);
+        if (node != Node.noNode()) {
+          log.info("Found coordinator node in cache: {}", node);
+          coordinatorNode = node;
+          return false;
+        }
+      }
+      return true;
+    }
+
+    /**
+     * Returns the String key to be used as share coordinator key
+     *
+     * @return String
+     */
+    protected String coordinatorKey() {
+      return ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
+    }
+
+    /**
+     * Returns true if the RPC response if for Find Coordinator RPC.
+     *
+     * @param response - Client response object
+     * @return boolean
+     */
+    protected boolean isFindCoordinatorResponse(ClientResponse response) {
+      return response != null && response.requestHeader().apiKey() == ApiKeys.FIND_COORDINATOR;
+    }
+
+    @Override
+    public void onComplete(ClientResponse response) {
+      if (response != null && response.hasResponse()) {
+        if (isFindCoordinatorResponse(response)) {
+          handleFindCoordinatorResponse(response);
+        } else if (isRequestResponse(response)) {
+          handleRequestResponse(response);
+        }
+      }
+    }
+
+    private void resetAttempts() {
+      findCoordattempts = 0;
+    }
+
+    private void resetCoordinatorNode() {
+      coordinatorNode = null;
+    }
+
+    /**
+     * Handles the response for find coordinator RPC and sets appropriate state.
+     *
+     * @param response - Client response for find coordinator RPC
+     */
+    protected void handleFindCoordinatorResponse(ClientResponse response) {
+      log.info("Find coordinator response received.");
+      List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
+      if (coordinators.size() != 1) {
+        log.error("Find coordinator response for {} is invalid", coordinatorKey());
+        findCoordinatorErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new IllegalStateException("Invalid response with multiple coordinators."));
+        return;
+      }
+
+      FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
+      Errors error = Errors.forCode(coordinatorData.errorCode());
+
+      switch (error) {
+        case NONE:
+          log.info("Find coordinator response valid. Enqueuing actual request.");
+          resetAttempts();
+          coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
+          // now we want the actual share state RPC call to happen
+          enqueue(this);
+          break;
+
+        case COORDINATOR_NOT_AVAILABLE: // retryable error codes
+        case COORDINATOR_LOAD_IN_PROGRESS:
+          log.warn("Received retryable error in find coordinator {}", error.message());
+          if (findCoordattempts >= MAX_FIND_COORD_ATTEMPTS) {
+            log.error("Exhausted max retries to find coordinator without success.");
+            findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
+            break;
+          }
+          log.info("Waiting before retrying find coordinator RPC.");
+          try {
+            TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(++findCoordattempts));
+          } catch (InterruptedException e) {
+            log.warn("Interrupted waiting before retrying find coordinator request", e);
+          }
+          resetCoordinatorNode();
+          enqueue(this);
+          break;
+
+        default:
+          log.error("Unable to find coordinator.");
+          findCoordinatorErrorResponse(error, null);
+      }
+    }
   }
 
   public class WriteStateHandler extends PersisterStateManagerHandler {
@@ -238,13 +292,22 @@ public class PersisterStateManager {
     private final List<PersisterStateBatch> batches;
     private final CompletableFuture<WriteShareGroupStateResponse> result;
 
-    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result) {
-      super(groupId, topicId, partition);
+    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result, long backoffMs, long backoffMaxMs) {
+      super(groupId, topicId, partition, backoffMs, backoffMaxMs);
       this.stateEpoch = stateEpoch;
       this.leaderEpoch = leaderEpoch;
       this.startOffset = startOffset;
       this.batches = batches;
       this.result = result;
+    }
+
+    public WriteStateHandler(String groupId, Uuid topicId, int partition, int stateEpoch, int leaderEpoch, long startOffset, List<PersisterStateBatch> batches, CompletableFuture<WriteShareGroupStateResponse> result) {
+      this(groupId, topicId, partition, stateEpoch, leaderEpoch, startOffset, batches, result, REQUEST_BACKOFF_MS, REQUEST_BACKOFF_MAX_MS);
+    }
+
+    @Override
+    protected String name() {
+      return "WriteStateHandler";
     }
 
     @Override
@@ -281,30 +344,104 @@ public class PersisterStateManager {
 
     @Override
     protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
-      if (error == Errors.UNKNOWN_SERVER_ERROR && exception != null) {
-        this.result.complete(new WriteShareGroupStateResponse(
-            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, exception.getMessage())));
-      } else {
-        this.result.complete(new WriteShareGroupStateResponse(
-            WriteShareGroupStateResponse.getErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
-                (exception == null ? error.message() : exception.getMessage()))));
-      }
+      this.result.complete(new WriteShareGroupStateResponse(
+          WriteShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+              (exception == null ? error.message() : exception.getMessage()))));
     }
   }
 
-  private static class SendThread extends InterBrokerSendThread {
-    private final ConcurrentLinkedQueue<PersisterStateManagerHandler> queue = new ConcurrentLinkedQueue<>();
-    private final Supplier<List<Node>> nodeSupplier;
-    private static final Random RAND = new Random(System.currentTimeMillis());
+  public class ReadStateHandler extends PersisterStateManagerHandler {
+    private final int leaderEpoch;
+    private final String coordinatorKey;
+    private final CompletableFuture<ReadShareGroupStateResponse> result;
 
-    public SendThread(String name, KafkaClient networkClient, int requestTimeoutMs, Time time, boolean isInterruptible, Supplier<List<Node>> nodeSupplier) {
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result, long backoffMs, long backoffMaxMs) {
+      super(groupId, topicId, partition, backoffMs, backoffMaxMs);
+      this.leaderEpoch = leaderEpoch;
+      this.coordinatorKey = ShareGroupHelper.coordinatorKey(groupId, topicId, partition);
+      this.result = result;
+    }
+
+    public ReadStateHandler(String groupId, Uuid topicId, int partition, int leaderEpoch, CompletableFuture<ReadShareGroupStateResponse> result) {
+      this(groupId, topicId, partition, leaderEpoch, result, REQUEST_BACKOFF_MS, REQUEST_BACKOFF_MAX_MS);
+    }
+
+    @Override
+    protected String name() {
+      return "ReadStateHandler";
+    }
+
+    @Override
+    protected AbstractRequest.Builder<? extends AbstractRequest> requestBuilder() {
+      return new ReadShareGroupStateRequest.Builder(new ReadShareGroupStateRequestData()
+          .setGroupId(groupId)
+          .setTopics(Collections.singletonList(
+              new ReadShareGroupStateRequestData.ReadStateData()
+                  .setTopicId(topicId)
+                  .setPartitions(Collections.singletonList(
+                      new ReadShareGroupStateRequestData.PartitionData()
+                          .setPartition(partition)
+                          .setLeaderEpoch(leaderEpoch))))));
+    }
+
+    @Override
+    protected boolean isRequestResponse(ClientResponse response) {
+      return response.requestHeader().apiKey() == ApiKeys.READ_SHARE_GROUP_STATE;
+    }
+
+    @Override
+    protected void handleRequestResponse(ClientResponse response) {
+      log.info("Read state response received. - {}", response);
+      ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
+      String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
+      if (readShareGroupStateResponseData.results().size() != 1) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+      }
+      ReadShareGroupStateResponseData.ReadStateResult topicData = readShareGroupStateResponseData.results().get(0);
+      if (!topicData.topicId().equals(topicId)) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+      }
+      if (topicData.partitions().size() != 1) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+      }
+      ReadShareGroupStateResponseData.PartitionResult partitionResponse = topicData.partitions().get(0);
+      if (partitionResponse.partition() != partition) {
+        log.error("ReadState response for {} is invalid", coordinatorKey);
+        this.result.complete(new ReadShareGroupStateResponse(
+            ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
+      }
+      result.complete((ReadShareGroupStateResponse) response.responseBody());
+    }
+
+    @Override
+    protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
+      this.result.complete(new ReadShareGroupStateResponse(
+          ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, error, "Error in find coordinator. " +
+              (exception == null ? error.message() : exception.getMessage()))));
+    }
+  }
+
+  private class SendThread extends InterBrokerSendThread {
+    private final ConcurrentLinkedQueue<PersisterStateManagerHandler> queue = new ConcurrentLinkedQueue<>();
+    private final Random random;
+
+    public SendThread(String name, KafkaClient networkClient, int requestTimeoutMs, Time time, boolean isInterruptible, Random random) {
       super(name, networkClient, requestTimeoutMs, time, isInterruptible);
-      this.nodeSupplier = nodeSupplier;
+      this.random = random;
     }
 
     private Node randomNode() {
-      List<Node> nodes = nodeSupplier.get();
-      return nodes.get(RAND.nextInt(nodes.size()));
+      List<Node> nodes = cacheHelper.getClusterNodes();
+      if (nodes == null || nodes.isEmpty()) {
+        return Node.noNode();
+      }
+      return nodes.get(random.nextInt(nodes.size()));
     }
 
     /**
@@ -329,18 +466,23 @@ public class PersisterStateManager {
         queue.poll();
         if (handler.lookupNeeded()) {
           // we need to find the coordinator node
+          Node randomNode = randomNode();
+          if (randomNode == Node.noNode()) {
+            log.error("Unable to find node to use for coordinator lookup.");
+            return Collections.emptyList();
+          }
           log.info("Sending find coordinator RPC");
           return Collections.singletonList(new RequestAndCompletionHandler(
-              System.currentTimeMillis(),
-              randomNode(),
+              time.milliseconds(),
+              randomNode,
               handler.findShareCoordinatorBuilder(),
               handler
           ));
         } else {
-          log.info("Sending share state RPC");
+          log.info("Sending share state RPC - {}", handler.name());
           // share coord node already available
           return Collections.singletonList(new RequestAndCompletionHandler(
-              System.currentTimeMillis(),
+              time.milliseconds(),
               handler.shareCoordinatorNode(),
               handler.requestBuilder(),
               handler

@@ -34,7 +34,7 @@ public class ReadShareGroupStateRequest extends AbstractRequest {
     private final ReadShareGroupStateRequestData data;
 
     public Builder(ReadShareGroupStateRequestData data) {
-      this(data, false);
+      this(data, true);
     }
 
     public Builder(ReadShareGroupStateRequestData data, boolean enableUnstableLastVersion) {
