@@ -87,6 +87,11 @@ public class WriteShareGroupStateResponse extends AbstractResponse {
         .setErrorMessage(errorMessage);
   }
 
+  public static WriteShareGroupStateResponseData.PartitionResult toResponsePartitionResult(int partitionId) {
+    return new WriteShareGroupStateResponseData.PartitionResult()
+        .setPartition(partitionId);
+  }
+
   public static WriteShareGroupStateResponseData.WriteStateResult toResponseWriteStateResult(Uuid topicId, List<WriteShareGroupStateResponseData.PartitionResult> partitionResults) {
     return new WriteShareGroupStateResponseData.WriteStateResult()
         .setTopicId(topicId)
