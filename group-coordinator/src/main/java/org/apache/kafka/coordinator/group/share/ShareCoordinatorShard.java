@@ -264,7 +264,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
           newValue.setSnapshotEpoch(oldValue.snapshotEpoch() + 1);  // increment the snapshot epoch
         }
         validRecords.add(record); // this will have updated snapshot epoch
-//        shareStateMap.put(mapKey, newValue);
+        shareStateMap.put(mapKey, newValue);
       }
     }
 
