@@ -46,6 +46,7 @@ import org.apache.kafka.coordinator.group.runtime.CoordinatorTimer;
 import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
+import org.apache.kafka.server.group.share.PartitionFactory;
 import org.apache.kafka.server.group.share.ShareGroupHelper;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
@@ -296,11 +297,12 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     String coordinatorKey = ShareGroupHelper.coordinatorKey(request.groupId(), topicId, partition);
 
     if (!shareStateMap.containsKey(coordinatorKey)) {
-      return ReadShareGroupStateResponse.toErrorResponseData(
+      return ReadShareGroupStateResponse.toResponseData(
           topicId,
           partition,
-          Errors.UNKNOWN_SERVER_ERROR,
-          "Data not found for topic {}, partition {} for group {}, in the in-memory state of share coordinator"
+          PartitionFactory.DEFAULT_START_OFFSET,
+          PartitionFactory.DEFAULT_STATE_EPOCH,
+          Collections.emptyList()
       );
     }
 
