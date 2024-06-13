@@ -31,6 +31,7 @@ import org.apache.kafka.clients.consumer.ShareConsumer;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventProcessor;
+import org.apache.kafka.clients.consumer.internals.events.AsyncShareAcknowledgeEvent;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.CompletableApplicationEvent;
@@ -691,7 +692,22 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      */
     @Override
     public void commitAsync() {
-        throw new UnsupportedOperationException();
+        acquireAndEnsureOpen();
+        try {
+            // Handle any completed acknowledgements for which we already have the responses
+            handleCompletedAcknowledgements();
+
+            // Acknowledge the previously fetched records
+            prepareToSendAcknowledgements(false);
+
+            Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = acknowledgementsToSend();
+            if (!acknowledgementsMap.isEmpty()) {
+                AsyncShareAcknowledgeEvent event = new AsyncShareAcknowledgeEvent(acknowledgementsMap);
+                applicationEventHandler.add(event);
+            }
+        } finally {
+            release();
+        }
     }
 
     /**

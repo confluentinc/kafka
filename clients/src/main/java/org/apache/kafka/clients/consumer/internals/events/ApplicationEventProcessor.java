@@ -147,6 +147,10 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
                 process((SyncShareAcknowledgeEvent) event);
                 return;
 
+            case SHARE_ACKNOWLEDGE_ASYNC:
+                process((AsyncShareAcknowledgeEvent) event);
+                return;
+
             case SHARE_SUBSCRIPTION_CHANGE:
                 process((ShareSubscriptionChangeApplicationEvent) event);
                 return;
@@ -335,6 +339,18 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
         CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future =
                 manager.commitSync(event.deadlineMs(), event.acknowledgementsMap());
         future.whenComplete(complete(event.future()));
+    }
+
+    /**
+     * Process event that indicates the consumer acknowledged delivery of records asynchronously.
+     */
+    private void process(final AsyncShareAcknowledgeEvent event) {
+        if (!requestManagers.shareConsumeRequestManager.isPresent()) {
+            return;
+        }
+
+        ShareConsumeRequestManager manager = requestManagers.shareConsumeRequestManager.get();
+        manager.commitAsync(event.acknowledgementsMap());
     }
 
     /**
