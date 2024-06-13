@@ -305,6 +305,34 @@ public class ShareConsumeRequestManagerTest {
     }
 
     @Test
+    public void testCommitAsync() {
+        buildFetcher();
+
+        assignFromSubscribed(Collections.singleton(tp0));
+
+        // normal fetch
+        assertEquals(1, sendFetches());
+        assertFalse(fetcher.hasCompletedFetches());
+
+        client.prepareResponse(fullFetchResponse(tip0, records, acquiredRecords, Errors.NONE));
+        networkClientDelegate.poll(time.timer(0));
+        assertTrue(fetcher.hasCompletedFetches());
+
+        Acknowledgements acknowledgements = Acknowledgements.empty();
+        acknowledgements.add(1L, AcknowledgeType.ACCEPT);
+        acknowledgements.add(2L, AcknowledgeType.ACCEPT);
+        acknowledgements.add(3L, AcknowledgeType.REJECT);
+
+        fetcher.commitAsync(Collections.singletonMap(tip0, acknowledgements));
+
+        assertEquals(1, fetcher.sendAcks());
+
+        client.prepareResponse(fullAcknowledgeResponse(tip0, Errors.NONE));
+        networkClientDelegate.poll(time.timer(0));
+        assertTrue(fetcher.hasCompletedFetches());
+    }
+
+    @Test
     public void testMultipleTopicsFetch() {
         buildFetcher();
         Set<TopicPartition> partitions = new HashSet<>();
