@@ -222,6 +222,10 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   }
 
   /**
+   * This method generates the ShareSnapshotValue record corresponding to the requested topic partition information.
+   * The generated record is then written to the __share_group_state topic and replayed to the in-memory state
+   * of the coordinator shard, shareStateMap, by CoordinatorRuntime.
+   *
    * This method as called by the ShareCoordinatorService will be provided with
    * the request data which covers only key i.e. group1:topic1:partition1. The implementation
    * below was done keeping this in mind.
@@ -251,12 +255,12 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
     WriteShareGroupStateResponseData responseData = new WriteShareGroupStateResponseData();
     for (Record record : recordList) {  // should be single record
       if (record.key().message() instanceof ShareSnapshotKey && record.value().message() instanceof ShareSnapshotValue) {
-        ShareSnapshotKey recordKeyKey = (ShareSnapshotKey) record.key().message();
+        ShareSnapshotKey recordKey = (ShareSnapshotKey) record.key().message();
         responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.toResponseWriteStateResult(
-            recordKeyKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.toResponsePartitionResult(
-                recordKeyKey.partition())))));
+            recordKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.toResponsePartitionResult(
+                recordKey.partition())))));
 
-        String mapKey = ShareGroupHelper.coordinatorKey(recordKeyKey.groupId(), recordKeyKey.topicId(), recordKeyKey.partition());
+        String mapKey = ShareGroupHelper.coordinatorKey(recordKey.groupId(), recordKey.topicId(), recordKey.partition());
 
         if (shareStateMap.containsKey(mapKey)) {
           ShareSnapshotValue oldValue = shareStateMap.get(mapKey);
@@ -270,6 +274,9 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   }
 
   /**
+   * This method finds the ShareSnapshotValue record corresponding to the requested topic partition from the
+   * in-memory state of coordinator shard, the shareStateMap.
+   *
    * This method as called by the ShareCoordinatorService will be provided with
    * the request data which covers only key i.e. group1:topic1:partition1. The implementation
    * below was done keeping this in mind.
