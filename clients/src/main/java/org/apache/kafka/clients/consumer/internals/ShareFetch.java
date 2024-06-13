@@ -132,8 +132,9 @@ public class ShareFetch<K, V> {
     public Map<TopicIdPartition, Acknowledgements> acknowledgementsByPartition() {
         Map<TopicIdPartition, Acknowledgements> acknowledgementMap = new LinkedHashMap<>();
         batches.forEach((tip, batch) -> {
-            if (!batch.getAcknowledgements().isEmpty())
-                acknowledgementMap.put(tip, batch.getAcknowledgements());
+            Acknowledgements acknowledgements = batch.getAcknowledgements();
+            if (!acknowledgements.isEmpty())
+                acknowledgementMap.put(tip, acknowledgements);
         });
         return acknowledgementMap;
     }

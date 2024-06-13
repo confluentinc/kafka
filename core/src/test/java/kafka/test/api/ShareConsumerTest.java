@@ -482,8 +482,13 @@ public class ShareConsumerTest {
         Iterator<ConsumerRecord<byte[], byte[]>> iterator = records.iterator();
 
         // Acknowledging 2 out of the 3 records received via commitAsync.
-        shareConsumer1.acknowledge(iterator.next());
-        shareConsumer1.acknowledge(iterator.next());
+        ConsumerRecord<byte[], byte[]> firstRecord = iterator.next();
+        ConsumerRecord<byte[], byte[]> secondRecord = iterator.next();
+        assertEquals(0L, firstRecord.offset());
+        assertEquals(1L, secondRecord.offset());
+
+        shareConsumer1.acknowledge(firstRecord);
+        shareConsumer1.acknowledge(secondRecord);
         shareConsumer1.commitAsync();
 
         // Allowing acquisition lock timeout to expire.
@@ -492,6 +497,7 @@ public class ShareConsumerTest {
         // The 3rd record should be reassigned to 2nd consumer when it polls.
         ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
         assertEquals(1, records2.count());
+        assertEquals(2L, records2.iterator().next().offset());
 
         assertFalse(partitionExceptionMap1.containsKey(tp));
         // The callback will receive the acknowledgement responses after the next poll.
@@ -499,6 +505,10 @@ public class ShareConsumerTest {
 
         assertTrue(partitionExceptionMap1.containsKey(tp));
         assertNull(partitionExceptionMap1.get(tp));
+
+        shareConsumer1.close();
+        shareConsumer2.close();
+        producer.close();
     }
 
     @Test
@@ -638,9 +648,9 @@ public class ShareConsumerTest {
         assertFalse(partitionExceptionMap1.containsKey(tp));
         // The callback will receive the acknowledgement responses after the next poll.
         TestUtils.waitUntilTrue(() -> {
-            shareConsumer1.poll(Duration.ofMillis(5000));
+            shareConsumer1.poll(Duration.ofMillis(1000));
             return partitionExceptionMap1.containsKey(tp);
-        }, () -> "Acknowledgement commit callback did not recieve the response yet", DEFAULT_MAX_WAIT_MS, 100L);
+        }, () -> "Acknowledgement commit callback did not receive the response yet", DEFAULT_MAX_WAIT_MS, 100L);
         assertNull(partitionExceptionMap1.get(tp));
     }
 
