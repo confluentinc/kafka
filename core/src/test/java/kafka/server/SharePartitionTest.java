@@ -6223,6 +6223,92 @@ public class SharePartitionTest {
         assertNull(sharePartition.cachedState().get(10L).acquisitionLockTimeoutTask());
     }
 
+    @Test
+    public void testLsoMovementThenAcquisitionLockTimeoutThenAcknowledgeBatchLastOffsetAheadOfStartOffsetBatch() throws InterruptedException {
+        ReplicaManager replicaManager = Mockito.mock(ReplicaManager.class);
+        // LSO returned is 0.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 0, Optional.of(0))));
+
+        SharePartition sharePartition = SharePartitionBuilder.builder().withReplicaManager(replicaManager)
+                .withAcquisitionLockTimeoutMs(ACQUISITION_LOCK_TIMEOUT_MS).build();
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(0, sharePartition.nextFetchOffset());
+        assertEquals(0, sharePartition.startOffset());
+        assertEquals(0, sharePartition.endOffset());
+
+        MemoryRecords records1 = memoryRecords(2, 1);
+
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records1, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertEquals(1, sharePartition.cachedState().size());
+        assertEquals(3, sharePartition.nextFetchOffset());
+        assertEquals(1, sharePartition.startOffset());
+        assertEquals(2, sharePartition.endOffset());
+
+        // LSO returned is 3.
+        when(replicaManager.fetchOffsetForTimestamp(any(), anyLong(), any(), any(), anyBoolean())).thenReturn(
+                new Some<>(new FileRecords.TimestampAndOffset(
+                        ListOffsetsRequest.EARLIEST_TIMESTAMP, 3, Optional.of(0))));
+
+        sharePartition.updateOffsetsOnLsoMovement();
+        assertEquals(3, sharePartition.nextFetchOffset());
+        assertEquals(3, sharePartition.startOffset());
+        assertEquals(3, sharePartition.endOffset());
+        assertEquals(1, sharePartition.cachedState().size());
+
+        // Checked cached state map.
+        assertEquals(MEMBER_ID, sharePartition.cachedState().get(1L).batchMemberId());
+        assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(1L).batchState());
+        assertNotNull(sharePartition.cachedState().get(1L).acquisitionLockTimeoutTask());
+
+        // Allowing acquisition lock to expire.
+        Thread.sleep(200);
+        assertEquals(3, sharePartition.nextFetchOffset());
+        assertEquals(3, sharePartition.startOffset());
+        assertEquals(3, sharePartition.endOffset());
+        assertEquals(0, sharePartition.cachedState().size());
+
+        MemoryRecords records2 = memoryRecords(2, 3);
+        MemoryRecords records3 = memoryRecords(3, 5);
+
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records2, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        sharePartition.acquire(MEMBER_ID,
+                new FetchPartitionData(Errors.NONE, 20, 0, records3, Optional.empty(),
+                        OptionalLong.empty(), Optional.empty(), OptionalInt.empty(), false));
+
+        assertEquals(8, sharePartition.nextFetchOffset());
+        assertEquals(3, sharePartition.startOffset());
+        assertEquals(7, sharePartition.endOffset());
+        assertEquals(2, sharePartition.cachedState().size());
+
+        // Acknowledge with RELEASE action. This contains a batch that doesn't exist at all.
+        CompletableFuture<Optional<Throwable>> ackResult = sharePartition.acknowledge(MEMBER_ID, Collections.singletonList(
+                new ShareAcknowledgementBatch(1, 7, Collections.singletonList((byte) 2))));
+
+        assertFalse(ackResult.isCompletedExceptionally());
+        assertFalse(ackResult.join().isPresent());
+
+        assertEquals(3, sharePartition.nextFetchOffset());
+        assertEquals(3, sharePartition.startOffset());
+        assertEquals(7, sharePartition.endOffset());
+        assertEquals(2, sharePartition.cachedState().size());
+
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(3L).batchMemberId());
+        assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(3L).batchState());
+        assertNull(sharePartition.cachedState().get(3L).acquisitionLockTimeoutTask());
+
+        assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
+        assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
+        assertNull(sharePartition.cachedState().get(5L).acquisitionLockTimeoutTask());
+    }
+
     private MemoryRecords memoryRecords(int numOfRecords) {
         return memoryRecords(numOfRecords, 0);
     }
