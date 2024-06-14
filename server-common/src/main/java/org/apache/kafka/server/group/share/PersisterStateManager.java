@@ -139,12 +139,14 @@ public class PersisterStateManager {
 
     /**
      * Handles the response for an RPC.
+     *
      * @param response - Client response
      */
     protected abstract void handleRequestResponse(ClientResponse response);
 
     /**
      * Returns true if the response if valid for the respective child class.
+     *
      * @param response - Client response
      * @return - boolean
      */
@@ -153,6 +155,7 @@ public class PersisterStateManager {
     /**
      * Handle invalid find coordinator response. If error is UNKNOWN_SERVER_ERROR. Look at the
      * exception details to figure out the problem.
+     *
      * @param error
      * @param exception
      */
@@ -160,6 +163,7 @@ public class PersisterStateManager {
 
     /**
      * Child class must provide a descriptive name for the implementation.
+     *
      * @return String
      */
     protected abstract String name();
@@ -320,7 +324,7 @@ public class PersisterStateManager {
         long backoffMs,
         long backoffMaxMs,
         int maxFindCoordAttempts
-        ) {
+    ) {
       super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxFindCoordAttempts);
       this.stateEpoch = stateEpoch;
       this.leaderEpoch = leaderEpoch;
@@ -468,7 +472,7 @@ public class PersisterStateManager {
     }
 
     @Override
-protected void handleRequestResponse(ClientResponse response) {
+    protected void handleRequestResponse(ClientResponse response) {
       log.info("Read state response received. - {}", response);
       ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
       String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
