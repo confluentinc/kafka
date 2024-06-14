@@ -955,7 +955,7 @@ public class SharePartition {
             if (floorOffset == null && hasStartOffsetMoved) {
                 // If the start offset is between the first and last offset of the acknowledgment batch, then
                 // we need to get the floor offset using the last offset of the acknowledgment batch.
-                floorOffset = cachedState.floorEntry(batch.lastOffset());
+                floorOffset = cachedState.floorEntry(startOffset);
             }
             if (floorOffset == null) {
                 log.debug("Batch record {} not found for share partition: {}-{}", batch, groupId,
