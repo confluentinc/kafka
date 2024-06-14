@@ -182,6 +182,12 @@ public class SubscriptionState {
         return changeSubscription(topics);
     }
 
+    public synchronized boolean subscribeToShareGroup(Set<String> topics, Optional<ConsumerRebalanceListener> listener) {
+        registerRebalanceListener(listener);
+        setSubscriptionType(SubscriptionType.AUTO_TOPICS_SHARE);
+        return changeSubscription(topics);
+    }
+
     public synchronized boolean subscribeFromPattern(Set<String> topics) {
         if (subscriptionType != SubscriptionType.AUTO_PATTERN)
             throw new IllegalArgumentException("Attempt to subscribe from pattern while subscription type set to " +

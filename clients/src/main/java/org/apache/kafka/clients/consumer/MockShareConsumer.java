@@ -73,6 +73,19 @@ public class MockShareConsumer<K, V> implements ShareConsumer<K, V> {
     }
 
     @Override
+    public void subscribe(Collection<String> topics, ConsumerRebalanceListener listener) {
+        if (listener == null)
+            throw new IllegalArgumentException("RebalanceListener cannot be null");
+
+        subscribe(topics, Optional.of(listener));
+    }
+
+    private synchronized void subscribe(Collection<String> topics, Optional<ConsumerRebalanceListener> listener) {
+        ensureNotClosed();
+        this.subscriptions.subscribe(new HashSet<>(topics), listener);
+    }
+
+    @Override
     public synchronized void unsubscribe() {
         ensureNotClosed();
         subscriptions.unsubscribe();
