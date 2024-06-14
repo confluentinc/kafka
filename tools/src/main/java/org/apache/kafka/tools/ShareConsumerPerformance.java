@@ -19,13 +19,11 @@ package org.apache.kafka.tools;
 import joptsimple.OptionException;
 import joptsimple.OptionSpec;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaShareConsumer;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.utils.Exit;
 import org.apache.kafka.common.utils.Utils;
@@ -37,7 +35,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
@@ -46,6 +43,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static joptsimple.util.RegexMatcher.regex;
+import static org.apache.kafka.tools.ConsumerPerformance.printConsumerProgress;
 
 public class ShareConsumerPerformance {
     private static final Logger LOG = LoggerFactory.getLogger(ShareConsumerPerformance.class);
@@ -53,7 +51,7 @@ public class ShareConsumerPerformance {
 
     public static void main(String[] args) {
         try {
-            LOG.info("Starting consumer...");
+            LOG.info("Starting share consumer...");
             ShareConsumerPerfOptions options = new ShareConsumerPerfOptions(args);
             AtomicLong totalMessagesRead = new AtomicLong(0);
             AtomicLong totalBytesRead = new AtomicLong(0);
@@ -69,11 +67,9 @@ public class ShareConsumerPerformance {
             long lastBytesRead = 0L;
             long lastMessagesRead = 0L;
             long currentTimeMs = System.currentTimeMillis();
-            long joinStartMs = currentTimeMs;
             long startMs = currentTimeMs;
-            consume(shareConsumer, options, totalMessagesRead, totalBytesRead, joinTimeMs,
-                    bytesRead, messagesRead, lastBytesRead, lastMessagesRead,
-                    joinStartMs, joinTimeMsInSingleRound);
+            consume(shareConsumer, options, totalMessagesRead, totalBytesRead, bytesRead, messagesRead, lastBytesRead,
+                    lastMessagesRead, joinTimeMsInSingleRound);
             long endMs = System.currentTimeMillis();
 
             Map<MetricName, ? extends Metric> metrics = null;
@@ -86,14 +82,13 @@ public class ShareConsumerPerformance {
             long fetchTimeInMs = (endMs - startMs) - joinTimeMs.get();
             if (!options.showDetailedStats()) {
                 double totalMbRead = (totalBytesRead.get() * 1.0) / (1024 * 1024);
-                System.out.printf("%s, %s, %.4f, %.4f, %d, %.4f, %d, %d, %.4f, %.4f%n",
+                System.out.printf("%s, %s, %.4f, %.4f, %d, %.4f, %d, %.4f, %.4f%n",
                     options.dateFormat().format(startMs),
                     options.dateFormat().format(endMs),
                     totalMbRead,
                     totalMbRead / elapsedSec,
                     totalMessagesRead.get(),
                     totalMessagesRead.get() / elapsedSec,
-                    joinTimeMs.get(),
                     fetchTimeInMs,
                     totalMbRead / (fetchTimeInMs / 1000.0),
                     totalMessagesRead.get() / (fetchTimeInMs / 1000.0)
@@ -110,7 +105,7 @@ public class ShareConsumerPerformance {
     }
 
     protected static void printHeader(boolean showDetailedStats) {
-        String newFieldsInHeader = ", rebalance.time.ms, fetch.time.ms, fetch.MB.sec, fetch.nMsg.sec";
+        String newFieldsInHeader = ", fetch.time.ms, fetch.MB.sec, fetch.nMsg.sec";
         if (!showDetailedStats)
             System.out.printf("start.time, end.time, data.consumed.in.MB, MB.sec, data.consumed.in.nMsg, nMsg.sec%s%n", newFieldsInHeader);
         else
@@ -121,20 +116,17 @@ public class ShareConsumerPerformance {
                                 ShareConsumerPerfOptions options,
                                 AtomicLong totalMessagesRead,
                                 AtomicLong totalBytesRead,
-                                AtomicLong joinTimeMs,
                                 long bytesRead,
                                 long messagesRead,
                                 long lastBytesRead,
                                 long lastMessagesRead,
-                                long joinStartMs,
                                 AtomicLong joinTimeMsInSingleRound) {
         long numMessages = options.numMessages();
         long recordFetchTimeoutMs = options.recordFetchTimeoutMs();
         long reportingIntervalMs = options.reportingIntervalMs();
         boolean showDetailedStats = options.showDetailedStats();
         SimpleDateFormat dateFormat = options.dateFormat();
-        shareConsumer.subscribe(options.topic(),
-                new ShareConsumerPerfRebListener(joinTimeMs, joinStartMs, joinTimeMsInSingleRound));
+        shareConsumer.subscribe(options.topic());
 
         // now start the benchmark
         long currentTimeMs = System.currentTimeMillis();
@@ -169,77 +161,6 @@ public class ShareConsumerPerformance {
                 "You can use the --timeout option to increase the timeout.%n", recordFetchTimeoutMs);
         totalMessagesRead.set(messagesRead);
         totalBytesRead.set(bytesRead);
-    }
-
-    protected static void printConsumerProgress(int id,
-                                                long bytesRead,
-                                                long lastBytesRead,
-                                                long messagesRead,
-                                                long lastMessagesRead,
-                                                long startMs,
-                                                long endMs,
-                                                SimpleDateFormat dateFormat,
-                                                long joinTimeMsInSingleRound) {
-        printBasicProgress(id, bytesRead, lastBytesRead, messagesRead, lastMessagesRead, startMs, endMs, dateFormat);
-        printExtendedProgress(bytesRead, lastBytesRead, messagesRead, lastMessagesRead, startMs, endMs, joinTimeMsInSingleRound);
-        System.out.println();
-    }
-
-    private static void printBasicProgress(int id,
-                                           long bytesRead,
-                                           long lastBytesRead,
-                                           long messagesRead,
-                                           long lastMessagesRead,
-                                           long startMs,
-                                           long endMs,
-                                           SimpleDateFormat dateFormat) {
-        double elapsedMs = endMs - startMs;
-        double totalMbRead = (bytesRead * 1.0) / (1024 * 1024);
-        double intervalMbRead = ((bytesRead - lastBytesRead) * 1.0) / (1024 * 1024);
-        double intervalMbPerSec = 1000.0 * intervalMbRead / elapsedMs;
-        double intervalMessagesPerSec = ((messagesRead - lastMessagesRead) / elapsedMs) * 1000.0;
-        System.out.printf("%s, %d, %.4f, %.4f, %d, %.4f", dateFormat.format(endMs), id,
-            totalMbRead, intervalMbPerSec, messagesRead, intervalMessagesPerSec);
-    }
-
-    private static void printExtendedProgress(long bytesRead,
-                                              long lastBytesRead,
-                                              long messagesRead,
-                                              long lastMessagesRead,
-                                              long startMs,
-                                              long endMs,
-                                              long joinTimeMsInSingleRound) {
-        long fetchTimeMs = endMs - startMs - joinTimeMsInSingleRound;
-        double intervalMbRead = ((bytesRead - lastBytesRead) * 1.0) / (1024 * 1024);
-        long intervalMessagesRead = messagesRead - lastMessagesRead;
-        double intervalMbPerSec = (fetchTimeMs <= 0) ? 0.0 : 1000.0 * intervalMbRead / fetchTimeMs;
-        double intervalMessagesPerSec = (fetchTimeMs <= 0) ? 0.0 : 1000.0 * intervalMessagesRead / fetchTimeMs;
-        System.out.printf(", %d, %d, %.4f, %.4f", joinTimeMsInSingleRound,
-            fetchTimeMs, intervalMbPerSec, intervalMessagesPerSec);
-    }
-
-    public static class ShareConsumerPerfRebListener implements ConsumerRebalanceListener {
-        private AtomicLong joinTimeMs;
-        private AtomicLong joinTimeMsInSingleRound;
-        private long joinStartMs;
-
-        public ShareConsumerPerfRebListener(AtomicLong joinTimeMs, long joinStartMs, AtomicLong joinTimeMsInSingleRound) {
-            this.joinTimeMs = joinTimeMs;
-            this.joinStartMs = joinStartMs;
-            this.joinTimeMsInSingleRound = joinTimeMsInSingleRound;
-        }
-
-        @Override
-        public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-            joinStartMs = System.currentTimeMillis();
-        }
-
-        @Override
-        public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-            long elapsedMs = System.currentTimeMillis() - joinStartMs;
-            joinTimeMs.addAndGet(elapsedMs);
-            joinTimeMsInSingleRound.addAndGet(elapsedMs);
-        }
     }
 
     protected static class ShareConsumerPerfOptions extends CommandDefaultOptions {
@@ -279,14 +200,14 @@ public class ShareConsumerPerformance {
             groupIdOpt = parser.accepts("group", "The group id to consume on.")
                 .withRequiredArg()
                 .describedAs("gid")
-                .defaultsTo("perf-consumer-" + RND.nextInt(100_000))
+                .defaultsTo("perf-share-consumer-" + RND.nextInt(100_000))
                 .ofType(String.class);
             fetchSizeOpt = parser.accepts("fetch-size", "The amount of data to fetch in a single request.")
                 .withRequiredArg()
                 .describedAs("size")
                 .ofType(Integer.class)
                 .defaultsTo(1024 * 1024);
-            resetBeginningOffsetOpt = parser.accepts("from-latest", "If the consumer does not already have an established " +
+            resetBeginningOffsetOpt = parser.accepts("from-latest", "If the share consumer does not already have an established " +
                 "offset to consume from, start with the latest message present in the log rather than the earliest message.");
             socketBufferSizeOpt = parser.accepts("socket-buffer-size", "The size of the tcp RECV size.")
                 .withRequiredArg()
@@ -303,7 +224,7 @@ public class ShareConsumerPerformance {
                 .describedAs("count")
                 .ofType(Integer.class)
                 .defaultsTo(1);
-            consumerConfigOpt = parser.accepts("consumer.config", "Consumer config properties file.")
+            consumerConfigOpt = parser.accepts("consumer.config", "Share consumer config properties file.")
                 .withRequiredArg()
                 .describedAs("config file")
                 .ofType(String.class);
@@ -341,7 +262,7 @@ public class ShareConsumerPerformance {
             if (options != null) {
                 if (options.has(numThreadsOpt) || options.has(numFetchersOpt))
                     System.out.println("WARNING: option [threads] and [num-fetch-threads] have been deprecated and will be ignored by the test");
-                CommandLineUtils.maybePrintHelpOrVersion(this, "This tool is used to verify the consumer performance.");
+                CommandLineUtils.maybePrintHelpOrVersion(this, "This tool is used to verify the share consumer performance.");
                 CommandLineUtils.checkRequiredArgs(parser, options, topicOpt, numMessagesOpt);
             }
         }
@@ -368,7 +289,7 @@ public class ShareConsumerPerformance {
             props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
             props.put(ConsumerConfig.CHECK_CRCS_CONFIG, "false");
             if (props.getProperty(ConsumerConfig.CLIENT_ID_CONFIG) == null)
-                props.put(ConsumerConfig.CLIENT_ID_CONFIG, "perf-consumer-client");
+                props.put(ConsumerConfig.CLIENT_ID_CONFIG, "perf-share-consumer-client");
             return props;
         }
 

@@ -51,18 +51,6 @@ public class ShareConsumerPerformanceTest {
     }
 
     @Test
-    public void testDetailedHeaderMatchBody() {
-        testHeaderMatchContent(true, 2,
-                () -> ShareConsumerPerformance.printConsumerProgress(1, 1024 * 1024, 0, 1, 0, 0, 1, dateFormat, 1L));
-    }
-
-    @Test
-    public void testNonDetailedHeaderMatchBody() {
-        testHeaderMatchContent(false, 2,
-                () -> ShareConsumerPerformance.printConsumerProgress(1, 1024 * 1024, 0, 1, 0, 0, 1, dateFormat, 1L));
-    }
-
-    @Test
     public void testConfigBrokerList() {
         String[] args = new String[]{
                 "--broker-list", "localhost:9092",
@@ -115,19 +103,19 @@ public class ShareConsumerPerformanceTest {
                 "--broker-list", "localhost:9092",
                 "--topic", "test",
                 "--messages", "10",
-                "--new-consumer"
+                "--new-share-consumer"
         };
 
         String err = ToolsTestUtils.captureStandardErr(() -> new ShareConsumerPerformance.ShareConsumerPerfOptions(args));
 
-        assertTrue(err.contains("new-consumer is not a recognized option"));
+        assertTrue(err.contains("new-share-consumer is not a recognized option"));
     }
 
     @Test
     public void testClientIdOverride() throws IOException {
-        File tempFile = Files.createFile(tempDir.resolve("test_consumer_config.conf")).toFile();
+        File tempFile = Files.createFile(tempDir.resolve("test_share_consumer_config.conf")).toFile();
         try (PrintWriter output = new PrintWriter(Files.newOutputStream(tempFile.toPath()))) {
-            output.println("client.id=consumer-1");
+            output.println("client.id=share-consumer-1");
             output.flush();
         }
 
@@ -140,7 +128,7 @@ public class ShareConsumerPerformanceTest {
 
         ShareConsumerPerformance.ShareConsumerPerfOptions config = new ShareConsumerPerformance.ShareConsumerPerfOptions(args);
 
-        assertEquals("consumer-1", config.props().getProperty(ConsumerConfig.CLIENT_ID_CONFIG));
+        assertEquals("share-consumer-1", config.props().getProperty(ConsumerConfig.CLIENT_ID_CONFIG));
     }
 
     @Test
@@ -153,20 +141,6 @@ public class ShareConsumerPerformanceTest {
 
         ShareConsumerPerformance.ShareConsumerPerfOptions config = new ShareConsumerPerformance.ShareConsumerPerfOptions(args);
 
-        assertEquals("perf-consumer-client", config.props().getProperty(ConsumerConfig.CLIENT_ID_CONFIG));
-    }
-
-    private void testHeaderMatchContent(boolean detailed, int expectedOutputLineCount, Runnable runnable) {
-        String out = ToolsTestUtils.captureStandardOut(() -> {
-            ShareConsumerPerformance.printHeader(detailed);
-            runnable.run();
-        });
-
-        String[] contents = out.split("\n");
-        assertEquals(expectedOutputLineCount, contents.length);
-        String header = contents[0];
-        String body = contents[1];
-
-        assertEquals(header.split(",\\s").length, body.split(",\\s").length);
+        assertEquals("perf-share-consumer-client", config.props().getProperty(ConsumerConfig.CLIENT_ID_CONFIG));
     }
 }

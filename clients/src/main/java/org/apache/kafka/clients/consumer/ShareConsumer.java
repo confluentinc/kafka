@@ -48,11 +48,6 @@ public interface ShareConsumer<K, V> extends Closeable {
     void subscribe(Collection<String> topics);
 
     /**
-     * @see KafkaConsumer#subscribe(Collection, ConsumerRebalanceListener)
-     */
-    void subscribe(Collection<String> topics, ConsumerRebalanceListener callback);
-
-    /**
      * @see KafkaShareConsumer#unsubscribe()
      */
     void unsubscribe();
