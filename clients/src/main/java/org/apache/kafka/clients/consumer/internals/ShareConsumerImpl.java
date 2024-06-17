@@ -909,6 +909,10 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 // The second call to poll(Duration) if PENDING moves into IMPLICIT
                 acknowledgementMode = AcknowledgementMode.IMPLICIT;
             }
+        } else {
+            if (acknowledgementMode == AcknowledgementMode.PENDING && currentFetch != null) {
+                acknowledgementMode = AcknowledgementMode.IMPLICIT;
+            }
         }
 
         if (currentFetch != null) {
@@ -936,11 +940,13 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      * Called to move the acknowledgement mode into EXPLICIT, if it is not known to be IMPLICIT.
      */
     private void ensureExplicitAcknowledgement() {
-        if ((acknowledgementMode == AcknowledgementMode.UNKNOWN) || (acknowledgementMode == AcknowledgementMode.PENDING)) {
-            // If poll(Duration) has been called at most once, moves into EXPLICIT
+        if (acknowledgementMode == AcknowledgementMode.PENDING) {
+            // If poll(Duration) has been called once, moves into EXPLICIT
             acknowledgementMode = AcknowledgementMode.EXPLICIT;
         } else if (acknowledgementMode == AcknowledgementMode.IMPLICIT) {
             throw new IllegalStateException("Implicit acknowledgement of delivery is being used.");
+        } else if (acknowledgementMode == AcknowledgementMode.UNKNOWN) {
+            throw new IllegalStateException("Acknowledge called before poll");
         }
     }
 
