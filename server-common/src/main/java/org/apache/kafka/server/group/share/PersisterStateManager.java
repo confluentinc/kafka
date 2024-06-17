@@ -495,5 +495,15 @@ public class PersisterStateManager {
     public void enqueue(PersisterStateManagerHandler handler) {
       queue.add(handler);
     }
+
+    @Override
+    public void doWork() {
+      try {
+        TimeUnit.MILLISECONDS.sleep(10);
+        this.pollOnce(100L);
+      } catch (Exception e) {
+        log.error("Timed out", e);
+      }
+    }
   }
 }
