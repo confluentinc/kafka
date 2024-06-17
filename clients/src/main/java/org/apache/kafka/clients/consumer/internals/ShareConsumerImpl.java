@@ -31,18 +31,19 @@ import org.apache.kafka.clients.consumer.ShareConsumer;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventProcessor;
-import org.apache.kafka.clients.consumer.internals.events.AsyncShareAcknowledgeEvent;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.CompletableApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
 import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
 import org.apache.kafka.clients.consumer.internals.events.PollEvent;
+import org.apache.kafka.clients.consumer.internals.events.ShareAcknowledgeAsyncEvent;
+import org.apache.kafka.clients.consumer.internals.events.ShareAcknowledgementCommitCallbackEvent;
+import org.apache.kafka.clients.consumer.internals.events.ShareAcknowledgeSyncEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareFetchEvent;
-import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseApplicationEvent;
+import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareSubscriptionChangeApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareUnsubscribeApplicationEvent;
-import org.apache.kafka.clients.consumer.internals.events.SyncShareAcknowledgeEvent;
 import org.apache.kafka.clients.consumer.internals.metrics.KafkaShareConsumerMetrics;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Metric;
@@ -76,6 +77,7 @@ import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -158,15 +160,28 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
 
         @Override
         public void process(final BackgroundEvent event) {
-            if (event.type() == BackgroundEvent.Type.ERROR) {
-                process((ErrorEvent) event);
-            } else {
-                throw new IllegalArgumentException("Background event type " + event.type() + " was not expected");
+            switch (event.type()) {
+                case ERROR:
+                    process((ErrorEvent) event);
+                    break;
+
+                case SHARE_ACKNOWLEDGEMENT_COMMIT_CALLBACK:
+                    process((ShareAcknowledgementCommitCallbackEvent) event);
+                    break;
+
+                default:
+                    throw new IllegalArgumentException("Background event type " + event.type() + " was not expected");
             }
         }
 
         private void process(final ErrorEvent event) {
             throw event.error();
+        }
+
+        private void process(final ShareAcknowledgementCommitCallbackEvent event) {
+            if (acknowledgementCommitCallbackHandler != null) {
+                completedAcknowledgements.add(event.acknowledgementsMap());
+            }
         }
     }
 
@@ -180,6 +195,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     private final Deserializers<K, V> deserializers;
     private ShareFetch<K, V> currentFetch;
     private AcknowledgementCommitCallbackHandler acknowledgementCommitCallbackHandler;
+    private final List<Map<TopicIdPartition, Acknowledgements>> completedAcknowledgements;
 
     private enum AcknowledgementMode {
         /** Acknowledgement mode is not yet known */
@@ -288,6 +304,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                     shareFetchMetricsManager.throttleTimeSensor(),
                     clientTelemetryReporter.map(ClientTelemetryReporter::telemetrySender).orElse(null)
             );
+            this.completedAcknowledgements = new LinkedList<>();
+
             final Supplier<RequestManagers> requestManagersSupplier = RequestManagers.supplier(
                     time,
                     logContext,
@@ -366,6 +384,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         this.metadata = metadata;
         this.defaultApiTimeoutMs = config.getInt(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG);
         this.fetchBuffer = new ShareFetchBuffer(logContext);
+        this.completedAcknowledgements = new LinkedList<>();
 
         ShareConsumerMetrics metricsRegistry = new ShareConsumerMetrics(CONSUMER_SHARE_METRIC_GROUP_PREFIX);
         ShareFetchMetricsManager shareFetchMetricsManager = new ShareFetchMetricsManager(metrics, metricsRegistry.shareFetchMetrics);
@@ -656,7 +675,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             if (acknowledgementsMap.isEmpty()) {
                 return Collections.emptyMap();
             } else {
-                SyncShareAcknowledgeEvent event = new SyncShareAcknowledgeEvent(requestTimer, acknowledgementsMap);
+                ShareAcknowledgeSyncEvent event = new ShareAcknowledgeSyncEvent(requestTimer, acknowledgementsMap);
                 applicationEventHandler.add(event);
                 CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitFuture = event.future();
                 wakeupTrigger.setActiveTask(commitFuture);
@@ -702,7 +721,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
 
             Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = acknowledgementsToSend();
             if (!acknowledgementsMap.isEmpty()) {
-                AsyncShareAcknowledgeEvent event = new AsyncShareAcknowledgeEvent(acknowledgementsMap);
+                ShareAcknowledgeAsyncEvent event = new ShareAcknowledgeAsyncEvent(acknowledgementsMap);
                 applicationEventHandler.add(event);
             }
         } finally {
@@ -720,6 +739,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             if (callback != null) {
                 acknowledgementCommitCallbackHandler = new AcknowledgementCommitCallbackHandler(callback);
             } else {
+                completedAcknowledgements.clear();
                 acknowledgementCommitCallbackHandler = null;
             }
         } finally {
@@ -815,7 +835,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     void prepareShutdown(final Timer timer, final AtomicReference<Throwable> firstException) {
         completeQuietly(
             () -> {
-                applicationEventHandler.addAndGet(new ShareLeaveOnCloseApplicationEvent(timer, acknowledgementsToSend()), timer);
+                applicationEventHandler.addAndGet(new ShareLeaveOnCloseEvent(timer, acknowledgementsToSend()), timer);
             },
             "Failed to send leaveGroup heartbeat with a timeout(ms)=" + timer.timeoutMs(), firstException);
     }
@@ -888,10 +908,13 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      * interested.
      */
     private void handleCompletedAcknowledgements() {
-        if (fetchBuffer != null) {
-            List<Map<TopicIdPartition, Acknowledgements>> completedAcknowledgements = fetchBuffer.getCompletedAcknowledgements();
-            if (!completedAcknowledgements.isEmpty() && acknowledgementCommitCallbackHandler != null) {
+        backgroundEventProcessor.process();
+
+        if ((acknowledgementCommitCallbackHandler != null) && !completedAcknowledgements.isEmpty()) {
+            try {
                 acknowledgementCommitCallbackHandler.onComplete(completedAcknowledgements);
+            } finally {
+                completedAcknowledgements.clear();
             }
         }
     }

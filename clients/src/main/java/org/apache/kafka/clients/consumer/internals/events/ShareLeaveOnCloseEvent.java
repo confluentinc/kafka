@@ -22,11 +22,11 @@ import org.apache.kafka.common.utils.Timer;
 
 import java.util.Map;
 
-public class ShareLeaveOnCloseApplicationEvent extends CompletableApplicationEvent<Void> {
+public class ShareLeaveOnCloseEvent extends CompletableApplicationEvent<Void> {
 
     private Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
 
-    public ShareLeaveOnCloseApplicationEvent(final Timer timer, final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
+    public ShareLeaveOnCloseEvent(final Timer timer, final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         super(Type.SHARE_LEAVE_ON_CLOSE, timer);
         this.acknowledgementsMap = acknowledgementsMap;
     }
@@ -36,9 +36,7 @@ public class ShareLeaveOnCloseApplicationEvent extends CompletableApplicationEve
     }
 
     @Override
-    public String toString() {
-        return "LeaveOnCloseApplicationEvent{" +
-                toStringBase() +
-                '}';
+    protected String toStringBase() {
+        return super.toStringBase() + ", acknowledgementsMap=" + acknowledgementsMap;
     }
 }

@@ -24,9 +24,6 @@ import org.apache.kafka.common.utils.Timer;
 import org.slf4j.Logger;
 
 import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -54,40 +51,11 @@ public class ShareFetchBuffer implements AutoCloseable {
     private final AtomicBoolean wokenUp = new AtomicBoolean(false);
     private ShareCompletedFetch nextInLineFetch;
 
-    // These are the acknowledgements for which the ShareConsumeRequestManager has received responses
-    private List<Map<TopicIdPartition, Acknowledgements>> completeAcknowledgements;
-
     public ShareFetchBuffer(final LogContext logContext) {
         this.log = logContext.logger(ShareFetchBuffer.class);
         this.completedFetches = new ConcurrentLinkedQueue<>();
         this.lock = new ReentrantLock();
         this.notEmptyCondition = lock.newCondition();
-        this.completeAcknowledgements = new LinkedList<>();
-    }
-
-    List<Map<TopicIdPartition, Acknowledgements>> getCompletedAcknowledgements() {
-        lock.lock();
-        try {
-            List<Map<TopicIdPartition, Acknowledgements>> complete = completeAcknowledgements;
-            completeAcknowledgements = new LinkedList<>();
-            return complete;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Add a completed acknowledgements map to the list to be picked up by the consumer.
-     *
-     * @param acknowledgementsMap Map of completed acknowledgements
-     */
-    public void addCompletedAcknowledgements(Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
-        lock.lock();
-        try {
-            completeAcknowledgements.add(acknowledgementsMap);
-        } finally {
-            lock.unlock();
-        }
     }
 
     /**

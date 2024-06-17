@@ -27,7 +27,7 @@ import java.util.Objects;
 public abstract class BackgroundEvent {
 
     public enum Type {
-        ERROR, CONSUMER_REBALANCE_LISTENER_CALLBACK_NEEDED
+        ERROR, CONSUMER_REBALANCE_LISTENER_CALLBACK_NEEDED, SHARE_ACKNOWLEDGEMENT_COMMIT_CALLBACK
     }
 
     private final Type type;

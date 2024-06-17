@@ -21,7 +21,7 @@ import org.apache.kafka.clients.consumer.internals.events.ApplicationEventHandle
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
 import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
 import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
-import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseApplicationEvent;
+import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareSubscriptionChangeApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareUnsubscribeApplicationEvent;
 import org.apache.kafka.common.KafkaException;
@@ -151,7 +151,7 @@ public class ShareConsumerImplTest {
         consumer = newConsumer();
         doReturn(null).when(applicationEventHandler).addAndGet(any(), any());
         consumer.close();
-        verify(applicationEventHandler).addAndGet(any(ShareLeaveOnCloseApplicationEvent.class), any());
+        verify(applicationEventHandler).addAndGet(any(ShareLeaveOnCloseEvent.class), any());
     }
 
     @Test
