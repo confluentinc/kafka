@@ -48,7 +48,6 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -597,7 +596,6 @@ public class ShareConsumerTest {
      * as the acknowledgement mode will be PENDING.
      * Enable test after fixing the above issue.
      */
-    @Disabled
     @Test
     public void testImplicitAcknowledgeCommitSync() {
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
@@ -621,7 +619,6 @@ public class ShareConsumerTest {
      * as the acknowledgement mode will be PENDING.
      * Enable test after fixing the above issue.
      */
-    @Disabled
     @Test
     public void testImplicitAcknowledgementCommitAsync() throws InterruptedException {
         ProducerRecord<byte[], byte[]> record1 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
