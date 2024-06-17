@@ -152,6 +152,7 @@ public class ShareConsumerTestBuilder implements Closeable {
                 subscriptions,
                 fetchConfig,
                 fetchBuffer,
+                backgroundEventHandler,
                 metricsManager,
                 retryBackoffMs,
                 retryBackoffMs));

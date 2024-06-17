@@ -144,11 +144,11 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
                 return;
 
             case SHARE_ACKNOWLEDGE_SYNC:
-                process((SyncShareAcknowledgeEvent) event);
+                process((ShareAcknowledgeSyncEvent) event);
                 return;
 
             case SHARE_ACKNOWLEDGE_ASYNC:
-                process((AsyncShareAcknowledgeEvent) event);
+                process((ShareAcknowledgeAsyncEvent) event);
                 return;
 
             case SHARE_SUBSCRIPTION_CHANGE:
@@ -160,7 +160,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
                 return;
 
             case SHARE_LEAVE_ON_CLOSE:
-                process((ShareLeaveOnCloseApplicationEvent) event);
+                process((ShareLeaveOnCloseEvent) event);
                 return;
 
             default:
@@ -330,7 +330,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
     /**
      * Process event that indicates the consumer acknowledged delivery of records synchronously.
      */
-    private void process(final SyncShareAcknowledgeEvent event) {
+    private void process(final ShareAcknowledgeSyncEvent event) {
         if (!requestManagers.shareConsumeRequestManager.isPresent()) {
             return;
         }
@@ -344,7 +344,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
     /**
      * Process event that indicates the consumer acknowledged delivery of records asynchronously.
      */
-    private void process(final AsyncShareAcknowledgeEvent event) {
+    private void process(final ShareAcknowledgeAsyncEvent event) {
         if (!requestManagers.shareConsumeRequestManager.isPresent()) {
             return;
         }
@@ -387,7 +387,7 @@ public class ApplicationEventProcessor extends EventProcessor<ApplicationEvent> 
         future.whenComplete(complete(event.future()));
     }
 
-    private void process(final ShareLeaveOnCloseApplicationEvent event) {
+    private void process(final ShareLeaveOnCloseEvent event) {
         if (!requestManagers.shareHeartbeatRequestManager.isPresent()) {
             event.future().complete(null);
             return;

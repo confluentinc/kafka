@@ -306,6 +306,7 @@ public class RequestManagers implements Closeable {
                         subscriptions,
                         fetchConfig,
                         fetchBuffer,
+                        backgroundEventHandler,
                         shareFetchMetricsManager,
                         retryBackoffMs,
                         retryBackoffMaxMs);

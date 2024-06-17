@@ -24,6 +24,9 @@ import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
+import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
+import org.apache.kafka.clients.consumer.internals.events.ShareAcknowledgementCommitCallbackEvent;
 import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Node;
@@ -81,12 +84,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Stream;
 
 import static java.util.Collections.singleton;
@@ -137,12 +142,14 @@ public class ShareConsumeRequestManagerTest {
     private List<ShareFetchResponseData.AcquiredRecords> acquiredRecords;
     private List<ShareFetchResponseData.AcquiredRecords> emptyAcquiredRecords;
     private ShareFetchMetricsRegistry shareFetchMetricsRegistry;
+    private List<Map<TopicIdPartition, Acknowledgements>> completedAcknowledgements;
 
     @BeforeEach
     public void setup() {
         records = buildRecords(1L, 3, 1);
         acquiredRecords = ShareCompletedFetchTest.acquiredRecords(1L, 3);
         emptyAcquiredRecords = new ArrayList<>();
+        completedAcknowledgements = new LinkedList<>();
     }
 
     private void assignFromSubscribed(Set<TopicPartition> partitions) {
@@ -252,7 +259,8 @@ public class ShareConsumeRequestManagerTest {
 
         partitionRecords = fetchRecords();
         assertTrue(partitionRecords.containsKey(tp0));
-        assertEquals(Collections.singletonMap(tip0, acknowledgements), fetcher.shareFetchBuffer.getCompletedAcknowledgements().get(0));
+        assertEquals(Collections.singletonMap(tip0, acknowledgements), completedAcknowledgements.get(0));
+        completedAcknowledgements.clear();
 
         Acknowledgements acknowledgements2 = Acknowledgements.empty();
         acknowledgements2.add(2L, AcknowledgeType.REJECT);
@@ -273,7 +281,7 @@ public class ShareConsumeRequestManagerTest {
 
         partitionRecords = fetchRecords();
         assertTrue(partitionRecords.isEmpty());
-        assertEquals(Collections.singletonMap(tip0, acknowledgements2), fetcher.shareFetchBuffer.getCompletedAcknowledgements().get(0));
+        assertEquals(Collections.singletonMap(tip0, acknowledgements2), completedAcknowledgements.get(0));
     }
 
     @Test
@@ -297,7 +305,7 @@ public class ShareConsumeRequestManagerTest {
 
         fetcher.commitSync(time.milliseconds() + 2000, Collections.singletonMap(tip0, acknowledgements));
 
-        assertEquals(1, fetcher.sendAcks());
+        assertEquals(1, fetcher.sendAcknowledgements());
 
         client.prepareResponse(fullAcknowledgeResponse(tip0, Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
@@ -325,7 +333,7 @@ public class ShareConsumeRequestManagerTest {
 
         fetcher.commitAsync(Collections.singletonMap(tip0, acknowledgements));
 
-        assertEquals(1, fetcher.sendAcks());
+        assertEquals(1, fetcher.sendAcknowledgements());
 
         client.prepareResponse(fullAcknowledgeResponse(tip0, Errors.NONE));
         networkClientDelegate.poll(time.timer(0));
@@ -358,7 +366,7 @@ public class ShareConsumeRequestManagerTest {
         assertEquals(3, shareFetch.records().get(tp0).size());
         // As the second topic failed authorization, we do not get the records in the ShareFetch.
         assertThrows(NullPointerException.class, (Executable) shareFetch.records().get(tp1));
-        assertThrows(TopicAuthorizationException.class, () -> collectFetch());
+        assertThrows(TopicAuthorizationException.class, this::collectFetch);
     }
 
     @Test
@@ -383,7 +391,7 @@ public class ShareConsumeRequestManagerTest {
 
         // The first call throws TopicAuthorizationException because there are no records ready to return when the
         // exception is noticed.
-        assertThrows(TopicAuthorizationException.class, () -> collectFetch());
+        assertThrows(TopicAuthorizationException.class, this::collectFetch);
         // And then a second iteration returns the records.
         ShareFetch<Object, Object> shareFetch = collectFetch();
         assertEquals(1, shareFetch.records().size());
@@ -807,6 +815,7 @@ public class ShareConsumeRequestManagerTest {
                 subscriptions,
                 fetchConfig,
                 deserializers);
+        BackgroundEventHandler backgroundEventHandler = new TestableBackgroundEventHandler(logContext, completedAcknowledgements);
         fetcher = spy(new TestableShareConsumeRequestManager<>(
                 logContext,
                 groupId,
@@ -814,6 +823,7 @@ public class ShareConsumeRequestManagerTest {
                 subscriptionState,
                 fetchConfig,
                 new ShareFetchBuffer(logContext),
+                backgroundEventHandler,
                 metricsManager,
                 shareFetchCollector
         ));
@@ -850,9 +860,11 @@ public class ShareConsumeRequestManagerTest {
                                                   SubscriptionState subscriptions,
                                                   FetchConfig fetchConfig,
                                                   ShareFetchBuffer shareFetchBuffer,
+                                                  BackgroundEventHandler backgroundEventHandler,
                                                   ShareFetchMetricsManager metricsManager,
                                                   ShareFetchCollector<K, V> fetchCollector) {
-            super(logContext, groupId, metadata, subscriptions, fetchConfig, shareFetchBuffer, metricsManager, retryBackoffMs, 1000);
+            super(logContext, groupId, metadata, subscriptions, fetchConfig, shareFetchBuffer,
+                    backgroundEventHandler, metricsManager, retryBackoffMs, 1000);
             this.shareFetchCollector = fetchCollector;
             onMemberEpochUpdated(Optional.empty(), Optional.of(Uuid.randomUuid().toString()));
         }
@@ -868,7 +880,7 @@ public class ShareConsumeRequestManagerTest {
             return pollResult.unsentRequests.size();
         }
 
-        private int sendAcks() {
+        private int sendAcknowledgements() {
             NetworkClientDelegate.PollResult pollResult = poll(time.milliseconds());
             networkClientDelegate.addAll(pollResult.unsentRequests);
             return pollResult.unsentRequests.size();
@@ -910,13 +922,13 @@ public class ShareConsumeRequestManagerTest {
         private List<UnsentRequest> removeUnsentRequestByNode(Node node) {
             List<UnsentRequest> list = new ArrayList<>();
 
-            Iterator<UnsentRequest> iter = unsentRequests().iterator();
+            Iterator<UnsentRequest> it = unsentRequests().iterator();
 
-            while (iter.hasNext()) {
-                UnsentRequest u = iter.next();
+            while (it.hasNext()) {
+                UnsentRequest u = it.next();
 
                 if (node.equals(u.node().orElse(null))) {
-                    iter.remove();
+                    it.remove();
                     list.add(u);
                 }
             }
@@ -970,6 +982,23 @@ public class ShareConsumeRequestManagerTest {
             for (UnsentRequest unsentRequest : removeUnsentRequestByNode(node)) {
                 FutureCompletionHandler handler = unsentRequest.handler();
                 handler.onFailure(time.milliseconds(), DisconnectException.INSTANCE);
+            }
+        }
+    }
+
+    private static class TestableBackgroundEventHandler extends BackgroundEventHandler {
+        List<Map<TopicIdPartition, Acknowledgements>> completedAcknowledgements;
+
+        public TestableBackgroundEventHandler(LogContext logContext,
+                                              List<Map<TopicIdPartition, Acknowledgements>> completedAcknowledgements) {
+            super(logContext, new LinkedBlockingQueue<>());
+            this.completedAcknowledgements = completedAcknowledgements;
+        }
+
+        public void add(BackgroundEvent event) {
+            if (event.type() == BackgroundEvent.Type.SHARE_ACKNOWLEDGEMENT_COMMIT_CALLBACK) {
+                ShareAcknowledgementCommitCallbackEvent shareAcknowledgementCommitCallbackEvent = (ShareAcknowledgementCommitCallbackEvent) event;
+                completedAcknowledgements.add(shareAcknowledgementCommitCallbackEvent.acknowledgementsMap());
             }
         }
     }

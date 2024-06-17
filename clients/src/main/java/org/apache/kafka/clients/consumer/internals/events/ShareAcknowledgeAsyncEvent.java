@@ -21,11 +21,11 @@ import org.apache.kafka.common.TopicIdPartition;
 
 import java.util.Map;
 
-public class AsyncShareAcknowledgeEvent extends ApplicationEvent {
+public class ShareAcknowledgeAsyncEvent extends ApplicationEvent {
 
     private final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
 
-    public AsyncShareAcknowledgeEvent(final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
+    public ShareAcknowledgeAsyncEvent(final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         super(Type.SHARE_ACKNOWLEDGE_ASYNC);
         this.acknowledgementsMap = acknowledgementsMap;
     }

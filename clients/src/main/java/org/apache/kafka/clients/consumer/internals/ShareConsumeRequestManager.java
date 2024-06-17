@@ -19,6 +19,8 @@ package org.apache.kafka.clients.consumer.internals;
 import org.apache.kafka.clients.ClientResponse;
 import org.apache.kafka.clients.consumer.internals.NetworkClientDelegate.PollResult;
 import org.apache.kafka.clients.consumer.internals.NetworkClientDelegate.UnsentRequest;
+import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
+import org.apache.kafka.clients.consumer.internals.events.ShareAcknowledgementCommitCallbackEvent;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicIdPartition;
@@ -70,6 +72,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     private final SubscriptionState subscriptions;
     private final FetchConfig fetchConfig;
     protected final ShareFetchBuffer shareFetchBuffer;
+    private final BackgroundEventHandler backgroundEventHandler;
     private final Map<Integer, ShareSessionHandler> sessionHandlers;
     private final Set<Integer> nodesWithPendingRequests;
     private final ShareFetchMetricsManager metricsManager;
@@ -87,6 +90,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                                final SubscriptionState subscriptions,
                                final FetchConfig fetchConfig,
                                final ShareFetchBuffer shareFetchBuffer,
+                               final BackgroundEventHandler backgroundEventHandler,
                                final ShareFetchMetricsManager metricsManager,
                                final long retryBackoffMs,
                                final long retryBackoffMaxMs) {
@@ -97,6 +101,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         this.subscriptions = subscriptions;
         this.fetchConfig = fetchConfig;
         this.shareFetchBuffer = shareFetchBuffer;
+        this.backgroundEventHandler = backgroundEventHandler;
         this.metricsManager = metricsManager;
         this.retryBackoffMs = retryBackoffMs;
         this.retryBackoffMaxMs = retryBackoffMaxMs;
@@ -414,7 +419,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         metricsManager.recordFailedAcknowledgements(acks.size());
                     }
                     acks.setAcknowledgeErrorCode(Errors.forCode(partitionData.acknowledgeErrorCode()));
-                    shareFetchBuffer.addCompletedAcknowledgements(Collections.singletonMap(tip, acks));
+                    Map<TopicIdPartition, Acknowledgements> acksMap = Collections.singletonMap(tip, acks);
+                    ShareAcknowledgementCommitCallbackEvent event = new ShareAcknowledgementCommitCallbackEvent(acksMap);
+                    backgroundEventHandler.add(event);
                 }
 
                 ShareCompletedFetch completedFetch = new ShareCompletedFetch(
@@ -456,7 +463,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 if (acks != null) {
                     metricsManager.recordFailedAcknowledgements(acks.size());
                     acks.setAcknowledgeErrorCode(Errors.forException(error));
-                    shareFetchBuffer.addCompletedAcknowledgements(Collections.singletonMap(tip, acks));
+                    Map<TopicIdPartition, Acknowledgements> acksMap = Collections.singletonMap(tip, acks);
+                    ShareAcknowledgementCommitCallbackEvent event = new ShareAcknowledgementCommitCallbackEvent(acksMap);
+                    backgroundEventHandler.add(event);
                 }
             }));
         } finally {
@@ -699,7 +708,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             Acknowledgements acks = acknowledgementsMap.get(tip);
             if (acks != null) {
                 acks.setAcknowledgeErrorCode(acknowledgeErrorCode);
-                shareFetchBuffer.addCompletedAcknowledgements(Collections.singletonMap(tip, acks));
+                Map<TopicIdPartition, Acknowledgements> acksMap = Collections.singletonMap(tip, acks);
+                ShareAcknowledgementCommitCallbackEvent event = new ShareAcknowledgementCommitCallbackEvent(acksMap);
+                backgroundEventHandler.add(event);
                 resultHandler.ifPresent(handler -> handler.complete(tip, acks));
             }
         }

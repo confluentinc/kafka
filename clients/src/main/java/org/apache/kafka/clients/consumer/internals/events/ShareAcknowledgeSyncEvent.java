@@ -18,15 +18,16 @@ package org.apache.kafka.clients.consumer.internals.events;
 
 import org.apache.kafka.clients.consumer.internals.Acknowledgements;
 import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.utils.Timer;
 
 import java.util.Map;
 
-public class ShareFetchEvent extends ApplicationEvent {
+public class ShareAcknowledgeSyncEvent extends CompletableApplicationEvent<Map<TopicIdPartition, Acknowledgements>> {
 
     private Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
 
-    public ShareFetchEvent(Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
-        super(Type.SHARE_FETCH);
+    public ShareAcknowledgeSyncEvent(final Timer timer, final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
+        super(Type.SHARE_ACKNOWLEDGE_SYNC, timer);
         this.acknowledgementsMap = acknowledgementsMap;
     }
 
