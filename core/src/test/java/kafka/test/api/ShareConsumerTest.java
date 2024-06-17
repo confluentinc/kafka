@@ -334,6 +334,7 @@ public class ShareConsumerTest {
             if (header != null)
                 assertEquals("headerValue", new String(header.value()));
         }
+        shareConsumer.close();
         producer.close();
     }
 
@@ -349,6 +350,7 @@ public class ShareConsumerTest {
 
         List<ConsumerRecord<byte[], byte[]>> records = consumeRecords(shareConsumer, numRecords);
         assertEquals(numRecords, records.size());
+        shareConsumer.close();
         producer.close();
     }
 
@@ -1075,6 +1077,7 @@ public class ShareConsumerTest {
         // This is verified inside the onComplete() method implementation.
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.close();
+        producer.close();
     }
 
     private class TestableAcknowledgeCommitCallbackWithShareConsumer<K, V> implements AcknowledgementCommitCallback {
