@@ -166,7 +166,6 @@ public class ShareConsumerPerformance {
         private final OptionSpec<String> topicOpt;
         private final OptionSpec<String> groupIdOpt;
         private final OptionSpec<Integer> fetchSizeOpt;
-        private final OptionSpec<Void> resetBeginningOffsetOpt;
         private final OptionSpec<Integer> socketBufferSizeOpt;
         private final OptionSpec<String> consumerConfigOpt;
         private final OptionSpec<Void> printMetricsOpt;
@@ -197,8 +196,6 @@ public class ShareConsumerPerformance {
                 .describedAs("size")
                 .ofType(Integer.class)
                 .defaultsTo(1024 * 1024);
-            resetBeginningOffsetOpt = parser.accepts("from-latest", "If the share consumer does not already have an established " +
-                "offset to consume from, start with the latest message present in the log rather than the earliest message.");
             socketBufferSizeOpt = parser.accepts("socket-buffer-size", "The size of the tcp RECV size.")
                 .withRequiredArg()
                 .describedAs("size")
@@ -261,8 +258,6 @@ public class ShareConsumerPerformance {
             props.put(ConsumerConfig.GROUP_ID_CONFIG, options.valueOf(groupIdOpt));
             props.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, options.valueOf(socketBufferSizeOpt).toString());
             props.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, options.valueOf(fetchSizeOpt).toString());
-            props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
-                options.has(resetBeginningOffsetOpt) ? "latest" : "earliest");
             props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
             props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
             props.put(ConsumerConfig.CHECK_CRCS_CONFIG, "false");
