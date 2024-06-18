@@ -348,11 +348,13 @@ public class SharePartitionManager implements AutoCloseable {
             return;
         }
         ShareSession shareSession = cache.get(new ShareSessionKey(groupId, memberId));
-        // Update the session's position in the cache for both piggybacked (to guard against the entry disappearing
-        // from the cache between the ack and the fetch) and standalone acknowledgments.
-        cache.touch(shareSession, time.milliseconds());
-        // If acknowledgement is piggybacked on fetch, newContext function takes care of updating the share session epoch
-        // and share session cache. However, if the acknowledgement is standalone, the updates are handled in the if block
+        synchronized (cache) {
+            // Update the session's position in the cache for both piggybacked (to guard against the entry disappearing
+            // from the cache between the ack and the fetch) and standalone acknowledgments.
+            cache.touch(shareSession, time.milliseconds());
+            // If acknowledgement is piggybacked on fetch, newContext function takes care of updating the share session epoch
+            // and share session cache. However, if the acknowledgement is standalone, the updates are handled in the if block
+        }
     }
 
     public List<TopicIdPartition> cachedTopicIdPartitionsInShareSession(String groupId, Uuid memberId) {
@@ -427,23 +429,25 @@ public class SharePartitionManager implements AutoCloseable {
                     }
                 }
             } else {
-                if (cache.remove(key) != null) {
-                    removedFetchSessionStr = "Removed share session with key " + key;
-                    log.debug(removedFetchSessionStr);
-                }
-                ImplicitLinkedHashCollection<CachedSharePartition> cachedSharePartitions = new
-                        ImplicitLinkedHashCollection<>(shareFetchDataWithMaxBytes.size());
-                shareFetchDataWithMaxBytes.forEach((topicIdPartition, reqData) -> {
-                    cachedSharePartitions.mustAdd(new CachedSharePartition(topicIdPartition, reqData, false));
-                });
-                ShareSessionKey responseShareSessionKey = cache.maybeCreateSession(groupId, reqMetadata.memberId(),
-                        time.milliseconds(), shareFetchDataWithMaxBytes.size(), cachedSharePartitions);
-                log.debug("Share session context with key {} isSubsequent {} returning {}", responseShareSessionKey,
-                        false, partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
+                synchronized (cache) {
+                    if (cache.remove(key) != null) {
+                        removedFetchSessionStr = "Removed share session with key " + key;
+                        log.debug(removedFetchSessionStr);
+                    }
+                    ImplicitLinkedHashCollection<CachedSharePartition> cachedSharePartitions = new
+                            ImplicitLinkedHashCollection<>(shareFetchDataWithMaxBytes.size());
+                    shareFetchDataWithMaxBytes.forEach((topicIdPartition, reqData) -> {
+                        cachedSharePartitions.mustAdd(new CachedSharePartition(topicIdPartition, reqData, false));
+                    });
+                    ShareSessionKey responseShareSessionKey = cache.maybeCreateSession(groupId, reqMetadata.memberId(),
+                            time.milliseconds(), shareFetchDataWithMaxBytes.size(), cachedSharePartitions);
+                    log.debug("Share session context with key {} isSubsequent {} returning {}", responseShareSessionKey,
+                            false, partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
 
-                context = new ShareSessionContext(time, cache, reqMetadata, shareFetchDataWithMaxBytes);
-                log.debug("Created a new ShareSessionContext with {}. A new share session will be started.",
-                        partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
+                    context = new ShareSessionContext(time, cache, reqMetadata, shareFetchDataWithMaxBytes);
+                    log.debug("Created a new ShareSessionContext with {}. A new share session will be started.",
+                            partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
+                }
             }
         } else {
             synchronized (cache) {
