@@ -47,7 +47,6 @@ import static org.apache.kafka.tools.ConsumerPerformance.printConsumerProgress;
 
 public class ShareConsumerPerformance {
     private static final Logger LOG = LoggerFactory.getLogger(ShareConsumerPerformance.class);
-    private static final Random RND = new Random();
 
     public static void main(String[] args) {
         try {
