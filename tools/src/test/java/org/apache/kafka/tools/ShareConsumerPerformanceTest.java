@@ -53,7 +53,7 @@ public class ShareConsumerPerformanceTest {
     @Test
     public void testConfigBrokerList() {
         String[] args = new String[]{
-                "--broker-list", "localhost:9092",
+                "--bootstrap-server", "localhost:9092",
                 "--topic", "test",
                 "--messages", "10"
         };
@@ -84,7 +84,6 @@ public class ShareConsumerPerformanceTest {
     @Test
     public void testBrokerListOverride() {
         String[] args = new String[]{
-                "--broker-list", "localhost:9094",
                 "--bootstrap-server", "localhost:9092",
                 "--topic", "test",
                 "--messages", "10"
@@ -100,7 +99,7 @@ public class ShareConsumerPerformanceTest {
     @Test
     public void testConfigWithUnrecognizedOption() {
         String[] args = new String[]{
-                "--broker-list", "localhost:9092",
+                "--bootstrap-server", "localhost:9092",
                 "--topic", "test",
                 "--messages", "10",
                 "--new-share-consumer"
@@ -120,7 +119,7 @@ public class ShareConsumerPerformanceTest {
         }
 
         String[] args = new String[]{
-                "--broker-list", "localhost:9092",
+                "--bootstrap-server", "localhost:9092",
                 "--topic", "test",
                 "--messages", "10",
                 "--consumer.config", tempFile.getAbsolutePath()
@@ -134,7 +133,7 @@ public class ShareConsumerPerformanceTest {
     @Test
     public void testDefaultClientId() throws IOException {
         String[] args = new String[]{
-                "--broker-list", "localhost:9092",
+                "--bootstrap-server", "localhost:9092",
                 "--topic", "test",
                 "--messages", "10"
         };
