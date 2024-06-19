@@ -834,7 +834,8 @@ public class GroupMetadataManager {
                 group = new ConsumerGroup(snapshotRegistry, groupId, metrics);
                 metrics.onConsumerGroupStateTransition(null, ((ConsumerGroup) group).state());
             } else if (groupType == SHARE) {
-                group = new ShareGroup(snapshotRegistry, groupId);
+                group = new ShareGroup(snapshotRegistry, groupId, metrics);
+                metrics.onShareGroupStateTransition(null, ((ShareGroup) group).state());
             } else {
                 throw new IllegalArgumentException("Invalid group type: " + groupType);
             }
