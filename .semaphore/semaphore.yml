@@ -59,9 +59,6 @@ blocks:
       jobs:
         - name: Build, Compile, Validations, Publish
           commands:
-            - . ci-tools ci-push-tag
-            - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
-            - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives
             - sem-trigger -p common -b master -f .semaphore/semaphore.yml
   - name: Tests
     dependencies: []
