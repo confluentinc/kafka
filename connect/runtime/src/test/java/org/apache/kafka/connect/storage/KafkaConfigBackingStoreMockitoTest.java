@@ -170,7 +170,8 @@ public class KafkaConfigBackingStoreMockitoTest {
             .put("state.v2", "STOPPED");
     private static final List<Struct> CONNECTOR_TASK_COUNT_RECORD_STRUCTS = Arrays.asList(
             new Struct(KafkaConfigBackingStore.TASK_COUNT_RECORD_V0).put("task-count", 6),
-            new Struct(KafkaConfigBackingStore.TASK_COUNT_RECORD_V0).put("task-count", 9)
+            new Struct(KafkaConfigBackingStore.TASK_COUNT_RECORD_V0).put("task-count", 9),
+            new Struct(KafkaConfigBackingStore.TASK_COUNT_RECORD_V0).put("task-count", 2)
     );
 
     // The exact format doesn't matter here since both conversions are mocked
@@ -800,7 +801,7 @@ public class KafkaConfigBackingStoreMockitoTest {
         // Should see a single connector and its config should be the last one seen anywhere in the log
         ClusterConfigState configState = configStorage.snapshot();
         assertEquals(8, configState.offset()); // Should always be next to be read, even if uncommitted
-        assertEquals(Arrays.asList(CONNECTOR_IDS.get(0)), new ArrayList<>(configState.connectors()));
+        assertEquals(Collections.singletonList(CONNECTOR_IDS.get(0)), new ArrayList<>(configState.connectors()));
         // CONNECTOR_CONFIG_STRUCTS[2] -> SAMPLE_CONFIGS[2]
         assertEquals(SAMPLE_CONFIGS.get(2), configState.connectorConfig(CONNECTOR_IDS.get(0)));
         // Should see 0 tasks for that connector.
@@ -811,6 +812,56 @@ public class KafkaConfigBackingStoreMockitoTest {
         // Shouldn't see any callbacks since this is during startup
         configStorage.stop();
         verify(configLog).stop();
+    }
+
+    @Test
+    public void testRestoreCompactedDeletedConnector() {
+        // When a connector is deleted, we emit a tombstone record for its config (with key
+        // "connector-<name>") and its target state (with key "target-state-<name>"), but not
+        // for its task configs
+        // As a result, we need to carefully handle the case where task configs are present in
+        // the config topic for a connector, but there is no accompanying config for the
+        // connector itself
+
+        int offset = 0;
+        List<ConsumerRecord<String, byte[]>> existingRecords = Arrays.asList(
+                new ConsumerRecord<>(TOPIC, 0, offset++, 0L, TimestampType.CREATE_TIME, 0, 0,
+                        TASK_CONFIG_KEYS.get(0), CONFIGS_SERIALIZED.get(0), new RecordHeaders(), Optional.empty()),
+                new ConsumerRecord<>(TOPIC, 0, offset++, 0L, TimestampType.CREATE_TIME, 0, 0,
+                        TASK_CONFIG_KEYS.get(1), CONFIGS_SERIALIZED.get(1), new RecordHeaders(), Optional.empty()),
+                new ConsumerRecord<>(TOPIC, 0, offset++, 0L, TimestampType.CREATE_TIME, 0, 0,
+                        COMMIT_TASKS_CONFIG_KEYS.get(0), CONFIGS_SERIALIZED.get(2), new RecordHeaders(), Optional.empty()),
+                new ConsumerRecord<>(TOPIC, 0, offset++, 0L, TimestampType.CREATE_TIME, 0, 0,
+                        CONNECTOR_TASK_COUNT_RECORD_KEYS.get(0), CONFIGS_SERIALIZED.get(3), new RecordHeaders(), Optional.empty()));
+        LinkedHashMap<byte[], Struct> deserialized = new LinkedHashMap<>();
+        deserialized.put(CONFIGS_SERIALIZED.get(0), TASK_CONFIG_STRUCTS.get(0));
+        deserialized.put(CONFIGS_SERIALIZED.get(1), TASK_CONFIG_STRUCTS.get(0));
+        deserialized.put(CONFIGS_SERIALIZED.get(2), TASKS_COMMIT_STRUCT_TWO_TASK_CONNECTOR);
+        deserialized.put(CONFIGS_SERIALIZED.get(3), CONNECTOR_TASK_COUNT_RECORD_STRUCTS.get(2));
+        logOffset = offset;
+        expectStart(existingRecords, deserialized);
+        when(configLog.partitionCount()).thenReturn(1);
+
+        configStorage.setupAndCreateKafkaBasedLog(TOPIC, config);
+        verifyConfigure();
+        configStorage.start();
+
+        // Should see no connectors and no task configs
+        ClusterConfigState configState = configStorage.snapshot();
+        assertEquals(Collections.emptySet(), configState.connectors());
+        assertEquals(0, configState.taskCount(CONNECTOR_1_NAME));
+        assertNull(configState.rawTaskConfig(TASK_IDS.get(0)));
+        assertNull(configState.rawTaskConfig(TASK_IDS.get(1)));
+
+        // Probe internal collections just to be sure
+        assertEquals(Collections.emptyMap(), configState.connectorConfigs);
+        assertEquals(Collections.emptyMap(), configState.taskConfigs);
+        assertEquals(Collections.emptyMap(), configState.connectorTaskCounts);
+
+        // Exception: we still include task count records, for the unlikely-but-possible case
+        // where there are still zombie instances of the tasks for this long-deleted connector
+        // running somewhere on the cluster
+        assertEquals(2, (int) configState.taskCountRecord(CONNECTOR_1_NAME));
     }
 
     @Test
@@ -1053,7 +1104,7 @@ public class KafkaConfigBackingStoreMockitoTest {
         // After reading the log, it should have been in an inconsistent state
         ClusterConfigState configState = configStorage.snapshot();
         assertEquals(6, configState.offset()); // Should always be next to be read, not last committed
-        assertEquals(Arrays.asList(CONNECTOR_IDS.get(0)), new ArrayList<>(configState.connectors()));
+        assertEquals(Collections.singletonList(CONNECTOR_IDS.get(0)), new ArrayList<>(configState.connectors()));
         // Inconsistent data should leave us with no tasks listed for the connector and an entry in the inconsistent list
         assertEquals(Collections.emptyList(), configState.tasks(CONNECTOR_IDS.get(0)));
         // Both TASK_CONFIG_STRUCTS[0] -> SAMPLE_CONFIGS[0]
@@ -1086,8 +1137,8 @@ public class KafkaConfigBackingStoreMockitoTest {
         // This is only two more ahead of the last one because multiple calls fail, and so their configs are not written
         // to the topic. Only the last call with 1 task config + 1 commit actually gets written.
         assertEquals(8, configState.offset());
-        assertEquals(Arrays.asList(CONNECTOR_IDS.get(0)), new ArrayList<>(configState.connectors()));
-        assertEquals(Arrays.asList(TASK_IDS.get(0)), configState.tasks(CONNECTOR_IDS.get(0)));
+        assertEquals(Collections.singletonList(CONNECTOR_IDS.get(0)), new ArrayList<>(configState.connectors()));
+        assertEquals(Collections.singletonList(TASK_IDS.get(0)), configState.tasks(CONNECTOR_IDS.get(0)));
         assertEquals(SAMPLE_CONFIGS.get(0), configState.taskConfig(TASK_IDS.get(0)));
         assertEquals(Collections.EMPTY_SET, configState.inconsistentConnectors());
 

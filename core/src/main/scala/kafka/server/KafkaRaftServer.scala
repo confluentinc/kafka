@@ -71,6 +71,7 @@ class KafkaRaftServer(
     time,
     metrics,
     CompletableFuture.completedFuture(QuorumConfig.parseVoterConnections(config.quorumVoters)),
+    List().asJava,
     new StandardFaultHandlerFactory(),
   )
 
