@@ -1016,6 +1016,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         self.security_config.clean_node(node)
         node.account.kill_process(self.java_class_name(),
                                          clean_shutdown=False, allow_fail=True)
+        node.account.kill_java_processes(self.deprecated_cp_java_class_name(),
+                                         clean_shutdown=False, allow_fail=True)
         node.account.ssh("sudo rm -rf -- %s" % KafkaService.PERSISTENT_ROOT, allow_fail=False)
 
     def kafka_topics_cmd_with_optional_security_settings(self, node, force_use_zk_connection, kafka_security_protocol=None, offline_nodes=[]):
@@ -1842,3 +1844,6 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
     def java_class_name(self):
         return "kafka.Kafka"
+
+    def deprecated_cp_java_class_name(self):
+        return "io.confluent.support.metrics.SupportedKafka"
