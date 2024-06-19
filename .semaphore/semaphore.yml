@@ -59,7 +59,6 @@ blocks:
       jobs:
         - name: Build, Compile, Validations, Publish
           commands:
-            - . ci-tools ci-update-version
             - . ci-tools ci-push-tag
             - mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
             - ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives
