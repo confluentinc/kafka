@@ -315,7 +315,7 @@ object TestUtils extends Logging {
     }.mkString(",")
 
     val props = new Properties
-    props.put(ServerConfigs.UNSTABLE_METADATA_VERSIONS_ENABLE_CONFIG, "true")
+    props.put(ServerConfigs.UNSTABLE_FEATURE_VERSIONS_ENABLE_CONFIG, "true")
     if (zkConnect == null) {
       props.setProperty(KRaftConfigs.SERVER_MAX_STARTUP_TIME_MS_CONFIG, TimeUnit.MINUTES.toMillis(10).toString)
       props.put(KRaftConfigs.NODE_ID_CONFIG, nodeId.toString)
@@ -914,9 +914,10 @@ object TestUtils extends Logging {
   def pollRecordsUntilTrue[K, V](consumer: Consumer[K, V],
                                  action: ConsumerRecords[K, V] => Boolean,
                                  msg: => String,
-                                 waitTimeMs: Long = JTestUtils.DEFAULT_MAX_WAIT_MS): Unit = {
+                                 waitTimeMs: Long = JTestUtils.DEFAULT_MAX_WAIT_MS,
+                                 pollTimeoutMs: Long = 100): Unit = {
     waitUntilTrue(() => {
-      val records = consumer.poll(Duration.ofMillis(100))
+      val records = consumer.poll(Duration.ofMillis(pollTimeoutMs))
       action(records)
     }, msg = msg, pause = 0L, waitTimeMs = waitTimeMs)
   }
