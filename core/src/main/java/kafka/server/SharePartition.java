@@ -731,11 +731,18 @@ public class SharePartition {
     }
 
     /**
-     * Checks if the number of records between startOffset and endOffset does not exceed the record lock partition limit
+     * Checks if the records can be acquired for the share partition. The records can be acquired if
+     * the number of records in-flight is less than the max in-flight messages. Or if the fetch is
+     * to happen somewhere in between the record states cached in the share partition i.e. re-acquire
+     * the records that are already fetched before.
      *
      * @return A boolean which indicates whether more records can be acquired or not
      */
-    public boolean canAcquireMore() {
+    public boolean canAcquireRecords() {
+        if (nextFetchOffset() != endOffset() + 1) {
+            return true;
+        }
+
         lock.readLock().lock();
         long numRecords;
         try {

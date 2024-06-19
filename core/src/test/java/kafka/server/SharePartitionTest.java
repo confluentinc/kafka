@@ -3329,7 +3329,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(149, sharePartition.endOffset());
     }
@@ -3349,7 +3349,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(149, sharePartition.endOffset());
 
@@ -3361,7 +3361,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
 
@@ -3374,7 +3374,7 @@ public class SharePartitionTest {
 
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(250, sharePartition.startOffset());
         assertEquals(250, sharePartition.endOffset());
     }
@@ -3390,7 +3390,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(149, sharePartition.endOffset());
 
@@ -3402,7 +3402,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
 
@@ -3418,7 +3418,7 @@ public class SharePartitionTest {
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
         // The records have been released, thus they are still available for being acquired
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
     }
 
     @Test
@@ -3432,7 +3432,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(149, sharePartition.endOffset());
 
@@ -3444,7 +3444,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
 
@@ -3460,7 +3460,7 @@ public class SharePartitionTest {
         assertEquals(90, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
         // The records have been rejected, thus they are removed from the cachedState
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
     }
 
     @Test
@@ -3474,7 +3474,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(149, sharePartition.endOffset());
 
@@ -3486,7 +3486,7 @@ public class SharePartitionTest {
 
         assertFalse(result.isCompletedExceptionally());
         assertEquals(1, result.join().size());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
 
@@ -3502,7 +3502,7 @@ public class SharePartitionTest {
         assertEquals(90, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
         // The records have been accepted, thus they are removed from the cachedState
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
     }
 
     @Test
@@ -3522,7 +3522,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
         assertEquals(250, sharePartition.nextFetchOffset());
@@ -3539,7 +3539,7 @@ public class SharePartitionTest {
         // The SPSO should only move when the initial records in cachedState are acknowledged with type ACKNOWLEDGE or ARCHIVED
         assertEquals(250, sharePartition.startOffset());
         assertEquals(250, sharePartition.endOffset());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         // The records have been accepted, thus they are removed from the cachedState
         assertEquals(0, sharePartition.cachedState().size());
     }
@@ -3558,7 +3558,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
         assertEquals(250, sharePartition.nextFetchOffset());
@@ -3575,7 +3575,7 @@ public class SharePartitionTest {
         // The SPSO should only move when the initial records in cachedState are acknowledged with type ACKNOWLEDGE or ARCHIVED
         assertEquals(250, sharePartition.startOffset());
         assertEquals(250, sharePartition.endOffset());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         // The records have been rejected, thus they are removed from the cachedState
         assertEquals(0, sharePartition.cachedState().size());
     }
@@ -3594,7 +3594,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
         assertEquals(250, sharePartition.nextFetchOffset());
@@ -3612,7 +3612,7 @@ public class SharePartitionTest {
         // The SPSO should only move when the initial records in cachedState are acknowledged with type ACKNOWLEDGE or ARCHIVED
         assertEquals(0, sharePartition.startOffset());
         assertEquals(249, sharePartition.endOffset());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         // The records have been released, thus they are not removed from the cachedState
         assertEquals(1, sharePartition.cachedState().size());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(0L).batchState());
@@ -3636,7 +3636,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(14, sharePartition.endOffset());
         assertEquals(15, sharePartition.nextFetchOffset());
@@ -3655,7 +3655,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(29, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3681,7 +3681,7 @@ public class SharePartitionTest {
         assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
 
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(13, sharePartition.startOffset());
         assertEquals(29, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3703,7 +3703,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(14, sharePartition.endOffset());
         assertEquals(15, sharePartition.nextFetchOffset());
@@ -3722,7 +3722,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(29, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3742,7 +3742,7 @@ public class SharePartitionTest {
         assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
 
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(15, sharePartition.startOffset());
         assertEquals(29, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3764,7 +3764,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(14, sharePartition.endOffset());
         assertEquals(15, sharePartition.nextFetchOffset());
@@ -3783,7 +3783,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(29, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3809,7 +3809,7 @@ public class SharePartitionTest {
         assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
 
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(29, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3832,7 +3832,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(14, sharePartition.endOffset());
         assertEquals(15, sharePartition.nextFetchOffset());
@@ -3852,7 +3852,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(15L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(15L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(15L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(29, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3868,7 +3868,7 @@ public class SharePartitionTest {
         assertFalse(ackResult.join().isPresent());
         assertEquals(0, sharePartition.cachedState().size());
 
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(30, sharePartition.startOffset());
         assertEquals(30, sharePartition.endOffset());
         assertEquals(30, sharePartition.nextFetchOffset());
@@ -3894,7 +3894,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(0L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(0L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(0L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(19, sharePartition.endOffset());
         assertEquals(20, sharePartition.nextFetchOffset());
@@ -3913,7 +3913,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(20L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(20L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(20L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(39, sharePartition.endOffset());
         assertEquals(40, sharePartition.nextFetchOffset());
@@ -3935,7 +3935,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(40L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(40L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(40L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(0, sharePartition.startOffset());
         assertEquals(59, sharePartition.endOffset());
         assertEquals(60, sharePartition.nextFetchOffset());
@@ -3957,7 +3957,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(40L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(40L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(40L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(20, sharePartition.startOffset());
         assertEquals(59, sharePartition.endOffset());
         assertEquals(60, sharePartition.nextFetchOffset());
@@ -3979,7 +3979,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(60L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(60L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(60L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(20, sharePartition.startOffset());
         assertEquals(79, sharePartition.endOffset());
         assertEquals(80, sharePartition.nextFetchOffset());
@@ -4004,7 +4004,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(60L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(60L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(60L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(50, sharePartition.startOffset());
         assertEquals(79, sharePartition.endOffset());
         assertEquals(80, sharePartition.nextFetchOffset());
@@ -4020,7 +4020,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(80L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(80L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(80L).batchDeliveryCount());
-        assertFalse(sharePartition.canAcquireMore());
+        assertFalse(sharePartition.canAcquireRecords());
         assertEquals(50, sharePartition.startOffset());
         assertEquals(179, sharePartition.endOffset());
         assertEquals(180, sharePartition.nextFetchOffset());
@@ -4036,7 +4036,7 @@ public class SharePartitionTest {
         assertFalse(ackResult.isCompletedExceptionally());
         assertFalse(ackResult.join().isPresent());
         assertEquals(0, sharePartition.cachedState().size());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(180, sharePartition.startOffset());
         assertEquals(180, sharePartition.endOffset());
         assertEquals(180, sharePartition.nextFetchOffset());
@@ -4052,7 +4052,7 @@ public class SharePartitionTest {
         assertEquals(RecordState.ACQUIRED, sharePartition.cachedState().get(180L).batchState());
         assertEquals("member-1", sharePartition.cachedState().get(180L).batchMemberId());
         assertEquals(1, sharePartition.cachedState().get(180L).batchDeliveryCount());
-        assertTrue(sharePartition.canAcquireMore());
+        assertTrue(sharePartition.canAcquireRecords());
         assertEquals(180, sharePartition.startOffset());
         assertEquals(199, sharePartition.endOffset());
         assertEquals(200, sharePartition.nextFetchOffset());
