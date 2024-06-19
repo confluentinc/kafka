@@ -46,8 +46,6 @@ global_job_config:
       - |
         if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]]; then
           . vault-setup
-          . vault-sem-get-secret ci-reporting
-          . vault-sem-get-secret sox-semaphore-build-info
         fi
       - sem-version java 21
       - sem-version go 1.16.15
@@ -65,6 +63,10 @@ blocks:
       jobs:
         - name: Build, Compile, Validations, Publish
           commands:
+            - export mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
+            - echo $mavenUrl
+            - export mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2)
+            - echo $mavenUrl
             - export SEMAPHORE_ORGANIZATION_URL=asdf.semaphoreci.com
             - |
               if [[ "${SEMAPHORE_ORGANIZATION_URL}" == *".semaphoreci.com" ]] && [ "$PUBLISH" = "true" ]; then \
