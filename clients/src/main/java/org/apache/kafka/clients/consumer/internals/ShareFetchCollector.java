@@ -107,9 +107,8 @@ public class ShareFetchCollector<K, V> {
                         nextInLineFetch.drain();
                     }
 
-                    final ShareFetch<K, V> nextFetch = ShareFetch.forInFlightBatch(tp, batch);
-                    recordsRemaining -= nextFetch.numRecords();
-                    fetch.add(nextFetch);
+                    recordsRemaining -= batch.numRecords();
+                    fetch.add(tp, batch);
 
                     if (batch.getException() != null) {
                         throw batch.getException();

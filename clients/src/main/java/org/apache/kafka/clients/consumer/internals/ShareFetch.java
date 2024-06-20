@@ -18,9 +18,11 @@ package org.apache.kafka.clients.consumer.internals;
 
 import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaShareConsumer;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -29,52 +31,42 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.apache.kafka.common.utils.Utils.mkEntry;
-import static org.apache.kafka.common.utils.Utils.mkMap;
-
+/**
+ * {@link ShareFetch} represents the records fetched from the broker to be returned to the consumer
+ * to satisfy a {@link KafkaShareConsumer#poll(Duration)} call. The records can come from multiple
+ * topic-partitions.
+ *
+ * @param <K> The record key
+ * @param <V> The record value
+ */
 public class ShareFetch<K, V> {
     private final Map<TopicIdPartition, ShareInFlightBatch<K, V>> batches;
-    private int numRecords;
 
     public static <K, V> ShareFetch<K, V> empty() {
-        return new ShareFetch<>(new HashMap<>(), 0);
+        return new ShareFetch<>(new HashMap<>());
     }
 
-    public static <K, V> ShareFetch<K, V> forInFlightBatch(
-        TopicIdPartition partition,
-        ShareInFlightBatch<K, V> batch) {
-        Map<TopicIdPartition, ShareInFlightBatch<K, V>> batchesMap = batch.isEmpty()
-                ? new HashMap<>()
-                : mkMap(mkEntry(partition, batch));
-        return new ShareFetch<>(batchesMap, batch.getInFlightRecords().size());
-    }
-
-    private ShareFetch(
-            Map<TopicIdPartition, ShareInFlightBatch<K, V>> batches,
-            int numRecords) {
+    private ShareFetch(Map<TopicIdPartition, ShareInFlightBatch<K, V>> batches) {
         this.batches = batches;
-        this.numRecords = numRecords;
     }
 
     /**
-     * Add another {@link ShareFetch} to this one; all of its records will be added to this object's
+     * Add another {@link ShareInFlightBatch} to this one; all of its records will be added to this object's
      * {@link #records() records}.
      *
-     * @param fetch the other fetch to add; may not be null
+     * @param partition the topic-partition
+     * @param batch the batch to add; may not be null
      */
-    public void add(ShareFetch<K, V> fetch) {
-        Objects.requireNonNull(fetch);
-        fetch.batches.forEach((partition, batch) -> {
-            this.numRecords += fetch.numRecords();
-            ShareInFlightBatch<K, V> currentBatch = this.batches.get(partition);
-            if (currentBatch == null) {
-                this.batches.put(partition, batch);
-            } else {
-                // This case shouldn't usually happen because we only send one fetch at a time per partition,
-                // but it might conceivably happen in some rare cases (such as partition leader changes).
-                currentBatch.merge(batch);
-            }
-        });
+    public void add(TopicIdPartition partition, ShareInFlightBatch<K, V> batch) {
+        Objects.requireNonNull(batch);
+        ShareInFlightBatch<K, V> currentBatch = this.batches.get(partition);
+        if (currentBatch == null) {
+            this.batches.put(partition, batch);
+        } else {
+            // This case shouldn't usually happen because we only send one fetch at a time per partition,
+            // but it might conceivably happen in some rare cases (such as partition leader changes).
+            currentBatch.merge(batch);
+        }
     }
 
     /**
@@ -90,6 +82,20 @@ public class ShareFetch<K, V> {
      * @return the total number of non-control messages for this fetch, across all partitions
      */
     public int numRecords() {
+        int numRecords = 0;
+        if (!batches.isEmpty()) {
+            Iterator<Map.Entry<TopicIdPartition, ShareInFlightBatch<K, V>>> iterator = batches.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<TopicIdPartition, ShareInFlightBatch<K, V>> entry = iterator.next();
+                ShareInFlightBatch<K, V> batch = entry.getValue();
+                if (batch.isEmpty()) {
+                    iterator.remove();
+                } else {
+                    numRecords += batch.numRecords();
+                }
+            }
+        }
+
         return numRecords;
     }
 
@@ -97,7 +103,7 @@ public class ShareFetch<K, V> {
      * @return {@code true} if and only if this fetch did not return any non-control records
      */
     public boolean isEmpty() {
-        return numRecords == 0;
+        return numRecords() == 0;
     }
 
     /**
@@ -129,10 +135,17 @@ public class ShareFetch<K, V> {
         batches.forEach((tip, batch) -> batch.acknowledgeAll(type));
     }
 
-    public Map<TopicIdPartition, Acknowledgements> acknowledgementsByPartition() {
+    /**
+     * Removes all acknowledged records from the in-flight records and returns the map of acknowledgements
+     * to send. If some records were not acknowledged, the in-flight records will not be empty after this
+     * method.
+     *
+     * @return The map of acknowledgements to send
+     */
+    public Map<TopicIdPartition, Acknowledgements> takeAcknowledgedRecords() {
         Map<TopicIdPartition, Acknowledgements> acknowledgementMap = new LinkedHashMap<>();
         batches.forEach((tip, batch) -> {
-            Acknowledgements acknowledgements = batch.getAcknowledgements();
+            Acknowledgements acknowledgements = batch.takeAcknowledgedRecords();
             if (!acknowledgements.isEmpty())
                 acknowledgementMap.put(tip, acknowledgements);
         });
