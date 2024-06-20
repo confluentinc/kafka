@@ -144,19 +144,21 @@ public class ShareSessionContext extends ShareFetchContext {
         Map.Entry<TopicIdPartition, ShareFetchResponseData.PartitionData> element = iterator.next();
         TopicIdPartition topicPart = element.getKey();
         ShareFetchResponseData.PartitionData respData = element.getValue();
-        CachedSharePartition cachedPart = session.partitionMap().find(new CachedSharePartition(topicPart));
-        boolean mustRespond = cachedPart.maybeUpdateResponseData(respData, updateShareContextAndRemoveUnselected);
-        if (mustRespond) {
-          nextElement = element;
-          if (updateShareContextAndRemoveUnselected && ShareFetchResponse.recordsSize(respData) > 0) {
-            // Session.partitionMap is of type ImplicitLinkedHashCollection<> which tracks the order of insertion of elements.
-            // Since, we are updating an element in this case, we need to perform a remove and then a mustAdd to maintain the correct order
-            session.partitionMap().remove(cachedPart);
-            session.partitionMap().mustAdd(cachedPart);
-          }
-        } else {
-          if (updateShareContextAndRemoveUnselected) {
-            iterator.remove();
+        synchronized (session) {
+          CachedSharePartition cachedPart = session.partitionMap().find(new CachedSharePartition(topicPart));
+          boolean mustRespond = cachedPart.maybeUpdateResponseData(respData, updateShareContextAndRemoveUnselected);
+          if (mustRespond) {
+            nextElement = element;
+            if (updateShareContextAndRemoveUnselected && ShareFetchResponse.recordsSize(respData) > 0) {
+              // Session.partitionMap is of type ImplicitLinkedHashCollection<> which tracks the order of insertion of elements.
+              // Since, we are updating an element in this case, we need to perform a remove and then a mustAdd to maintain the correct order
+              session.partitionMap().remove(cachedPart);
+              session.partitionMap().mustAdd(cachedPart);
+            }
+          } else {
+            if (updateShareContextAndRemoveUnselected) {
+              iterator.remove();
+            }
           }
         }
       }
@@ -207,7 +209,7 @@ public class ShareSessionContext extends ShareFetchContext {
       synchronized (session) {
         sessionEpoch = session.epoch;
       }
-      if (session.epoch != expectedEpoch) {
+      if (sessionEpoch != expectedEpoch) {
         log.info("Subsequent share session {} expected epoch {}, but got {}. Possible duplicate request.",
             session.key(), expectedEpoch, sessionEpoch);
         return new ShareFetchResponse(ShareFetchResponse.toMessage(Errors.INVALID_SHARE_SESSION_EPOCH,
