@@ -305,17 +305,15 @@ public class SharePartitionManager implements AutoCloseable {
         acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionBatches) -> {
             SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
             if (sharePartition != null) {
-                synchronized (sharePartition) {
-                    CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgePartitionBatches).thenApply(throwable -> {
-                        if (throwable.isPresent()) {
-                            return Errors.forException(throwable.get());
-                        } else {
-                            return Errors.NONE;
-                        }
+                CompletableFuture<Errors> future = sharePartition.acknowledge(memberId, acknowledgePartitionBatches).thenApply(throwable -> {
+                    if (throwable.isPresent()) {
+                        return Errors.forException(throwable.get());
+                    } else {
+                        return Errors.NONE;
+                    }
 
-                    });
-                    futures.put(topicIdPartition, future);
-                }
+                });
+                futures.put(topicIdPartition, future);
             } else {
                 futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
             }
@@ -348,13 +346,11 @@ public class SharePartitionManager implements AutoCloseable {
             return;
         }
         ShareSession shareSession = cache.get(new ShareSessionKey(groupId, memberId));
-        synchronized (cache) {
-            // Update the session's position in the cache for both piggybacked (to guard against the entry disappearing
-            // from the cache between the ack and the fetch) and standalone acknowledgments.
-            cache.touch(shareSession, time.milliseconds());
-            // If acknowledgement is piggybacked on fetch, newContext function takes care of updating the share session epoch
-            // and share session cache. However, if the acknowledgement is standalone, the updates are handled in the if block
-        }
+        // Update the session's position in the cache for both piggybacked (to guard against the entry disappearing
+        // from the cache between the ack and the fetch) and standalone acknowledgments.
+        cache.touch(shareSession, time.milliseconds());
+        // If acknowledgement is piggybacked on fetch, newContext function takes care of updating the share session epoch
+        // and share session cache. However, if the acknowledgement is standalone, the updates are handled in the if block
     }
 
     public List<TopicIdPartition> cachedTopicIdPartitionsInShareSession(String groupId, Uuid memberId) {
@@ -379,16 +375,14 @@ public class SharePartitionManager implements AutoCloseable {
                 log.debug("No share partition found for groupId {} topicPartition {} while releasing acquired topic partitions", groupId, topicIdPartition);
                 futures.put(topicIdPartition, CompletableFuture.completedFuture(Errors.UNKNOWN_TOPIC_OR_PARTITION));
             } else {
-                synchronized (sharePartition) {
-                    CompletableFuture<Errors> future = sharePartition.releaseAcquiredRecords(memberId).thenApply(throwable -> {
-                        if (throwable.isPresent()) {
-                            return Errors.forException(throwable.get());
-                        } else {
-                            return Errors.NONE;
-                        }
-                    });
-                    futures.put(topicIdPartition, future);
-                }
+                CompletableFuture<Errors> future = sharePartition.releaseAcquiredRecords(memberId).thenApply(throwable -> {
+                    if (throwable.isPresent()) {
+                        return Errors.forException(throwable.get());
+                    } else {
+                        return Errors.NONE;
+                    }
+                });
+                futures.put(topicIdPartition, future);
             }
         });
 
@@ -422,32 +416,29 @@ public class SharePartitionManager implements AutoCloseable {
                     throw Errors.INVALID_REQUEST.exception();
                 }
                 context = new FinalContext();
-                synchronized (cache) {
-                    if (cache.remove(key) != null) {
-                        removedFetchSessionStr = "Removed share session with key " + key;
-                        log.debug(removedFetchSessionStr);
-                    }
+                if (cache.remove(key) != null) {
+                    removedFetchSessionStr = "Removed share session with key " + key;
+                    log.debug(removedFetchSessionStr);
                 }
             } else {
-                synchronized (cache) {
-                    if (cache.remove(key) != null) {
-                        removedFetchSessionStr = "Removed share session with key " + key;
-                        log.debug(removedFetchSessionStr);
-                    }
-                    ImplicitLinkedHashCollection<CachedSharePartition> cachedSharePartitions = new
-                            ImplicitLinkedHashCollection<>(shareFetchDataWithMaxBytes.size());
-                    shareFetchDataWithMaxBytes.forEach((topicIdPartition, reqData) -> {
-                        cachedSharePartitions.mustAdd(new CachedSharePartition(topicIdPartition, reqData, false));
-                    });
-                    ShareSessionKey responseShareSessionKey = cache.maybeCreateSession(groupId, reqMetadata.memberId(),
-                            time.milliseconds(), shareFetchDataWithMaxBytes.size(), cachedSharePartitions);
-                    log.debug("Share session context with key {} isSubsequent {} returning {}", responseShareSessionKey,
-                            false, partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
-
-                    context = new ShareSessionContext(time, cache, reqMetadata, shareFetchDataWithMaxBytes);
-                    log.debug("Created a new ShareSessionContext with {}. A new share session will be started.",
-                            partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
+                // Initialize a new share session.
+                if (cache.remove(key) != null) {
+                    removedFetchSessionStr = "Removed share session with key " + key;
+                    log.debug(removedFetchSessionStr);
                 }
+                ImplicitLinkedHashCollection<CachedSharePartition> cachedSharePartitions = new
+                        ImplicitLinkedHashCollection<>(shareFetchDataWithMaxBytes.size());
+                shareFetchDataWithMaxBytes.forEach((topicIdPartition, reqData) -> {
+                    cachedSharePartitions.mustAdd(new CachedSharePartition(topicIdPartition, reqData, false));
+                });
+                ShareSessionKey responseShareSessionKey = cache.maybeCreateSession(groupId, reqMetadata.memberId(),
+                        time.milliseconds(), shareFetchDataWithMaxBytes.size(), cachedSharePartitions);
+                log.debug("Share session context with key {} isSubsequent {} returning {}", responseShareSessionKey,
+                        false, partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
+
+                context = new ShareSessionContext(time, cache, reqMetadata, shareFetchDataWithMaxBytes);
+                log.debug("Created a new ShareSessionContext with {}. A new share session will be started.",
+                        partitionsToLogString(shareFetchDataWithMaxBytes.keySet()));
             }
         } else {
             synchronized (cache) {
@@ -487,10 +478,8 @@ public class SharePartitionManager implements AutoCloseable {
             throw Errors.INVALID_SHARE_SESSION_EPOCH.exception();
         } else if (reqMetadata.epoch() == ShareFetchMetadata.FINAL_EPOCH) {
             ShareSessionKey key = shareSessionKey(groupId, reqMetadata.memberId());
-            synchronized (cache) {
-                if (cache.remove(key) != null) {
-                    log.debug("Removed share session with key " + key);
-                }
+            if (cache.remove(key) != null) {
+                log.debug("Removed share session with key " + key);
             }
         } else {
             synchronized (cache) {
