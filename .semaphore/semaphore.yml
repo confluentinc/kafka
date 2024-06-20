@@ -57,7 +57,7 @@ blocks:
         - name: Build, Compile, Validations, Publish
           commands:
           # Skip in public CI
-            - |
+            - >
               if [[ "${SEMAPHORE_ORGANIZATION_URL}" == *".semaphoreci.com" ]]; then
                 echo "${SEMAPHORE_ORGANIZATION_URL} does not match the required pattern. Exiting without error."
                 exit 0
