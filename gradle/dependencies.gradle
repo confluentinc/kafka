@@ -143,7 +143,7 @@ versions += [
   pcollections: "4.0.1",
   reflections: "0.10.2",
   reload4j: "1.2.25",
-  rocksDB: "7.9.2",
+  rocksDB: "2.4.1.5",
   scalaCollectionCompat: "2.10.0",
   // When updating the scalafmt version please also update the version field in checkstyle/.scalafmt.conf. scalafmt now
   // has the version field as mandatory in its configuration, see
@@ -237,7 +237,7 @@ libs += [
   pcollections: "org.pcollections:pcollections:$versions.pcollections",
   opentelemetryProto: "io.opentelemetry.proto:opentelemetry-proto:$versions.opentelemetryProto",
   reflections: "org.reflections:reflections:$versions.reflections",
-  rocksDBJni: "org.rocksdb:rocksdbjni:$versions.rocksDB",
+  rocksDBJni: "io.github.speedb-io:speedbjni:$versions.rocksDB",
   scalaCollectionCompat: "org.scala-lang.modules:scala-collection-compat_$versions.baseScala:$versions.scalaCollectionCompat",
   scalaJava8Compat: "org.scala-lang.modules:scala-java8-compat_$versions.baseScala:$versions.scalaJava8Compat",
   scalaLibrary: "org.scala-lang:scala-library:$versions.scala",
