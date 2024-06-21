@@ -248,7 +248,6 @@ public class ShareConsumerTest {
         // We get back the acknowledgment error code after the second poll.
         // When we start the 3rd poll, the acknowledgment commit callback is invoked.
         shareConsumer.poll(Duration.ofMillis(2000));
-//        shareConsumer.poll(Duration.ofMillis(2000));
 
         // We expect null exception as the acknowledgment error code is null.
         assertTrue(partitionExceptionMap.containsKey(tp));
@@ -270,11 +269,13 @@ public class ShareConsumerTest {
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
+
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgement error code after the second poll.
         // The acknowledgement commit callback is invoked in close.
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.close();
+
         // We expect null exception as the acknowledgment error code is null.
         assertTrue(partitionExceptionMap.containsKey(tp));
         assertNull(partitionExceptionMap.get(tp));
@@ -1086,7 +1087,7 @@ public class ShareConsumerTest {
             consumerExecutorService.submit(() -> {
                 CompletableFuture<Integer> future = new CompletableFuture<>();
                 futuresSuccess.add(future);
-                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 250000, true, future);
+                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 25, true, future);
             });
         }
         producerExecutorService.shutdown();
