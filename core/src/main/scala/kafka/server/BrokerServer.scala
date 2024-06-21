@@ -418,7 +418,8 @@ class BrokerServer(
         config.shareGroupRecordLockDurationMs,
         config.shareGroupDeliveryCountLimit,
         config.shareGroupPartitionMaxRecordLocks,
-        persister
+        persister,
+        metrics
       )
 
       // Create the request processor objects.
