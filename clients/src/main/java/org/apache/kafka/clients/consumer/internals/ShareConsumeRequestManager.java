@@ -147,15 +147,16 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
             Node node = leaderOpt.get();
             if (nodesWithPendingRequests.contains(node.id())) {
-                log.trace("Skipping fetch for partition {} because previous fetch request to {} has not been processed", partition, node);
+                log.trace("Skipping fetch for partition {} because previous fetch request to {} has not been processed", partition, node.id());
             } else {
                 // if there is a leader and no in-flight requests, issue a new fetch
                 ShareSessionHandler handler = handlerMap.computeIfAbsent(node, k -> sessionHandlers.computeIfAbsent(node.id(), n -> new ShareSessionHandler(logContext, n, memberId)));
 
                 TopicIdPartition tip = new TopicIdPartition(topicId, partition);
                 Acknowledgements acknowledgementsToSend = fetchAcknowledgementsMap.get(tip);
-                if (acknowledgementsToSend != null)
+                if (acknowledgementsToSend != null) {
                     metricsManager.recordAcknowledgementSent(acknowledgementsToSend.size());
+                }
                 handler.addPartitionToFetch(tip, acknowledgementsToSend);
 
                 log.debug("Added fetch request for partition {} to node {}", partition, node);
@@ -267,18 +268,28 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             if (acknowledgeRequestState.isProcessed()) {
                 iterator.remove();
             } else if (!acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
-                if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
-                    acknowledgeRequestState.onSendAttempt(currentTimeMs);
-                    if (onClose) {
-                        unsentRequests.add(acknowledgeRequestState.buildRequest(
-                                this::handleShareAcknowledgeCloseSuccess,
-                                this::handleShareAcknowledgeCloseFailure,
-                                currentTimeMs));
-                    } else {
-                        unsentRequests.add(acknowledgeRequestState.buildRequest(
-                                this::handleShareAcknowledgeSuccess,
-                                this::handleShareAcknowledgeFailure,
-                                currentTimeMs));
+                if (nodesWithPendingRequests.contains(acknowledgeRequestState.nodeId)) {
+                    log.trace("Skipping acknowledge request because previous request to {} has not been processed", acknowledgeRequestState.nodeId);
+                } else {
+                    if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
+                        acknowledgeRequestState.onSendAttempt(currentTimeMs);
+                        if (onClose) {
+                            UnsentRequest request = acknowledgeRequestState.buildRequest(
+                                    this::handleShareAcknowledgeCloseSuccess,
+                                    this::handleShareAcknowledgeCloseFailure,
+                                    currentTimeMs);
+                            if (request != null) {
+                                unsentRequests.add(request);
+                            }
+                        } else {
+                            UnsentRequest request = acknowledgeRequestState.buildRequest(
+                                    this::handleShareAcknowledgeSuccess,
+                                    this::handleShareAcknowledgeFailure,
+                                    currentTimeMs);
+                            if (request != null) {
+                                unsentRequests.add(request);
+                            }
+                        }
                     }
                 }
             } else {
@@ -494,7 +505,8 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }
 
             final short requestVersion = resp.requestHeader().apiVersion();
-            if (acknowledgeRequestState.isCommitSync() && !handler.handleResponse(response, requestVersion)) {
+
+            if (!handler.handleResponse(response, requestVersion)) {
                 acknowledgeRequestState.onFailedAttempt(currentTimeMs);
                 if (response.error() != Errors.INVALID_SHARE_SESSION_EPOCH) {
                     // We retry the request until the timer in commitSync expires.

@@ -297,7 +297,7 @@ public class ShareConsumerTest {
         assertEquals(1, records.count());
 
         // Waiting until the acquisition lock expires.
-        Thread.sleep(10000);
+        Thread.sleep(12000);
 
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgment error code after the second poll.
@@ -528,7 +528,7 @@ public class ShareConsumerTest {
         shareConsumer1.commitAsync();
 
         // Allowing acquisition lock timeout to expire.
-        Thread.sleep(10000);
+        Thread.sleep(12000);
 
         // The 3rd record should be reassigned to 2nd consumer when it polls.
         ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
@@ -1061,14 +1061,12 @@ public class ShareConsumerTest {
         }
 
         ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresSuccess = new ConcurrentLinkedQueue<>();
-        ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresFail = new ConcurrentLinkedQueue<>();
 
         CountDownLatch startSignal = new CountDownLatch(1);
 
         consumerExecutorService.submit(() -> {
             // The "failing" consumer polls but immediately closes, which releases the records for the other consumers
             CompletableFuture<Integer> future = new CompletableFuture<>();
-            futuresFail.add(future);
             AtomicInteger failedMessagesConsumed = new AtomicInteger(0);
             consumeMessages(failedMessagesConsumed, producerCount * messagesPerProducer, "group1", 0, 1, false, future);
             startSignal.countDown();
@@ -1098,10 +1096,6 @@ public class ShareConsumerTest {
             int totalSuccessResult = 0;
             for (CompletableFuture<Integer> future : futuresSuccess) {
                 totalSuccessResult += future.get();
-            }
-            int totalFailResult = 0;
-            for (CompletableFuture<Integer> future : futuresFail) {
-                totalFailResult += future.get();
             }
             assertEquals(producerCount * messagesPerProducer, totalMessagesConsumed.get());
             assertEquals(producerCount * messagesPerProducer, totalSuccessResult);
@@ -1141,8 +1135,10 @@ public class ShareConsumerTest {
         assertEquals(1, records1.count());
         assertEquals("key_2", new String(records1.iterator().next().key()));
         assertEquals("value_2", new String(records1.iterator().next().value()));
+
         // Allowing acquisition lock to expire.
         Thread.sleep(12000);
+
         records2 = shareConsumer1.poll(Duration.ofMillis(2000));
         assertEquals(1, records2.count());
         assertEquals("key_2", new String(records2.iterator().next().key()));
