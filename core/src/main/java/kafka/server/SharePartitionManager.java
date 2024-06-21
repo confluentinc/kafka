@@ -652,7 +652,7 @@ public class SharePartitionManager implements AutoCloseable {
         }
     }
 
-    public static class ShareGroupMetrics {
+    static class ShareGroupMetrics {
         /**
          * share-acknowledgement (share-acknowledgement-rate and share-acknowledgement-count) - The total number of offsets acknowledged for share groups (requests to be ack).
          * record-acknowledgement (record-acknowledgement-rate and record-acknowledgement-count) - The number of records acknowledged per acknowledgement type.
