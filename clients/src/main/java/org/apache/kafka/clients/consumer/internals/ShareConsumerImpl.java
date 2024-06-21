@@ -276,6 +276,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             this.metrics = createMetrics(config, time, reporters);
 
             this.deserializers = new Deserializers<>(config, keyDeserializer, valueDeserializer);
+            this.currentFetch = ShareFetch.empty();
             this.subscriptions = createSubscriptionState(config, logContext);
             ClusterResourceListeners clusterResourceListeners = ClientUtils.configureClusterResourceListeners(
                     metrics.reporters(),
@@ -380,6 +381,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         this.metrics = new Metrics(time);
         this.clientTelemetryReporter = Optional.empty();
         this.deserializers = new Deserializers<>(config, keyDeserializer, valueDeserializer);
+        this.currentFetch = ShareFetch.empty();
         this.subscriptions = subscriptions;
         this.metadata = metadata;
         this.defaultApiTimeoutMs = config.getInt(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG);
@@ -547,7 +549,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             handleCompletedAcknowledgements();
 
             // If using implicit acknowledgement, acknowledge the previously fetched records
-            prepareToSendAcknowledgements(true);
+            acknowledgeBatchIfImplicitAcknowledgement(true);
 
             kafkaShareConsumerMetrics.recordPollStart(timer.currentTimeMs());
 
@@ -560,8 +562,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 // A wake-up between returned fetches and returning records would lead to never
                 // returning the records in the fetches. Thus, we trigger a possible wake-up before we poll fetches.
                 wakeupTrigger.maybeTriggerWakeup();
-
-                backgroundEventProcessor.process();
 
                 metadata.maybeThrowAnyException();
 
@@ -583,6 +583,10 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         } finally {
             kafkaShareConsumerMetrics.recordPollEnd(timer.currentTimeMs());
             wakeupTrigger.clearTask();
+
+            // Handle any completed acknowledgements for which we already have the responses
+            handleCompletedAcknowledgements();
+
             release();
         }
     }
@@ -590,8 +594,10 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     private ShareFetch<K, V> pollForFetches(final Timer timer) {
         long pollTimeout = Math.min(applicationEventHandler.maximumTimeToWait(), timer.remainingMs());
 
+        Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = currentFetch.takeAcknowledgedRecords();
+
         // If data is available already, return it immediately
-        final ShareFetch<K, V> fetch = collect();
+        final ShareFetch<K, V> fetch = collect(acknowledgementsMap);
         if (!fetch.isEmpty()) {
             return fetch;
         }
@@ -607,20 +613,36 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             timer.update(pollTimer.currentTimeMs());
         }
 
-        return collect();
+        return collect(Collections.emptyMap());
     }
 
-    private ShareFetch<K, V> collect() {
-        final ShareFetch<K, V> fetch = fetchCollector.collect(fetchBuffer);
-        if (fetch.isEmpty()) {
-            // Make sure the network thread can tell the application is actively polling
-            applicationEventHandler.add(new ShareFetchEvent(acknowledgementsToSend()));
+    private ShareFetch<K, V> collect(Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
+        if (currentFetch.isEmpty()) {
+            final ShareFetch<K, V> fetch = fetchCollector.collect(fetchBuffer);
+            if (fetch.isEmpty()) {
+                // Fetch more records and send any waiting acknowledgements
+                applicationEventHandler.add(new ShareFetchEvent(acknowledgementsMap));
 
-            // Notify the network thread to wake up and start the next round of fetching
-            applicationEventHandler.wakeupNetworkThread();
+                // Notify the network thread to wake up and start the next round of fetching
+                applicationEventHandler.wakeupNetworkThread();
+            } else if (!acknowledgementsMap.isEmpty()) {
+                // Asynchronously commit any waiting acknowledgements
+                applicationEventHandler.add(new ShareAcknowledgeAsyncEvent(acknowledgementsMap));
+
+                // Notify the network thread to wake up and start the next round of fetching
+                applicationEventHandler.wakeupNetworkThread();
+            }
+            return fetch;
+        } else {
+            if (!acknowledgementsMap.isEmpty()) {
+                // Asynchronously commit any waiting acknowledgements
+                applicationEventHandler.add(new ShareAcknowledgeAsyncEvent(acknowledgementsMap));
+
+                // Notify the network thread to wake up and start the next round of fetching
+                applicationEventHandler.wakeupNetworkThread();
+            }
+            return currentFetch;
         }
-
-        return fetch;
     }
 
     /**
@@ -639,11 +661,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         acquireAndEnsureOpen();
         try {
             ensureExplicitAcknowledgement();
-            if (currentFetch != null) {
-                currentFetch.acknowledge(record, type);
-            } else {
-                throw new IllegalStateException("The record cannot be acknowledged.");
-            }
+            currentFetch.acknowledge(record, type);
         } finally {
             release();
         }
@@ -667,8 +685,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             // Handle any completed acknowledgements for which we already have the responses
             handleCompletedAcknowledgements();
 
-            // Acknowledge the previously fetched records
-            prepareToSendAcknowledgements(false);
+            // If using implicit acknowledgement, acknowledge the previously fetched records
+            acknowledgeBatchIfImplicitAcknowledgement(false);
 
             Timer requestTimer = time.timer(timeout.toMillis());
             Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = acknowledgementsToSend();
@@ -716,8 +734,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             // Handle any completed acknowledgements for which we already have the responses
             handleCompletedAcknowledgements();
 
-            // Acknowledge the previously fetched records
-            prepareToSendAcknowledgements(false);
+            // If using implicit acknowledgement, acknowledge the previously fetched records
+            acknowledgeBatchIfImplicitAcknowledgement(false);
 
             Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = acknowledgementsToSend();
             if (!acknowledgementsMap.isEmpty()) {
@@ -904,15 +922,17 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
 
     /**
      * Handles any completed acknowledgements. If there is an acknowledgement commit callback registered,
-     * call it. Otherwise, discard the completed acknowledgement information because the application is not
-     * interested.
+     * call it. Otherwise, discard the information about completed acknowledgements because the application
+     * is not interested.
      */
     private void handleCompletedAcknowledgements() {
         backgroundEventProcessor.process();
 
-        if ((acknowledgementCommitCallbackHandler != null) && !completedAcknowledgements.isEmpty()) {
+        if (!completedAcknowledgements.isEmpty()) {
             try {
-                acknowledgementCommitCallbackHandler.onComplete(completedAcknowledgements);
+                if (acknowledgementCommitCallbackHandler != null) {
+                    acknowledgementCommitCallbackHandler.onComplete(completedAcknowledgements);
+                }
             } finally {
                 completedAcknowledgements.clear();
             }
@@ -921,9 +941,11 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
 
     /**
      * Called to progressively move the acknowledgement mode into IMPLICIT if it is not known to be EXPLICIT.
-     * If the acknowledgement mode is IMPLICIT, acknowledges the current batch.
+     * If the acknowledgement mode is IMPLICIT, acknowledges all records in the current batch.
+     *
+     * @param calledOnPoll If true, called on poll. Otherwise, called on commit.
      */
-    private void prepareToSendAcknowledgements(boolean calledOnPoll) {
+    private void acknowledgeBatchIfImplicitAcknowledgement(boolean calledOnPoll) {
         if (calledOnPoll) {
             if (acknowledgementMode == AcknowledgementMode.UNKNOWN) {
                 // The first call to poll(Duration) moves into PENDING
@@ -933,16 +955,15 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 acknowledgementMode = AcknowledgementMode.IMPLICIT;
             }
         } else {
-            if (acknowledgementMode == AcknowledgementMode.PENDING && currentFetch != null) {
+            // If there are records to acknowledge and PENDING, moves into IMPLICIT
+            if (acknowledgementMode == AcknowledgementMode.PENDING && !currentFetch.isEmpty()) {
                 acknowledgementMode = AcknowledgementMode.IMPLICIT;
             }
         }
 
-        if (currentFetch != null) {
-            // If IMPLICIT, acknowledge all records and send
-            if (acknowledgementMode == AcknowledgementMode.IMPLICIT) {
-                currentFetch.acknowledgeAll(AcknowledgeType.ACCEPT);
-            }
+        // If IMPLICIT, acknowledge all records
+        if (acknowledgementMode == AcknowledgementMode.IMPLICIT) {
+            currentFetch.acknowledgeAll(AcknowledgeType.ACCEPT);
         }
     }
 
@@ -950,13 +971,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      * Returns any ready acknowledgements to be sent to the cluster.
      */
     private Map<TopicIdPartition, Acknowledgements> acknowledgementsToSend() {
-        if (currentFetch != null) {
-            Map<TopicIdPartition, Acknowledgements> acknowledgementsMap = currentFetch.acknowledgementsByPartition();
-            currentFetch = null;
-            return acknowledgementsMap;
-        } else {
-            return Collections.emptyMap();
-        }
+        return currentFetch.takeAcknowledgedRecords();
     }
 
     /**
@@ -969,7 +984,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         } else if (acknowledgementMode == AcknowledgementMode.IMPLICIT) {
             throw new IllegalStateException("Implicit acknowledgement of delivery is being used.");
         } else if (acknowledgementMode == AcknowledgementMode.UNKNOWN) {
-            throw new IllegalStateException("Acknowledge called before poll");
+            throw new IllegalStateException("Acknowledge called before poll.");
         }
     }
 
