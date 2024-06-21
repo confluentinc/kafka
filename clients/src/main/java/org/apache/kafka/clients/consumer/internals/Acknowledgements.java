@@ -63,9 +63,11 @@ public class Acknowledgements {
      *
      * @param offset The record offset.
      * @param type   The AcknowledgeType.
+     *
+     * @return Whether the acknowledgement was added.
      */
-    public void addIfAbsent(long offset, AcknowledgeType type) {
-        acknowledgements.putIfAbsent(offset, type);
+    public boolean addIfAbsent(long offset, AcknowledgeType type) {
+        return acknowledgements.putIfAbsent(offset, type) == null ? true : false;
     }
 
     /**
@@ -152,9 +154,15 @@ public class Acknowledgements {
         return acknowledgements;
     }
 
+    /**
+     * Converts the acknowledgements into a list of {@link AcknowledgementBatch} which can easily
+     * be converted into the form required for the RPC requests.
+     */
     public List<AcknowledgementBatch> getAcknowledgementBatches() {
         List<AcknowledgementBatch> batches = new ArrayList<>();
-        if (acknowledgements.isEmpty()) return batches;
+        if (acknowledgements.isEmpty())
+            return batches;
+
         AcknowledgementBatch currentBatch = null;
         for (Map.Entry<Long, AcknowledgeType> entry : acknowledgements.entrySet()) {
             if (currentBatch == null) {

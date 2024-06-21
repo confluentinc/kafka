@@ -255,8 +255,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
         ShareSnapshotKey newKey = (ShareSnapshotKey) record.key().message();
         ShareSnapshotValue newValue = (ShareSnapshotValue) record.value().message();
         responseData.setResults(Collections.singletonList(WriteShareGroupStateResponse.toResponseWriteStateResult(
-            newKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.toErrorResponsePartitionResult(
-                newKey.partition(), Errors.NONE, Errors.NONE.message())))));
+            newKey.topicId(), Collections.singletonList(WriteShareGroupStateResponse.toResponsePartitionResult(
+                newKey.partition())))));
 
         String mapKey = ShareGroupHelper.coordinatorKey(newKey.groupId(), newKey.topicId(), newKey.partition());
 
@@ -292,6 +292,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
     Uuid topicId = request.topics().get(0).topicId();
     int partition = request.topics().get(0).partitions().get(0).partition();
+    int leaderEpoch = request.topics().get(0).partitions().get(0).leaderEpoch();
 
     String coordinatorKey = ShareGroupHelper.coordinatorKey(request.groupId(), topicId, partition);
 
@@ -325,6 +326,9 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
                 .setDeliveryState(stateBatch.deliveryState())
                 .setDeliveryCount(stateBatch.deliveryCount())
         ).collect(java.util.stream.Collectors.toList()) : Collections.emptyList();
+
+    // Updating the leader map with the new leader epoch
+    leaderMap.put(coordinatorKey, leaderEpoch);
 
     // Returning the successfully retrieved snapshot value
     return ReadShareGroupStateResponse.toResponseData(topicId, partition, snapshotValue.startOffset(), snapshotValue.stateEpoch(), stateBatches);
@@ -371,9 +375,6 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
       return Optional.of(ReadShareGroupStateResponse.toErrorResponseData(topicId, partitionId, Errors.FENCED_LEADER_EPOCH, Errors.FENCED_LEADER_EPOCH.message()));
     }
 
-    // Updating the leader map with the new leader epoch
-    leaderMap.put(mapKey, partitionData.leaderEpoch());
-
     if (metadataImage != null && (metadataImage.topics().getTopic(topicId) == null ||
         metadataImage.topics().getPartition(topicId, partitionId) == null)) {
       return Optional.of(ReadShareGroupStateResponse.toErrorResponseData(topicId, partitionId, Errors.UNKNOWN_TOPIC_OR_PARTITION, Errors.UNKNOWN_TOPIC_OR_PARTITION.message()));
@@ -385,5 +386,15 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
   private CoordinatorResult<WriteShareGroupStateResponseData, Record> getWriteErrorResponse(Errors error, Uuid topicId, int partitionId) {
     WriteShareGroupStateResponseData responseData = WriteShareGroupStateResponse.toErrorResponseData(topicId, partitionId, error, error.message());
     return new CoordinatorResult<>(Collections.emptyList(), responseData);
+  }
+
+  // Visible for testing
+  public Integer getLeaderMapValue(String key) {
+    return this.leaderMap.get(key);
+  }
+
+  // Visible for testing
+  public ShareSnapshotValue getShareStateMapValue(String key) {
+    return this.shareStateMap.get(key);
   }
 }

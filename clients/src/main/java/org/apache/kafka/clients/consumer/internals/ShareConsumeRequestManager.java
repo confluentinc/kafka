@@ -46,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -270,9 +271,11 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
      */
     private PollResult processAcknowledgements(long currentTimeMs, boolean onClose) {
         List<UnsentRequest> unsentRequests = new ArrayList<>();
-        acknowledgeRequestStates.forEach(acknowledgeRequestState -> {
+        Iterator<AcknowledgeRequestState> iterator = acknowledgeRequestStates.iterator();
+        while (iterator.hasNext()) {
+            AcknowledgeRequestState acknowledgeRequestState = iterator.next();
             if (acknowledgeRequestState.isProcessed()) {
-                acknowledgeRequestStates.remove(acknowledgeRequestState);
+                iterator.remove();
             } else if (!acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
                 if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
                     acknowledgeRequestState.onSendAttempt(currentTimeMs);
@@ -294,9 +297,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                     metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
                     acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.REQUEST_TIMED_OUT);
                 }
-                acknowledgeRequestStates.remove(acknowledgeRequestState);
+                iterator.remove();
             }
-        });
+        }
 
         PollResult pollResult = null;
         if (!unsentRequests.isEmpty()) {
