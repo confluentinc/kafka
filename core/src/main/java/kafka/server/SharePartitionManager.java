@@ -36,7 +36,6 @@ import org.apache.kafka.common.requests.ShareFetchRequest;
 import org.apache.kafka.common.requests.ShareFetchResponse;
 import org.apache.kafka.common.utils.ImplicitLinkedHashCollection;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.server.group.share.Persister;
 import org.apache.kafka.server.share.CachedSharePartition;
 import org.apache.kafka.server.share.ShareAcknowledgementBatch;
@@ -64,7 +63,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -164,7 +162,7 @@ public class SharePartitionManager implements AutoCloseable {
                 );
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
                     k -> {
-                        long start = time.milliseconds();
+                        long start = time.hiResClockMs();
                         SharePartition partition =  new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
                             recordLockDurationMs, timer, time, persister, replicaManager);
                         this.shareGroupMetrics.partitionLoadTime(start);
@@ -660,15 +658,13 @@ public class SharePartitionManager implements AutoCloseable {
          */
 
         public static final String METRICS_GROUP_NAME = "share-group-metrics";
-        public static final String PROTOCOL = "protocol";
-        public static final String GROUP_STATE = "share";
 
         public static final String SHARE_ACK_SENSOR = "share-acknowledgement-sensor";
-        public static final String SHARE_ACK_RATE_PER_MINUTE = "share-acknowledgement-rate-per-minute";
+        public static final String SHARE_ACK_RATE = "share-acknowledgement-rate";
         public static final String SHARE_ACK_COUNT = "share-acknowledgement-count";
 
-        public static final String RECORD_ACK_SENSOR = "record-acknowledgement";
-        public static final String RECORD_ACK_RATE_PER_MINUTE = "record-acknowledgement-rate-per-minute";
+        public static final String RECORD_ACK_SENSOR_PREFIX = "record-acknowledgement";
+        public static final String RECORD_ACK_RATE = "record-acknowledgement-rate";
         public static final String RECORD_ACK_COUNT = "record-acknowledgement-count";
         public static final String ACK_TYPE = "ack-type";
 
@@ -676,18 +672,19 @@ public class SharePartitionManager implements AutoCloseable {
         public static final String PARTITION_LOAD_TIME_AVG = "partition-load-time-avg";
         public static final String PARTITION_LOAD_TIME_MAX = "partition-load-time-max";
 
-
-        private static final Map<Byte, String> RECORD_ACKS_MAP = Utils.mkMap(
-            Utils.mkEntry((byte) 1, "accept"),
-            Utils.mkEntry((byte) 2, "release"),
-            Utils.mkEntry((byte) 3, "reject")
-        );
+        public static final Map<Byte, String> RECORD_ACKS_MAP = new HashMap<>();
 
         private final Metrics metrics;
         private final Time time;
         private final Sensor shareAcknowledgementSensor;
         private final Map<Byte, Sensor> recordAcksSensorMap = new HashMap<>();
         private final Sensor partitionLoadTimeSensor;
+
+        static {
+            RECORD_ACKS_MAP.put((byte) 1, "accept");
+            RECORD_ACKS_MAP.put((byte) 2, "release");
+            RECORD_ACKS_MAP.put((byte) 3, "reject");
+        }
 
         public ShareGroupMetrics(Metrics metrics, Time time) {
             this.metrics = metrics;
@@ -697,47 +694,43 @@ public class SharePartitionManager implements AutoCloseable {
             shareAcknowledgementSensor.add(metrics.metricName(
                     SHARE_ACK_COUNT,
                     METRICS_GROUP_NAME,
-                    "The total number of offsets acknowledged for share groups.",
-                    PROTOCOL, GROUP_STATE),
+                    "The total number of offsets acknowledged for share groups."),
                 new CumulativeSum());
             shareAcknowledgementSensor.add(metrics.metricName(
-                    SHARE_ACK_RATE_PER_MINUTE,
+                    SHARE_ACK_RATE,
                     METRICS_GROUP_NAME,
-                    "The total number of offsets acknowledged for share groups per minute.",
-                    PROTOCOL, GROUP_STATE),
-                new Rate(TimeUnit.MINUTES));
+                    "The total number of offsets acknowledged for share groups per minute."),
+                new Rate());
 
             for (Map.Entry<Byte, String> entry : RECORD_ACKS_MAP.entrySet()) {
-                recordAcksSensorMap.put(entry.getKey(), metrics.sensor(String.format("%s-%s-sensor", RECORD_ACK_SENSOR, entry.getValue())));
+                recordAcksSensorMap.put(entry.getKey(), metrics.sensor(String.format("%s-%s-sensor", RECORD_ACK_SENSOR_PREFIX, entry.getValue())));
                 recordAcksSensorMap.get(entry.getKey())
                     .add(metrics.metricName(
-                            RECORD_ACK_RATE_PER_MINUTE,
+                            RECORD_ACK_RATE,
                             METRICS_GROUP_NAME,
                             "The number of records acknowledged per acknowledgement type per minute.",
-                            ACK_TYPE, entry.getValue(),
-                            PROTOCOL, GROUP_STATE),
-                        new Rate(TimeUnit.MINUTES));
+                            ACK_TYPE, entry.getValue()),
+                        new Rate());
                 recordAcksSensorMap.get(entry.getKey())
                     .add(metrics.metricName(
                             RECORD_ACK_COUNT,
                             METRICS_GROUP_NAME,
                             "The number of records acknowledged per acknowledgement type.",
-                            ACK_TYPE, entry.getValue(),
-                            PROTOCOL, GROUP_STATE),
+                            ACK_TYPE, entry.getValue()),
                         new CumulativeSum());
             }
 
             partitionLoadTimeSensor = metrics.sensor(PARTITION_LOAD_TIME_SENSOR);
             partitionLoadTimeSensor.add(metrics.metricName(
-                PARTITION_LOAD_TIME_AVG,
-                METRICS_GROUP_NAME,
-                "Average time taken to load the share partitions.",
-                PROTOCOL, GROUP_STATE), new Avg());
+                    PARTITION_LOAD_TIME_AVG,
+                    METRICS_GROUP_NAME,
+                    "Average time taken to load the share partitions."),
+                new Avg());
             partitionLoadTimeSensor.add(metrics.metricName(
-                PARTITION_LOAD_TIME_MAX,
-                METRICS_GROUP_NAME,
-                "Maximum time taken to load the share partitions.",
-                PROTOCOL, GROUP_STATE), new Max());
+                    PARTITION_LOAD_TIME_MAX,
+                    METRICS_GROUP_NAME,
+                    "Maximum time taken to load the share partitions."),
+                new Max());
         }
 
         // visibility for testing
@@ -756,7 +749,7 @@ public class SharePartitionManager implements AutoCloseable {
         }
 
         void partitionLoadTime(long start) {
-            partitionLoadTimeSensor.record(time.milliseconds() - start);
+            partitionLoadTimeSensor.record(time.hiResClockMs() - start);
         }
     }
 }
