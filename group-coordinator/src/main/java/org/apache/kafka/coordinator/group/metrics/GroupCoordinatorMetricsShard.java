@@ -25,6 +25,8 @@ import org.apache.kafka.coordinator.group.share.ShareGroup;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineLong;
 import org.apache.kafka.coordinator.group.TimelineGaugeCounter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
@@ -39,6 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * report.
  */
 public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
+    private static final Logger log = LoggerFactory.getLogger(GroupCoordinatorMetricsShard.class);
     /**
      * Classic group size gauge counters keyed by the metric name.
      */
@@ -110,8 +113,6 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
             Utils.mkEntry(ShareGroup.ShareGroupState.STABLE,
                 new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
             Utils.mkEntry(ShareGroup.ShareGroupState.DEAD,
-                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
-            Utils.mkEntry(ShareGroup.ShareGroupState.UNKNOWN,
                 new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0)))
         );
 
@@ -426,9 +427,8 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
                 case DEAD:
                     incrementNumShareGroups(ShareGroup.ShareGroupState.DEAD);
                     break;
-                case UNKNOWN:
-                    incrementNumShareGroups(ShareGroup.ShareGroupState.UNKNOWN);
-                    break;
+                default:
+                    log.warn("Unknown new share group state: {}", newState);
             }
         }
 
@@ -443,9 +443,8 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
                 case DEAD:
                     decrementNumShareGroups(ShareGroup.ShareGroupState.DEAD);
                     break;
-                case UNKNOWN:
-                    decrementNumShareGroups(ShareGroup.ShareGroupState.UNKNOWN);
-                    break;
+                default:
+                    log.warn("Unknown previous share group state: {}", oldState);
             }
         }
     }

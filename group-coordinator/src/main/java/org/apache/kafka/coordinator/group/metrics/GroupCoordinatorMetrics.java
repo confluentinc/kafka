@@ -87,7 +87,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
     private final MetricName shareGroupCountEmptyMetricName;
     private final MetricName shareGroupCountStableMetricName;
     private final MetricName shareGroupCountDeadMetricName;
-    private final MetricName shareGroupCountUnknownMetricName;
 
     private final MetricsRegistry registry;
     private final Metrics metrics;
@@ -181,13 +180,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
             METRICS_GROUP,
             "The number of share groups in dead state.",
             Collections.singletonMap(SHARE_GROUP_COUNT_STATE_TAG, ShareGroup.ShareGroupState.DEAD.toString())
-        );
-
-        shareGroupCountUnknownMetricName = metrics.metricName(
-            SHARE_GROUP_COUNT_METRIC_NAME,
-            METRICS_GROUP,
-            "The number of share groups in unknown state.",
-            Collections.singletonMap(SHARE_GROUP_COUNT_STATE_TAG, ShareGroup.ShareGroupState.UNKNOWN.toString())
         );
 
         registerGauges();
@@ -297,8 +289,7 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
             shareGroupCountMetricName,
             shareGroupCountEmptyMetricName,
             shareGroupCountStableMetricName,
-            shareGroupCountDeadMetricName,
-            shareGroupCountUnknownMetricName
+            shareGroupCountDeadMetricName
         ).forEach(metrics::removeMetric);
 
         Arrays.asList(
@@ -448,11 +439,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
         metrics.addMetric(
             shareGroupCountDeadMetricName,
             (Gauge<Long>) (config, now) -> numShareGroups(ShareGroup.ShareGroupState.DEAD)
-        );
-
-        metrics.addMetric(
-            shareGroupCountUnknownMetricName,
-            (Gauge<Long>) (config, now) -> numShareGroups(ShareGroup.ShareGroupState.UNKNOWN)
         );
     }
 }
