@@ -21,8 +21,12 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.coordinator.group.consumer.ConsumerGroup.ConsumerGroupState;
 import org.apache.kafka.coordinator.group.classic.ClassicGroupState;
+import org.apache.kafka.coordinator.group.share.ShareGroup;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineLong;
+import org.apache.kafka.coordinator.group.TimelineGaugeCounter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
@@ -37,24 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * report.
  */
 public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
-
-    /**
-     * This class represents a gauge counter for this shard. The TimelineLong object represents a gauge backed by
-     * the snapshot registry. Once we commit to a certain offset in the snapshot registry, we write the given
-     * TimelineLong's value to the AtomicLong. This AtomicLong represents the actual gauge counter that is queried
-     * when reporting the value to {@link GroupCoordinatorMetrics}.
-     */
-    private static class TimelineGaugeCounter {
-
-        final TimelineLong timelineLong;
-
-        final AtomicLong atomicLong;
-
-        public TimelineGaugeCounter(TimelineLong timelineLong, AtomicLong atomicLong) {
-            this.timelineLong = timelineLong;
-            this.atomicLong = atomicLong;
-        }
-    }
+    private static final Logger log = LoggerFactory.getLogger(GroupCoordinatorMetricsShard.class);
     /**
      * Classic group size gauge counters keyed by the metric name.
      */
@@ -64,6 +51,11 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
      * Consumer group size gauge counters keyed by the metric name.
      */
     private final Map<ConsumerGroupState, TimelineGaugeCounter> consumerGroupGauges;
+
+    /**
+     * Consumer group size gauge counters keyed by the metric name.
+     */
+    private final Map<ShareGroup.ShareGroupState, TimelineGaugeCounter> shareGroupGauges;
 
     /**
      * All sensors keyed by the sensor name. A Sensor object is shared across all metrics shards.
@@ -112,6 +104,15 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
             Utils.mkEntry(ConsumerGroupState.STABLE,
                 new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
             Utils.mkEntry(ConsumerGroupState.DEAD,
+                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0)))
+        );
+
+        this.shareGroupGauges = Utils.mkMap(
+            Utils.mkEntry(ShareGroup.ShareGroupState.EMPTY,
+                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
+            Utils.mkEntry(ShareGroup.ShareGroupState.STABLE,
+                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
+            Utils.mkEntry(ShareGroup.ShareGroupState.DEAD,
                 new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0)))
         );
 
@@ -375,6 +376,75 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
                     break;
                 case DEAD:
                     decrementNumConsumerGroups(ConsumerGroupState.DEAD);
+            }
+        }
+    }
+
+    public void incrementNumShareGroups(ShareGroup.ShareGroupState state) {
+        TimelineGaugeCounter gaugeCounter = shareGroupGauges.get(state);
+        if (gaugeCounter != null) {
+            synchronized (gaugeCounter.timelineLong) {
+                gaugeCounter.timelineLong.increment();
+            }
+        }
+    }
+
+    public void decrementNumShareGroups(ShareGroup.ShareGroupState state) {
+        TimelineGaugeCounter gaugeCounter = shareGroupGauges.get(state);
+        if (gaugeCounter != null) {
+            synchronized (gaugeCounter.timelineLong) {
+                gaugeCounter.timelineLong.decrement();
+            }
+        }
+    }
+
+    public long numShareGroups(ShareGroup.ShareGroupState state) {
+        TimelineGaugeCounter gaugeCounter = shareGroupGauges.get(state);
+        if (gaugeCounter != null) {
+            return gaugeCounter.atomicLong.get();
+        }
+        return 0L;
+    }
+
+    public long numShareGroups() {
+        return shareGroupGauges.values().stream()
+            .mapToLong(timelineGaugeCounter -> timelineGaugeCounter.atomicLong.get()).sum();
+    }
+
+    // could be called from ShareGroup to indicate state transition
+    public void onShareGroupStateTransition(
+        ShareGroup.ShareGroupState oldState,
+        ShareGroup.ShareGroupState newState
+    ) {
+        if (newState != null) {
+            switch (newState) {
+                case EMPTY:
+                    incrementNumShareGroups(ShareGroup.ShareGroupState.EMPTY);
+                    break;
+                case STABLE:
+                    incrementNumShareGroups(ShareGroup.ShareGroupState.STABLE);
+                    break;
+                case DEAD:
+                    incrementNumShareGroups(ShareGroup.ShareGroupState.DEAD);
+                    break;
+                default:
+                    log.warn("Unknown new share group state: {}", newState);
+            }
+        }
+
+        if (oldState != null) {
+            switch (oldState) {
+                case EMPTY:
+                    decrementNumShareGroups(ShareGroup.ShareGroupState.EMPTY);
+                    break;
+                case STABLE:
+                    decrementNumShareGroups(ShareGroup.ShareGroupState.STABLE);
+                    break;
+                case DEAD:
+                    decrementNumShareGroups(ShareGroup.ShareGroupState.DEAD);
+                    break;
+                default:
+                    log.warn("Unknown previous share group state: {}", oldState);
             }
         }
     }

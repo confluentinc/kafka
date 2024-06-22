@@ -172,7 +172,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
   @Override
   public void onLoaded(MetadataImage newImage) {
-    CoordinatorShard.super.onLoaded(newImage);
+    coordinatorMetrics.activateMetricsShard(metricsShard);
   }
 
   @Override
@@ -182,7 +182,7 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
 
   @Override
   public void onUnloaded() {
-    CoordinatorShard.super.onUnloaded();
+    coordinatorMetrics.deactivateMetricsShard(metricsShard);
   }
 
   @Override

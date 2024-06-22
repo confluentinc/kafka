@@ -26,6 +26,7 @@ import org.apache.kafka.coordinator.group.AbstractGroup;
 import org.apache.kafka.coordinator.group.GroupMember;
 import org.apache.kafka.coordinator.group.Record;
 import org.apache.kafka.coordinator.group.RecordHelpers;
+import org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetricsShard;
 import org.apache.kafka.image.TopicsImage;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
@@ -33,6 +34,7 @@ import org.apache.kafka.timeline.TimelineObject;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.apache.kafka.coordinator.group.share.ShareGroup.ShareGroupState.EMPTY;
@@ -67,13 +69,17 @@ public class ShareGroup extends AbstractGroup {
      * The group state.
      */
     private final TimelineObject<ShareGroupState> state;
+    private final GroupCoordinatorMetricsShard metrics;
 
     public ShareGroup(
         SnapshotRegistry snapshotRegistry,
-        String groupId
+        String groupId,
+        GroupCoordinatorMetricsShard metrics    // has share group metric information
     ) {
         super(snapshotRegistry, groupId);
         this.state = new TimelineObject<>(snapshotRegistry, ShareGroupState.EMPTY);
+        this.metrics = metrics;
+        Objects.requireNonNull(metrics);
     }
 
     /**
@@ -223,7 +229,9 @@ public class ShareGroup extends AbstractGroup {
             newState = EMPTY;
         }
 
+        ShareGroupState oldState = state.get();
         state.set(newState);
+        metrics.onShareGroupStateTransition(oldState, newState);
     }
 
     /**
