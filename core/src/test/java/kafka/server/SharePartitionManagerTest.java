@@ -16,12 +16,14 @@
  */
 package kafka.server;
 
+import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.InvalidShareSessionEpochException;
 import org.apache.kafka.common.errors.ShareSessionNotFoundException;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
+import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
@@ -84,6 +86,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import scala.Tuple2;
@@ -1079,9 +1082,9 @@ public class SharePartitionManagerTest {
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp1), sp1);
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp2), sp2);
         Map<TopicIdPartition, List<ShareAcknowledgementBatch>> acknowledgeTopics = new HashMap<>();
-
+        Metrics metrics = new Metrics();
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
-                .withPartitionCacheMap(partitionCacheMap).build();
+                .withPartitionCacheMap(partitionCacheMap).withMetrics(metrics).build();
         acknowledgeTopics.put(tp1, Arrays.asList(
                 new ShareAcknowledgementBatch(12, 20, Collections.singletonList((byte) 1)),
                 new ShareAcknowledgementBatch(24, 56, Collections.singletonList((byte) 1))
@@ -1107,6 +1110,50 @@ public class SharePartitionManagerTest {
         assertEquals(Errors.INVALID_REQUEST.code(), result.get(tp2).errorCode());
         assertEquals(4, result.get(tp3).partitionIndex());
         assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION.code(), result.get(tp3).errorCode());
+
+        Map<MetricName, Consumer<Double>> expectedMetrics = new HashMap<>();
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.SHARE_ACK_COUNT, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME),
+            val -> assertEquals(val, 1.0)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.SHARE_ACK_RATE, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME),
+            val -> assertTrue(val > 0)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_COUNT, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "accept")),
+            val -> assertEquals(2.0, val)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_COUNT, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "release")),
+            val -> assertEquals(0.0, val)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_COUNT, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "reject")),
+            val -> assertEquals(0.0, val)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_RATE, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "accept")),
+            val -> assertTrue(val > 0)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_RATE, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "release")),
+            val -> assertEquals(0.0, val)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_RATE, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "reject")),
+            val -> assertEquals(0.0, val)
+        );
+        expectedMetrics.forEach((metric, test) -> {
+            assertTrue(metrics.metrics().containsKey(metric));
+            test.accept((Double) metrics.metrics().get(metric).metricValue());
+        });
     }
 
     @Test
@@ -1129,7 +1176,6 @@ public class SharePartitionManagerTest {
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp1), sp1);
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp2), sp2);
         Map<TopicIdPartition, List<ShareAcknowledgementBatch>> acknowledgeTopics = new HashMap<>();
-
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
                 .withPartitionCacheMap(partitionCacheMap).build();
 
@@ -1259,9 +1305,12 @@ public class SharePartitionManagerTest {
         partitionMaxBytes.put(tp6, PARTITION_MAX_BYTES);
 
         ReplicaManager replicaManager = mock(ReplicaManager.class);
+        Metrics metrics = new Metrics();
+        Time time = mock(Time.class);
+        when(time.hiResClockMs()).thenReturn(0L).thenReturn(100L);
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
             .withReplicaManager(replicaManager)
-            .withShareGroupPersister(NoOpShareStatePersister.getInstance()).build();
+            .withShareGroupPersister(NoOpShareStatePersister.getInstance()).withTime(time).withMetrics(metrics).build();
 
         doAnswer(invocation -> {
             sharePartitionManager.releaseFetchQueueAndPartitionsLock(groupId, partitionMaxBytes.keySet());
@@ -1279,6 +1328,20 @@ public class SharePartitionManagerTest {
         sharePartitionManager.fetchMessages(groupId, memberId1.toString(), fetchParams, Arrays.asList(tp5, tp6), partitionMaxBytes);
         Mockito.verify(replicaManager, times(3)).fetchMessages(
                 any(), any(), any(ReplicaQuota.class), any());
+
+        Map<MetricName, Consumer<Double>> expectedMetrics = new HashMap<>();
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.PARTITION_LOAD_TIME_AVG, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME),
+            val -> assertEquals(val.intValue(), (int) 100.0 / 7, SharePartitionManager.ShareGroupMetrics.PARTITION_LOAD_TIME_AVG)
+        );
+        expectedMetrics.put(
+            metrics.metricName(SharePartitionManager.ShareGroupMetrics.PARTITION_LOAD_TIME_MAX, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME),
+            val -> assertEquals(val, 100.0, SharePartitionManager.ShareGroupMetrics.PARTITION_LOAD_TIME_MAX)
+        );
+        expectedMetrics.forEach((metric, test) -> {
+            assertTrue(metrics.metrics().containsKey(metric));
+            test.accept((Double) metrics.metrics().get(metric).metricValue());
+        });
     }
 
     @Test
@@ -1568,7 +1631,6 @@ public class SharePartitionManagerTest {
         when(sp0.endOffset()).thenReturn((long) 199);
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new HashMap<>();
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp0), sp0);
-
         SharePartitionManager sharePartitionManager = SharePartitionManagerBuilder.builder()
                 .withPartitionCacheMap(partitionCacheMap).withReplicaManager(replicaManager).build();
 
@@ -1981,6 +2043,7 @@ public class SharePartitionManagerTest {
         private ShareSessionCache cache = new ShareSessionCache(10, 1000);
         private Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new HashMap<>();
         private Persister persister = null;
+        private Metrics metrics = new Metrics();
 
         private SharePartitionManagerBuilder withReplicaManager(ReplicaManager replicaManager) {
             this.replicaManager = replicaManager;
@@ -2007,11 +2070,16 @@ public class SharePartitionManagerTest {
             return this;
         }
 
+        private SharePartitionManagerBuilder withMetrics(Metrics metrics) {
+            this.metrics = metrics;
+            return this;
+        }
+
         public static SharePartitionManagerBuilder builder() {
             return new SharePartitionManagerBuilder();
         }
         public SharePartitionManager build() {
-            return new SharePartitionManager(replicaManager, time, cache, partitionCacheMap, RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES, persister);
+            return new SharePartitionManager(replicaManager, time, cache, partitionCacheMap, RECORD_LOCK_DURATION_MS, MAX_DELIVERY_COUNT, MAX_IN_FLIGHT_MESSAGES, persister, metrics);
         }
     }
 }
