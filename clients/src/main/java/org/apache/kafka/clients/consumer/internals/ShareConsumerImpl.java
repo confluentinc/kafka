@@ -558,15 +558,15 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             }
 
             do {
+                // Make sure the network thread can tell the application is actively polling
+                applicationEventHandler.add(new PollEvent(timer.currentTimeMs()));
+
+                backgroundEventProcessor.process();
+
                 // We must not allow wake-ups between polling for fetches and returning the records.
                 // A wake-up between returned fetches and returning records would lead to never
                 // returning the records in the fetches. Thus, we trigger a possible wake-up before we poll fetches.
                 wakeupTrigger.maybeTriggerWakeup();
-
-                metadata.maybeThrowAnyException();
-
-                // Make sure the network thread can tell the application is actively polling
-                applicationEventHandler.add(new PollEvent(timer.currentTimeMs()));
 
                 final ShareFetch<K, V> fetch = pollForFetches(timer);
                 if (!fetch.isEmpty()) {
@@ -924,6 +924,8 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      * Handles any completed acknowledgements. If there is an acknowledgement commit callback registered,
      * call it. Otherwise, discard the information about completed acknowledgements because the application
      * is not interested.
+     * <p>
+     * If the acknowledgement commit callback throws an exception, this method will throw an exception.
      */
     private void handleCompletedAcknowledgements() {
         backgroundEventProcessor.process();
