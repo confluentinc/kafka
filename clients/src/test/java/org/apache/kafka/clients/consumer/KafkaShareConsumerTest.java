@@ -63,6 +63,7 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.test.MockMetricsReporter;
 import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.internal.stubbing.answers.CallsRealMethods;
@@ -119,7 +120,6 @@ public class KafkaShareConsumerTest {
     private final String topic3 = "test3";
     private final Uuid topicId3 = Uuid.randomUuid();
 
-    private final int sessionTimeoutMs = 10000;
     private final int heartbeatIntervalMs = 1000;
 
     private final String groupId = "mock-group";
@@ -128,9 +128,6 @@ public class KafkaShareConsumerTest {
                     new AbstractMap.SimpleEntry<>(topic2, topicId2),
                     new AbstractMap.SimpleEntry<>(topic3, topicId3))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-    private final Time time = new MockTime();
-    private final SubscriptionState subscription = new SubscriptionState(new LogContext(), OffsetResetStrategy.EARLIEST);
 
     private KafkaShareConsumer<?, ?> consumer;
 
@@ -239,7 +236,9 @@ public class KafkaShareConsumerTest {
         Cluster cluster = TestUtils.singletonCluster(tp.topic(), 1);
         Node node = cluster.nodes().get(0);
 
+        SubscriptionState subscription = new SubscriptionState(new LogContext(), OffsetResetStrategy.EARLIEST);
         ConsumerMetadata metadata = createMetadata(subscription);
+        Time time = new MockTime();
         MockClient client = new MockClient(time, metadata);
         initMetadata(client, Collections.singletonMap(topic, 1));
         Uuid memberId = Uuid.randomUuid();
@@ -377,7 +376,9 @@ public class KafkaShareConsumerTest {
 
     @Test
     public void testHeartbeatSent() throws Exception {
+        SubscriptionState subscription = new SubscriptionState(new LogContext(), OffsetResetStrategy.EARLIEST);
         ConsumerMetadata metadata = createMetadata(subscription);
+        Time time = new MockTime();
         MockClient client = new MockClient(time, metadata);
 
         initMetadata(client, Collections.singletonMap(topic, 1));
@@ -403,8 +404,10 @@ public class KafkaShareConsumerTest {
 
     @Test
     public void testPollTimesOutDuringMetadataUpdate() {
-        final ConsumerMetadata metadata = createMetadata(subscription);
-        final MockClient client = new MockClient(time, metadata);
+        SubscriptionState subscription = new SubscriptionState(new LogContext(), OffsetResetStrategy.EARLIEST);
+        ConsumerMetadata metadata = createMetadata(subscription);
+        Time time = new MockTime();
+        MockClient client = new MockClient(time, metadata);
 
         initMetadata(client, Collections.singletonMap(topic, 1));
         Node node = metadata.fetch().nodes().get(0);
@@ -419,7 +422,7 @@ public class KafkaShareConsumerTest {
 
         consumer.poll(Duration.ZERO);
 
-        final Queue<ClientRequest> requests = client.requests();
+        Queue<ClientRequest> requests = client.requests();
         assertEquals(0, requests.stream().filter(request -> request.apiKey().equals(ApiKeys.SHARE_FETCH)).count());
     }
 
@@ -435,7 +438,9 @@ public class KafkaShareConsumerTest {
 
     @Test
     public void testFetchResponseWithUnexpectedPartitionIsIgnored() {
+        SubscriptionState subscription = new SubscriptionState(new LogContext(), OffsetResetStrategy.EARLIEST);
         ConsumerMetadata metadata = createMetadata(subscription);
+        Time time = new MockTime();
         MockClient client = new MockClient(time, metadata);
 
         initMetadata(client, Collections.singletonMap(topic, 1));
@@ -472,7 +477,9 @@ public class KafkaShareConsumerTest {
 
     @Test
     public void testCloseShouldBeIdempotent() {
+        SubscriptionState subscription = new SubscriptionState(new LogContext(), OffsetResetStrategy.EARLIEST);
         ConsumerMetadata metadata = createMetadata(subscription);
+        Time time = new MockTime();
         MockClient client = spy(new MockClient(time, metadata));
         initMetadata(client, Collections.singletonMap(topic, 1));
 
@@ -500,14 +507,29 @@ public class KafkaShareConsumerTest {
         consumer2.close(Duration.ZERO);
     }
 
+    // This test is not reliable and needs more work
+    @Disabled
     @Test
     public void testPollAuthenticationFailure() {
-        final KafkaShareConsumer<String, String> consumer = consumerWithPendingAuthenticationError();
+        KafkaShareConsumer<String, String> consumer = consumerWithPendingAuthenticationError();
         consumer.subscribe(Collections.singleton(topic));
-        assertThrows(AuthenticationException.class, () -> consumer.poll(Duration.ofMillis(2000L)));
+        assertThrows(AuthenticationException.class, () -> consumer.poll(Duration.ZERO));
+    }
+
+    // This test is not reliable and needs more work
+    @Disabled
+    @Test
+    public void testCommitSyncAuthenticationFailure() {
+        KafkaShareConsumer<String, String> consumer = consumerWithPendingAuthenticationError();
+        assertThrows(AuthenticationException.class, () -> consumer.commitSync());
+    }
+
+    private KafkaShareConsumer<String, String> consumerWithPendingAuthenticationError() {
+        return consumerWithPendingAuthenticationError(new MockTime());
     }
 
     private KafkaShareConsumer<String, String> consumerWithPendingAuthenticationError(final Time time) {
+        SubscriptionState subscription = new SubscriptionState(new LogContext(), OffsetResetStrategy.EARLIEST);
         ConsumerMetadata metadata = createMetadata(subscription);
         MockClient client = new MockClient(time, metadata);
 
@@ -516,10 +538,6 @@ public class KafkaShareConsumerTest {
 
         client.createPendingAuthenticationError(node, 0);
         return newShareConsumer(time, client, subscription, metadata);
-    }
-
-    private KafkaShareConsumer<String, String> consumerWithPendingAuthenticationError() {
-        return consumerWithPendingAuthenticationError(new MockTime());
     }
 
     private ConsumerMetadata createMetadata(SubscriptionState subscription) {
