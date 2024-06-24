@@ -21,21 +21,26 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
 
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 public class ShareInFlightBatch<K, V> {
     final TopicIdPartition partition;
-    private final Acknowledgements acknowledgements;
-    private final List<ConsumerRecord<K, V>> inFlightRecords;
+    private final Map<Long, ConsumerRecord<K, V>> inFlightRecords;
+    private final Set<Long> acknowledgedRecords;
+    private Acknowledgements acknowledgements;
     private KafkaException exception;
     private boolean hasCachedException = false;
 
     public ShareInFlightBatch(TopicIdPartition partition) {
         this.partition = partition;
+        inFlightRecords = new TreeMap<>();
+        acknowledgedRecords = new TreeSet<>();
         acknowledgements = Acknowledgements.empty();
-        inFlightRecords = new ArrayList<>();
     }
 
     public void addAcknowledgement(long offset, AcknowledgeType acknowledgeType) {
@@ -43,25 +48,27 @@ public class ShareInFlightBatch<K, V> {
     }
 
     public void acknowledge(ConsumerRecord<K, V> record, AcknowledgeType type) {
-        Iterator<ConsumerRecord<K, V>> recordIterator = inFlightRecords.iterator();
-        while (recordIterator.hasNext()) {
-            ConsumerRecord<K, V> currentRecord = recordIterator.next();
-            if (currentRecord.offset() == record.offset()) {
-                acknowledgements.add(record.offset(), type);
-                return;
-            }
+        if (inFlightRecords.get(record.offset()) != null) {
+            acknowledgements.add(record.offset(), type);
+            acknowledgedRecords.add(record.offset());
+            return;
         }
         throw new IllegalStateException("The record cannot be acknowledged.");
     }
 
-    public void acknowledgeAll(AcknowledgeType type) {
-        inFlightRecords.forEach(record -> {
-            acknowledgements.addIfAbsent(record.offset(), type);
-        });
+    public int acknowledgeAll(AcknowledgeType type) {
+        int recordsAcknowledged = 0;
+        for (Map.Entry<Long, ConsumerRecord<K, V>> entry : inFlightRecords.entrySet()) {
+            if (acknowledgements.addIfAbsent(entry.getKey(), type)) {
+                acknowledgedRecords.add(entry.getKey());
+                recordsAcknowledged++;
+            }
+        }
+        return recordsAcknowledged;
     }
 
     public void addRecord(ConsumerRecord<K, V> record) {
-        inFlightRecords.add(record);
+        inFlightRecords.put(record.offset(), record);
     }
 
     public void addGap(long offset) {
@@ -69,12 +76,32 @@ public class ShareInFlightBatch<K, V> {
     }
 
     public void merge(ShareInFlightBatch<K, V> other) {
-        inFlightRecords.addAll(other.inFlightRecords);
-        acknowledgements.merge(other.acknowledgements);
+        inFlightRecords.putAll(other.inFlightRecords);
     }
 
     List<ConsumerRecord<K, V>> getInFlightRecords() {
-        return inFlightRecords;
+        return inFlightRecords.entrySet().stream().map(Map.Entry::getValue).collect(Collectors.toList());
+    }
+
+    int numRecords() {
+        return inFlightRecords.size();
+    }
+
+    Acknowledgements takeAcknowledgedRecords() {
+        // Usually, all records will be acknowledged so we can just clear the in-flight records leaving
+        // an empty batch, which will trigger more fetching
+        if (acknowledgedRecords.size() == inFlightRecords.size()) {
+            inFlightRecords.clear();
+        } else {
+            acknowledgedRecords.forEach(offset -> {
+                inFlightRecords.remove(offset);
+            });
+        }
+        acknowledgedRecords.clear();
+
+        Acknowledgements currentAcknowledgements = acknowledgements;
+        acknowledgements = Acknowledgements.empty();
+        return currentAcknowledgements;
     }
 
     Acknowledgements getAcknowledgements() {

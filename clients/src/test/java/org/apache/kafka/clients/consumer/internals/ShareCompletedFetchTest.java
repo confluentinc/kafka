@@ -205,8 +205,9 @@ public class ShareCompletedFetchTest {
                 // Record 0 is returned by itself because record 1 fails to deserialize
                 ShareInFlightBatch<UUID, UUID> batch = completedFetch.fetchRecords(deserializers, 10, false);
                 assertNull(batch.getException());
-                assertEquals(1, batch.getInFlightRecords().size());
-                assertEquals(0L, batch.getInFlightRecords().get(0).offset());
+                List<ConsumerRecord<UUID, UUID>> fetchedRecords = batch.getInFlightRecords();
+                assertEquals(1, fetchedRecords.size());
+                assertEquals(0L, fetchedRecords.get(0).offset());
                 Acknowledgements acknowledgements = batch.getAcknowledgements();
                 assertEquals(0, acknowledgements.size());
 
@@ -222,7 +223,8 @@ public class ShareCompletedFetchTest {
                 assertArrayEquals("key".getBytes(), org.apache.kafka.common.utils.Utils.toNullableArray(thrown.keyBuffer()));
                 assertArrayEquals("value".getBytes(), Utils.toNullableArray(thrown.valueBuffer()));
                 assertEquals(0, thrown.headers().toArray().length);
-                assertEquals(0, batch.getInFlightRecords().size());
+                fetchedRecords = batch.getInFlightRecords();
+                assertEquals(0, fetchedRecords.size());
                 acknowledgements = batch.getAcknowledgements();
                 assertEquals(1, acknowledgements.size());
                 assertEquals(AcknowledgeType.RELEASE, acknowledgements.get(1L));
@@ -238,7 +240,8 @@ public class ShareCompletedFetchTest {
                 assertEquals(10L, thrown.timestamp());
                 assertNotNull(thrown.keyBuffer());
                 assertArrayEquals("otherValue".getBytes(), Utils.toNullableArray(thrown.valueBuffer()));
-                assertEquals(0, batch.getInFlightRecords().size());
+                fetchedRecords = batch.getInFlightRecords();
+                assertEquals(0, fetchedRecords.size());
                 acknowledgements = batch.getAcknowledgements();
                 assertEquals(1, acknowledgements.size());
                 assertEquals(AcknowledgeType.RELEASE, acknowledgements.get(2L));
@@ -246,8 +249,9 @@ public class ShareCompletedFetchTest {
                 // Record 3 is returned in the next batch, because record 2 has now been skipped
                 batch = completedFetch.fetchRecords(deserializers, 10, false);
                 assertNull(batch.getException());
-                assertEquals(1, batch.getInFlightRecords().size());
-                assertEquals(3L, batch.getInFlightRecords().get(0).offset());
+                fetchedRecords = batch.getInFlightRecords();
+                assertEquals(1, fetchedRecords.size());
+                assertEquals(3L, fetchedRecords.get(0).offset());
                 acknowledgements = batch.getAcknowledgements();
                 assertEquals(0, acknowledgements.size());
             }

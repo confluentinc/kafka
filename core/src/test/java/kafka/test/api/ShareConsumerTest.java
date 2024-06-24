@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +66,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -231,12 +233,13 @@ public class ShareConsumerTest {
 
     @Test
     public void testAcknowledgementCommitCallbackSuccessfulAcknowledgement() {
+        Map<TopicPartition, Set<Long>> partitionOffsetsMap = new HashMap<>();
         Map<TopicPartition, Exception> partitionExceptionMap = new HashMap<>();
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
-        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap));
+        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap, partitionExceptionMap));
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
@@ -245,7 +248,7 @@ public class ShareConsumerTest {
         // We get back the acknowledgment error code after the second poll.
         // When we start the 3rd poll, the acknowledgment commit callback is invoked.
         shareConsumer.poll(Duration.ofMillis(2000));
-        shareConsumer.poll(Duration.ofMillis(2000));
+
         // We expect null exception as the acknowledgment error code is null.
         assertTrue(partitionExceptionMap.containsKey(tp));
         assertNull(partitionExceptionMap.get(tp));
@@ -255,21 +258,24 @@ public class ShareConsumerTest {
 
     @Test
     public void testAcknowledgementCommitCallbackOnClose() {
+        Map<TopicPartition, Set<Long>> partitionOffsetsMap = new HashMap<>();
         Map<TopicPartition, Exception> partitionExceptionMap = new HashMap<>();
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
-        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap));
+        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap, partitionExceptionMap));
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
+
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgement error code after the second poll.
         // The acknowledgement commit callback is invoked in close.
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.close();
+
         // We expect null exception as the acknowledgment error code is null.
         assertTrue(partitionExceptionMap.containsKey(tp));
         assertNull(partitionExceptionMap.get(tp));
@@ -277,25 +283,32 @@ public class ShareConsumerTest {
     }
 
     @Test
-    public void testAcknowledgementCommitCallbackInvalidRecordException() throws Exception {
+    public void testAcknowledgementCommitCallbackInvalidRecordStateException() throws Exception {
+        Map<TopicPartition, Set<Long>> partitionOffsetsMap = new HashMap<>();
         Map<TopicPartition, Exception> partitionExceptionMap = new HashMap<>();
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         producer.send(record);
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
-        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap));
+        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap, partitionExceptionMap));
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
         assertEquals(1, records.count());
-        // Waiting until acquisition lock expires.
+
+        // Waiting until the acquisition lock expires.
         Thread.sleep(10000);
+
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgment error code after the second poll.
         // When we start the 3rd poll, the acknowledgment commit callback is invoked.
-        shareConsumer.poll(Duration.ofMillis(2000));
-        shareConsumer.poll(Duration.ofMillis(2000));
-        // As we tried to acknowledge a record after acquisition lock expired,
+        records = shareConsumer.poll(Duration.ofMillis(200));
+        assertEquals(1, records.count());
+
+        records = shareConsumer.poll(Duration.ofMillis(200));
+        assertEquals(0, records.count());
+
+        // As we tried to acknowledge a record after the acquisition lock expired,
         // we wil get an InvalidRecordStateException.
         assertInstanceOf(InvalidRecordStateException.class, partitionExceptionMap.get(tp));
         shareConsumer.close();
@@ -303,15 +316,28 @@ public class ShareConsumerTest {
     }
 
     private static class TestableAcknowledgeCommitCallback implements AcknowledgementCommitCallback {
+        private final Map<TopicPartition, Set<Long>> partitionOffsetsMap;
         private final Map<TopicPartition, Exception> partitionExceptionMap;
 
-        public TestableAcknowledgeCommitCallback(Map<TopicPartition, Exception> partitionExceptionMap) {
+        public TestableAcknowledgeCommitCallback(Map<TopicPartition, Set<Long>> partitionOffsetsMap,
+                                                 Map<TopicPartition, Exception> partitionExceptionMap) {
+            this.partitionOffsetsMap = partitionOffsetsMap;
             this.partitionExceptionMap = partitionExceptionMap;
         }
 
         @Override
         public void onComplete(Map<TopicIdPartition, Set<Long>> offsetsMap, Exception exception) {
-            offsetsMap.forEach((partition, offsets) -> offsets.forEach(offset -> partitionExceptionMap.put(partition.topicPartition(), exception)));
+            offsetsMap.forEach((partition, offsets) -> {
+                partitionOffsetsMap.merge(partition.topicPartition(), offsets, (oldOffsets, newOffsets) -> {
+                    Set<Long> mergedOffsets = new HashSet<>();
+                    mergedOffsets.addAll(oldOffsets);
+                    mergedOffsets.addAll(newOffsets);
+                    return mergedOffsets;
+                });
+                if (!partitionExceptionMap.containsKey(partition.topicPartition())) {
+                    partitionExceptionMap.put(partition.topicPartition(), exception);
+                }
+            });
         }
     }
 
@@ -483,9 +509,9 @@ public class ShareConsumerTest {
         shareConsumer1.subscribe(Collections.singleton(tp.topic()));
         shareConsumer2.subscribe(Collections.singleton(tp.topic()));
 
+        Map<TopicPartition, Set<Long>> partitionOffsetsMap1 = new HashMap<>();
         Map<TopicPartition, Exception> partitionExceptionMap1 = new HashMap<>();
-
-        shareConsumer1.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap1));
+        shareConsumer1.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap1, partitionExceptionMap1));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer1.poll(Duration.ofMillis(5000));
         assertEquals(3, records.count());
@@ -518,6 +544,66 @@ public class ShareConsumerTest {
 
         shareConsumer1.close();
         shareConsumer2.close();
+        producer.close();
+    }
+
+    @Test
+    public void testExplicitAcknowledgementCommitAsyncPartialBatch() throws InterruptedException {
+        ProducerRecord<byte[], byte[]> record1 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> record2 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        ProducerRecord<byte[], byte[]> record3 = new ProducerRecord<>(tp.topic(), tp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        producer.send(record1);
+        producer.send(record2);
+        producer.send(record3);
+
+        KafkaShareConsumer<byte[], byte[]> shareConsumer1 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
+        shareConsumer1.subscribe(Collections.singleton(tp.topic()));
+
+        Map<TopicPartition, Set<Long>> partitionOffsetsMap = new HashMap<>();
+        Map<TopicPartition, Exception> partitionExceptionMap = new HashMap<>();
+        shareConsumer1.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap, partitionExceptionMap));
+
+        ConsumerRecords<byte[], byte[]> records = shareConsumer1.poll(Duration.ofMillis(5000));
+        assertEquals(3, records.count());
+        Iterator<ConsumerRecord<byte[], byte[]>> iterator = records.iterator();
+
+        // Acknowledging 2 out of the 3 records received via commitAsync.
+        ConsumerRecord<byte[], byte[]> firstRecord = iterator.next();
+        ConsumerRecord<byte[], byte[]> secondRecord = iterator.next();
+        assertEquals(0L, firstRecord.offset());
+        assertEquals(1L, secondRecord.offset());
+
+        shareConsumer1.acknowledge(firstRecord);
+        shareConsumer1.acknowledge(secondRecord);
+        shareConsumer1.commitAsync();
+
+        // The 3rd record should be re-presented to the consumer when it polls again.
+        records = shareConsumer1.poll(Duration.ofMillis(5000));
+        assertEquals(1, records.count());
+        iterator = records.iterator();
+        firstRecord = iterator.next();
+        assertEquals(2L, firstRecord.offset());
+
+        // And poll again without acknowledging - the callback will receive the acknowledgement responses too
+        records = shareConsumer1.poll(Duration.ofMillis(5000));
+        assertEquals(1, records.count());
+        iterator = records.iterator();
+        firstRecord = iterator.next();
+        assertEquals(2L, firstRecord.offset());
+
+        shareConsumer1.acknowledge(firstRecord);
+
+        // The callback will receive the acknowledgement responses after polling. The callback is
+        // called on entry to the poll method, and the commit is being performed asynchronously so
+        // call a couple of times in case the response takes a little time to arrive
+        shareConsumer1.poll(Duration.ofMillis(5000));
+        shareConsumer1.poll(Duration.ofMillis(5000));
+
+        assertTrue(partitionExceptionMap.containsKey(tp));
+        assertNull(partitionExceptionMap.get(tp));
+
+        shareConsumer1.close();
         producer.close();
     }
 
@@ -649,9 +735,10 @@ public class ShareConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
+        Map<TopicPartition, Set<Long>> partitionOffsetsMap1 = new HashMap<>();
         Map<TopicPartition, Exception> partitionExceptionMap1 = new HashMap<>();
 
-        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionExceptionMap1));
+        shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap1, partitionExceptionMap1));
 
         ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(3, records.count());
@@ -797,7 +884,7 @@ public class ShareConsumerTest {
             consumerExecutorService.submit(() -> {
                 CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures.add(future);
-                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 30, future);
+                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 30, true, future);
             });
         }
 
@@ -868,17 +955,17 @@ public class ShareConsumerTest {
             shareGroupExecutorService1.submit(() -> {
                 CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures1.add(future);
-                consumeMessages(totalMessagesConsumedGroup1, totalMessagesSent, "group1", consumerNumber, 100, future);
+                consumeMessages(totalMessagesConsumedGroup1, totalMessagesSent, "group1", consumerNumber, 100, true, future);
             });
             shareGroupExecutorService2.submit(() -> {
                 CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures2.add(future);
-                consumeMessages(totalMessagesConsumedGroup2, totalMessagesSent, "group2", consumerNumber, 100, future);
+                consumeMessages(totalMessagesConsumedGroup2, totalMessagesSent, "group2", consumerNumber, 100, true, future);
             });
             shareGroupExecutorService3.submit(() -> {
                 CompletableFuture<Integer> future = new CompletableFuture<>();
                 futures3.add(future);
-                consumeMessages(totalMessagesConsumedGroup3, totalMessagesSent, "group3", consumerNumber, 100, future);
+                consumeMessages(totalMessagesConsumedGroup3, totalMessagesSent, "group3", consumerNumber, 100, true, future);
             });
         }
         shareGroupExecutorService1.shutdown();
@@ -976,18 +1063,31 @@ public class ShareConsumerTest {
         ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresSuccess = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<CompletableFuture<Integer>> futuresFail = new ConcurrentLinkedQueue<>();
 
+        CountDownLatch startSignal = new CountDownLatch(1);
+
         consumerExecutorService.submit(() -> {
             // The "failing" consumer polls but immediately closes, which releases the records for the other consumers
             CompletableFuture<Integer> future = new CompletableFuture<>();
-            consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", 0, 0, future);
             futuresFail.add(future);
+            AtomicInteger failedMessagesConsumed = new AtomicInteger(0);
+            consumeMessages(failedMessagesConsumed, producerCount * messagesPerProducer, "group1", 0, 1, false, future);
+            startSignal.countDown();
         });
+
+        // Wait for the failed consumer to run
+        try {
+            boolean signalled = startSignal.await(15, TimeUnit.SECONDS);
+            assertTrue(signalled);
+        } catch (InterruptedException e) {
+            fail("Exception awaiting start signal");
+        }
+
         for (int i = 0; i < consumerCount; i++) {
             final int consumerNumber = i + 1;
             consumerExecutorService.submit(() -> {
                 CompletableFuture<Integer> future = new CompletableFuture<>();
-                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 25, future);
                 futuresSuccess.add(future);
+                consumeMessages(totalMessagesConsumed, producerCount * messagesPerProducer, "group1", consumerNumber, 25, true, future);
             });
         }
         producerExecutorService.shutdown();
@@ -1004,7 +1104,7 @@ public class ShareConsumerTest {
                 totalFailResult += future.get();
             }
             assertEquals(producerCount * messagesPerProducer, totalMessagesConsumed.get());
-            assertEquals(producerCount * messagesPerProducer, totalSuccessResult + totalFailResult);
+            assertEquals(producerCount * messagesPerProducer, totalSuccessResult);
         } catch (Exception e) {
             fail("Exception occurred : " + e.getMessage());
         }
@@ -1071,9 +1171,7 @@ public class ShareConsumerTest {
         // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
         shareConsumer.poll(Duration.ofMillis(2000));
         // The second poll sends the acknowledgments implicitly.
-        shareConsumer.poll(Duration.ofMillis(2000));
-        // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
-        // On 3rd poll, the acknowledgement commit callback will be called and exception is thrown.
+        // The acknowledgement commit callback will be called and the exception is thrown.
         // This is verified inside the onComplete() method implementation.
         shareConsumer.poll(Duration.ofMillis(2000));
         shareConsumer.close();
@@ -1148,13 +1246,12 @@ public class ShareConsumerTest {
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallbackThrows<>());
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
         shareConsumer.poll(Duration.ofMillis(2000));
-        // The second poll sends the acknowledgments implicitly.
-        shareConsumer.poll(Duration.ofMillis(2000));
-        // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
-        // On 3rd poll, the acknowledgement commit callback will be called and the exception is thrown.
+
+        // The second poll sends the acknowledgments implicitly. Once the response for the acknowledgements is
+        // received, the acknowledgement commit callback will be called and the exception is thrown.
         assertThrows(org.apache.kafka.common.errors.OutOfOrderSequenceException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+
         shareConsumer.close();
         producer.close();
     }
@@ -1162,7 +1259,7 @@ public class ShareConsumerTest {
     private static class TestableAcknowledgeCommitCallbackThrows<K, V> implements AcknowledgementCommitCallback {
         @Override
         public void onComplete(Map<TopicIdPartition, Set<Long>> offsetsMap, Exception exception) {
-            throw new org.apache.kafka.common.errors.OutOfOrderSequenceException("Hello from TestableAcknowledgeCommitCallbackThrows.onComplete");
+            throw new org.apache.kafka.common.errors.OutOfOrderSequenceException("Exception thrown in TestableAcknowledgeCommitCallbackThrows.onComplete");
         }
     }
 
@@ -1315,7 +1412,7 @@ public class ShareConsumerTest {
 
         AtomicInteger totalMessagesConsumed = new AtomicInteger(0);
         CompletableFuture<Integer> future = new CompletableFuture<>();
-        consumeMessages(totalMessagesConsumed, 5, "group1", 1, 10, future);
+        consumeMessages(totalMessagesConsumed, 5, "group1", 1, 10, true, future);
         // The records returned belong to offsets 5-9.
         assertEquals(5, totalMessagesConsumed.get());
         try {
@@ -1338,7 +1435,7 @@ public class ShareConsumerTest {
 
         totalMessagesConsumed = new AtomicInteger(0);
         future = new CompletableFuture<>();
-        consumeMessages(totalMessagesConsumed, 1, "group1", 1, 10, future);
+        consumeMessages(totalMessagesConsumed, 1, "group1", 1, 10, true, future);
         // The record returned belong to offset 14.
         assertEquals(1, totalMessagesConsumed.get());
         try {
@@ -1352,7 +1449,7 @@ public class ShareConsumerTest {
 
         totalMessagesConsumed = new AtomicInteger(0);
         future = new CompletableFuture<>();
-        consumeMessages(totalMessagesConsumed, 0, "group1", 1, 5, future);
+        consumeMessages(totalMessagesConsumed, 0, "group1", 1, 5, true, future);
         assertEquals(0, totalMessagesConsumed.get());
         try {
             assertEquals(0, future.get());
@@ -1402,6 +1499,7 @@ public class ShareConsumerTest {
                                  String groupId,
                                  int consumerNumber,
                                  int maxPolls,
+                                 boolean commit,
                                  CompletableFuture<Integer> future) {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), groupId);
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
@@ -1423,8 +1521,11 @@ public class ShareConsumerTest {
                     retries++;
                 }
             }
-            // Complete acknowledgement of the records
-            shareConsumer.commitSync(Duration.ofMillis(2000));
+
+            if (commit) {
+                // Complete acknowledgement of the records
+                shareConsumer.commitSync(Duration.ofMillis(2000));
+            }
         } catch (Exception e) {
             fail("Consumer " + consumerNumber + " failed with exception: " + e);
         } finally {
