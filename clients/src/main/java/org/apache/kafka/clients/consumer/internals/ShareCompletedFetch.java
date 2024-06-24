@@ -20,6 +20,7 @@ import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.CorruptRecordException;
 import org.apache.kafka.common.errors.RecordDeserializationException;
 import org.apache.kafka.common.errors.SerializationException;
@@ -286,25 +287,39 @@ public class ShareCompletedFetch {
                                             final TimestampType timestampType,
                                             final Record record,
                                             final short deliveryCount) {
+        Headers headers = new RecordHeaders(record.headers());
+        ByteBuffer keyBytes = record.key();
+        ByteBuffer valueBytes = record.value();
+        K key;
+        V value;
         try {
-            long offset = record.offset();
-            long timestamp = record.timestamp();
-            Headers headers = new RecordHeaders(record.headers());
-            ByteBuffer keyBytes = record.key();
-            K key = keyBytes == null ? null : deserializers.keyDeserializer.deserialize(partition.topic(), headers, keyBytes);
-            ByteBuffer valueBytes = record.value();
-            V value = valueBytes == null ? null : deserializers.valueDeserializer.deserialize(partition.topic(), headers, valueBytes);
-            return new ConsumerRecord<>(partition.topic(), partition.partition(), offset,
-                    timestamp, timestampType,
-                    keyBytes == null ? ConsumerRecord.NULL_SIZE : keyBytes.remaining(),
-                    valueBytes == null ? ConsumerRecord.NULL_SIZE : valueBytes.remaining(),
-                    key, value, headers, leaderEpoch, Optional.of(deliveryCount));
+            key = keyBytes == null ? null : deserializers.keyDeserializer.deserialize(partition.topic(), headers, keyBytes);
         } catch (RuntimeException e) {
-            log.error("Deserializers with error: {}", deserializers);
-            throw new RecordDeserializationException(partition.topicPartition(), record.offset(),
-                    "Error deserializing key/value for partition " + partition +
-                    " at offset " + record.offset() + ". The record has been released.", e);
+            log.error("Key Deserializers with error: {}", deserializers);
+            throw newRecordDeserializationException(RecordDeserializationException.DeserializationExceptionOrigin.KEY, partition.topicPartition(), timestampType, record, e, headers);
         }
+        try {
+            value = valueBytes == null ? null : deserializers.valueDeserializer.deserialize(partition.topic(), headers, valueBytes);
+        } catch (RuntimeException e) {
+            log.error("Value Deserializers with error: {}", deserializers);
+            throw newRecordDeserializationException(RecordDeserializationException.DeserializationExceptionOrigin.VALUE, partition.topicPartition(), timestampType, record, e, headers);
+        }
+        return new ConsumerRecord<>(partition.topic(), partition.partition(), record.offset(),
+                record.timestamp(), timestampType,
+                keyBytes == null ? ConsumerRecord.NULL_SIZE : keyBytes.remaining(),
+                valueBytes == null ? ConsumerRecord.NULL_SIZE : valueBytes.remaining(),
+                key, value, headers, leaderEpoch, Optional.of(deliveryCount));
+    }
+
+    private static RecordDeserializationException newRecordDeserializationException(RecordDeserializationException.DeserializationExceptionOrigin origin,
+                                                                                    TopicPartition partition,
+                                                                                    TimestampType timestampType,
+                                                                                    Record record,
+                                                                                    RuntimeException e,
+                                                                                    Headers headers) {
+        return new RecordDeserializationException(origin, partition, record.offset(), record.timestamp(), timestampType, record.key(), record.value(), headers,
+                "Error deserializing " + origin.name() + " for partition " + partition + " at offset " + record.offset()
+                        + ". The record has been released.", e);
     }
 
     private Record nextFetchedRecord(final boolean checkCrcs) {
