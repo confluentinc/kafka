@@ -136,7 +136,7 @@ class KafkaApisTest extends Logging {
     clientControllerQuotaManager, replicaQuotaManager, replicaQuotaManager, replicaQuotaManager, None)
   private val fetchManager: FetchManager = mock(classOf[FetchManager])
   val sharePartitionManager : SharePartitionManager =
-    new SharePartitionManager(replicaManager, new SystemTime(), new ShareSessionCache(1000, 100), 30000, 5, 200, NoOpShareStatePersister.getInstance())
+    new SharePartitionManager(replicaManager, new SystemTime(), new ShareSessionCache(1000, 100), 30000, 5, 200, NoOpShareStatePersister.getInstance(), metrics)
   private val clientMetricsManager: ClientMetricsManager = mock(classOf[ClientMetricsManager])
   private val brokerTopicStats = new BrokerTopicStats
   private val clusterId = "clusterId"

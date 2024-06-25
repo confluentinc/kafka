@@ -23,6 +23,12 @@ import org.apache.kafka.common.errors.ShareSessionNotFoundException;
 import org.apache.kafka.common.message.ShareAcknowledgeResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.message.ShareFetchResponseData.PartitionData;
+import org.apache.kafka.common.metrics.Metrics;
+import org.apache.kafka.common.metrics.Sensor;
+import org.apache.kafka.common.metrics.stats.Avg;
+import org.apache.kafka.common.metrics.stats.CumulativeSum;
+import org.apache.kafka.common.metrics.stats.Max;
+import org.apache.kafka.common.metrics.stats.Rate;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.FetchRequest;
 import org.apache.kafka.common.requests.ShareFetchMetadata;
@@ -82,6 +88,7 @@ public class SharePartitionManager implements AutoCloseable {
     private final int maxInFlightMessages;
     private final int maxDeliveryCount;
     private final Persister persister;
+    private final ShareGroupMetrics shareGroupMetrics;
 
     public SharePartitionManager(
             ReplicaManager replicaManager,
@@ -90,14 +97,15 @@ public class SharePartitionManager implements AutoCloseable {
             int recordLockDurationMs,
             int maxDeliveryCount,
             int maxInFlightMessages,
-            Persister persister
+            Persister persister,
+            Metrics metrics
     ) {
-        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, maxDeliveryCount, maxInFlightMessages, persister);
+        this(replicaManager, time, cache, new ConcurrentHashMap<>(), recordLockDurationMs, maxDeliveryCount, maxInFlightMessages, persister, metrics);
     }
 
     // Visible for testing
     SharePartitionManager(ReplicaManager replicaManager, Time time, ShareSessionCache cache, Map<SharePartitionKey, SharePartition> partitionCacheMap,
-                          int recordLockDurationMs, int maxDeliveryCount, int maxInFlightMessages, Persister persister) {
+                          int recordLockDurationMs, int maxDeliveryCount, int maxInFlightMessages, Persister persister, Metrics metrics) {
         this.replicaManager = replicaManager;
         this.time = time;
         this.cache = cache;
@@ -110,6 +118,7 @@ public class SharePartitionManager implements AutoCloseable {
         this.maxDeliveryCount = maxDeliveryCount;
         this.maxInFlightMessages = maxInFlightMessages;
         this.persister = persister;
+        this.shareGroupMetrics = new ShareGroupMetrics(metrics, time);
     }
 
     // TODO: Move some part in share session context and change method signature to accept share
@@ -152,8 +161,13 @@ public class SharePartitionManager implements AutoCloseable {
                         topicIdPartition
                 );
                 SharePartition sharePartition = partitionCacheMap.computeIfAbsent(sharePartitionKey,
-                    k -> new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
-                            recordLockDurationMs, timer, time, persister, replicaManager));
+                    k -> {
+                        long start = time.hiResClockMs();
+                        SharePartition partition =  new SharePartition(shareFetchPartitionData.groupId, topicIdPartition, maxInFlightMessages, maxDeliveryCount,
+                            recordLockDurationMs, timer, time, persister, replicaManager);
+                        this.shareGroupMetrics.partitionLoadTime(start);
+                        return partition;
+                    });
                 int partitionMaxBytes = shareFetchPartitionData.partitionMaxBytes.getOrDefault(topicIdPartition, 0);
                 // Add the share partition to the list of partitions to be fetched only if we can
                 // acquire the fetch lock on it.
@@ -301,6 +315,7 @@ public class SharePartitionManager implements AutoCloseable {
     ) {
         log.debug("Acknowledge request for topicIdPartitions: {} with groupId: {}",
                 acknowledgeTopics.keySet(), groupId);
+        this.shareGroupMetrics.shareAcknowledgement();
         Map<TopicIdPartition, CompletableFuture<Errors>> futures = new HashMap<>();
         acknowledgeTopics.forEach((topicIdPartition, acknowledgePartitionBatches) -> {
             SharePartition sharePartition = partitionCacheMap.get(sharePartitionKey(groupId, topicIdPartition));
@@ -309,6 +324,9 @@ public class SharePartitionManager implements AutoCloseable {
                     if (throwable.isPresent()) {
                         return Errors.forException(throwable.get());
                     } else {
+                        acknowledgePartitionBatches.forEach(batch -> {
+                            batch.acknowledgeTypes().forEach(this.shareGroupMetrics::recordAcknowledgement);
+                        });
                         return Errors.NONE;
                     }
 
@@ -629,6 +647,111 @@ public class SharePartitionManager implements AutoCloseable {
             this.topicIdPartitions = topicIdPartitions;
             this.future = future;
             this.partitionMaxBytes = partitionMaxBytes;
+        }
+    }
+
+    static class ShareGroupMetrics {
+        /**
+         * share-acknowledgement (share-acknowledgement-rate and share-acknowledgement-count) - The total number of offsets acknowledged for share groups (requests to be ack).
+         * record-acknowledgement (record-acknowledgement-rate and record-acknowledgement-count) - The number of records acknowledged per acknowledgement type.
+         * partition-load-time (partition-load-time-avg and partition-load-time-max) - The time taken to load the share partitions.
+         */
+
+        public static final String METRICS_GROUP_NAME = "share-group-metrics";
+
+        public static final String SHARE_ACK_SENSOR = "share-acknowledgement-sensor";
+        public static final String SHARE_ACK_RATE = "share-acknowledgement-rate";
+        public static final String SHARE_ACK_COUNT = "share-acknowledgement-count";
+
+        public static final String RECORD_ACK_SENSOR_PREFIX = "record-acknowledgement";
+        public static final String RECORD_ACK_RATE = "record-acknowledgement-rate";
+        public static final String RECORD_ACK_COUNT = "record-acknowledgement-count";
+        public static final String ACK_TYPE = "ack-type";
+
+        public static final String PARTITION_LOAD_TIME_SENSOR = "partition-load-time-sensor";
+        public static final String PARTITION_LOAD_TIME_AVG = "partition-load-time-avg";
+        public static final String PARTITION_LOAD_TIME_MAX = "partition-load-time-max";
+
+        public static final Map<Byte, String> RECORD_ACKS_MAP = new HashMap<>();
+
+        private final Metrics metrics;
+        private final Time time;
+        private final Sensor shareAcknowledgementSensor;
+        private final Map<Byte, Sensor> recordAcksSensorMap = new HashMap<>();
+        private final Sensor partitionLoadTimeSensor;
+
+        static {
+            RECORD_ACKS_MAP.put((byte) 1, "accept");
+            RECORD_ACKS_MAP.put((byte) 2, "release");
+            RECORD_ACKS_MAP.put((byte) 3, "reject");
+        }
+
+        public ShareGroupMetrics(Metrics metrics, Time time) {
+            this.metrics = metrics;
+            this.time = time;
+
+            shareAcknowledgementSensor = metrics.sensor(SHARE_ACK_SENSOR);
+            shareAcknowledgementSensor.add(metrics.metricName(
+                    SHARE_ACK_COUNT,
+                    METRICS_GROUP_NAME,
+                    "The total number of offsets acknowledged for share groups."),
+                new CumulativeSum());
+            shareAcknowledgementSensor.add(metrics.metricName(
+                    SHARE_ACK_RATE,
+                    METRICS_GROUP_NAME,
+                    "The total number of offsets acknowledged for share groups."),
+                new Rate());
+
+            for (Map.Entry<Byte, String> entry : RECORD_ACKS_MAP.entrySet()) {
+                recordAcksSensorMap.put(entry.getKey(), metrics.sensor(String.format("%s-%s-sensor", RECORD_ACK_SENSOR_PREFIX, entry.getValue())));
+                recordAcksSensorMap.get(entry.getKey())
+                    .add(metrics.metricName(
+                            RECORD_ACK_RATE,
+                            METRICS_GROUP_NAME,
+                            "The number of records acknowledged per acknowledgement type.",
+                            ACK_TYPE, entry.getValue()),
+                        new Rate());
+                recordAcksSensorMap.get(entry.getKey())
+                    .add(metrics.metricName(
+                            RECORD_ACK_COUNT,
+                            METRICS_GROUP_NAME,
+                            "The number of records acknowledged per acknowledgement type.",
+                            ACK_TYPE, entry.getValue()),
+                        new CumulativeSum());
+            }
+
+            partitionLoadTimeSensor = metrics.sensor(PARTITION_LOAD_TIME_SENSOR);
+            partitionLoadTimeSensor.add(metrics.metricName(
+                    PARTITION_LOAD_TIME_AVG,
+                    METRICS_GROUP_NAME,
+                    "Average time taken to load the share partitions."),
+                new Avg());
+            partitionLoadTimeSensor.add(metrics.metricName(
+                    PARTITION_LOAD_TIME_MAX,
+                    METRICS_GROUP_NAME,
+                    "Maximum time taken to load the share partitions."),
+                new Max());
+        }
+
+        // visibility for testing
+        ShareGroupMetrics(Time time) {
+            this(new Metrics(time), time);
+        }
+
+        void shareAcknowledgement() {
+            shareAcknowledgementSensor.record(1.0);
+        }
+
+        void recordAcknowledgement(byte ackType) {
+            if (recordAcksSensorMap.containsKey(ackType)) {
+                recordAcksSensorMap.get(ackType).record(1.0);
+            } else {
+                log.error("Unknown ack type {}", ackType);
+            }
+        }
+
+        void partitionLoadTime(long start) {
+            partitionLoadTimeSensor.record(time.hiResClockMs() - start);
         }
     }
 }
