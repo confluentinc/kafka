@@ -118,6 +118,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return PollResult.EMPTY;
         }
 
+        // Send any pending acknowledgements before fetching more records.
         PollResult pollResult = processAcknowledgements(currentTimeMs, false);
         if (pollResult != null) {
             return pollResult;
@@ -260,6 +261,15 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         acknowledgementsMap.forEach((tip, acks) -> fetchAcknowledgementsMap.merge(tip, acks, Acknowledgements::merge));
     }
 
+    /**
+     * Process acknowledgeRequestStates and prepares a
+     * list of acknowledgements to be sent in the poll().
+     *
+     * @param currentTimeMs the current time in ms.
+     * @param onClose True if called during close
+     *
+     * @return the PollResult containing zero or more acknowledgements.
+     */
     private PollResult processAcknowledgements(long currentTimeMs, boolean onClose) {
         List<UnsentRequest> unsentRequests = new ArrayList<>();
         Iterator<AcknowledgeRequestState> iterator = acknowledgeRequestStates.iterator();
@@ -325,7 +335,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         final AtomicInteger resultCount = new AtomicInteger();
         final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitSyncFuture = new CompletableFuture<>();
-        final CommitSyncResultHandler resultHandler = new CommitSyncResultHandler(resultCount, commitSyncFuture);
+        final CommitResultHandler resultHandler = new CommitResultHandler(resultCount, Optional.of(commitSyncFuture));
 
         final Cluster cluster = metadata.fetch();
 
@@ -358,8 +368,15 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         return commitSyncFuture;
     }
 
+    /**
+     * Enqueue an AcknowledgeRequestState to be picked up on the next poll.
+     *
+     * @param acknowledgementsMap The acknowledgements to commit
+     */
     public void commitAsync(final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         final Cluster cluster = metadata.fetch();
+        final AtomicInteger resultCount = new AtomicInteger();
+        final CommitResultHandler resultHandler = new CommitResultHandler(resultCount, Optional.empty());
 
         sessionHandlers.forEach((nodeId, sessionHandler) -> {
             Node node = cluster.nodeById(nodeId);
@@ -373,6 +390,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         metricsManager.recordAcknowledgementSent(acknowledgements.size());
                         log.debug("Added acknowledge request for partition {} to node {}", tip.topicPartition(), node);
                     }
+                    resultCount.incrementAndGet();
                 }
                 acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
                         ShareConsumeRequestManager.class.getSimpleName(),
@@ -381,7 +399,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         Optional.empty(),
                         nodeId,
                         acknowledgementsMapForNode,
-                        Optional.empty()
+                        Optional.of(resultHandler)
                 ));
             }
         });
@@ -655,21 +673,21 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         private final Optional<Long> expirationTimeMs;
 
         /**
-         * Whether the request has been processed.
+         * Whether the request has been processed and will not be retried.
          */
         private boolean isProcessed = false;
 
         /**
          * For a synchronous request, this handles completing a future when all results are known.
          */
-        private final Optional<CommitSyncResultHandler> resultHandler;
+        private final Optional<CommitResultHandler> resultHandler;
 
         AcknowledgeRequestState(LogContext logContext, String owner,
                                 long retryBackoffMs, long retryBackoffMaxMs,
                                 Optional<Long> expirationTimeMs,
                                 int nodeId,
                                 Map<TopicIdPartition, Acknowledgements> acknowledgementsMap,
-                                Optional<CommitSyncResultHandler> resultHandler) {
+                                Optional<CommitResultHandler> resultHandler) {
             super(logContext, owner, retryBackoffMs, retryBackoffMaxMs);
             this.expirationTimeMs = expirationTimeMs;
             this.nodeId = nodeId;
@@ -719,17 +737,28 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }
         }
 
+        /**
+         * Sets the error code in the acknowledgements and sends the response
+         * through a background event.
+         */
         void handleAcknowledgeErrorCode(TopicIdPartition tip, Errors acknowledgeErrorCode) {
             Acknowledgements acks = acknowledgementsMap.get(tip);
             if (acks != null) {
                 acks.setAcknowledgeErrorCode(acknowledgeErrorCode);
-                Map<TopicIdPartition, Acknowledgements> acksMap = Collections.singletonMap(tip, acks);
-                ShareAcknowledgementCommitCallbackEvent event = new ShareAcknowledgementCommitCallbackEvent(acksMap);
-                backgroundEventHandler.add(event);
-                resultHandler.ifPresent(handler -> handler.complete(tip, acks));
+                if (resultHandler.isPresent()) {
+                    resultHandler.get().complete(tip, acks);
+                } else {
+                    Map<TopicIdPartition, Acknowledgements> acksMap = Collections.singletonMap(tip, acks);
+                    ShareAcknowledgementCommitCallbackEvent event = new ShareAcknowledgementCommitCallbackEvent(acksMap);
+                    backgroundEventHandler.add(event);
+                }
             }
         }
 
+        /**
+         * @param currentTimeMs the current time in ms.
+         * @return True if the request can be retried and is still not timed out.
+         */
         boolean retryTimeoutExpired(long currentTimeMs) {
             return expirationTimeMs.isPresent() && expirationTimeMs.get() <= currentTimeMs;
         }
@@ -738,8 +767,11 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return isProcessed;
         }
 
+        /**
+         * @return True if the current request was built as part of commitSync.
+         */
         boolean isCommitSync() {
-            return expirationTimeMs.isPresent() && resultHandler.isPresent();
+            return expirationTimeMs.isPresent();
         }
     }
 
@@ -757,25 +789,29 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     }
 
     /**
-     * Manages completing the future for a synchronous acknowledgement commit by counting
+     * Sends a ShareAcknowledgeCommitCallback event to the application when it is done
+     * processing all the remaining acknowledgement request states.
+     * Also manages completing the future for synchronous acknowledgement commit by counting
      * down the result as they are known and completing the future at the end.
      */
-    static class CommitSyncResultHandler {
+    class CommitResultHandler {
         private final Map<TopicIdPartition, Acknowledgements> result;
         private final AtomicInteger remainingResults;
-        private final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future;
+        private final Optional<CompletableFuture<Map<TopicIdPartition, Acknowledgements>>> future;
 
-        CommitSyncResultHandler(final AtomicInteger remainingResults,
-                                final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future) {
-            this.result = new HashMap<>();
+        CommitResultHandler(final AtomicInteger remainingResults,
+                            final Optional<CompletableFuture<Map<TopicIdPartition, Acknowledgements>>> future) {
+            result = new HashMap<>();
             this.remainingResults = remainingResults;
             this.future = future;
         }
 
-        void complete(TopicIdPartition partition, Acknowledgements acknowledgements) {
+        public void complete(TopicIdPartition partition, Acknowledgements acknowledgements) {
             result.put(partition, acknowledgements);
             if (remainingResults.decrementAndGet() == 0) {
-                future.complete(result);
+                ShareAcknowledgementCommitCallbackEvent event = new ShareAcknowledgementCommitCallbackEvent(result);
+                backgroundEventHandler.add(event);
+                future.ifPresent(future -> future.complete(result));
             }
         }
     }
