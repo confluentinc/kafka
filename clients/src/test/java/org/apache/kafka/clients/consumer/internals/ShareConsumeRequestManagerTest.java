@@ -762,6 +762,9 @@ public class ShareConsumeRequestManagerTest {
 
     private <K, V> Map<TopicPartition, List<ConsumerRecord<K, V>>> fetchRecords() {
         ShareFetch<K, V> fetch = collectFetch();
+        if (fetch.isEmpty()) {
+            return Collections.emptyMap();
+        }
         return fetch.records();
     }
 
@@ -771,14 +774,12 @@ public class ShareConsumeRequestManagerTest {
     }
 
     private void buildFetcher() {
-        buildFetcher(new ByteArrayDeserializer(), new ByteArrayDeserializer()
-        );
+        buildFetcher(new ByteArrayDeserializer(), new ByteArrayDeserializer());
     }
 
     private <K, V> void buildFetcher(Deserializer<K> keyDeserializer,
                                      Deserializer<V> valueDeserializer) {
-        buildFetcher(new MetricConfig(), keyDeserializer, valueDeserializer
-        );
+        buildFetcher(new MetricConfig(), keyDeserializer, valueDeserializer);
     }
 
     private <K, V> void buildFetcher(MetricConfig metricConfig,
@@ -825,8 +826,7 @@ public class ShareConsumeRequestManagerTest {
                 new ShareFetchBuffer(logContext),
                 backgroundEventHandler,
                 metricsManager,
-                shareFetchCollector
-        ));
+                shareFetchCollector));
     }
 
     private void buildDependencies(MetricConfig metricConfig,

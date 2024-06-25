@@ -21,6 +21,9 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.RecordDeserializationException;
+import org.apache.kafka.common.header.Headers;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.message.ShareFetchResponseData;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -40,6 +43,7 @@ import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.common.utils.Utils;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -50,7 +54,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class ShareCompletedFetchTest {
 
@@ -180,8 +187,10 @@ public class ShareCompletedFetchTest {
         try (final MemoryRecordsBuilder builder = MemoryRecords.builder(ByteBuffer.allocate(1024), CompressionType.NONE, TimestampType.CREATE_TIME, 0);
              final UUIDSerializer serializer = new UUIDSerializer()) {
             builder.append(new SimpleRecord(serializer.serialize(TOPIC_NAME, UUID.randomUUID())));
-            builder.append(0L, "key1".getBytes(), "value1".getBytes());
-            builder.append(0L, "key2".getBytes(), "value2".getBytes());
+            builder.append(0L, "key".getBytes(), "value".getBytes());
+            Headers headers = new RecordHeaders();
+            headers.add("hkey", "hvalue".getBytes());
+            builder.append(10L, serializer.serialize("key", UUID.randomUUID()), "otherValue".getBytes(), headers.toArray());
             builder.append(new SimpleRecord(serializer.serialize(TOPIC_NAME, UUID.randomUUID())));
             Records records = builder.build();
 
@@ -195,6 +204,7 @@ public class ShareCompletedFetchTest {
 
                 // Record 0 is returned by itself because record 1 fails to deserialize
                 ShareInFlightBatch<UUID, UUID> batch = completedFetch.fetchRecords(deserializers, 10, false);
+                assertNull(batch.getException());
                 List<ConsumerRecord<UUID, UUID>> fetchedRecords = batch.getInFlightRecords();
                 assertEquals(1, fetchedRecords.size());
                 assertEquals(0L, fetchedRecords.get(0).offset());
@@ -203,6 +213,16 @@ public class ShareCompletedFetchTest {
 
                 // Record 1 then results in an empty batch
                 batch = completedFetch.fetchRecords(deserializers, 10, false);
+                assertEquals(RecordDeserializationException.class, batch.getException().getClass());
+                RecordDeserializationException thrown = (RecordDeserializationException) batch.getException();
+                assertEquals(RecordDeserializationException.DeserializationExceptionOrigin.KEY, thrown.origin());
+                assertEquals(1, thrown.offset());
+                assertEquals(TOPIC_NAME, thrown.topicPartition().topic());
+                assertEquals(0, thrown.topicPartition().partition());
+                assertEquals(0, thrown.timestamp());
+                assertArrayEquals("key".getBytes(), org.apache.kafka.common.utils.Utils.toNullableArray(thrown.keyBuffer()));
+                assertArrayEquals("value".getBytes(), Utils.toNullableArray(thrown.valueBuffer()));
+                assertEquals(0, thrown.headers().toArray().length);
                 fetchedRecords = batch.getInFlightRecords();
                 assertEquals(0, fetchedRecords.size());
                 acknowledgements = batch.getAcknowledgements();
@@ -211,6 +231,15 @@ public class ShareCompletedFetchTest {
 
                 // Record 2 then results in an empty batch, because record 1 has now been skipped
                 batch = completedFetch.fetchRecords(deserializers, 10, false);
+                assertEquals(RecordDeserializationException.class, batch.getException().getClass());
+                thrown = (RecordDeserializationException) batch.getException();
+                assertEquals(RecordDeserializationException.DeserializationExceptionOrigin.VALUE, thrown.origin());
+                assertEquals(2L, thrown.offset());
+                assertEquals(TOPIC_NAME, thrown.topicPartition().topic());
+                assertEquals(0, thrown.topicPartition().partition());
+                assertEquals(10L, thrown.timestamp());
+                assertNotNull(thrown.keyBuffer());
+                assertArrayEquals("otherValue".getBytes(), Utils.toNullableArray(thrown.valueBuffer()));
                 fetchedRecords = batch.getInFlightRecords();
                 assertEquals(0, fetchedRecords.size());
                 acknowledgements = batch.getAcknowledgements();
@@ -219,6 +248,7 @@ public class ShareCompletedFetchTest {
 
                 // Record 3 is returned in the next batch, because record 2 has now been skipped
                 batch = completedFetch.fetchRecords(deserializers, 10, false);
+                assertNull(batch.getException());
                 fetchedRecords = batch.getInFlightRecords();
                 assertEquals(1, fetchedRecords.size());
                 assertEquals(3L, fetchedRecords.get(0).offset());

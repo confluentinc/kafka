@@ -311,7 +311,7 @@ public class ShareHeartbeatRequestManager implements RequestManager {
                     exception.getMessage());
             logger.debug(message);
         } else {
-            logger.error("ShareGroupHeartbeatRequest failed due to fatal error: " + exception.getMessage());
+            logger.error("ShareGroupHeartbeatRequest failed due to fatal error: {}", exception.getMessage());
             handleFatalFailure(exception);
         }
     }
