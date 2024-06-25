@@ -699,7 +699,7 @@ public class SharePartitionManager implements AutoCloseable {
             shareAcknowledgementSensor.add(metrics.metricName(
                     SHARE_ACK_RATE,
                     METRICS_GROUP_NAME,
-                    "The total number of offsets acknowledged for share groups per minute."),
+                    "The total number of offsets acknowledged for share groups."),
                 new Rate());
 
             for (Map.Entry<Byte, String> entry : RECORD_ACKS_MAP.entrySet()) {
@@ -708,7 +708,7 @@ public class SharePartitionManager implements AutoCloseable {
                     .add(metrics.metricName(
                             RECORD_ACK_RATE,
                             METRICS_GROUP_NAME,
-                            "The number of records acknowledged per acknowledgement type per minute.",
+                            "The number of records acknowledged per acknowledgement type.",
                             ACK_TYPE, entry.getValue()),
                         new Rate());
                 recordAcksSensorMap.get(entry.getKey())
@@ -745,6 +745,8 @@ public class SharePartitionManager implements AutoCloseable {
         void recordAcknowledgement(byte ackType) {
             if (recordAcksSensorMap.containsKey(ackType)) {
                 recordAcksSensorMap.get(ackType).record(1.0);
+            } else {
+                log.error("Unknown ack type {}", ackType);
             }
         }
 
