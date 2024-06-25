@@ -20,26 +20,34 @@ package org.apache.kafka.coordinator.group.share;
 import com.yammer.metrics.core.MetricsRegistry;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
+import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetrics;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetricsShard;
-import org.apache.kafka.server.metrics.KafkaYammerMetrics;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
-// todo smjn- need to add metrics. Currently placeholder for adhering to coordinator API
 public class ShareCoordinatorMetrics extends CoordinatorMetrics implements AutoCloseable {
+  public static final String METRICS_GROUP = "share-coordinator-metrics";
 
-  private final MetricsRegistry registry;
   private final Metrics metrics;
+  private final Map<TopicPartition, ShareCoordinatorMetricsShard> shards = new ConcurrentHashMap<>();
+
+  /**
+   * Global sensors. These are shared across all metrics shards.
+   */
+  public final Map<String, Sensor> globalSensors;
 
   public ShareCoordinatorMetrics() {
-    this(KafkaYammerMetrics.defaultRegistry(), new Metrics());
+    this(new Metrics());
   }
 
-  public ShareCoordinatorMetrics(MetricsRegistry registry, Metrics metrics) {
-    this.registry = Objects.requireNonNull(registry);
+  public ShareCoordinatorMetrics(Metrics metrics) {
     this.metrics = Objects.requireNonNull(metrics);
+    this.globalSensors = Collections.emptyMap();  //todo smjn: replace with unmodifiable map
   }
 
   @Override
@@ -49,26 +57,37 @@ public class ShareCoordinatorMetrics extends CoordinatorMetrics implements AutoC
 
   @Override
   public ShareCoordinatorMetricsShard newMetricsShard(SnapshotRegistry snapshotRegistry, TopicPartition tp) {
-    return null;
+    return new ShareCoordinatorMetricsShard(snapshotRegistry, globalSensors, tp);
   }
 
   @Override
   public void activateMetricsShard(CoordinatorMetricsShard shard) {
-
+    if (!(shard instanceof ShareCoordinatorMetricsShard)) {
+      throw new IllegalArgumentException("ShareCoordinatorMetrics can only activate ShareCoordinatorMetricShard");
+    }
+    shards.put(shard.topicPartition(), (ShareCoordinatorMetricsShard) shard);
   }
 
   @Override
   public void deactivateMetricsShard(CoordinatorMetricsShard shard) {
-
+    if (!(shard instanceof ShareCoordinatorMetricsShard)) {
+      throw new IllegalArgumentException("ShareCoordinatorMetrics can only deactivate ShareCoordinatorMetricShard");
+    }
+    shards.remove(shard.topicPartition());
   }
 
   @Override
   public MetricsRegistry registry() {
+    // we are not using MetricsRegistry in share coordinator
+    // but this method is part for implemented interface
     return null;
   }
 
   @Override
   public void onUpdateLastCommittedOffset(TopicPartition tp, long offset) {
-
+    CoordinatorMetricsShard shard = shards.get(tp);
+    if (shard != null) {
+      shard.commitUpTo(offset);
+    }
   }
 }
