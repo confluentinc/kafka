@@ -28,9 +28,13 @@ import org.apache.kafka.coordinator.group.TimelineGaugeCounter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * This class is mapped to a single {@link org.apache.kafka.coordinator.group.GroupCoordinatorShard}. It will
@@ -73,9 +77,17 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     private final TimelineGaugeCounter numClassicGroupsTimelineCounter;
 
     /**
+     * The number of share partitions managed by the group coordinator.
+     */
+    private final Map<String, Boolean> numSharePartitions;
+    private final Object sharePartLock = new Object();
+
+    /**
      * The topic partition.
      */
     private final TopicPartition topicPartition;
+
+    private final SnapshotRegistry snapshotRegistry;
 
     public GroupCoordinatorMetricsShard(
         SnapshotRegistry snapshotRegistry,
@@ -85,6 +97,7 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
         Objects.requireNonNull(snapshotRegistry);
         numOffsetsTimelineGaugeCounter = new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0));
         numClassicGroupsTimelineCounter = new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0));
+        numSharePartitions = new ConcurrentHashMap<>();
 
         this.classicGroupGauges = Utils.mkMap(
             Utils.mkEntry(ClassicGroupState.PREPARING_REBALANCE, new AtomicLong(0)),
@@ -118,6 +131,7 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
 
         this.globalSensors = Objects.requireNonNull(globalSensors);
         this.topicPartition = Objects.requireNonNull(topicPartition);
+        this.snapshotRegistry = snapshotRegistry;
     }
 
     public void incrementNumClassicGroups(ClassicGroupState state) {
@@ -409,6 +423,25 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     public long numShareGroups() {
         return shareGroupGauges.values().stream()
             .mapToLong(timelineGaugeCounter -> timelineGaugeCounter.atomicLong.get()).sum();
+    }
+
+    public void incrementNumSharePartitions(Set<String> keys) {
+        synchronized (sharePartLock) {
+            numSharePartitions.putAll(keys.stream().map(key -> Utils.mkEntry(key, true)).
+                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+        }
+    }
+
+    public void decrementNumSharePartitions(Set<String> keys) {
+        synchronized (sharePartLock) {
+            for (String key : keys) {
+                numSharePartitions.remove(key);
+            }
+        }
+    }
+
+    public Set<String> sharePartitions() {
+        return Collections.unmodifiableSet(numSharePartitions.keySet());
     }
 
     // could be called from ShareGroup to indicate state transition
