@@ -90,6 +90,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -128,6 +129,7 @@ import static org.apache.kafka.coordinator.group.classic.ClassicGroupState.PREPA
 import static org.apache.kafka.coordinator.group.classic.ClassicGroupState.STABLE;
 import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.CLASSIC_GROUP_COMPLETED_REBALANCES_SENSOR_NAME;
 import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.CONSUMER_GROUP_REBALANCES_SENSOR_NAME;
+import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.SHARE_GROUP_REBALANCES_SENSOR_NAME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -9565,6 +9567,7 @@ public class GroupMetadataManagerTest {
                 .setAssignment(new ShareGroupHeartbeatResponseData.Assignment()),
             result.response()
         );
+        verify(context.metrics).record(SHARE_GROUP_REBALANCES_SENSOR_NAME);
     }
 
     @Test
@@ -9615,6 +9618,9 @@ public class GroupMetadataManagerTest {
                     .setMemberId(Uuid.randomUuid().toString())
                     .setMemberEpoch(1)
                     .setSubscribedTopicNames(Arrays.asList("foo", "bar"))));
+
+        verify(context.metrics, times(1)).decrementNumSharePartitions(new HashSet<>());
+        verify(context.metrics, times(1)).incrementNumSharePartitions(any());
     }
 
     @Test
