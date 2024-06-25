@@ -96,6 +96,7 @@ import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.image.TopicImage;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
+import org.apache.kafka.server.group.share.ShareGroupHelper;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
 import org.apache.kafka.timeline.TimelineHashSet;
@@ -147,6 +148,7 @@ import static org.apache.kafka.coordinator.group.classic.ClassicGroupState.STABL
 import static org.apache.kafka.coordinator.group.consumer.ConsumerGroupMember.hasAssignedPartitionsChanged;
 import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.CLASSIC_GROUP_COMPLETED_REBALANCES_SENSOR_NAME;
 import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.CONSUMER_GROUP_REBALANCES_SENSOR_NAME;
+import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.SHARE_GROUP_REBALANCES_SENSOR_NAME;
 
 /**
  * The GroupMetadataManager manages the metadata of all classic and consumer groups. It holds
@@ -1630,6 +1632,7 @@ public class GroupMetadataManager {
                 groupEpoch += 1;
                 records.add(newGroupEpochRecord(groupId, groupEpoch, SHARE));
                 log.info("[GroupId {}] Bumped group epoch to {}.", groupId, groupEpoch);
+                metrics.record(SHARE_GROUP_REBALANCES_SENSOR_NAME);
             }
 
             group.setMetadataRefreshDeadline(currentTimeMs + groupMetadataRefreshIntervalMs, groupEpoch);
@@ -1695,6 +1698,21 @@ public class GroupMetadataManager {
         // 1. The member just joined or rejoined to group (epoch equals to zero);
         // 2. The member's assignment has been updated.
         if (memberEpoch == 0 || assignmentUpdated) {
+            // subtract original assigment partitions and add new ones
+            Set<String> oldAssignment = new HashSet<>();
+            if (assignmentUpdated) {
+                member.assignedPartitions.forEach((topicId, partitions) -> partitions.forEach(partition -> {
+                    oldAssignment.add(ShareGroupHelper.coordinatorKey(groupId, topicId, partition));
+                }));
+            }
+
+            Set<String> newAssignment = new HashSet<>();
+            updatedMember.assignedPartitions.forEach((topicId, partitions) -> partitions.forEach(partition -> {
+                newAssignment.add(ShareGroupHelper.coordinatorKey(groupId, topicId, partition));
+            }));
+            metrics.decrementNumSharePartitions(oldAssignment);
+            metrics.incrementNumSharePartitions(newAssignment);
+
             response.setAssignment(createShareGroupResponseAssignment(updatedMember));
         }
 
