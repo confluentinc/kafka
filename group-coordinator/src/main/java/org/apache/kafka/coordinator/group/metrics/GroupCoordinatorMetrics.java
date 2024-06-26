@@ -33,10 +33,8 @@ import org.apache.kafka.timeline.SnapshotRegistry;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -70,7 +68,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
     public final static String SHARE_GROUP_PROTOCOL_TAG = GROUP_COUNT_PROTOCOL_TAG;
     public final static String CONSUMER_GROUP_COUNT_METRIC_NAME = "consumer-group-count";
     public final static String SHARE_GROUP_COUNT_METRIC_NAME = "share-group-count";
-    public final static String SHARE_PARTITIONS_COUNT_METRIC_NAME = "num-partitions";
     public final static String CONSUMER_GROUP_COUNT_STATE_TAG = "state";
     public final static String SHARE_GROUP_COUNT_STATE_TAG = CONSUMER_GROUP_COUNT_STATE_TAG;
 
@@ -92,7 +89,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
     private final MetricName shareGroupCountEmptyMetricName;
     private final MetricName shareGroupCountStableMetricName;
     private final MetricName shareGroupCountDeadMetricName;
-    private final MetricName sharePartitionsMetricName;
 
     private final MetricsRegistry registry;
     private final Metrics metrics;
@@ -186,13 +182,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
             METRICS_GROUP,
             "The number of share groups in dead state.",
             Collections.singletonMap(SHARE_GROUP_COUNT_STATE_TAG, ShareGroup.ShareGroupState.DEAD.toString())
-        );
-
-        sharePartitionsMetricName = metrics.metricName(
-            SHARE_PARTITIONS_COUNT_METRIC_NAME,
-            METRICS_GROUP,
-            "The number of share groups in dead state.",
-            Collections.singletonMap(SHARE_GROUP_PROTOCOL_TAG, Group.GroupType.SHARE.toString())
         );
 
         registerGauges();
@@ -289,12 +278,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
 
     private long numShareGroups(ShareGroup.ShareGroupState state) {
         return shards.values().stream().mapToLong(shard -> shard.numShareGroups(state)).sum();
-    }
-
-    private long numSharePartitions() {
-        Set<String> sharePartitions = new HashSet<>();
-        shards.values().forEach(shard -> sharePartitions.addAll(shard.sharePartitions()));
-        return sharePartitions.size();
     }
 
     @Override
@@ -471,11 +454,6 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
         metrics.addMetric(
             shareGroupCountDeadMetricName,
             (Gauge<Long>) (config, now) -> numShareGroups(ShareGroup.ShareGroupState.DEAD)
-        );
-
-        metrics.addMetric(
-            sharePartitionsMetricName,
-            (Gauge<Long>) (config, now) -> numSharePartitions()
         );
     }
 }

@@ -23,16 +23,13 @@ import org.apache.kafka.coordinator.group.consumer.ConsumerGroup.ConsumerGroupSt
 import org.apache.kafka.coordinator.group.classic.ClassicGroupState;
 import org.apache.kafka.coordinator.group.share.ShareGroup;
 import org.apache.kafka.timeline.SnapshotRegistry;
-import org.apache.kafka.timeline.TimelineHashSet;
 import org.apache.kafka.timeline.TimelineLong;
 import org.apache.kafka.coordinator.group.TimelineGaugeCounter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -76,12 +73,6 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     private final TimelineGaugeCounter numClassicGroupsTimelineCounter;
 
     /**
-     * The number of share partitions managed by the group coordinator.
-     */
-    private final Set<String> numSharePartitions;
-    private final Object sharePartLock = new Object();
-
-    /**
      * The topic partition.
      */
     private final TopicPartition topicPartition;
@@ -94,7 +85,6 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
         Objects.requireNonNull(snapshotRegistry);
         numOffsetsTimelineGaugeCounter = new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0));
         numClassicGroupsTimelineCounter = new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0));
-        numSharePartitions = new TimelineHashSet<>(snapshotRegistry, 1);
 
         this.classicGroupGauges = Utils.mkMap(
             Utils.mkEntry(ClassicGroupState.PREPARING_REBALANCE, new AtomicLong(0)),
@@ -419,17 +409,6 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     public long numShareGroups() {
         return shareGroupGauges.values().stream()
             .mapToLong(timelineGaugeCounter -> timelineGaugeCounter.atomicLong.get()).sum();
-    }
-
-    public void updateNumSharePartitions(Set<String> toRemove, Set<String> toAdd) {
-        synchronized (sharePartLock) {
-            numSharePartitions.removeAll(toRemove);
-            numSharePartitions.addAll(toAdd);
-        }
-    }
-
-    public Set<String> sharePartitions() {
-        return Collections.unmodifiableSet(numSharePartitions);
     }
 
     // could be called from ShareGroup to indicate state transition

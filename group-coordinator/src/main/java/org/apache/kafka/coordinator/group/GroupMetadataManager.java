@@ -96,7 +96,6 @@ import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.image.TopicImage;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
-import org.apache.kafka.server.group.share.ShareGroupHelper;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
 import org.apache.kafka.timeline.TimelineHashSet;
@@ -1698,20 +1697,6 @@ public class GroupMetadataManager {
         // 1. The member just joined or rejoined to group (epoch equals to zero);
         // 2. The member's assignment has been updated.
         if (memberEpoch == 0 || assignmentUpdated) {
-            // subtract original assigment partitions and add new ones
-            Set<String> oldAssignment = new HashSet<>();
-            if (assignmentUpdated) {
-                member.assignedPartitions.forEach((topicId, partitions) -> partitions.forEach(partition -> {
-                    oldAssignment.add(ShareGroupHelper.coordinatorKey(groupId, topicId, partition));
-                }));
-            }
-
-            Set<String> newAssignment = new HashSet<>();
-            updatedMember.assignedPartitions.forEach((topicId, partitions) -> partitions.forEach(partition -> {
-                newAssignment.add(ShareGroupHelper.coordinatorKey(groupId, topicId, partition));
-            }));
-            metrics.updateNumSharePartitions(oldAssignment, newAssignment);
-
             response.setAssignment(createShareGroupResponseAssignment(updatedMember));
         }
 

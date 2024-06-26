@@ -138,7 +138,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -9618,8 +9617,6 @@ public class GroupMetadataManagerTest {
                     .setMemberId(Uuid.randomUuid().toString())
                     .setMemberEpoch(1)
                     .setSubscribedTopicNames(Arrays.asList("foo", "bar"))));
-
-        verify(context.metrics, times(1)).updateNumSharePartitions(anySet(), anySet());
     }
 
     @Test
