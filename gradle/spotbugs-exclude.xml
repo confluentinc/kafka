@@ -443,7 +443,7 @@ For a detailed description of spotbugs bug categories, see https://spotbugs.read
 
     <Match>
         <!-- Suppress inconsistent synchronization warnings about currentFetch.
-             Locking is consistent but does not use synchronized methods.-->
+             Locking is consistent but does not use synchronized methods. -->
         <Class name="org.apache.kafka.clients.consumer.internals.ShareConsumerImpl"/>
         <Bug pattern="IS2_INCONSISTENT_SYNC"/>
     </Match>

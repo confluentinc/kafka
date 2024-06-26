@@ -1245,7 +1245,7 @@ public class ShareConsumerTest {
 
         shareConsumer.poll(Duration.ofMillis(2000));
 
-        // The second poll sends the acknowledgments implicitly. Once the response for the acknowledgements is received.
+        // The second poll sends the acknowledgments implicitly.
         shareConsumer.poll(Duration.ofMillis(2000));
 
         // On the third poll, the acknowledgement commit callback will be called and the exception is thrown.
