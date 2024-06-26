@@ -248,6 +248,7 @@ public class ShareConsumerTest {
         // We get back the acknowledgment error code after the second poll.
         // When we start the 3rd poll, the acknowledgment commit callback is invoked.
         shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(2000));
 
         // We expect null exception as the acknowledgment error code is null.
         assertTrue(partitionExceptionMap.containsKey(tp));
@@ -1244,8 +1245,10 @@ public class ShareConsumerTest {
 
         shareConsumer.poll(Duration.ofMillis(2000));
 
-        // The second poll sends the acknowledgments implicitly. Once the response for the acknowledgements is
-        // received, the acknowledgement commit callback will be called and the exception is thrown.
+        // The second poll sends the acknowledgments implicitly.
+        shareConsumer.poll(Duration.ofMillis(2000));
+
+        // On the third poll, the acknowledgement commit callback will be called and the exception is thrown.
         assertThrows(org.apache.kafka.common.errors.OutOfOrderSequenceException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
 
         shareConsumer.close();
