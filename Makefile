@@ -117,7 +117,7 @@ check-scala-compatibility:
 			echo "$$line"; \
 		done; \
 		echo "Number of compile, checkstyle and spotbug errors: $$error_count"; \
-		exit $$error_count
+		exit $$error_count; \
 	else \
 		echo "No errors found"; \
 	fi
