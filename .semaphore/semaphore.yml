@@ -43,7 +43,7 @@ global_job_config:
       - echo $SEMAPHORE_WORKFLOW_ID
       - echo $SEMAPHORE_GIT_REPO_SLUG
       - checkout
-      - sem-version java 21
+      - sem-version java 13
       - sem-version go 1.16.15
       - git config --global url."git@github.com:".insteadOf "https://github.com/"
       - export SEMAPHORE_CACHE_DIR=/home/semaphore
