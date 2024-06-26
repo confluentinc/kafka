@@ -19,8 +19,8 @@ package org.apache.kafka.clients.consumer.internals;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
+import org.apache.kafka.clients.consumer.internals.events.CompletableEventReaper;
 import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
-import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
 import org.apache.kafka.clients.consumer.internals.events.ShareLeaveOnCloseEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareSubscriptionChangeApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.ShareUnsubscribeApplicationEvent;
@@ -72,6 +72,7 @@ public class ShareConsumerImplTest {
 
     private final ApplicationEventHandler applicationEventHandler = mock(ApplicationEventHandler.class);
     private final LinkedBlockingQueue<BackgroundEvent> backgroundEventQueue = new LinkedBlockingQueue<>();
+    private final CompletableEventReaper backgroundEventReaper = mock(CompletableEventReaper.class);
 
     @AfterEach
     public void resetAll() {
@@ -107,7 +108,8 @@ public class ShareConsumerImplTest {
                 new StringDeserializer(),
                 new StringDeserializer(),
                 time,
-                (a, b, c, d, e, f) -> applicationEventHandler,
+                (a, b, c, d, e, f, g) -> applicationEventHandler,
+                a -> backgroundEventReaper,
                 (a, b, c, d, e) -> fetchCollector,
                 backgroundEventQueue
         );
@@ -149,9 +151,9 @@ public class ShareConsumerImplTest {
     @Test
     public void testVerifyApplicationEventOnShutdown() {
         consumer = newConsumer();
-        doReturn(null).when(applicationEventHandler).addAndGet(any(), any());
+        doReturn(null).when(applicationEventHandler).addAndGet(any());
         consumer.close();
-        verify(applicationEventHandler).addAndGet(any(ShareLeaveOnCloseEvent.class), any());
+        verify(applicationEventHandler).addAndGet(any(ShareLeaveOnCloseEvent.class));
     }
 
     @Test
@@ -302,7 +304,7 @@ public class ShareConsumerImplTest {
     }
 
     /**
-     * Tests {@link ShareConsumerImpl#processBackgroundEvents(EventProcessor, Future, Timer) processBackgroundEvents}
+     * Tests {@link ShareConsumerImpl#processBackgroundEvents(Future, Timer) processBackgroundEvents}
      * handles the case where the {@link Future} takes a bit of time to complete, but does within the timeout.
      */
     @Test
@@ -329,16 +331,14 @@ public class ShareConsumerImplTest {
             return null;
         }).when(future).get(any(Long.class), any(TimeUnit.class));
 
-        try (EventProcessor<?> processor = mock(EventProcessor.class)) {
-            consumer.processBackgroundEvents(processor, future, timer);
+        consumer.processBackgroundEvents(future, timer);
 
-            // 800 is the 1000 ms timeout (above) minus the 200 ms delay for the two incremental timeouts/retries.
-            assertEquals(800, timer.remainingMs());
-        }
+        // 800 is the 1000 ms timeout (above) minus the 200 ms delay for the two incremental timeouts/retries.
+        assertEquals(800, timer.remainingMs());
     }
 
     /**
-     * Tests {@link ShareConsumerImpl#processBackgroundEvents(EventProcessor, Future, Timer) processBackgroundEvents}
+     * Tests {@link ShareConsumerImpl#processBackgroundEvents(Future, Timer) processBackgroundEvents}
      * handles the case where the {@link Future} is already complete when invoked, so it doesn't have to wait.
      */
     @Test
@@ -350,17 +350,15 @@ public class ShareConsumerImplTest {
         // Create a future that is already completed.
         CompletableFuture<?> future = CompletableFuture.completedFuture(null);
 
-        try (EventProcessor<?> processor = mock(EventProcessor.class)) {
-            consumer.processBackgroundEvents(processor, future, timer);
+        consumer.processBackgroundEvents(future, timer);
 
-            // Because we didn't need to perform a timed get, we should still have every last millisecond
-            // of our initial timeout.
-            assertEquals(1000, timer.remainingMs());
-        }
+        // Because we didn't need to perform a timed get, we should still have every last millisecond
+        // of our initial timeout.
+        assertEquals(1000, timer.remainingMs());
     }
 
     /**
-     * Tests {@link ShareConsumerImpl#processBackgroundEvents(EventProcessor, Future, Timer) processBackgroundEvents}
+     * Tests {@link ShareConsumerImpl#processBackgroundEvents(Future, Timer) processBackgroundEvents}
      * handles the case where the {@link Future} does not complete within the timeout.
      */
     @Test
@@ -376,12 +374,10 @@ public class ShareConsumerImplTest {
             throw new java.util.concurrent.TimeoutException("Intentional timeout");
         }).when(future).get(any(Long.class), any(TimeUnit.class));
 
-        try (EventProcessor<?> processor = mock(EventProcessor.class)) {
-            assertThrows(TimeoutException.class, () -> consumer.processBackgroundEvents(processor, future, timer));
+        assertThrows(TimeoutException.class, () -> consumer.processBackgroundEvents(future, timer));
 
-            // Because we forced our mocked future to continuously time out, we should have no time remaining.
-            assertEquals(0, timer.remainingMs());
-        }
+        // Because we forced our mocked future to continuously time out, we should have no time remaining.
+        assertEquals(0, timer.remainingMs());
     }
 
     private void completeShareUnsubscribeApplicationEventSuccessfully() {

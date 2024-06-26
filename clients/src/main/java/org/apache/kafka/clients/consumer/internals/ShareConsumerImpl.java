@@ -34,6 +34,8 @@ import org.apache.kafka.clients.consumer.internals.events.ApplicationEventProces
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.CompletableApplicationEvent;
+import org.apache.kafka.clients.consumer.internals.events.CompletableEvent;
+import org.apache.kafka.clients.consumer.internals.events.CompletableEventReaper;
 import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
 import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
 import org.apache.kafka.clients.consumer.internals.events.PollEvent;
@@ -97,6 +99,7 @@ import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.CONSUMER
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createMetrics;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createShareFetchMetricsManager;
 import static org.apache.kafka.clients.consumer.internals.ConsumerUtils.createSubscriptionState;
+import static org.apache.kafka.clients.consumer.internals.events.CompletableEvent.calculateDeadlineMs;
 import static org.apache.kafka.common.utils.Utils.closeQuietly;
 import static org.apache.kafka.common.utils.Utils.isBlank;
 import static org.apache.kafka.common.utils.Utils.join;
@@ -123,40 +126,9 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      *     <li>{@link ConsumerRebalanceListener} callbacks that are to be executed on the application thread</li>
      * </ul>
      */
-    private class BackgroundEventProcessor extends EventProcessor<BackgroundEvent> {
+    private class BackgroundEventProcessor implements EventProcessor<BackgroundEvent> {
 
-        public BackgroundEventProcessor(final LogContext logContext,
-                                        final BlockingQueue<BackgroundEvent> backgroundEventQueue) {
-            super(logContext, backgroundEventQueue);
-        }
-
-        /**
-         * Process the events, if any, that were produced by the {@link ConsumerNetworkThread network thread}.
-         * It is possible that {@link org.apache.kafka.clients.consumer.internals.events.ErrorEvent an error}
-         * could occur when processing the events. In such cases, the processor will take a reference to the first
-         * error, continue to process the remaining events, and then throw the first error that occurred.
-         */
-        @Override
-        public boolean process() {
-            AtomicReference<KafkaException> firstError = new AtomicReference<>();
-
-            ProcessHandler<BackgroundEvent> processHandler = (event, error) -> {
-                if (error.isPresent()) {
-                    KafkaException e = error.get();
-
-                    if (!firstError.compareAndSet(null, e)) {
-                        log.warn("An error occurred when processing the event: {}", e.getMessage(), e);
-                    }
-                }
-            };
-
-            boolean hadEvents = process(processHandler);
-
-            if (firstError.get() != null)
-                throw firstError.get();
-
-            return hadEvents;
-        }
+        public BackgroundEventProcessor() {}
 
         @Override
         public void process(final BackgroundEvent event) {
@@ -191,7 +163,9 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     private Logger log;
     private final String clientId;
     private final String groupId;
+    private final BlockingQueue<BackgroundEvent> backgroundEventQueue;
     private final BackgroundEventProcessor backgroundEventProcessor;
+    private final CompletableEventReaper backgroundEventReaper;
     private final Deserializers<K, V> deserializers;
     private ShareFetch<K, V> currentFetch;
     private AcknowledgementCommitCallbackHandler acknowledgementCommitCallbackHandler;
@@ -243,6 +217,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             valueDeserializer,
             Time.SYSTEM,
             ApplicationEventHandler::new,
+            CompletableEventReaper::new,
             ShareFetchCollector::new,
             new LinkedBlockingQueue<>()
         );
@@ -254,6 +229,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                       final Deserializer<V> valueDeserializer,
                       final Time time,
                       final ApplicationEventHandlerFactory applicationEventHandlerFactory,
+                      final AsyncKafkaConsumer.CompletableEventReaperFactory backgroundEventReaperFactory,
                       final ShareFetchCollectorFactory<K, V> fetchCollectorFactory,
                       final LinkedBlockingQueue<BackgroundEvent> backgroundEventQueue) {
         try {
@@ -265,6 +241,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             this.groupId = config.getString(ConsumerConfig.GROUP_ID_CONFIG);
             maybeThrowInvalidGroupIdException();
             LogContext logContext = createLogContext(clientId, groupId);
+            this.backgroundEventQueue = backgroundEventQueue;
             this.log = logContext.logger(getClass());
 
             log.debug("Initializing the Kafka share consumer");
@@ -324,7 +301,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             final Supplier<ApplicationEventProcessor> applicationEventProcessorSupplier = ApplicationEventProcessor.supplier(
                     logContext,
                     metadata,
-                    applicationEventQueue,
                     requestManagersSupplier
             );
 
@@ -332,13 +308,13 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                     logContext,
                     time,
                     applicationEventQueue,
+                    new CompletableEventReaper(logContext),
                     applicationEventProcessorSupplier,
                     networkClientDelegateSupplier,
                     requestManagersSupplier);
 
-            this.backgroundEventProcessor = new BackgroundEventProcessor(
-                    logContext,
-                    backgroundEventQueue);
+            this.backgroundEventProcessor = new BackgroundEventProcessor();
+            this.backgroundEventReaper = backgroundEventReaperFactory.build(logContext);
 
             this.fetchCollector = fetchCollectorFactory.build(
                     logContext,
@@ -429,7 +405,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         final Supplier<ApplicationEventProcessor> applicationEventProcessorSupplier = ApplicationEventProcessor.supplier(
                 logContext,
                 metadata,
-                applicationEventQueue,
                 requestManagersSupplier
         );
 
@@ -437,13 +412,14 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 logContext,
                 time,
                 applicationEventQueue,
+                new CompletableEventReaper(logContext),
                 applicationEventProcessorSupplier,
                 networkClientDelegateSupplier,
                 requestManagersSupplier);
 
-        this.backgroundEventProcessor = new BackgroundEventProcessor(
-                logContext,
-                backgroundEventQueue);
+        this.backgroundEventQueue = new LinkedBlockingQueue<>();
+        this.backgroundEventProcessor = new BackgroundEventProcessor();
+        this.backgroundEventReaper = new CompletableEventReaper(logContext);
 
         config.logUnused();
         AppInfoParser.registerAppInfo(CONSUMER_JMX_PREFIX, clientId, metrics, time.milliseconds());
@@ -456,6 +432,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 final LogContext logContext,
                 final Time time,
                 final BlockingQueue<ApplicationEvent> applicationEventQueue,
+                final CompletableEventReaper applicationEventReaper,
                 final Supplier<ApplicationEventProcessor> applicationEventProcessorSupplier,
                 final Supplier<NetworkClientDelegate> networkClientDelegateSupplier,
                 final Supplier<RequestManagers> requestManagersSupplier
@@ -561,7 +538,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
                 // Make sure the network thread can tell the application is actively polling
                 applicationEventHandler.add(new PollEvent(timer.currentTimeMs()));
 
-                backgroundEventProcessor.process();
+                processBackgroundEvents();
 
                 // We must not allow wake-ups between polling for fetches and returning the records.
                 // A wake-up between returned fetches and returning records would lead to never
@@ -583,10 +560,6 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         } finally {
             kafkaShareConsumerMetrics.recordPollEnd(timer.currentTimeMs());
             wakeupTrigger.clearTask();
-
-            // Handle any completed acknowledgements for which we already have the responses
-            handleCompletedAcknowledgements();
-
             release();
         }
     }
@@ -693,13 +666,13 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
             if (acknowledgementsMap.isEmpty()) {
                 return Collections.emptyMap();
             } else {
-                ShareAcknowledgeSyncEvent event = new ShareAcknowledgeSyncEvent(requestTimer, acknowledgementsMap);
+                ShareAcknowledgeSyncEvent event = new ShareAcknowledgeSyncEvent(acknowledgementsMap, calculateDeadlineMs(requestTimer));
                 applicationEventHandler.add(event);
                 CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitFuture = event.future();
                 wakeupTrigger.setActiveTask(commitFuture);
                 try {
                     Map<TopicIdPartition, Optional<KafkaException>> result = new HashMap<>();
-                    Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = ConsumerUtils.getResult(commitFuture, requestTimer);
+                    Map<TopicIdPartition, Acknowledgements> completedAcknowledgements = ConsumerUtils.getResult(commitFuture);
                     completedAcknowledgements.forEach((tip, acks) -> {
                         Errors ackErrorCode = acks.getAcknowledgeErrorCode();
                         if (ackErrorCode == null) {
@@ -817,6 +790,9 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         log.trace("Closing the Kafka consumer");
         AtomicReference<Throwable> firstException = new AtomicReference<>();
 
+        // We are already closing with a timeout, don't allow wake-ups from here on.
+        wakeupTrigger.disableWakeups();
+
         final Timer closeTimer = time.timer(timeout);
         clientTelemetryReporter.ifPresent(reporter -> reporter.initiateClose(timeout.toMillis()));
         closeTimer.update();
@@ -829,6 +805,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
         swallow(log, Level.ERROR, "Failed invoking acknowledgement commit callback.", this::handleCompletedAcknowledgements,
                 firstException);
         closeTimer.update();
+
         closeQuietly(kafkaShareConsumerMetrics, "kafka share consumer metrics", firstException);
         closeQuietly(metrics, "consumer metrics", firstException);
         closeQuietly(deserializers, "consumer deserializers", firstException);
@@ -853,7 +830,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     void prepareShutdown(final Timer timer, final AtomicReference<Throwable> firstException) {
         completeQuietly(
             () -> {
-                applicationEventHandler.addAndGet(new ShareLeaveOnCloseEvent(timer, acknowledgementsToSend()), timer);
+                applicationEventHandler.addAndGet(new ShareLeaveOnCloseEvent(acknowledgementsToSend(), calculateDeadlineMs(timer)));
             },
             "Failed to send leaveGroup heartbeat with a timeout(ms)=" + timer.timeoutMs(), firstException);
     }
@@ -928,7 +905,7 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      * If the acknowledgement commit callback throws an exception, this method will throw an exception.
      */
     private void handleCompletedAcknowledgements() {
-        backgroundEventProcessor.process();
+        processBackgroundEvents();
 
         if (!completedAcknowledgements.isEmpty()) {
             try {
@@ -991,6 +968,40 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
     }
 
     /**
+     * Process the events—if any—that were produced by the {@link ConsumerNetworkThread network thread}.
+     * It is possible that {@link ErrorEvent an error}
+     * could occur when processing the events. In such cases, the processor will take a reference to the first
+     * error, continue to process the remaining events, and then throw the first error that occurred.
+     */
+    private boolean processBackgroundEvents() {
+        AtomicReference<KafkaException> firstError = new AtomicReference<>();
+
+        LinkedList<BackgroundEvent> events = new LinkedList<>();
+        backgroundEventQueue.drainTo(events);
+
+        for (BackgroundEvent event : events) {
+            try {
+                if (event instanceof CompletableEvent)
+                    backgroundEventReaper.add((CompletableEvent<?>) event);
+
+                backgroundEventProcessor.process(event);
+            } catch (Throwable t) {
+                KafkaException e = ConsumerUtils.maybeWrapAsKafkaException(t);
+
+                if (!firstError.compareAndSet(null, e))
+                    log.warn("An error occurred when processing the background event: {}", e.getMessage(), e);
+            }
+        }
+
+        backgroundEventReaper.reap(time.milliseconds());
+
+        if (firstError.get() != null)
+            throw firstError.get();
+
+        return !events.isEmpty();
+    }
+
+    /**
      * This method can be used by cases where the caller has an event that needs to both block for completion but
      * also process background events. For some events, in order to fully process the associated logic, the
      * {@link ConsumerNetworkThread background thread} needs assistance from the application thread to complete.
@@ -1007,20 +1018,18 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      * Each iteration gives the application thread an opportunity to process background events, which may be
      * necessary to complete the overall processing.
      *
-     * @param eventProcessor Event processor that contains the queue of events to process
      * @param future         Event that contains a {@link CompletableFuture}; it is on this future that the
      *                       application thread will wait for completion
      * @param timer          Overall timer that bounds how long to wait for the event to complete
      * @return {@code true} if the event completed within the timeout, {@code false} otherwise
      */
     // Visible for testing
-    <T> T processBackgroundEvents(final EventProcessor<?> eventProcessor,
-                                  final Future<T> future,
+    <T> T processBackgroundEvents(final Future<T> future,
                                   final Timer timer) {
         log.trace("Will wait up to {} ms for future {} to complete", timer.remainingMs(), future);
 
         do {
-            boolean hadEvents = eventProcessor.process();
+            boolean hadEvents = processBackgroundEvents();
 
             try {
                 if (future.isDone()) {

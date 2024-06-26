@@ -210,7 +210,6 @@ public class ShareConsumerTestBuilder implements Closeable {
                 shareMembershipManager);
         this.applicationEventProcessor = spy(new ApplicationEventProcessor(
                         logContext,
-                        applicationEventQueue,
                         requestManagers,
                         metadata
                 )
@@ -220,7 +219,6 @@ public class ShareConsumerTestBuilder implements Closeable {
     @Override
     public void close() {
         closeQuietly(requestManagers, RequestManagers.class.getSimpleName());
-        closeQuietly(applicationEventProcessor, ApplicationEventProcessor.class.getSimpleName());
     }
 
     public static class GroupInformation {

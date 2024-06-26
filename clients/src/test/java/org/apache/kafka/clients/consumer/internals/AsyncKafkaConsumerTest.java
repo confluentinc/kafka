@@ -38,11 +38,11 @@ import org.apache.kafka.clients.consumer.internals.events.BackgroundEvent;
 import org.apache.kafka.clients.consumer.internals.events.CommitOnCloseEvent;
 import org.apache.kafka.clients.consumer.internals.events.CompletableApplicationEvent;
 import org.apache.kafka.clients.consumer.internals.events.CompletableBackgroundEvent;
+import org.apache.kafka.clients.consumer.internals.events.CompletableEventReaper;
 import org.apache.kafka.clients.consumer.internals.events.ConsumerRebalanceListenerCallbackNeededEvent;
 import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
 import org.apache.kafka.clients.consumer.internals.events.EventProcessor;
 import org.apache.kafka.clients.consumer.internals.events.FetchCommittedOffsetsEvent;
-import org.apache.kafka.clients.consumer.internals.events.LeaveOnCloseEvent;
 import org.apache.kafka.clients.consumer.internals.events.ListOffsetsEvent;
 import org.apache.kafka.clients.consumer.internals.events.NewTopicsMetadataUpdateRequestEvent;
 import org.apache.kafka.clients.consumer.internals.events.PollEvent;
@@ -106,7 +106,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
-import static java.util.Collections.emptySet;
 import static java.util.Collections.singleton;
 import static java.util.Collections.singletonList;
 import static org.apache.kafka.clients.consumer.internals.ConsumerRebalanceListenerMethodName.ON_PARTITIONS_ASSIGNED;
@@ -128,7 +127,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -136,6 +134,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -153,6 +152,7 @@ public class AsyncKafkaConsumerTest {
     private final ApplicationEventHandler applicationEventHandler = mock(ApplicationEventHandler.class);
     private final ConsumerMetadata metadata = mock(ConsumerMetadata.class);
     private final LinkedBlockingQueue<BackgroundEvent> backgroundEventQueue = new LinkedBlockingQueue<>();
+    private final CompletableEventReaper backgroundEventReaper = mock(CompletableEventReaper.class);
 
     @AfterEach
     public void resetAll() {
@@ -193,7 +193,8 @@ public class AsyncKafkaConsumerTest {
             new StringDeserializer(),
             new StringDeserializer(),
             time,
-            (a, b, c, d, e, f) -> applicationEventHandler,
+            (a, b, c, d, e, f, g) -> applicationEventHandler,
+            a -> backgroundEventReaper,
             (a, b, c, d, e, f, g) -> fetchCollector,
             (a, b, c, d) -> metadata,
             backgroundEventQueue
@@ -218,6 +219,7 @@ public class AsyncKafkaConsumerTest {
             time,
             applicationEventHandler,
             backgroundEventQueue,
+            backgroundEventReaper,
             rebalanceListenerInvoker,
             new Metrics(),
             subscriptions,
@@ -232,6 +234,7 @@ public class AsyncKafkaConsumerTest {
     @Test
     public void testSuccessfulStartupShutdown() {
         consumer = newConsumer();
+        completeUnsubscribeApplicationEventSuccessfully();
         assertDoesNotThrow(() -> consumer.close());
     }
 
@@ -244,6 +247,7 @@ public class AsyncKafkaConsumerTest {
     @Test
     public void testFailOnClosedConsumer() {
         consumer = newConsumer();
+        completeUnsubscribeApplicationEventSuccessfully();
         consumer.close();
         final IllegalStateException res = assertThrows(IllegalStateException.class, consumer::assignment);
         assertEquals("This consumer has already been closed.", res.getMessage());
@@ -266,6 +270,15 @@ public class AsyncKafkaConsumerTest {
         assertEquals(offsets, commitEvent.offsets());
         assertDoesNotThrow(() -> commitEvent.future().complete(null));
         assertDoesNotThrow(() -> consumer.commitAsync(offsets, null));
+
+        // Clean-up. Close the consumer here as we know it will cause a TimeoutException to be thrown.
+        // If we get an error *other* than the TimeoutException, we'll fail the test.
+        try {
+            Exception e = assertThrows(KafkaException.class, () -> consumer.close(Duration.ZERO));
+            assertInstanceOf(TimeoutException.class, e.getCause());
+        } finally {
+            consumer = null;
+        }
     }
 
     @Test
@@ -309,6 +322,7 @@ public class AsyncKafkaConsumerTest {
     @Test
     public void testCommitAsyncWithFencedException() {
         consumer = newConsumer();
+        completeCommitSyncApplicationEventSuccessfully();
         final HashMap<TopicPartition, OffsetAndMetadata> offsets = mockTopicPartitionOffset();
         MockCommitCallback callback = new MockCommitCallback();
 
@@ -329,7 +343,7 @@ public class AsyncKafkaConsumerTest {
         completeFetchedCommittedOffsetApplicationEventSuccessfully(topicPartitionOffsets);
 
         assertEquals(topicPartitionOffsets, consumer.committed(topicPartitionOffsets.keySet(), Duration.ofMillis(1000)));
-        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class), any());
+        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class));
         final Metric metric = consumer.metrics()
             .get(consumer.metricsRegistry().metricName("committed-time-ns-total", "consumer-metrics"));
         assertTrue((double) metric.metricValue() > 0);
@@ -351,7 +365,7 @@ public class AsyncKafkaConsumerTest {
 
         verify(metadata).updateLastSeenEpochIfNewer(t0, 2);
         verify(metadata).updateLastSeenEpochIfNewer(t2, 3);
-        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class), any());
+        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class));
     }
 
     @Test
@@ -359,7 +373,7 @@ public class AsyncKafkaConsumerTest {
         consumer = newConsumer();
         Map<TopicPartition, OffsetAndMetadata> offsets = mockTopicPartitionOffset();
         when(applicationEventHandler.addAndGet(
-            any(FetchCommittedOffsetsEvent.class), any())).thenAnswer(invocation -> {
+            any(FetchCommittedOffsetsEvent.class))).thenAnswer(invocation -> {
                 CompletableApplicationEvent<?> event = invocation.getArgument(0);
                 assertInstanceOf(FetchCommittedOffsetsEvent.class, event);
                 throw new KafkaException("Test exception");
@@ -377,6 +391,7 @@ public class AsyncKafkaConsumerTest {
         doReturn(Fetch.empty()).when(fetchCollector).collectFetch(any(FetchBuffer.class));
         Map<TopicPartition, OffsetAndMetadata> offsets = mkMap(mkEntry(tp, new OffsetAndMetadata(1)));
         completeFetchedCommittedOffsetApplicationEventSuccessfully(offsets);
+        completeCommitSyncApplicationEventSuccessfully();
         doReturn(LeaderAndEpoch.noLeaderOrEpoch()).when(metadata).currentLeader(any());
         consumer.assign(singleton(tp));
 
@@ -398,6 +413,7 @@ public class AsyncKafkaConsumerTest {
         }).doAnswer(invocation -> Fetch.empty()).when(fetchCollector).collectFetch(any(FetchBuffer.class));
         Map<TopicPartition, OffsetAndMetadata> offsets = mkMap(mkEntry(tp, new OffsetAndMetadata(1)));
         completeFetchedCommittedOffsetApplicationEventSuccessfully(offsets);
+        completeCommitSyncApplicationEventSuccessfully();
         doReturn(LeaderAndEpoch.noLeaderOrEpoch()).when(metadata).currentLeader(any());
         consumer.assign(singleton(tp));
 
@@ -421,6 +437,7 @@ public class AsyncKafkaConsumerTest {
         }).when(fetchCollector).collectFetch(Mockito.any(FetchBuffer.class));
         Map<TopicPartition, OffsetAndMetadata> offsets = mkMap(mkEntry(tp, new OffsetAndMetadata(1)));
         completeFetchedCommittedOffsetApplicationEventSuccessfully(offsets);
+        completeCommitSyncApplicationEventSuccessfully();
         doReturn(LeaderAndEpoch.noLeaderOrEpoch()).when(metadata).currentLeader(any());
         consumer.assign(singleton(tp));
 
@@ -476,6 +493,7 @@ public class AsyncKafkaConsumerTest {
             .when(fetchCollector).collectFetch(any(FetchBuffer.class));
         Map<TopicPartition, OffsetAndMetadata> offsets = mkMap(mkEntry(tp, new OffsetAndMetadata(1)));
         completeFetchedCommittedOffsetApplicationEventSuccessfully(offsets);
+        completeCommitSyncApplicationEventSuccessfully();
         doReturn(LeaderAndEpoch.noLeaderOrEpoch()).when(metadata).currentLeader(any());
         consumer.assign(singleton(tp));
 
@@ -548,6 +566,7 @@ public class AsyncKafkaConsumerTest {
             singletonList(new RoundRobinAssignor()),
             "group-id",
             "client-id");
+        completeCommitSyncApplicationEventSuccessfully();
         final TopicPartition t0 = new TopicPartition("t0", 2);
         final TopicPartition t1 = new TopicPartition("t0", 3);
         HashMap<TopicPartition, OffsetAndMetadata> topicPartitionOffsets = new HashMap<>();
@@ -569,6 +588,15 @@ public class AsyncKafkaConsumerTest {
         verify(metadata).updateLastSeenEpochIfNewer(t0, 2);
         verify(metadata).updateLastSeenEpochIfNewer(t1, 1);
         verify(applicationEventHandler).add(ArgumentMatchers.isA(AsyncCommitEvent.class));
+
+        // Clean-Up. Close the consumer here as we know it will cause a TimeoutException to be thrown.
+        // If we get an error *other* than the TimeoutException, we'll fail the test.
+        try {
+            Exception e = assertThrows(KafkaException.class, () -> consumer.close(Duration.ZERO));
+            assertInstanceOf(TimeoutException.class, e.getCause());
+        } finally {
+            consumer = null;
+        }
     }
 
     @Test
@@ -655,6 +683,7 @@ public class AsyncKafkaConsumerTest {
     @Test
     public void testEnsureShutdownExecutedCommitAsyncCallbacks() {
         consumer = newConsumer();
+        completeUnsubscribeApplicationEventSuccessfully();
         MockCommitCallback callback = new MockCommitCallback();
         completeCommitAsyncApplicationEventSuccessfully();
         assertDoesNotThrow(() -> consumer.commitAsync(new HashMap<>(), callback));
@@ -666,54 +695,31 @@ public class AsyncKafkaConsumerTest {
     @Test
     public void testVerifyApplicationEventOnShutdown() {
         consumer = newConsumer();
-        doReturn(null).when(applicationEventHandler).addAndGet(any(), any());
+        completeUnsubscribeApplicationEventSuccessfully();
+        doReturn(null).when(applicationEventHandler).addAndGet(any());
         consumer.close();
-        verify(applicationEventHandler).addAndGet(any(LeaveOnCloseEvent.class), any());
+        verify(applicationEventHandler).add(any(UnsubscribeEvent.class));
         verify(applicationEventHandler).add(any(CommitOnCloseEvent.class));
-    }
-
-    @Test
-    public void testPartitionRevocationOnClose() {
-        MockRebalanceListener listener = new MockRebalanceListener();
-        SubscriptionState subscriptions = new SubscriptionState(new LogContext(), OffsetResetStrategy.NONE);
-        consumer = newConsumer(
-            mock(FetchBuffer.class),
-            mock(ConsumerInterceptors.class),
-            mock(ConsumerRebalanceListenerInvoker.class),
-            subscriptions,
-            singletonList(new RoundRobinAssignor()),
-            "group-id",
-            "client-id");
-
-        consumer.subscribe(singleton("topic"), listener);
-        subscriptions.assignFromSubscribed(singleton(new TopicPartition("topic", 0)));
-        consumer.close(Duration.ZERO);
-        assertTrue(subscriptions.assignedPartitions().isEmpty());
-        assertEquals(1, listener.revokedCount);
     }
 
     @Test
     public void testFailedPartitionRevocationOnClose() {
         // If rebalance listener failed to execute during close, we will skip sending leave group and proceed with
         // closing the consumer.
-        ConsumerRebalanceListener listener = mock(ConsumerRebalanceListener.class);
-        SubscriptionState subscriptions = new SubscriptionState(new LogContext(), OffsetResetStrategy.NONE);
-        consumer = newConsumer(
+        SubscriptionState subscriptions = mock(SubscriptionState.class);
+        consumer = spy(newConsumer(
             mock(FetchBuffer.class),
             new ConsumerInterceptors<>(Collections.emptyList()),
             mock(ConsumerRebalanceListenerInvoker.class),
             subscriptions,
             singletonList(new RoundRobinAssignor()),
             "group-id",
-            "client-id");
-        subscriptions.subscribe(singleton("topic"), Optional.of(listener));
-        TopicPartition tp = new TopicPartition("topic", 0);
-        subscriptions.assignFromSubscribed(singleton(tp));
-        doThrow(new KafkaException()).when(listener).onPartitionsRevoked(eq(singleton(tp)));
+            "client-id"));
+        doThrow(new KafkaException()).when(consumer).processBackgroundEvents(any(), any());
         assertThrows(KafkaException.class, () -> consumer.close(Duration.ZERO));
-        verify(applicationEventHandler, never()).addAndGet(any(LeaveOnCloseEvent.class), any());
-        verify(listener).onPartitionsRevoked(eq(singleton(tp)));
-        assertEquals(emptySet(), subscriptions.assignedPartitions());
+        verifyUnsubscribeEvent(subscriptions);
+        // Close operation should carry on even if the unsubscribe fails
+        verify(applicationEventHandler).close(any(Duration.class));
     }
 
     @Test
@@ -734,6 +740,7 @@ public class AsyncKafkaConsumerTest {
 
     @Test
     public void testAutoCommitSyncEnabled() {
+        completeCommitSyncApplicationEventSuccessfully();
         SubscriptionState subscriptions = new SubscriptionState(new LogContext(), OffsetResetStrategy.NONE);
         consumer = newConsumer(
             mock(FetchBuffer.class),
@@ -746,7 +753,7 @@ public class AsyncKafkaConsumerTest {
         consumer.subscribe(singleton("topic"), mock(ConsumerRebalanceListener.class));
         subscriptions.assignFromSubscribed(singleton(new TopicPartition("topic", 0)));
         subscriptions.seek(new TopicPartition("topic", 0), 100);
-        consumer.maybeAutoCommitSync(true, time.timer(100));
+        consumer.commitSyncAllConsumed(time.timer(100));
         verify(applicationEventHandler).add(any(SyncCommitEvent.class));
     }
 
@@ -764,7 +771,6 @@ public class AsyncKafkaConsumerTest {
         consumer.subscribe(singleton("topic"), mock(ConsumerRebalanceListener.class));
         subscriptions.assignFromSubscribed(singleton(new TopicPartition("topic", 0)));
         subscriptions.seek(new TopicPartition("topic", 0), 100);
-        consumer.maybeAutoCommitSync(false, time.timer(100));
         verify(applicationEventHandler, never()).add(any(SyncCommitEvent.class));
     }
 
@@ -844,15 +850,14 @@ public class AsyncKafkaConsumerTest {
         Map<TopicPartition, OffsetAndTimestamp> expectedOffsetsAndTimestamp =
             mockOffsetAndTimestamp();
         Set<TopicPartition> partitions = expectedOffsetsAndTimestamp.keySet();
-        doReturn(expectedOffsetsAndTimestamp).when(applicationEventHandler).addAndGet(any(), any());
+        doReturn(expectedOffsetsAndTimestamp).when(applicationEventHandler).addAndGet(any());
         Map<TopicPartition, Long> result =
             assertDoesNotThrow(() -> consumer.beginningOffsets(partitions,
                 Duration.ofMillis(1)));
         Map<TopicPartition, Long> expectedOffsets = expectedOffsetsAndTimestamp.entrySet().stream()
             .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().offset()));
         assertEquals(expectedOffsets, result);
-        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class),
-            ArgumentMatchers.isA(Timer.class));
+        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class));
     }
 
     @Test
@@ -862,26 +867,23 @@ public class AsyncKafkaConsumerTest {
         Throwable eventProcessingFailure = new KafkaException("Unexpected failure " +
             "processing List Offsets event");
         doThrow(eventProcessingFailure).when(applicationEventHandler).addAndGet(
-            any(ListOffsetsEvent.class),
-            any());
+            any(ListOffsetsEvent.class));
         Throwable consumerError = assertThrows(KafkaException.class,
             () -> consumer.beginningOffsets(partitions,
                 Duration.ofMillis(1)));
         assertEquals(eventProcessingFailure, consumerError);
-        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class),
-            ArgumentMatchers.isA(Timer.class));
+        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class));
     }
 
     @Test
     public void testBeginningOffsetsTimeoutOnEventProcessingTimeout() {
         consumer = newConsumer();
-        doThrow(new TimeoutException()).when(applicationEventHandler).addAndGet(any(), any());
+        doThrow(new TimeoutException()).when(applicationEventHandler).addAndGet(any());
         assertThrows(TimeoutException.class,
             () -> consumer.beginningOffsets(
                 Collections.singletonList(new TopicPartition("t1", 0)),
                 Duration.ofMillis(1)));
-        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class),
-            ArgumentMatchers.isA(Timer.class));
+        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class));
     }
 
     @Test
@@ -916,12 +918,11 @@ public class AsyncKafkaConsumerTest {
         Map<TopicPartition, OffsetAndTimestamp> expectedResult = mockOffsetAndTimestamp();
         Map<TopicPartition, Long> timestampToSearch = mockTimestampToSearch();
 
-        doReturn(expectedResult).when(applicationEventHandler).addAndGet(any(), any());
+        doReturn(expectedResult).when(applicationEventHandler).addAndGet(any());
         Map<TopicPartition, OffsetAndTimestamp> result =
                 assertDoesNotThrow(() -> consumer.offsetsForTimes(timestampToSearch, Duration.ofMillis(1)));
         assertEquals(expectedResult, result);
-        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class),
-                ArgumentMatchers.isA(Timer.class));
+        verify(applicationEventHandler).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class));
     }
 
     // This test ensures same behaviour as the current consumer when offsetsForTimes is called
@@ -939,8 +940,7 @@ public class AsyncKafkaConsumerTest {
                 assertDoesNotThrow(() -> consumer.offsetsForTimes(timestampToSearch,
                         Duration.ZERO));
         assertEquals(expectedResult, result);
-        verify(applicationEventHandler, never()).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class),
-            ArgumentMatchers.isA(Timer.class));
+        verify(applicationEventHandler, never()).addAndGet(ArgumentMatchers.isA(ListOffsetsEvent.class));
     }
 
     @Test
@@ -949,13 +949,12 @@ public class AsyncKafkaConsumerTest {
         final HashMap<TopicPartition, OffsetAndMetadata> offsets = mockTopicPartitionOffset();
         doAnswer(invocation -> {
             CompletableApplicationEvent<?> event = invocation.getArgument(0);
-            Timer timer = invocation.getArgument(1);
             assertInstanceOf(FetchCommittedOffsetsEvent.class, event);
             assertTrue(event.future().isCompletedExceptionally());
-            return ConsumerUtils.getResult(event.future(), timer);
+            return ConsumerUtils.getResult(event.future());
         })
             .when(applicationEventHandler)
-            .addAndGet(any(FetchCommittedOffsetsEvent.class), any(Timer.class));
+            .addAndGet(any(FetchCommittedOffsetsEvent.class));
 
         consumer.wakeup();
         assertThrows(WakeupException.class, () -> consumer.committed(offsets.keySet()));
@@ -979,7 +978,7 @@ public class AsyncKafkaConsumerTest {
             }
             return null;
         }).when(applicationEventHandler).add(any());
-
+        completeUnsubscribeApplicationEventSuccessfully();
         consumer.close(Duration.ZERO);
 
         // A commit was triggered and not completed exceptionally by the wakeup
@@ -1071,6 +1070,7 @@ public class AsyncKafkaConsumerTest {
     @Test
     public void testRefreshCommittedOffsetsSuccess() {
         consumer = newConsumer();
+        completeCommitSyncApplicationEventSuccessfully();
         TopicPartition partition = new TopicPartition("t1", 1);
         Set<TopicPartition> partitions = Collections.singleton(partition);
         Map<TopicPartition, OffsetAndMetadata> committedOffsets = Collections.singletonMap(partition, new OffsetAndMetadata(10L));
@@ -1496,20 +1496,20 @@ public class AsyncKafkaConsumerTest {
         consumer.poll(Duration.ZERO);
 
         verify(applicationEventHandler, atLeast(1))
-            .addAndGet(ArgumentMatchers.isA(ValidatePositionsEvent.class), ArgumentMatchers.isA(Timer.class));
+            .addAndGet(ArgumentMatchers.isA(ValidatePositionsEvent.class));
 
         if (committedOffsetsEnabled) {
             // Verify there was an FetchCommittedOffsets event and no ResetPositions event
             verify(applicationEventHandler, atLeast(1))
-                .addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class), ArgumentMatchers.isA(Timer.class));
+                .addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class));
             verify(applicationEventHandler, never())
-                .addAndGet(ArgumentMatchers.isA(ResetPositionsEvent.class), ArgumentMatchers.isA(Timer.class));
+                .addAndGet(ArgumentMatchers.isA(ResetPositionsEvent.class));
         } else {
             // Verify there was not any FetchCommittedOffsets event but there should be a ResetPositions
             verify(applicationEventHandler, never())
-                .addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class), ArgumentMatchers.isA(Timer.class));
+                .addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class));
             verify(applicationEventHandler, atLeast(1))
-                .addAndGet(ArgumentMatchers.isA(ResetPositionsEvent.class), ArgumentMatchers.isA(Timer.class));
+                .addAndGet(ArgumentMatchers.isA(ResetPositionsEvent.class));
         }
     }
 
@@ -1524,11 +1524,11 @@ public class AsyncKafkaConsumerTest {
         consumer.poll(Duration.ZERO);
 
         verify(applicationEventHandler, atLeast(1))
-            .addAndGet(ArgumentMatchers.isA(ValidatePositionsEvent.class), ArgumentMatchers.isA(Timer.class));
+            .addAndGet(ArgumentMatchers.isA(ValidatePositionsEvent.class));
         verify(applicationEventHandler, atLeast(1))
-            .addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class), ArgumentMatchers.isA(Timer.class));
+            .addAndGet(ArgumentMatchers.isA(FetchCommittedOffsetsEvent.class));
         verify(applicationEventHandler, atLeast(1))
-            .addAndGet(ArgumentMatchers.isA(ResetPositionsEvent.class), ArgumentMatchers.isA(Timer.class));
+            .addAndGet(ArgumentMatchers.isA(ResetPositionsEvent.class));
     }
 
     @Test
@@ -1565,7 +1565,7 @@ public class AsyncKafkaConsumerTest {
     }
 
     /**
-     * Tests {@link AsyncKafkaConsumer#processBackgroundEvents(EventProcessor, Future, Timer) processBackgroundEvents}
+     * Tests {@link AsyncKafkaConsumer#processBackgroundEvents(Future, Timer) processBackgroundEvents}
      * handles the case where the {@link Future} takes a bit of time to complete, but does within the timeout.
      */
     @Test
@@ -1592,16 +1592,14 @@ public class AsyncKafkaConsumerTest {
             return null;
         }).when(future).get(any(Long.class), any(TimeUnit.class));
 
-        try (EventProcessor<?> processor = mock(EventProcessor.class)) {
-            consumer.processBackgroundEvents(processor, future, timer);
+        consumer.processBackgroundEvents(future, timer);
 
-            // 800 is the 1000 ms timeout (above) minus the 200 ms delay for the two incremental timeouts/retries.
-            assertEquals(800, timer.remainingMs());
-        }
+        // 800 is the 1000 ms timeout (above) minus the 200 ms delay for the two incremental timeouts/retries.
+        assertEquals(800, timer.remainingMs());
     }
 
     /**
-     * Tests {@link AsyncKafkaConsumer#processBackgroundEvents(EventProcessor, Future, Timer) processBackgroundEvents}
+     * Tests {@link AsyncKafkaConsumer#processBackgroundEvents(Future, Timer) processBackgroundEvents}
      * handles the case where the {@link Future} is already complete when invoked, so it doesn't have to wait.
      */
     @Test
@@ -1613,17 +1611,15 @@ public class AsyncKafkaConsumerTest {
         // Create a future that is already completed.
         CompletableFuture<?> future = CompletableFuture.completedFuture(null);
 
-        try (EventProcessor<?> processor = mock(EventProcessor.class)) {
-            consumer.processBackgroundEvents(processor, future, timer);
+        consumer.processBackgroundEvents(future, timer);
 
-            // Because we didn't need to perform a timed get, we should still have every last millisecond
-            // of our initial timeout.
-            assertEquals(1000, timer.remainingMs());
-        }
+        // Because we didn't need to perform a timed get, we should still have every last millisecond
+        // of our initial timeout.
+        assertEquals(1000, timer.remainingMs());
     }
 
     /**
-     * Tests {@link AsyncKafkaConsumer#processBackgroundEvents(EventProcessor, Future, Timer) processBackgroundEvents}
+     * Tests {@link AsyncKafkaConsumer#processBackgroundEvents(Future, Timer) processBackgroundEvents}
      * handles the case where the {@link Future} does not complete within the timeout.
      */
     @Test
@@ -1639,12 +1635,22 @@ public class AsyncKafkaConsumerTest {
             throw new java.util.concurrent.TimeoutException("Intentional timeout");
         }).when(future).get(any(Long.class), any(TimeUnit.class));
 
-        try (EventProcessor<?> processor = mock(EventProcessor.class)) {
-            assertThrows(TimeoutException.class, () -> consumer.processBackgroundEvents(processor, future, timer));
+        assertThrows(TimeoutException.class, () -> consumer.processBackgroundEvents(future, timer));
 
-            // Because we forced our mocked future to continuously time out, we should have no time remaining.
-            assertEquals(0, timer.remainingMs());
-        }
+        // Because we forced our mocked future to continuously time out, we should have no time remaining.
+        assertEquals(0, timer.remainingMs());
+    }
+
+    private void verifyUnsubscribeEvent(SubscriptionState subscriptions) {
+        // Check that an unsubscribe event was generated, and that the consumer waited for it to
+        // complete processing background events.
+        verify(applicationEventHandler).add(any(UnsubscribeEvent.class));
+        verify(consumer).processBackgroundEvents(any(), any());
+
+        // The consumer should not clear the assignment in the app thread. The unsubscribe
+        // event is the one responsible for updating the assignment in the background when it
+        // completes.
+        verify(subscriptions, never()).assignFromSubscribed(any());
     }
 
     private HashMap<TopicPartition, OffsetAndMetadata> mockTopicPartitionOffset() {
@@ -1709,13 +1715,13 @@ public class AsyncKafkaConsumerTest {
     private void completeFetchedCommittedOffsetApplicationEventSuccessfully(final Map<TopicPartition, OffsetAndMetadata> committedOffsets) {
         doReturn(committedOffsets)
             .when(applicationEventHandler)
-            .addAndGet(any(FetchCommittedOffsetsEvent.class), any(Timer.class));
+            .addAndGet(any(FetchCommittedOffsetsEvent.class));
     }
 
     private void completeFetchedCommittedOffsetApplicationEventExceptionally(Exception ex) {
         doThrow(ex)
             .when(applicationEventHandler)
-            .addAndGet(any(FetchCommittedOffsetsEvent.class), any(Timer.class));
+            .addAndGet(any(FetchCommittedOffsetsEvent.class));
     }
 
     private void completeUnsubscribeApplicationEventSuccessfully() {

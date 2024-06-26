@@ -18,7 +18,6 @@ package org.apache.kafka.clients.consumer.internals.events;
 
 import org.apache.kafka.clients.consumer.internals.Acknowledgements;
 import org.apache.kafka.common.TopicIdPartition;
-import org.apache.kafka.common.utils.Timer;
 
 import java.util.Map;
 
@@ -26,8 +25,8 @@ public class ShareLeaveOnCloseEvent extends CompletableApplicationEvent<Void> {
 
     private Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
 
-    public ShareLeaveOnCloseEvent(final Timer timer, final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
-        super(Type.SHARE_LEAVE_ON_CLOSE, timer);
+    public ShareLeaveOnCloseEvent(final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap, final long deadlineMs) {
+        super(Type.SHARE_LEAVE_ON_CLOSE, deadlineMs);
         this.acknowledgementsMap = acknowledgementsMap;
     }
 
