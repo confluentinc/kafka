@@ -106,7 +106,6 @@ compile-validate:
 	else \
 		echo "No errors found"; \
 	fi
-	rm build.log
 
 #Check compilation compatibility with Scala 2.12
 .PHONY: check-scala-compatibility
@@ -122,7 +121,6 @@ check-scala-compatibility:
 	else \
 		echo "No errors found"; \
 	fi
-	rm build.log
 # Below targets are used during kafka packaging for debian.
 
 .PHONY: clean
