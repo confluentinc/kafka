@@ -94,7 +94,7 @@ include ./mk-include/cc-end.mk
 #Runs the compile and checkstyle error check
 .PHONY: compile-validate
 compile-validate:
-	./retry_zinc ./gradlew clean publishToMavenLocal build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true 2>&1 | tee build.log
+	./retry_zinc ./gradlew clean publishToMavenLocal build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true 2>&1 | tee -a build.log
 	@error_count=$$(grep -c -E "(ERROR|error:|\[Error\]|FAILED)" build.log); \
 	if [ $$error_count -ne 0 ]; then \
 		echo "Compile, checkstyle or spotbugs error found"; \
@@ -110,14 +110,17 @@ compile-validate:
 #Check compilation compatibility with Scala 2.12
 .PHONY: check-scala-compatibility
 check-scala-compatibility:
-	./retry_zinc ./gradlew clean build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true -PscalaVersion=2.12 2>&1 | tee build.log
-	@error_count=$$(grep -c -E "(ERROR|error:|\[Error\])" build.log); \
-  	grep -E "(ERROR|error:|\[Error\])" build.log | while read -r line; do \
-		echo "$$line"; \
-	done; \
-	echo "Number of compile, checkstyle and spotbug errors: $$error_count"; \
-	exit $$error_count
-
+	./retry_zinc ./gradlew clean build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true -PscalaVersion=2.12 2>&1 | tee -a build.log
+	@error_count=$$(grep -c -E "(ERROR|error:|\[Error\]|FAILED)" build.log); \
+	if [ $$error_count -ne 0 ]; then \
+		grep -E "(ERROR|error:|\[Error\]|FAILED)" build.log | while read -r line; do \
+			echo "$$line"; \
+		done; \
+		echo "Number of compile, checkstyle and spotbug errors: $$error_count"; \
+		exit $$error_count; \
+	else \
+		echo "No errors found"; \
+	fi
 # Below targets are used during kafka packaging for debian.
 
 .PHONY: clean
