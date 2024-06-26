@@ -94,7 +94,7 @@ include ./mk-include/cc-end.mk
 #Runs the compile and checkstyle error check
 .PHONY: compile-validate
 compile-validate:
-	./retry_zinc ./gradlew clean publishToMavenLocal build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true 2>&1 | tee build.log
+	./retry_zinc ./gradlewAll clean install build -x test --no-daemon --stacktrace -PxmlSpotBugsReport=true 2>&1 | tee build.log
 	@error_count=$$(grep -c -E "(ERROR|error:|\[Error\]|FAILED)" build.log); \
 	if [ $$error_count -ne 0 ]; then \
 		echo "Compile, checkstyle or spotbugs error found"; \
