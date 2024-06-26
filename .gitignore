@@ -56,3 +56,6 @@ jmh-benchmarks/src/main/generated
 **/.jqwik-database
 **/src/generated
 **/src/generated-test
+
+mk-include/
+.mk-include-timestamp
