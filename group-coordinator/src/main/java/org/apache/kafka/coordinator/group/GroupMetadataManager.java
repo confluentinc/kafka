@@ -147,6 +147,7 @@ import static org.apache.kafka.coordinator.group.classic.ClassicGroupState.STABL
 import static org.apache.kafka.coordinator.group.consumer.ConsumerGroupMember.hasAssignedPartitionsChanged;
 import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.CLASSIC_GROUP_COMPLETED_REBALANCES_SENSOR_NAME;
 import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.CONSUMER_GROUP_REBALANCES_SENSOR_NAME;
+import static org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics.SHARE_GROUP_REBALANCES_SENSOR_NAME;
 
 /**
  * The GroupMetadataManager manages the metadata of all classic and consumer groups. It holds
@@ -1630,6 +1631,7 @@ public class GroupMetadataManager {
                 groupEpoch += 1;
                 records.add(newGroupEpochRecord(groupId, groupEpoch, SHARE));
                 log.info("[GroupId {}] Bumped group epoch to {}.", groupId, groupEpoch);
+                metrics.record(SHARE_GROUP_REBALANCES_SENSOR_NAME);
             }
 
             group.setMetadataRefreshDeadline(currentTimeMs + groupMetadataRefreshIntervalMs, groupEpoch);

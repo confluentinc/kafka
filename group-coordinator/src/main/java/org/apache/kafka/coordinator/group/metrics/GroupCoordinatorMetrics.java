@@ -65,6 +65,7 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
 
     public final static String GROUP_COUNT_METRIC_NAME = "group-count";
     public final static String GROUP_COUNT_PROTOCOL_TAG = "protocol";
+    public final static String SHARE_GROUP_PROTOCOL_TAG = GROUP_COUNT_PROTOCOL_TAG;
     public final static String CONSUMER_GROUP_COUNT_METRIC_NAME = "consumer-group-count";
     public final static String SHARE_GROUP_COUNT_METRIC_NAME = "share-group-count";
     public final static String CONSUMER_GROUP_COUNT_STATE_TAG = "state";
@@ -75,6 +76,7 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
     public static final String OFFSET_DELETIONS_SENSOR_NAME = "OffsetDeletions";
     public static final String CLASSIC_GROUP_COMPLETED_REBALANCES_SENSOR_NAME = "CompletedRebalances";
     public static final String CONSUMER_GROUP_REBALANCES_SENSOR_NAME = "ConsumerGroupRebalances";
+    public static final String SHARE_GROUP_REBALANCES_SENSOR_NAME = "ShareGroupRebalances";
 
     private final MetricName classicGroupCountMetricName;
     private final MetricName consumerGroupCountMetricName;
@@ -158,7 +160,7 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
             SHARE_GROUP_COUNT_METRIC_NAME,
             METRICS_GROUP,
             "The total number of share groups.",
-            Collections.singletonMap(GROUP_COUNT_PROTOCOL_TAG, Group.GroupType.SHARE.toString())
+            Collections.singletonMap(SHARE_GROUP_PROTOCOL_TAG, Group.GroupType.SHARE.toString())
         );
 
         shareGroupCountEmptyMetricName = metrics.metricName(
@@ -229,12 +231,24 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
                 METRICS_GROUP,
                 "The total number of consumer group rebalances")));
 
+        Sensor shareGroupRebalanceSensor = metrics.sensor(SHARE_GROUP_REBALANCES_SENSOR_NAME);
+        shareGroupRebalanceSensor.add(new Meter(
+            metrics.metricName("share-group-rebalance-rate",
+                METRICS_GROUP,
+                "The rate of share group rebalances",
+                SHARE_GROUP_PROTOCOL_TAG, Group.GroupType.SHARE.toString()),
+            metrics.metricName("share-group-rebalance-count",
+                METRICS_GROUP,
+                "The total number of share group rebalances",
+                SHARE_GROUP_PROTOCOL_TAG, Group.GroupType.SHARE.toString())));
+
         globalSensors = Collections.unmodifiableMap(Utils.mkMap(
             Utils.mkEntry(OFFSET_COMMITS_SENSOR_NAME, offsetCommitsSensor),
             Utils.mkEntry(OFFSET_EXPIRED_SENSOR_NAME, offsetExpiredSensor),
             Utils.mkEntry(OFFSET_DELETIONS_SENSOR_NAME, offsetDeletionsSensor),
             Utils.mkEntry(CLASSIC_GROUP_COMPLETED_REBALANCES_SENSOR_NAME, classicGroupCompletedRebalancesSensor),
-            Utils.mkEntry(CONSUMER_GROUP_REBALANCES_SENSOR_NAME, consumerGroupRebalanceSensor)
+            Utils.mkEntry(CONSUMER_GROUP_REBALANCES_SENSOR_NAME, consumerGroupRebalanceSensor),
+            Utils.mkEntry(SHARE_GROUP_REBALANCES_SENSOR_NAME, shareGroupRebalanceSensor)
         ));
     }
 
@@ -297,7 +311,8 @@ public class GroupCoordinatorMetrics extends CoordinatorMetrics implements AutoC
             OFFSET_EXPIRED_SENSOR_NAME,
             OFFSET_DELETIONS_SENSOR_NAME,
             CLASSIC_GROUP_COMPLETED_REBALANCES_SENSOR_NAME,
-            CONSUMER_GROUP_REBALANCES_SENSOR_NAME
+            CONSUMER_GROUP_REBALANCES_SENSOR_NAME,
+            SHARE_GROUP_REBALANCES_SENSOR_NAME
         ).forEach(metrics::removeSensor);
     }
 
