@@ -83,15 +83,17 @@ public class ShareCoordinatorMetrics extends CoordinatorMetrics implements AutoC
 
     this.globalSensors = Collections.unmodifiableMap(Utils.mkMap(
         Utils.mkEntry(SHARE_COORDINATOR_WRITE_SENSOR_NAME, shareCoordinatorWriteSensor),
-        Utils.mkEntry(SHARE_COORDINATOR_WRITE_LATENCY_AVG_SENSOR_NAME, shareCoordinatorWriteSensor),
-        Utils.mkEntry(SHARE_COORDINATOR_WRITE_LATENCY_TOTAL_SENSOR_NAME, shareCoordinatorWriteSensor)
+        Utils.mkEntry(SHARE_COORDINATOR_WRITE_LATENCY_AVG_SENSOR_NAME, shareCoordinatorWriteLatencyAvgSensor),
+        Utils.mkEntry(SHARE_COORDINATOR_WRITE_LATENCY_TOTAL_SENSOR_NAME, shareCoordinatorWriteLatencyTotalSensor)
     ));
   }
 
   @Override
   public void close() throws Exception {
     Arrays.asList(
-        SHARE_COORDINATOR_WRITE_SENSOR_NAME
+        SHARE_COORDINATOR_WRITE_SENSOR_NAME,
+        SHARE_COORDINATOR_WRITE_LATENCY_AVG_SENSOR_NAME,
+        SHARE_COORDINATOR_WRITE_LATENCY_TOTAL_SENSOR_NAME
     ).forEach(metrics::removeSensor);
   }
 

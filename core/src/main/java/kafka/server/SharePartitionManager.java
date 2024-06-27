@@ -26,9 +26,8 @@ import org.apache.kafka.common.message.ShareFetchResponseData.PartitionData;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
-import org.apache.kafka.common.metrics.stats.CumulativeSum;
 import org.apache.kafka.common.metrics.stats.Max;
-import org.apache.kafka.common.metrics.stats.Rate;
+import org.apache.kafka.common.metrics.stats.Meter;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.FetchRequest;
 import org.apache.kafka.common.requests.ShareFetchMetadata;
@@ -691,33 +690,30 @@ public class SharePartitionManager implements AutoCloseable {
             this.time = time;
 
             shareAcknowledgementSensor = metrics.sensor(SHARE_ACK_SENSOR);
-            shareAcknowledgementSensor.add(metrics.metricName(
-                    SHARE_ACK_COUNT,
-                    METRICS_GROUP_NAME,
-                    "The total number of offsets acknowledged for share groups."),
-                new CumulativeSum());
-            shareAcknowledgementSensor.add(metrics.metricName(
+            shareAcknowledgementSensor.add(new Meter(
+                metrics.metricName(
                     SHARE_ACK_RATE,
                     METRICS_GROUP_NAME,
-                    "The total number of offsets acknowledged for share groups."),
-                new Rate());
+                    "The total number of offsets acknowledged for share groups per second."),
+                metrics.metricName(
+                    SHARE_ACK_COUNT,
+                    METRICS_GROUP_NAME,
+                    "The total number of offsets acknowledged for share groups.")));
 
             for (Map.Entry<Byte, String> entry : RECORD_ACKS_MAP.entrySet()) {
                 recordAcksSensorMap.put(entry.getKey(), metrics.sensor(String.format("%s-%s-sensor", RECORD_ACK_SENSOR_PREFIX, entry.getValue())));
                 recordAcksSensorMap.get(entry.getKey())
-                    .add(metrics.metricName(
+                    .add(new Meter(
+                        metrics.metricName(
                             RECORD_ACK_RATE,
                             METRICS_GROUP_NAME,
-                            "The number of records acknowledged per acknowledgement type.",
+                            "The number of records acknowledged per acknowledgement type per second.",
                             ACK_TYPE, entry.getValue()),
-                        new Rate());
-                recordAcksSensorMap.get(entry.getKey())
-                    .add(metrics.metricName(
+                        metrics.metricName(
                             RECORD_ACK_COUNT,
                             METRICS_GROUP_NAME,
                             "The number of records acknowledged per acknowledgement type.",
-                            ACK_TYPE, entry.getValue()),
-                        new CumulativeSum());
+                            ACK_TYPE, entry.getValue())));
             }
 
             partitionLoadTimeSensor = metrics.sensor(PARTITION_LOAD_TIME_SENSOR);
