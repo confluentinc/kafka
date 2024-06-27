@@ -232,7 +232,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
    * @return CoordinatorResult(records, response)
    */
   public CoordinatorResult<WriteShareGroupStateResponseData, Record> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
-    log.info("Shard writeState request received - {}", request);
+    log.info("Shard writeState request received");
+    log.debug("Write request dump - {}", request);
     // records to write (with both key and value of snapshot type), response to caller
     // only one key will be there in the request by design
     Optional<CoordinatorResult<WriteShareGroupStateResponseData, Record>> error = maybeGetWriteStateError(request);
@@ -282,7 +283,8 @@ public class ShareCoordinatorShard implements CoordinatorShard<Record> {
    * @return CoordinatorResult(records, response)
    */
   public ReadShareGroupStateResponseData readState(ReadShareGroupStateRequestData request, Long offset) {
-    log.info("Shard readState request received - {}", request);
+    log.info("Shard readState request received");
+    log.debug("Read request dump - {}", request);
     // records to read (with the key of snapshot type), response to caller
     // only one key will be there in the request by design
     Optional<ReadShareGroupStateResponseData> error = maybeGetReadStateError(request);
