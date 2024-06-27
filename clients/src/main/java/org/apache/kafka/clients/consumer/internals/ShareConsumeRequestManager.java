@@ -26,6 +26,7 @@ import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.RetriableException;
 import org.apache.kafka.common.internals.IdempotentCloser;
 import org.apache.kafka.common.message.ShareAcknowledgeRequestData;
 import org.apache.kafka.common.message.ShareFetchRequestData;
@@ -526,9 +527,12 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
             if (!handler.handleResponse(response, requestVersion)) {
                 acknowledgeRequestState.onFailedAttempt(currentTimeMs);
-                if (response.error() != Errors.INVALID_SHARE_SESSION_EPOCH) {
+                if (response.error().exception() instanceof RetriableException) {
                     // We retry the request until the timer in commitSync expires.
-                    return;
+                    // For commitAsync, we do not retry irrespective of the error.
+                    if (acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
+                        return;
+                    }
                 }
             }
 
@@ -765,13 +769,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
         boolean isProcessed() {
             return isProcessed;
-        }
-
-        /**
-         * @return True if the current request was built as part of commitSync.
-         */
-        boolean isCommitSync() {
-            return expirationTimeMs.isPresent();
         }
     }
 
