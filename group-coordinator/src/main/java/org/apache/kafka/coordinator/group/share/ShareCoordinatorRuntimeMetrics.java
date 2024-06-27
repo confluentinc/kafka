@@ -18,53 +18,16 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.metrics.Metrics;
-import org.apache.kafka.coordinator.group.metrics.CoordinatorRuntimeMetrics;
-import org.apache.kafka.coordinator.group.runtime.CoordinatorRuntime;
+import org.apache.kafka.coordinator.group.metrics.GroupCoordinatorRuntimeMetrics;
 
-import java.util.Objects;
-import java.util.function.Supplier;
+public class ShareCoordinatorRuntimeMetrics extends GroupCoordinatorRuntimeMetrics {
 
-//todo smjn- need to add metrics. Currently placeholder for adhering to coordinator API
-public class ShareCoordinatorRuntimeMetrics implements CoordinatorRuntimeMetrics {
+  public static final String METRICS_GROUP = "share-coordinator-metrics";
 
-  private final Metrics metrics;
-
-  public ShareCoordinatorRuntimeMetrics(Metrics metrics) {
-    this.metrics = Objects.requireNonNull(metrics);
-  }
-
-  @Override
-  public void recordPartitionStateChange(CoordinatorRuntime.CoordinatorState oldState, CoordinatorRuntime.CoordinatorState newState) {
-
-  }
-
-  @Override
-  public void recordPartitionLoadSensor(long startTimeMs, long endTimeMs) {
-
-  }
-
-  @Override
-  public void recordEventQueueTime(long durationMs) {
-
-  }
-
-  @Override
-  public void recordEventQueueProcessingTime(long durationMs) {
-
-  }
-
-  @Override
-  public void recordThreadIdleRatio(double ratio) {
-
-  }
-
-  @Override
-  public void registerEventQueueSizeGauge(Supplier<Integer> sizeSupplier) {
-
-  }
-
-  @Override
-  public void close() throws Exception {
-
+  public ShareCoordinatorRuntimeMetrics(Metrics metrics, String metricsGroup) {
+    //partition-load-time (partition-load-time-avg and partition-load-time-max) Meter share-coordinator-metrics The time taken in milliseconds to load the share-group state from the share-group state partitions.
+    //thread-idle-ratio (thread-idle-ratio-min and thread-idle-ratio-avg) Meter share-coordinator-metrics The fraction of time the share coordinator thread is idle.
+    //num-partitions Gauge share-coordinator-metrics The number of partitions in the share-state topic.
+    super(metrics, METRICS_GROUP);
   }
 }

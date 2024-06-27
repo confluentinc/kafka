@@ -55,6 +55,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class ShareCoordinatorShardTest {
 
@@ -247,6 +248,7 @@ class ShareCoordinatorShardTest {
         GROUP_ID, TOPIC_ID, PARTITION, ShareGroupOffset.fromRequest(request.topics().get(0).partitions().get(0))
     ).value().message(), shard.getShareStateMapValue(shareCoordinatorKey));
     assertEquals(0, shard.getLeaderMapValue(shareCoordinatorKey));
+    verify(shard.getMetricsShard()).record(ShareCoordinatorMetrics.SHARE_COORDINATOR_WRITE_SENSOR_NAME);
   }
 
   @Test
