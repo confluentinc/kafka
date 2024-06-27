@@ -215,6 +215,7 @@ if (file('.git').exists()) {
     excludes = new ArrayList<String>(repo.clean(ignore: false, directories: true, dryRun: true))
     // And some of the files that we have checked in should also be excluded from this check
     excludes.addAll([
+        'build.log',
         '**/.git/**',
         '**/build/**',
         'CONTRIBUTING.md',
