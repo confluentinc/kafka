@@ -78,10 +78,13 @@ public class GroupCoordinatorRuntimeMetrics implements CoordinatorRuntimeMetrics
      * The thread idle sensor.
      */
     private final Sensor threadIdleRatioSensor;
+    
+    private final String metricsGroup;
 
-    public GroupCoordinatorRuntimeMetrics(Metrics metrics) {
+    public GroupCoordinatorRuntimeMetrics(Metrics metrics, String metricsGroup) {
         this.metrics = Objects.requireNonNull(metrics);
-
+        this.metricsGroup = Objects.requireNonNull(metricsGroup);
+        
         this.numPartitionsLoading = kafkaMetricName(
             NUM_PARTITIONS_METRIC_NAME,
             "The number of partitions in Loading state.",
@@ -110,13 +113,13 @@ public class GroupCoordinatorRuntimeMetrics implements CoordinatorRuntimeMetrics
         this.partitionLoadSensor.add(
             metrics.metricName(
                 "partition-load-time-max",
-                METRICS_GROUP,
+                metricsGroup,
                 "The max time it took to load the partitions in the last 30 sec."
             ), new Max());
         this.partitionLoadSensor.add(
             metrics.metricName(
                 "partition-load-time-avg",
-                METRICS_GROUP,
+                metricsGroup,
                 "The average time it took to load the partitions in the last 30 sec."
             ), new Avg());
 
@@ -124,13 +127,13 @@ public class GroupCoordinatorRuntimeMetrics implements CoordinatorRuntimeMetrics
         this.threadIdleRatioSensor.add(
             metrics.metricName(
                 "thread-idle-ratio-min",
-                METRICS_GROUP,
+                metricsGroup,
                 "The minimum thread idle ratio over the last 30 seconds."
             ), new Min());
         this.threadIdleRatioSensor.add(
             metrics.metricName(
                 "thread-idle-ratio-avg",
-                METRICS_GROUP,
+                metricsGroup,
                 "The average thread idle ratio over the last 30 seconds."
             ), new Avg());
     }
@@ -143,7 +146,7 @@ public class GroupCoordinatorRuntimeMetrics implements CoordinatorRuntimeMetrics
      * @return The kafka metric name.
      */
     private MetricName kafkaMetricName(String name, String description, String... keyValue) {
-        return metrics.metricName(name, METRICS_GROUP, description, keyValue);
+        return metrics.metricName(name, metricsGroup, description, keyValue);
     }
 
     @Override

@@ -629,7 +629,7 @@ class BrokerServer(
         .withTimer(timer)
         .withLoader(loader)
         .withWriter(writer)
-        .withCoordinatorRuntimeMetrics(new GroupCoordinatorRuntimeMetrics(metrics))
+        .withCoordinatorRuntimeMetrics(new GroupCoordinatorRuntimeMetrics(metrics, GroupCoordinatorRuntimeMetrics.METRICS_GROUP))
         .withGroupCoordinatorMetrics(new GroupCoordinatorMetrics(KafkaYammerMetrics.defaultRegistry, metrics))
         .build()
     } else {
@@ -676,8 +676,8 @@ class BrokerServer(
       .withTime(time)
       .withLoader(loader)
       .withWriter(writer)
-      .withCoordinatorRuntimeMetrics(new ShareCoordinatorRuntimeMetrics(metrics))
-      .withCoordinatorMetrics(new ShareCoordinatorMetrics(KafkaYammerMetrics.defaultRegistry, metrics))
+      .withCoordinatorRuntimeMetrics(new ShareCoordinatorRuntimeMetrics(metrics, ShareCoordinatorRuntimeMetrics.METRICS_GROUP))
+      .withCoordinatorMetrics(new ShareCoordinatorMetrics(metrics))
       .build()
   }
 

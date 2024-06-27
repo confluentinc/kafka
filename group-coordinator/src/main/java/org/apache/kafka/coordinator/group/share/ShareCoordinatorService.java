@@ -64,6 +64,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
   private final CoordinatorRuntime<ShareCoordinatorShard, Record> runtime;
   private final ShareCoordinatorMetrics shareCoordinatorMetrics;
   private volatile int numPartitions = -1; // Number of partitions for __share_group_state. Provided when component is started.
+  private final Time time;
 
   public static class Builder {
     private final int nodeId;
@@ -169,7 +170,8 @@ public class ShareCoordinatorService implements ShareCoordinator {
           logContext,
           config,
           runtime,
-          coordinatorMetrics
+          coordinatorMetrics,
+          time
       );
     }
   }
@@ -178,11 +180,13 @@ public class ShareCoordinatorService implements ShareCoordinator {
       LogContext logContext,
       ShareCoordinatorConfig config,
       CoordinatorRuntime<ShareCoordinatorShard, Record> runtime,
-      ShareCoordinatorMetrics shareCoordinatorMetrics) {
+      ShareCoordinatorMetrics shareCoordinatorMetrics,
+      Time time) {
     this.log = logContext.logger(ShareCoordinatorService.class);
     this.config = config;
     this.runtime = runtime;
     this.shareCoordinatorMetrics = shareCoordinatorMetrics;
+    this.time = time;
   }
 
   @Override
@@ -233,6 +237,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
     log.info("ShareCoordinatorService writeState request received - {}", request);
     String groupId = request.groupId();
     Map<Uuid, Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>>> futureMap = new HashMap<>();
+    long startTime = time.hiResClockMs();
 
     // Send an empty response if topic data is empty
     if (isEmpty(request.topics())) {
@@ -309,7 +314,14 @@ public class ShareCoordinatorService implements ShareCoordinator {
                   CompletableFuture<WriteShareGroupStateResponseData> future = topicEntry.getValue();
                   int partition = topicEntry.getKey();
                   try {
+                    long timeTaken = time.hiResClockMs() - startTime;
                     WriteShareGroupStateResponseData partitionData = future.get();
+                    // This is the future returned by runtime.scheduleWriteOperation which returns when the
+                    // operation has completed including
+                    shareCoordinatorMetrics.globalSensors.get(ShareCoordinatorMetrics.SHARE_COORDINATOR_WRITE_LATENCY_AVG_SENSOR_NAME)
+                        .record(timeTaken);
+                    shareCoordinatorMetrics.globalSensors.get(ShareCoordinatorMetrics.SHARE_COORDINATOR_WRITE_LATENCY_TOTAL_SENSOR_NAME)
+                        .record(timeTaken);
                     // error check if the partitionData results contains only 1 row (corresponding to topicId)
                     return partitionData.results().get(0).partitions();
                   } catch (Exception e) {

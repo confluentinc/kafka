@@ -18,23 +18,43 @@
 package org.apache.kafka.coordinator.group.share;
 
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetricsShard;
+import org.apache.kafka.timeline.SnapshotRegistry;
 
-// todo smjn - currently placeholder
+import java.util.Map;
+
 public class ShareCoordinatorMetricsShard implements CoordinatorMetricsShard {
+
+  private final SnapshotRegistry snapshotRegistry;
+  private final Map<String, Sensor> globalSensors;
+  private final TopicPartition topicPartition;
+
+  public ShareCoordinatorMetricsShard(SnapshotRegistry snapshotRegistry,
+                                      Map<String, Sensor> globalSensors,
+                                      TopicPartition topicPartition) {
+    this.snapshotRegistry = snapshotRegistry;
+    this.globalSensors = globalSensors;
+    this.topicPartition = topicPartition;
+  }
+
   @Override
   public void record(String sensorName) {
-
+    if (this.globalSensors.containsKey(sensorName)) {
+      this.globalSensors.get(sensorName).record();
+    }
   }
 
   @Override
   public void record(String sensorName, double val) {
-
+    if (this.globalSensors.containsKey(sensorName)) {
+      this.globalSensors.get(sensorName).record(val);
+    }
   }
 
   @Override
   public TopicPartition topicPartition() {
-    return null;
+    return this.topicPartition;
   }
 
   @Override
