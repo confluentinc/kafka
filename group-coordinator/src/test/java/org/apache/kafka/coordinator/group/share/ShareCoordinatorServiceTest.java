@@ -17,15 +17,18 @@
 
 package org.apache.kafka.coordinator.group.share;
 
+import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
+import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.Record;
 import org.apache.kafka.coordinator.group.runtime.CoordinatorRuntime;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +46,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.apache.kafka.coordinator.group.TestUtil.requestContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -71,7 +76,8 @@ class ShareCoordinatorServiceTest {
         new LogContext(),
         createConfig(),
         runtime,
-        new ShareCoordinatorMetrics()
+        new ShareCoordinatorMetrics(),
+        Time.SYSTEM
     );
 
     service.startup(() -> 1);
@@ -83,11 +89,16 @@ class ShareCoordinatorServiceTest {
   @Test
   public void testWriteStateSuccess() throws ExecutionException, InterruptedException, TimeoutException {
     CoordinatorRuntime<ShareCoordinatorShard, Record> runtime = mockRuntime();
+    Metrics metrics = new Metrics();
+    ShareCoordinatorMetrics coordinatorMetrics = new ShareCoordinatorMetrics(metrics);
+    Time time = mock(Time.class);
+    when(time.hiResClockMs()).thenReturn(0L).thenReturn(100L).thenReturn(150L);
     ShareCoordinatorService service = new ShareCoordinatorService(
         new LogContext(),
         createConfig(),
         runtime,
-        new ShareCoordinatorMetrics()
+        coordinatorMetrics,
+        time
     );
 
     service.startup(() -> 1);
@@ -177,6 +188,14 @@ class ShareCoordinatorServiceTest {
             .setPartitions(Collections.singletonList(new WriteShareGroupStateResponseData.PartitionResult()
                 .setPartition(partition1)))));
     assertEquals(expectedResult, result);
+    verify(time, times(3)).hiResClockMs();
+    Set<MetricName> expectedMetrics = new HashSet<>(Arrays.asList(
+        metrics.metricName("write-latency-avg", ShareCoordinatorMetrics.METRICS_GROUP),
+        metrics.metricName("write-latency-total", ShareCoordinatorMetrics.METRICS_GROUP),
+        metrics.metricName("write-rate", ShareCoordinatorMetrics.METRICS_GROUP),
+        metrics.metricName("write-total", ShareCoordinatorMetrics.METRICS_GROUP)
+    ));
+    expectedMetrics.forEach(metric -> assertTrue(metrics.metrics().containsKey(metric)));
   }
 
   @Test
@@ -186,7 +205,8 @@ class ShareCoordinatorServiceTest {
         new LogContext(),
         createConfig(),
         runtime,
-        new ShareCoordinatorMetrics()
+        new ShareCoordinatorMetrics(),
+        Time.SYSTEM
     );
 
     service.startup(() -> 1);
@@ -284,7 +304,8 @@ class ShareCoordinatorServiceTest {
         new LogContext(),
         createConfig(),
         runtime,
-        new ShareCoordinatorMetrics()
+        new ShareCoordinatorMetrics(),
+        Time.SYSTEM
     );
 
     service.startup(() -> 1);
@@ -328,7 +349,8 @@ class ShareCoordinatorServiceTest {
         new LogContext(),
         createConfig(),
         runtime,
-        new ShareCoordinatorMetrics()
+        new ShareCoordinatorMetrics(),
+        Time.SYSTEM
     );
 
     service.startup(() -> 1);
@@ -372,7 +394,8 @@ class ShareCoordinatorServiceTest {
         new LogContext(),
         createConfig(),
         runtime,
-        new ShareCoordinatorMetrics()
+        new ShareCoordinatorMetrics(),
+        Time.SYSTEM
     );
 
     String groupId = "group1";
@@ -448,7 +471,8 @@ class ShareCoordinatorServiceTest {
         new LogContext(),
         createConfig(),
         runtime,
-        new ShareCoordinatorMetrics()
+        new ShareCoordinatorMetrics(),
+        Time.SYSTEM
     );
 
     String groupId = "group1";

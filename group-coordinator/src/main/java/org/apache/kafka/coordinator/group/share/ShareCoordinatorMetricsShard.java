@@ -40,17 +40,21 @@ public class ShareCoordinatorMetricsShard implements CoordinatorMetricsShard {
 
   @Override
   public void record(String sensorName) {
-
+    if (this.globalSensors.containsKey(sensorName)) {
+      this.globalSensors.get(sensorName).record();
+    }
   }
 
   @Override
   public void record(String sensorName, double val) {
-
+    if (this.globalSensors.containsKey(sensorName)) {
+      this.globalSensors.get(sensorName).record(val);
+    }
   }
 
   @Override
   public TopicPartition topicPartition() {
-    return null;
+    return this.topicPartition;
   }
 
   @Override
