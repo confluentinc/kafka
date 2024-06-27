@@ -230,7 +230,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
   @Override
   public CompletableFuture<WriteShareGroupStateResponseData> writeState(RequestContext context, WriteShareGroupStateRequestData request) {
-    log.info("ShareCoordinatorService writeState request received - {}", request);
+    log.info("ShareCoordinatorService writeState request received");
+    log.debug("ShareCoordinatorService writeState request dump - {}", request);
+
     String groupId = request.groupId();
     Map<Uuid, Map<Integer, CompletableFuture<WriteShareGroupStateResponseData>>> futureMap = new HashMap<>();
 
@@ -334,7 +336,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
   @Override
   public CompletableFuture<ReadShareGroupStateResponseData> readState(RequestContext context, ReadShareGroupStateRequestData request) {
-    log.info("ShareCoordinatorService readState request received - {}", request);
+    log.info("ShareCoordinatorService readState request received");
+    log.debug("ShareCoordinatorService readState request dump - {}", request);
+
     String groupId = request.groupId();
     // A map to store the futures for each topicId and partition.
     Map<Uuid, Map<Integer, CompletableFuture<ReadShareGroupStateResponseData>>> futureMap = new HashMap<>();
