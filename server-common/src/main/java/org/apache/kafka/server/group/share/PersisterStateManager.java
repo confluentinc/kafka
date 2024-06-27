@@ -391,7 +391,8 @@ public class PersisterStateManager {
 
     @Override
     protected void handleRequestResponse(ClientResponse response) {
-      log.info("Write state response received. - {}", response);
+      log.info("Write state response received.");
+      log.debug("Write state response: {}", response);
       this.result.complete((WriteShareGroupStateResponse) response.responseBody());
     }
 
@@ -473,7 +474,9 @@ public class PersisterStateManager {
 
     @Override
     protected void handleRequestResponse(ClientResponse response) {
-      log.info("Read state response received. - {}", response);
+      log.info("Read state response received.");
+      log.debug("Read state response: {}", response);
+      
       ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
       String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
       if (readShareGroupStateResponseData.results().size() != 1) {
