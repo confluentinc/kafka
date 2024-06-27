@@ -527,7 +527,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
             if (!handler.handleResponse(response, requestVersion)) {
                 acknowledgeRequestState.onFailedAttempt(currentTimeMs);
-                if (response.error().exception() instanceof RetriableException || response.error() != Errors.INVALID_SHARE_SESSION_EPOCH) {
+                if (response.error().exception() instanceof RetriableException) {
                     // We retry the request until the timer in commitSync expires.
                     // For commitAsync, we do not retry irrespective of the error.
                     if (acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
@@ -769,13 +769,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
         boolean isProcessed() {
             return isProcessed;
-        }
-
-        /**
-         * @return True if the current request was built as part of commitSync.
-         */
-        boolean isCommitSync() {
-            return expirationTimeMs.isPresent();
         }
     }
 
