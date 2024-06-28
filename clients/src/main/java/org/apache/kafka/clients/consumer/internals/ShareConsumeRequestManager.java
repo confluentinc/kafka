@@ -66,7 +66,7 @@ import java.util.stream.Collectors;
  * in a share group.
  */
 public class ShareConsumeRequestManager implements RequestManager, MemberStateListener, Closeable {
-
+    private final Time time;
     private final Logger log;
     private final LogContext logContext;
     private final String groupId;
@@ -86,7 +86,8 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     private final long retryBackoffMs;
     private final long retryBackoffMaxMs;
 
-    ShareConsumeRequestManager(final LogContext logContext,
+    ShareConsumeRequestManager(final Time time,
+                               final LogContext logContext,
                                final String groupId,
                                final ConsumerMetadata metadata,
                                final SubscriptionState subscriptions,
@@ -96,6 +97,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                                final ShareFetchMetricsManager metricsManager,
                                final long retryBackoffMs,
                                final long retryBackoffMaxMs) {
+        this.time = time;
         this.log = logContext.logger(ShareConsumeRequestManager.class);
         this.logContext = logContext;
         this.groupId = groupId;
@@ -228,9 +230,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 if (requestBuilder != null) {
                     AcknowledgeRequestState requestState = new AcknowledgeRequestState(logContext,
                             ShareConsumeRequestManager.class.getSimpleName(),
+                            0L,
                             retryBackoffMs,
                             retryBackoffMaxMs,
-                            Optional.empty(),
                             node.id(),
                             acknowledgementsMapForNode,
                             Optional.empty());
@@ -278,28 +280,26 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             AcknowledgeRequestState acknowledgeRequestState = iterator.next();
             if (acknowledgeRequestState.isProcessed()) {
                 iterator.remove();
-            } else if (!acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
+            } else if (!acknowledgeRequestState.maybeExpire()) {
                 if (nodesWithPendingRequests.contains(acknowledgeRequestState.nodeId)) {
                     log.trace("Skipping acknowledge request because previous request to {} has not been processed", acknowledgeRequestState.nodeId);
                 } else {
                     if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
                         acknowledgeRequestState.onSendAttempt(currentTimeMs);
+                        UnsentRequest request;
                         if (onClose) {
-                            UnsentRequest request = acknowledgeRequestState.buildRequest(
+                            request = acknowledgeRequestState.buildRequest(
                                     this::handleShareAcknowledgeCloseSuccess,
                                     this::handleShareAcknowledgeCloseFailure,
                                     currentTimeMs);
-                            if (request != null) {
-                                unsentRequests.add(request);
-                            }
                         } else {
-                            UnsentRequest request = acknowledgeRequestState.buildRequest(
+                            request = acknowledgeRequestState.buildRequest(
                                     this::handleShareAcknowledgeSuccess,
                                     this::handleShareAcknowledgeFailure,
                                     currentTimeMs);
-                            if (request != null) {
-                                unsentRequests.add(request);
-                            }
+                        }
+                        if (request != null) {
+                            unsentRequests.add(request);
                         }
                     }
                 }
@@ -326,17 +326,18 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     /**
      * Enqueue an AcknowledgeRequestState to be picked up on the next poll
      *
-     * @param retryExpirationTimeMs The timeout for the operation
      * @param acknowledgementsMap The acknowledgements to commit
+     * @param deadlineMs          Time until which the request will be retried if it fails with
+     *                            an expected retriable error.
      *
      * @return The future which completes when the acknowledgements finished
      */
     public CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitSync(
-            final long retryExpirationTimeMs,
-            final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
+            final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap,
+            final long deadlineMs) {
         final AtomicInteger resultCount = new AtomicInteger();
-        final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> commitSyncFuture = new CompletableFuture<>();
-        final CommitResultHandler resultHandler = new CommitResultHandler(resultCount, Optional.of(commitSyncFuture));
+        final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future = new CompletableFuture<>();
+        final CommitResultHandler resultHandler = new CommitResultHandler(resultCount, Optional.of(future));
 
         final Cluster cluster = metadata.fetch();
 
@@ -356,9 +357,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 }
                 acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
                         ShareConsumeRequestManager.class.getSimpleName(),
+                        deadlineMs,
                         retryBackoffMs,
                         retryBackoffMaxMs,
-                        Optional.of(retryExpirationTimeMs),
                         nodeId,
                         acknowledgementsMapForNode,
                         Optional.of(resultHandler)
@@ -366,7 +367,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }
         });
 
-        return commitSyncFuture;
+        return future;
     }
 
     /**
@@ -395,9 +396,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 }
                 acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
                         ShareConsumeRequestManager.class.getSimpleName(),
+                        Long.MAX_VALUE,
                         retryBackoffMs,
                         retryBackoffMaxMs,
-                        Optional.empty(),
                         nodeId,
                         acknowledgementsMapForNode,
                         Optional.of(resultHandler)
@@ -528,9 +529,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             if (!handler.handleResponse(response, requestVersion)) {
                 acknowledgeRequestState.onFailedAttempt(currentTimeMs);
                 if (response.error().exception() instanceof RetriableException) {
-                    // We retry the request until the timer in commitSync expires.
+                    // For commitSync, we retry the request until the timer expires.
                     // For commitAsync, we do not retry irrespective of the error.
-                    if (acknowledgeRequestState.retryTimeoutExpired(currentTimeMs)) {
+                    if (acknowledgeRequestState.isExpired()) {
                         return;
                     }
                 }
@@ -657,7 +658,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     /**
      * Represents a request to acknowledge delivery that can be retried or aborted.
      */
-    class AcknowledgeRequestState extends RequestState {
+    class AcknowledgeRequestState extends TimedRequestState {
 
         /**
          * The node to send the request to.
@@ -670,13 +671,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         private final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
 
         /**
-         * Time until which the request should be retried if it fails with retriable
-         * errors. If not present, the request is triggered without waiting for a response or
-         * retrying.
-         */
-        private final Optional<Long> expirationTimeMs;
-
-        /**
          * Whether the request has been processed and will not be retried.
          */
         private boolean isProcessed = false;
@@ -686,14 +680,15 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
          */
         private final Optional<CommitResultHandler> resultHandler;
 
-        AcknowledgeRequestState(LogContext logContext, String owner,
-                                long retryBackoffMs, long retryBackoffMaxMs,
-                                Optional<Long> expirationTimeMs,
+        AcknowledgeRequestState(LogContext logContext,
+                                String owner,
+                                long deadlineMs,
+                                long retryBackoffMs,
+                                long retryBackoffMaxMs,
                                 int nodeId,
                                 Map<TopicIdPartition, Acknowledgements> acknowledgementsMap,
                                 Optional<CommitResultHandler> resultHandler) {
-            super(logContext, owner, retryBackoffMs, retryBackoffMaxMs);
-            this.expirationTimeMs = expirationTimeMs;
+            super(logContext, owner, retryBackoffMs, retryBackoffMaxMs, deadlineTimer(time, deadlineMs));
             this.nodeId = nodeId;
             this.acknowledgementsMap = acknowledgementsMap;
             this.resultHandler = resultHandler;
@@ -759,16 +754,12 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }
         }
 
-        /**
-         * @param currentTimeMs the current time in ms.
-         * @return True if the request can be retried and is still not timed out.
-         */
-        boolean retryTimeoutExpired(long currentTimeMs) {
-            return expirationTimeMs.isPresent() && expirationTimeMs.get() <= currentTimeMs;
-        }
-
         boolean isProcessed() {
             return isProcessed;
+        }
+
+        boolean maybeExpire() {
+            return numAttempts > 0 && isExpired();
         }
     }
 
@@ -777,8 +768,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
      * @param <T> Type of response, usually either {@link ClientResponse} or {@link Throwable}
      */
     @FunctionalInterface
-    protected interface ResponseHandler<T> {
-
+    private interface ResponseHandler<T> {
         /**
          * Handle the response from the given {@link Node target}
          */
