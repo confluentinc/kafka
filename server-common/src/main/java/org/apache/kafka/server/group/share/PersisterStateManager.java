@@ -198,10 +198,10 @@ public class PersisterStateManager {
         return false;
       }
       if (cacheHelper.containsTopic(Topic.SHARE_GROUP_STATE_TOPIC_NAME)) {
-        log.info("{} internal topic already exists.", Topic.SHARE_GROUP_STATE_TOPIC_NAME);
+        log.debug("{} internal topic already exists.", Topic.SHARE_GROUP_STATE_TOPIC_NAME);
         Node node = cacheHelper.getShareCoordinator(coordinatorKey(), Topic.SHARE_GROUP_STATE_TOPIC_NAME);
         if (node != Node.noNode()) {
-          log.info("Found coordinator node in cache: {}", node);
+          log.debug("Found coordinator node in cache: {}", node);
           coordinatorNode = node;
           return false;
         }
@@ -253,8 +253,7 @@ public class PersisterStateManager {
      * @param response - Client response for find coordinator RPC
      */
     protected void handleFindCoordinatorResponse(ClientResponse response) {
-      log.info("Find coordinator response received.");
-      log.debug("Find coordinator response dump - {}", response);
+      log.debug("Find coordinator response received - {}", response);
       
       // Incrementing the number of find coordinator attempts
       findCoordattempts++;
@@ -270,7 +269,7 @@ public class PersisterStateManager {
 
       switch (error) {
         case NONE:
-          log.info("Find coordinator response valid. Enqueuing actual request.");
+          log.debug("Find coordinator response valid. Enqueuing actual request.");
           resetAttempts();
           coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
           // now we want the actual share state RPC call to happen
@@ -285,7 +284,7 @@ public class PersisterStateManager {
             findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
             break;
           }
-          log.info("Waiting before retrying find coordinator RPC.");
+          log.debug("Waiting before retrying find coordinator RPC.");
           try {
             TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(findCoordattempts));
           } catch (InterruptedException e) {
@@ -393,8 +392,7 @@ public class PersisterStateManager {
 
     @Override
     protected void handleRequestResponse(ClientResponse response) {
-      log.info("Write state response received.");
-      log.debug("Write state response: {}", response);
+      log.debug("Write state response received - {}", response);
       this.result.complete((WriteShareGroupStateResponse) response.responseBody());
     }
 
@@ -476,8 +474,7 @@ public class PersisterStateManager {
 
     @Override
     protected void handleRequestResponse(ClientResponse response) {
-      log.info("Read state response received.");
-      log.debug("Read state response: {}", response);
+      log.debug("Read state response received - {}", response);
 
       ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
       String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
@@ -563,7 +560,7 @@ public class PersisterStateManager {
             log.error("Unable to find node to use for coordinator lookup.");
             return Collections.emptyList();
           }
-          log.info("Sending find coordinator RPC");
+          log.debug("Sending find coordinator RPC");
           return Collections.singletonList(new RequestAndCompletionHandler(
               time.milliseconds(),
               randomNode,
@@ -571,7 +568,7 @@ public class PersisterStateManager {
               handler
           ));
         } else {
-          log.info("Sending share state RPC - {}", handler.name());
+          log.debug("Sending share state RPC - {}", handler.name());
           // share coord node already available
           return Collections.singletonList(new RequestAndCompletionHandler(
               time.milliseconds(),
