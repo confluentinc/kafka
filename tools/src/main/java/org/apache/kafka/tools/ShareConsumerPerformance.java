@@ -80,16 +80,14 @@ public class ShareConsumerPerformance {
             long fetchTimeInMs = (endMs - startMs) - joinTimeMs.get();
             if (!options.showDetailedStats()) {
                 double totalMbRead = (totalBytesRead.get() * 1.0) / (1024 * 1024);
-                System.out.printf("%s, %s, %.4f, %.4f, %d, %.4f, %d, %.4f, %.4f%n",
+                System.out.printf("%s, %s, %.4f, %.4f, %.4f, %d, %d%n",
                     options.dateFormat().format(startMs),
                     options.dateFormat().format(endMs),
                     totalMbRead,
                     totalMbRead / elapsedSec,
-                    totalMessagesRead.get(),
                     totalMessagesRead.get() / elapsedSec,
-                    fetchTimeInMs,
-                    totalMbRead / (fetchTimeInMs / 1000.0),
-                    totalMessagesRead.get() / (fetchTimeInMs / 1000.0)
+                    totalMessagesRead.get(),
+                    fetchTimeInMs
                 );
             }
 
@@ -103,9 +101,9 @@ public class ShareConsumerPerformance {
     }
 
     protected static void printHeader(boolean showDetailedStats) {
-        String newFieldsInHeader = ", fetch.time.ms, fetch.MB.sec, fetch.nMsg.sec";
+        String newFieldsInHeader = ", fetch.time.ms";
         if (!showDetailedStats)
-            System.out.printf("start.time, end.time, data.consumed.in.MB, MB.sec, data.consumed.in.nMsg, nMsg.sec%s%n", newFieldsInHeader);
+            System.out.printf("start.time, end.time, data.consumed.in.MB, MB.sec, nMsg.sec, data.consumed.in.nMsg%s%n", newFieldsInHeader);
         else
             System.out.printf("time, threadId, data.consumed.in.MB, MB.sec, data.consumed.in.nMsg, nMsg.sec%s%n", newFieldsInHeader);
     }
