@@ -1145,6 +1145,8 @@ public class SharePartition {
         List<InFlightState> updatedStates,
         List<PersisterStateBatch> stateBatches
     ) {
+        if (stateBatches.isEmpty() && updatedStates.isEmpty())
+            return;
         lock.writeLock().lock();
         try {
             if (throwable != null || !isWriteShareGroupStateSuccessful(stateBatches)) {
