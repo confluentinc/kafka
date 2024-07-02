@@ -59,6 +59,3 @@ streams/src/generated
 raft/src/generated
 core/src/generated
 metadata/src/generated
-
-mk-include/
-.mk-include-timestamp
