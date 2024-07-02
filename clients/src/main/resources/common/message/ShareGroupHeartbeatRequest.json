@@ -34,13 +34,6 @@
     { "name": "RackId", "type": "string", "versions": "0+",  "nullableVersions": "0+", "default": "null",
       "about": "null if not provided or if it didn't change since the last heartbeat; the rack ID of consumer otherwise." },
     { "name": "SubscribedTopicNames", "type": "[]string", "versions": "0+", "nullableVersions": "0+", "default": "null",
-      "about": "null if it didn't change since the last heartbeat; the subscribed topic names otherwise." },
-    { "name": "TopicPartitions", "type": "[]TopicPartitions", "versions": "0+", "nullableVersions": "0+", "default": "null",
-      "about": "null if it didn't change since the last heartbeat; the partitions owned by the member.", "fields": [
-      { "name": "TopicId", "type": "uuid", "versions": "0+",
-        "about": "The topic ID." },
-      { "name": "Partitions", "type": "[]int32", "versions": "0+",
-        "about": "The partitions." }
-    ]}
+      "about": "null if it didn't change since the last heartbeat; the subscribed topic names otherwise." }
   ]
 }
