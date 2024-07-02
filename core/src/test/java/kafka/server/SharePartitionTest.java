@@ -74,6 +74,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
@@ -6307,6 +6308,25 @@ public class SharePartitionTest {
         assertEquals(EMPTY_MEMBER_ID, sharePartition.cachedState().get(5L).batchMemberId());
         assertEquals(RecordState.AVAILABLE, sharePartition.cachedState().get(5L).batchState());
         assertNull(sharePartition.cachedState().get(5L).acquisitionLockTimeoutTask());
+    }
+
+    @Test
+    public void testNumberOfWriteCallsOnUpdates() {
+        SharePartition sharePartition = Mockito.spy(SharePartitionBuilder.builder().build());
+
+        sharePartition.acquire(MEMBER_ID, new FetchPartitionData(Errors.NONE, 10, 0, memoryRecords(5, 2),
+                Optional.empty(), OptionalLong.empty(), Optional.empty(),
+                OptionalInt.empty(), false));
+
+        sharePartition.acknowledge(MEMBER_ID, Collections.singletonList(
+                new ShareAcknowledgementBatch(2, 6, Collections.singletonList((byte) 1))));
+        // Acknowledge records will induce 1 write state RPC call via function isWriteShareGroupStateSuccessful.
+        Mockito.verify(sharePartition, Mockito.times(1)).isWriteShareGroupStateSuccessful(anyList());
+
+        sharePartition.releaseAcquiredRecords(MEMBER_ID);
+        // Release acquired records will induce 0 write state RPC call via function isWriteShareGroupStateSuccessful
+        // because the in-flight batch has been acknowledged. Hence, the total calls remain 1.
+        Mockito.verify(sharePartition, Mockito.times(1)).isWriteShareGroupStateSuccessful(anyList());
     }
 
     private MemoryRecords memoryRecords(int numOfRecords) {
