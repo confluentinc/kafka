@@ -48,7 +48,6 @@ import org.mockito.Mockito;
 
 import java.time.Duration;
 import java.util.Collections;
-import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -66,7 +65,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -339,9 +337,8 @@ public class ShareConsumerImplTest {
                 "client-id");
         final TopicPartition tp = new TopicPartition("topic", 0);
         final TopicIdPartition tip = new TopicIdPartition(Uuid.randomUuid(), tp);
-        final List<ConsumerRecord<String, String>> records = singletonList(
-                new ConsumerRecord<>("topic", 0, 2, "key1", "value1"));
         final ShareInFlightBatch<String, String> batch = new ShareInFlightBatch<>(tip);
+        batch.addRecord(new ConsumerRecord<>("topic", 0, 2, "key1", "value1"));
         final ShareFetch<String, String> fetch = ShareFetch.empty();
         fetch.add(tip, batch);
         doAnswer(invocation -> fetch)
@@ -350,7 +347,12 @@ public class ShareConsumerImplTest {
 
         consumer.subscribe(singletonList("topic1"));
         consumer.poll(Duration.ofMillis(100));
-        verify(applicationEventHandler, atLeastOnce()).add(any(PollEvent.class));
+        verify(applicationEventHandler).add(any(PollEvent.class));
+        verify(applicationEventHandler).add(any(ShareSubscriptionChangeApplicationEvent.class));
+
+        completeShareLeaveOnCloseApplicationEventSuccessfully();
+        consumer.close();
+        verify(applicationEventHandler).addAndGet(any(ShareLeaveOnCloseEvent.class));
     }
 
     private Properties requiredConsumerPropertiesAndGroupId(final String groupId) {
