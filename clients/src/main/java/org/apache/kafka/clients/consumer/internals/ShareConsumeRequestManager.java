@@ -203,10 +203,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return pollResult;
         }
 
-        if (fetchAcknowledgementsMap.isEmpty()) {
-            return PollResult.EMPTY;
-        }
-
         final Cluster cluster = metadata.fetch();
         List<UnsentRequest> requests = new LinkedList<>();
 
@@ -291,12 +287,14 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                             request = acknowledgeRequestState.buildRequest(
                                     this::handleShareAcknowledgeCloseSuccess,
                                     this::handleShareAcknowledgeCloseFailure,
-                                    currentTimeMs);
+                                    currentTimeMs,
+                                    true);
                         } else {
                             request = acknowledgeRequestState.buildRequest(
                                     this::handleShareAcknowledgeSuccess,
                                     this::handleShareAcknowledgeFailure,
-                                    currentTimeMs);
+                                    currentTimeMs,
+                                    false);
                         }
                         if (request != null) {
                             unsentRequests.add(request);
@@ -696,10 +694,15 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
 
         UnsentRequest buildRequest(ResponseHandler<ClientResponse> successHandler,
                                    ResponseHandler<Throwable> errorHandler,
-                                   long currentTimeMs) {
+                                   long currentTimeMs,
+                                   boolean onClose) {
             ShareSessionHandler handler = sessionHandlers.get(nodeId);
             if (handler == null) {
                 return null;
+            }
+
+            if (onClose) {
+                handler.notifyClose();
             }
 
             for (Map.Entry<TopicIdPartition, Acknowledgements> entry : acknowledgementsMap.entrySet()) {
