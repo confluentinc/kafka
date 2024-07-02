@@ -58,11 +58,10 @@ blocks:
           commands:
             - |
               if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]]; then
-                make init-ci
-              fi
-            - |
-              if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]]; then
                 . vault-setup
+                mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2); \
+                echo $mavenUrl
+                sem-trigger -p common -b master -f .semaphore/semaphore.yml
               fi
             - >-
               if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]] && [ "$NANO_VERSION" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then
