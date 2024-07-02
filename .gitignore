@@ -59,5 +59,3 @@ jmh-benchmarks/src/main/generated
 **/src/generated-test
 
 storage/kafka-tiered-storage/
-mk-include/
-.mk-include-timestamp
