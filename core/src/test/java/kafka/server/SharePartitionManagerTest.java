@@ -16,6 +16,7 @@
  */
 package kafka.server;
 
+import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidRequestException;
@@ -1122,32 +1123,32 @@ public class SharePartitionManagerTest {
         );
         expectedMetrics.put(
             metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_COUNT, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
-                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "accept")),
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, AcknowledgeType.ACCEPT.toString())),
             val -> assertEquals(2.0, val)
         );
         expectedMetrics.put(
             metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_COUNT, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
-                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "release")),
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, AcknowledgeType.RELEASE.toString())),
             val -> assertEquals(0.0, val)
         );
         expectedMetrics.put(
             metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_COUNT, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
-                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "reject")),
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, AcknowledgeType.REJECT.toString())),
             val -> assertEquals(0.0, val)
         );
         expectedMetrics.put(
             metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_RATE, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
-                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "accept")),
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, AcknowledgeType.ACCEPT.toString())),
             val -> assertTrue(val > 0)
         );
         expectedMetrics.put(
             metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_RATE, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
-                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "release")),
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, AcknowledgeType.RELEASE.toString())),
             val -> assertEquals(0.0, val)
         );
         expectedMetrics.put(
             metrics.metricName(SharePartitionManager.ShareGroupMetrics.RECORD_ACK_RATE, SharePartitionManager.ShareGroupMetrics.METRICS_GROUP_NAME,
-                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, "reject")),
+                Collections.singletonMap(SharePartitionManager.ShareGroupMetrics.ACK_TYPE, AcknowledgeType.REJECT.toString())),
             val -> assertEquals(0.0, val)
         );
         expectedMetrics.forEach((metric, test) -> {
