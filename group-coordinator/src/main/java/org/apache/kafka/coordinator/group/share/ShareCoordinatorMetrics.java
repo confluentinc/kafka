@@ -76,7 +76,7 @@ public class ShareCoordinatorMetrics extends CoordinatorMetrics implements AutoC
             "Average latency in write state per second."),
         new Avg());
     shareCoordinatorWriteLatencyTotalSensor.add(
-        metrics.metricName("write-latency-total",
+        metrics.metricName("write-latency-max",
             METRICS_GROUP,
             "Maximum total latency in write state per second."),
         new Max());
