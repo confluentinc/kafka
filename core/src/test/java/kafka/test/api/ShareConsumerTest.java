@@ -1465,8 +1465,13 @@ public class ShareConsumerTest {
     }
 
     @Test
-    public void testShareGroupStateTopicCreation() throws Exception {
-        Set<String> topics = listTopics().names().get();
+    public void testShareGroupStateTopicCreation() throws InterruptedException {
+        Set<String> topics = null;
+        try {
+            topics = listTopics().names().get();
+        } catch (Exception e) {
+            fail("Failed to list topics: " + e);
+        }
         // The __share_group_state topic is created on the first FIND_COORDINATOR RPC call for any share group topic partition.
         // Since that does not happen automatically on cluster creation, we expect that the cluster will not have
         // __share_group_state topic until yet.
@@ -1475,22 +1480,26 @@ public class ShareConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        long duration = 45 * 1000; // 45 seconds
+        shareConsumer.poll(Duration.ofMillis(2000));
+        TestUtils.waitForCondition(
+                () -> {
+                    boolean ans = false;
+                    try {
+                        ans = listTopics().names().get().contains(SHARE_GROUP_STATE_TOPIC_NAME);
+                    } catch (Exception e) {
+                        fail("Failed to list topics: " + e);
+                    }
+                    return ans;
+                },
+                45000L,
+                3000L,
+                () -> "Failed to create share group topic");
 
-        long startTime = System.currentTimeMillis();
-
-        // Poll for 45 seconds to ensure that the __share_group_state topic is created.
-        while (System.currentTimeMillis() - startTime < duration) {
-            // First poll will initialise the share partition, which will internally try to read the state from the persister.
-            // Since this is the first persister related cal, it will result in a lot of events happening in the background
-            // including creation of __share_group_state topic and loading of coordinator shards in-memory states.
-            shareConsumer.poll(Duration.ofMillis(2000));
-        }
+        // The above condition only checks for the existence of the __share_group_state topic, but that happens when
+        // FIND_COORDINATOR is called internally. We need to wait for the ReadShareGroupState to finish completely
+        Thread.sleep(2000L);
 
         shareConsumer.close();
-
-        topics = listTopics().names().get();
-        assertTrue(topics.contains(SHARE_GROUP_STATE_TOPIC_NAME));
     }
 
     @Test
