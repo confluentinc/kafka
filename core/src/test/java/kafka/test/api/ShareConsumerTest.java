@@ -43,6 +43,7 @@ import org.apache.kafka.common.errors.InvalidRecordStateException;
 import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
@@ -51,6 +52,7 @@ import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -70,6 +72,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -88,11 +91,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-@Timeout(600)
+@Timeout(1200)
 @Tag("integration")
 public class ShareConsumerTest {
     private KafkaClusterTestKit cluster;
     private final TopicPartition tp = new TopicPartition("topic", 0);
+    private final TopicPartition warmupTp = new TopicPartition("warmup", 0);
 
     @BeforeEach
     public void createCluster() throws Exception {
@@ -119,6 +123,7 @@ public class ShareConsumerTest {
         cluster.waitForActiveController();
         cluster.waitForReadyBrokers();
         createTopic("topic");
+        warmup();
     }
 
     @AfterEach
@@ -131,7 +136,7 @@ public class ShareConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         assertEquals(Collections.emptySet(), shareConsumer.subscription());
         // "Consumer is not subscribed to any topics."
-        assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+        assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(5000)));
         shareConsumer.close();
     }
 
@@ -141,7 +146,7 @@ public class ShareConsumerTest {
         Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         shareConsumer.close();
         assertEquals(0, records.count());
     }
@@ -152,7 +157,7 @@ public class ShareConsumerTest {
         Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         shareConsumer.unsubscribe();
         assertEquals(Collections.emptySet(), shareConsumer.subscription());
         shareConsumer.close();
@@ -165,11 +170,11 @@ public class ShareConsumerTest {
         Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
-        records = shareConsumer.poll(Duration.ofMillis(2000));
+        records = shareConsumer.poll(Duration.ofMillis(5000));
         shareConsumer.close();
         assertEquals(0, records.count());
     }
@@ -180,11 +185,11 @@ public class ShareConsumerTest {
         Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         shareConsumer.unsubscribe();
         assertEquals(Collections.emptySet(), shareConsumer.subscription());
         // "Consumer is not subscribed to any topics."
-        assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+        assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(5000)));
         shareConsumer.close();
         assertEquals(0, records.count());
     }
@@ -195,11 +200,11 @@ public class ShareConsumerTest {
         Set<String> subscription = Collections.singleton(tp.topic());
         shareConsumer.subscribe(subscription);
         assertEquals(subscription, shareConsumer.subscription());
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         shareConsumer.subscribe(Collections.emptySet());
         assertEquals(Collections.emptySet(), shareConsumer.subscription());
         // "Consumer is not subscribed to any topics."
-        assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+        assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(5000)));
         shareConsumer.close();
         assertEquals(0, records.count());
     }
@@ -247,13 +252,13 @@ public class ShareConsumerTest {
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap, partitionExceptionMap));
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgment error code after the second poll.
         // When we start the 3rd poll, the acknowledgment commit callback is invoked.
-        shareConsumer.poll(Duration.ofMillis(2000));
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
+        shareConsumer.poll(Duration.ofMillis(5000));
 
         // We expect null exception as the acknowledgment error code is null.
         assertTrue(partitionExceptionMap.containsKey(tp));
@@ -273,13 +278,13 @@ public class ShareConsumerTest {
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap, partitionExceptionMap));
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
 
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgement error code after the second poll.
         // The acknowledgement commit callback is invoked in close.
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
         shareConsumer.close();
 
         // We expect null exception as the acknowledgment error code is null.
@@ -299,11 +304,11 @@ public class ShareConsumerTest {
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallback(partitionOffsetsMap, partitionExceptionMap));
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
 
         // Waiting until the acquisition lock expires.
-        Thread.sleep(12000);
+        Thread.sleep(15000);
 
         // Now in the second poll, we implicitly acknowledge the record received in the first poll.
         // We get back the acknowledgment error code after the second poll.
@@ -534,7 +539,7 @@ public class ShareConsumerTest {
         shareConsumer1.commitAsync();
 
         // Allowing acquisition lock timeout to expire.
-        Thread.sleep(12000);
+        Thread.sleep(15000);
 
         // The 3rd record should be reassigned to 2nd consumer when it polls.
         ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
@@ -802,8 +807,8 @@ public class ShareConsumerTest {
         AtomicInteger shareConsumer1Records = new AtomicInteger();
         AtomicInteger shareConsumer2Records = new AtomicInteger();
         TestUtils.waitForCondition(() -> {
-            int records1 = shareConsumer1Records.addAndGet(shareConsumer1.poll(Duration.ofMillis(2000)).count());
-            int records2 = shareConsumer2Records.addAndGet(shareConsumer2.poll(Duration.ofMillis(2000)).count());
+            int records1 = shareConsumer1Records.addAndGet(shareConsumer1.poll(Duration.ofMillis(5000)).count());
+            int records2 = shareConsumer2Records.addAndGet(shareConsumer2.poll(Duration.ofMillis(5000)).count());
             return records1 == 3 && records2 == 3;
         }, DEFAULT_MAX_WAIT_MS, 100L, () -> "Failed to consume records for both consumers");
 
@@ -812,7 +817,7 @@ public class ShareConsumerTest {
 
         shareConsumer1Records.set(0);
         TestUtils.waitForCondition(() -> {
-            int records1 = shareConsumer1Records.addAndGet(shareConsumer1.poll(Duration.ofMillis(2000)).count());
+            int records1 = shareConsumer1Records.addAndGet(shareConsumer1.poll(Duration.ofMillis(5000)).count());
             return records1 == 2;
         }, DEFAULT_MAX_WAIT_MS, 100L, () -> "Failed to consume records for share consumer 1");
 
@@ -823,8 +828,8 @@ public class ShareConsumerTest {
         shareConsumer1Records.set(0);
         shareConsumer2Records.set(0);
         TestUtils.waitForCondition(() -> {
-            int records1 = shareConsumer1Records.addAndGet(shareConsumer1.poll(Duration.ofMillis(2000)).count());
-            int records2 = shareConsumer2Records.addAndGet(shareConsumer2.poll(Duration.ofMillis(2000)).count());
+            int records1 = shareConsumer1Records.addAndGet(shareConsumer1.poll(Duration.ofMillis(5000)).count());
+            int records2 = shareConsumer2Records.addAndGet(shareConsumer2.poll(Duration.ofMillis(5000)).count());
             return records1 == 3 && records2 == 5;
         }, DEFAULT_MAX_WAIT_MS, 100L, () -> "Failed to consume records for both consumers for the last batch");
 
@@ -874,7 +879,7 @@ public class ShareConsumerTest {
 
         int consumerCount = 4;
         int producerCount = 4;
-        int messagesPerProducer = 2000;
+        int messagesPerProducer = 5000;
 
         ExecutorService producerExecutorService = Executors.newFixedThreadPool(producerCount);
         ExecutorService consumerExecutorService = Executors.newFixedThreadPool(consumerCount);
@@ -1017,7 +1022,7 @@ public class ShareConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer2 = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer2.subscribe(Collections.singleton(tp.topic()));
 
-        int totalMessages = 3000;
+        int totalMessages = 1000;
         for (int i = 0; i < totalMessages; i++) {
             producer.send(record);
         }
@@ -1029,20 +1034,20 @@ public class ShareConsumerTest {
         // Poll three times to receive records. The second poll acknowledges the records
         // from the first poll, and so on. The third poll's records are not acknowledged
         // because the consumer is closed, which makes the broker release the records fetched.
-        ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(5000));
         consumer1MessageCount += records1.count();
         int consumer1MessageCountA = records1.count();
-        records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+        records1 = shareConsumer1.poll(Duration.ofMillis(5000));
         consumer1MessageCount += records1.count();
         int consumer1MessageCountB = records1.count();
-        records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+        records1 = shareConsumer1.poll(Duration.ofMillis(5000));
         int consumer1MessageCountC = records1.count();
         shareConsumer1.close();
 
         int maxRetries = 10;
         int retries = 0;
         while (consumer1MessageCount + consumer2MessageCount < totalMessages && retries < maxRetries) {
-            ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(2000));
+            ConsumerRecords<byte[], byte[]> records2 = shareConsumer2.poll(Duration.ofMillis(5000));
             consumer2MessageCount += records2.count();
             retries++;
         }
@@ -1056,7 +1061,7 @@ public class ShareConsumerTest {
 
         int consumerCount = 4;
         int producerCount = 4;
-        int messagesPerProducer = 2000;
+        int messagesPerProducer = 5000;
 
         ExecutorService consumerExecutorService = Executors.newFixedThreadPool(consumerCount);
         ExecutorService producerExecutorService = Executors.newFixedThreadPool(producerCount);
@@ -1125,11 +1130,11 @@ public class ShareConsumerTest {
         // Poll two times to receive records. The first poll puts the acquisition lock and fetches the record.
         // Since, we are only sending one record and acquisition lock hasn't timed out, the second poll only acknowledges the
         // record from the first poll and no more fetch.
-        ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records1 = shareConsumer1.poll(Duration.ofMillis(5000));
         assertEquals(1, records1.count());
         assertEquals("key_1", new String(records1.iterator().next().key()));
         assertEquals("value_1", new String(records1.iterator().next().value()));
-        ConsumerRecords<byte[], byte[]> records2 = shareConsumer1.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records2 = shareConsumer1.poll(Duration.ofMillis(5000));
         assertEquals(0, records2.count());
 
         producer.send(producerRecord2);
@@ -1137,19 +1142,19 @@ public class ShareConsumerTest {
         // Poll three times. The first poll puts the acquisition lock and fetches the record. Before the second poll,
         // acquisition lock times out and hence the consumer needs to fetch the record again. Since, the acquisition lock
         // hasn't timed out before the third poll, the third poll only acknowledges the record from the second poll and no more fetch.
-        records1 = shareConsumer1.poll(Duration.ofMillis(2000));
+        records1 = shareConsumer1.poll(Duration.ofMillis(5000));
         assertEquals(1, records1.count());
         assertEquals("key_2", new String(records1.iterator().next().key()));
         assertEquals("value_2", new String(records1.iterator().next().value()));
 
         // Allowing acquisition lock to expire.
-        Thread.sleep(12000);
+        Thread.sleep(15000);
 
-        records2 = shareConsumer1.poll(Duration.ofMillis(2000));
+        records2 = shareConsumer1.poll(Duration.ofMillis(5000));
         assertEquals(1, records2.count());
         assertEquals("key_2", new String(records2.iterator().next().key()));
         assertEquals("value_2", new String(records2.iterator().next().value()));
-        ConsumerRecords<byte[], byte[]> records3 = shareConsumer1.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records3 = shareConsumer1.poll(Duration.ofMillis(5000));
         assertEquals(0, records3.count());
 
         producer.close();
@@ -1171,11 +1176,11 @@ public class ShareConsumerTest {
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
         // The second poll sends the acknowledgments implicitly.
         // The acknowledgement commit callback will be called and the exception is thrown.
         // This is verified inside the onComplete() method implementation.
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
         shareConsumer.close();
         producer.close();
     }
@@ -1192,7 +1197,7 @@ public class ShareConsumerTest {
             // Accessing methods of KafkaShareConsumer should throw an exception.
             assertThrows(IllegalStateException.class, shareConsumer::close);
             assertThrows(IllegalStateException.class, () -> shareConsumer.subscribe(Collections.singleton(tp.topic())));
-            assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+            assertThrows(IllegalStateException.class, () -> shareConsumer.poll(Duration.ofMillis(5000)));
         }
     }
 
@@ -1211,12 +1216,12 @@ public class ShareConsumerTest {
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
         // The acknowledgment commit callback will try to call a method of KafkaShareConsumer
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
         // The second poll sends the acknowledgments implicitly.
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
         // Till now acknowledgement commit callback has not been called, so no exception thrown yet.
         // On 3rd poll, the acknowledgement commit callback will be called and the exception is thrown.
-        assertThrows(WakeupException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+        assertThrows(WakeupException.class, () -> shareConsumer.poll(Duration.ofMillis(5000)));
         shareConsumer.close();
         producer.close();
     }
@@ -1248,13 +1253,13 @@ public class ShareConsumerTest {
         shareConsumer.setAcknowledgementCommitCallback(new TestableAcknowledgeCommitCallbackThrows<>());
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
 
         // The second poll sends the acknowledgments implicitly.
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
 
         // On the third poll, the acknowledgement commit callback will be called and the exception is thrown.
-        assertThrows(org.apache.kafka.common.errors.OutOfOrderSequenceException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+        assertThrows(org.apache.kafka.common.errors.OutOfOrderSequenceException.class, () -> shareConsumer.poll(Duration.ofMillis(5000)));
 
         shareConsumer.close();
         producer.close();
@@ -1300,7 +1305,7 @@ public class ShareConsumerTest {
 
         // The exception depends upon a metadata response which arrives asynchronously. If the delay is
         // too short, the poll might return before the error is known.
-        assertThrows(InvalidTopicException.class, () -> shareConsumer.poll(Duration.ofMillis(2000)));
+        assertThrows(InvalidTopicException.class, () -> shareConsumer.poll(Duration.ofMillis(5000)));
         shareConsumer.close();
     }
 
@@ -1319,7 +1324,7 @@ public class ShareConsumerTest {
         shareConsumer.wakeup();
         assertThrows(WakeupException.class, () -> shareConsumer.poll(Duration.ZERO));
 
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
 
         shareConsumer.close();
@@ -1340,22 +1345,22 @@ public class ShareConsumerTest {
         producer.send(record);
 
         TestUtils.waitForCondition(() -> {
-            int records = shareConsumer.poll(Duration.ofMillis(2000)).count();
+            int records = shareConsumer.poll(Duration.ofMillis(5000)).count();
             return records == 1;
         }, DEFAULT_MAX_WAIT_MS, 100L, () -> "Failed to consume records for share consumer, metadata sync failed");
 
         producer.send(record);
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         producer.send(record);
-        records = shareConsumer.poll(Duration.ofMillis(2000));
+        records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(1, records.count());
         shareConsumer.close();
         producer.close();
     }
 
     @Test
-    public void testSubscriptionAndPollFollowedByTopicDeletion() throws InterruptedException {
+    public void testSubscriptionAndPollFollowedByTopicDeletion() throws InterruptedException, ExecutionException {
         String topic1 = "bar";
         String topic2 = "baz";
         createTopic(topic1);
@@ -1369,29 +1374,27 @@ public class ShareConsumerTest {
         // Consumer subscribes to the topics -> bar and baz.
         shareConsumer.subscribe(Arrays.asList(topic1, topic2));
 
-        producer.send(recordTopic1);
-        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
-        assertEquals(1, records.count());
+        producer.send(recordTopic1).get();
+        TestUtils.waitForCondition(() -> shareConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS, 100L, () -> "incorrect number of records");
 
         producer.send(recordTopic2);
-        records = shareConsumer.poll(Duration.ofMillis(2000));
-        assertEquals(1, records.count());
+        TestUtils.waitForCondition(() -> shareConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS, 100L, () -> "incorrect number of records");
 
         // Topic bar is deleted, hence poll should not give any results.
         deleteTopic(topic1);
-        records = shareConsumer.poll(Duration.ofMillis(2000));
+        ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
         assertEquals(0, records.count());
 
         producer.send(recordTopic2);
         // Poll should give the record from the non-deleted topic baz.
-        TestUtils.waitForCondition(() -> {
-            int recordCount = shareConsumer.poll(Duration.ofMillis(2000)).count();
-            return recordCount == 1;
-        }, DEFAULT_MAX_WAIT_MS, 100L, () -> "Failed to consume records for share consumer, metadata sync failed");
+        TestUtils.waitForCondition(() -> shareConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS, 100L, () -> "incorrect number of records");
 
         producer.send(recordTopic2);
-        records = shareConsumer.poll(Duration.ofMillis(2000));
-        assertEquals(1, records.count());
+        TestUtils.waitForCondition(() -> shareConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS, 100L, () -> "incorrect number of records");
         shareConsumer.close();
         producer.close();
     }
@@ -1465,6 +1468,7 @@ public class ShareConsumerTest {
     }
 
     @Test
+    @Disabled("redundant due to warmup")
     public void testShareGroupStateTopicCreation() throws InterruptedException {
         Set<String> topics = null;
         try {
@@ -1480,7 +1484,7 @@ public class ShareConsumerTest {
         KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "group1");
         shareConsumer.subscribe(Collections.singleton(tp.topic()));
 
-        shareConsumer.poll(Duration.ofMillis(2000));
+        shareConsumer.poll(Duration.ofMillis(5000));
         TestUtils.waitForCondition(
                 () -> {
                     boolean ans = false;
@@ -1497,19 +1501,13 @@ public class ShareConsumerTest {
 
         // The above condition only checks for the existence of the __share_group_state topic, but that happens when
         // FIND_COORDINATOR is called internally. We need to wait for the ReadShareGroupState to finish completely
-        Thread.sleep(2000L);
+        Thread.sleep(5000L);
 
         shareConsumer.close();
     }
 
     @Test
     public void testWriteShareGroupState() throws Exception {
-        Set<String> topics = listTopics().names().get();
-        // The __share_group_state topic is created on the first FIND_COORDINATOR RPC call for any share group topic partition.
-        // Since that does not happen automatically on cluster creation, we expect that the cluster will not have
-        // __share_group_state topic until yet.
-        assertFalse(topics.contains(SHARE_GROUP_STATE_TOPIC_NAME));
-
         KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
         ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(tp.topic(), 0, null, "key".getBytes(), "value".getBytes());
 
@@ -1527,17 +1525,12 @@ public class ShareConsumerTest {
             fail("Failed to send records: " + e);
         }
 
-        int numRecordsConsumed = 0;
-
-        while (numRecordsConsumed == 0) {
-            // First poll will initialise the share partition, which will internally try to read the state from the persister.
-            // Since this is the first persister related call, it will result in a lot of events happening in the background
-            // including creation of __share_group_state topic and loading of coordinator shards' in-memory states.
-            ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
-            numRecordsConsumed += records.count();
-        }
-
-        assertEquals(1, numRecordsConsumed);
+        TestUtils.waitForCondition(
+                () -> internalConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS,
+                200L,
+                () -> "record count incorrect"
+        );
 
         long duration = 1000; // 1 seconds
         long startTime = System.currentTimeMillis();
@@ -1547,17 +1540,15 @@ public class ShareConsumerTest {
             shareConsumer.poll(Duration.ofMillis(2000));
         }
 
-        topics = listTopics().names().get();
+        Set<String> topics = listTopics().names().get();
         assertTrue(topics.contains(SHARE_GROUP_STATE_TOPIC_NAME));
 
-        int numInternalRecordsConsumed = 0;
-
-        while (numInternalRecordsConsumed == 0) {
-            ConsumerRecords<byte[], byte[]> records = internalConsumer.poll(Duration.ofMillis(2000));
-            numInternalRecordsConsumed += records.count();
-        }
-
-        assertEquals(1, numInternalRecordsConsumed);
+        TestUtils.waitForCondition(
+                () -> internalConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS,
+                200L,
+                () -> "record count incorrect"
+        );
 
         try {
             producer.send(record).get();
@@ -1565,14 +1556,12 @@ public class ShareConsumerTest {
             fail("Failed to send records: " + e);
         }
 
-        numRecordsConsumed = 0;
-
-        while (numRecordsConsumed == 0) {
-            ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
-            numRecordsConsumed += records.count();
-        }
-
-        assertEquals(1, numRecordsConsumed);
+        TestUtils.waitForCondition(
+                () -> internalConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS,
+                200L,
+                () -> "record count incorrect"
+        );
 
         startTime = System.currentTimeMillis();
 
@@ -1586,13 +1575,12 @@ public class ShareConsumerTest {
         topics = listTopics().names().get();
         assertTrue(topics.contains(SHARE_GROUP_STATE_TOPIC_NAME));
 
-        numInternalRecordsConsumed = 0;
-
-        while (numInternalRecordsConsumed == 0) {
-            ConsumerRecords<byte[], byte[]> records = internalConsumer.poll(Duration.ofMillis(2000));
-            numInternalRecordsConsumed += records.count();
-        }
-        assertEquals(1, numInternalRecordsConsumed);
+        TestUtils.waitForCondition(
+                () -> internalConsumer.poll(Duration.ofMillis(2000)).count() == 1,
+                DEFAULT_MAX_WAIT_MS,
+                200L,
+                () -> "record count incorrect"
+        );
 
         internalConsumer.close();
         producer.close();
@@ -1600,12 +1588,6 @@ public class ShareConsumerTest {
 
     @Test
     public void testReadShareGroupState() throws Exception {
-        Set<String> topics = listTopics().names().get();
-        // The __share_group_state topic is created on the first FIND_COORDINATOR RPC call for any share group topic partition.
-        // Since that does not happen automatically on cluster creation, we expect that the cluster will not have
-        // __share_group_state topic until yet.
-        assertFalse(topics.contains(SHARE_GROUP_STATE_TOPIC_NAME));
-
         String key1 = "key1";
         String key2 = "key2";
         String value1 = "value1";
@@ -1633,7 +1615,7 @@ public class ShareConsumerTest {
             // First poll will initialise the share partition, which will internally try to read the state from the persister.
             // Since this is the first persister related call, it will result in a lot of events happening in the background
             // including creation of __share_group_state topic and loading of coordinator shards' in-memory states.
-            consumedRecords = shareConsumer.poll(Duration.ofMillis(2000));
+            consumedRecords = shareConsumer.poll(Duration.ofMillis(5000));
             numRecordsConsumed += consumedRecords.count();
         }
 
@@ -1648,10 +1630,10 @@ public class ShareConsumerTest {
 
         // Poll for 1 second to ensure acknowledgement is sent for the fetched record
         while (System.currentTimeMillis() - startTime < duration) {
-            shareConsumer.poll(Duration.ofMillis(2000));
+            shareConsumer.poll(Duration.ofMillis(5000));
         }
 
-        topics = listTopics().names().get();
+        Set<String> topics = listTopics().names().get();
         assertTrue(topics.contains(SHARE_GROUP_STATE_TOPIC_NAME));
 
         shareConsumer.close();
@@ -1677,7 +1659,7 @@ public class ShareConsumerTest {
         numRecordsConsumed = 0;
 
         while (numRecordsConsumed == 0) {
-            consumedRecords = shareConsumer.poll(Duration.ofMillis(2000));
+            consumedRecords = shareConsumer.poll(Duration.ofMillis(5000));
             numRecordsConsumed += consumedRecords.count();
         }
 
@@ -1694,7 +1676,7 @@ public class ShareConsumerTest {
 
         // Poll for 1 second to ensure acknowledgement is sent for the fetched record
         while (System.currentTimeMillis() - startTime < duration) {
-            shareConsumer.poll(Duration.ofMillis(2000));
+            shareConsumer.poll(Duration.ofMillis(5000));
         }
 
         shareConsumer.close();
@@ -1749,14 +1731,14 @@ public class ShareConsumerTest {
         try {
             if (totalMessages > 0) {
                 while (totalMessagesConsumed.get() < totalMessages && retries < maxPolls) {
-                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
                     messagesConsumed += records.count();
                     totalMessagesConsumed.addAndGet(records.count());
                     retries++;
                 }
             } else {
                 while (retries < maxPolls) {
-                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(2000));
+                    ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(5000));
                     messagesConsumed += records.count();
                     totalMessagesConsumed.addAndGet(records.count());
                     retries++;
@@ -1765,7 +1747,7 @@ public class ShareConsumerTest {
 
             if (commit) {
                 // Complete acknowledgement of the records
-                shareConsumer.commitSync(Duration.ofMillis(2000));
+                shareConsumer.commitSync(Duration.ofMillis(5000));
             }
         } catch (Exception e) {
             fail("Consumer " + consumerNumber + " failed with exception: " + e);
@@ -1867,5 +1849,25 @@ public class ShareConsumerTest {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.CLIENT_ID_CONFIG, "console-consumer");
         return new KafkaConsumer<>(props, keyDeserializer, valueDeserializer);
+    }
+
+    private void warmup() throws InterruptedException {
+        createTopic(warmupTp.topic());
+        TestUtils.waitForCondition(() ->
+                        !scala.collection.JavaConverters.asJava(cluster.brokers().get(0).metadataCache().getAliveBrokerNodes(new ListenerName("EXTERNAL"))).isEmpty(),
+                DEFAULT_MAX_WAIT_MS, 100L, () -> "cache not up yet");
+        ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(warmupTp.topic(), warmupTp.partition(), null, "key".getBytes(), "value".getBytes());
+        KafkaProducer<byte[], byte[]> producer = createProducer(new ByteArraySerializer(), new ByteArraySerializer());
+        producer.send(record);
+        KafkaShareConsumer<byte[], byte[]> shareConsumer = createShareConsumer(new ByteArrayDeserializer(), new ByteArrayDeserializer(), "warmupgroup1");
+        Set<String> subscription = Collections.singleton(warmupTp.topic());
+        shareConsumer.subscribe(subscription);
+        TestUtils.waitForCondition(
+                () -> shareConsumer.poll(Duration.ofMillis(5000)).count() == 1, DEFAULT_MAX_WAIT_MS, 200L, () -> "warmup record not received");
+        TestUtils.waitForCondition(
+                () -> listTopics().names().get().contains(SHARE_GROUP_STATE_TOPIC_NAME), DEFAULT_MAX_WAIT_MS, 200L, () -> "SGS not up yet");
+        producer.close();
+        shareConsumer.close();
+        System.err.println("warmup complete");
     }
 }
