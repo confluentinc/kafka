@@ -558,6 +558,9 @@ public class PersisterStateManager {
           Node randomNode = randomNode();
           if (randomNode == Node.noNode()) {
             log.error("Unable to find node to use for coordinator lookup.");
+            // fatal failure, cannot retry or progress
+            // fail the RPC
+            handler.findCoordinatorErrorResponse(Errors.COORDINATOR_NOT_AVAILABLE, Errors.COORDINATOR_NOT_AVAILABLE.exception());
             return Collections.emptyList();
           }
           log.debug("Sending find coordinator RPC");
