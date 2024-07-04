@@ -695,11 +695,11 @@ public class SharePartitionManager implements AutoCloseable {
                 metrics.metricName(
                     SHARE_ACK_RATE,
                     METRICS_GROUP_NAME,
-                    "The total number of requests acknowledged for share groups per second."),
+                    "The rate of number of acknowledge requests."),
                 metrics.metricName(
                     SHARE_ACK_COUNT,
                     METRICS_GROUP_NAME,
-                    "The total number of requests acknowledged for share groups.")));
+                    "The number of acknowledge requests.")));
 
             for (Map.Entry<Byte, String> entry : RECORD_ACKS_MAP.entrySet()) {
                 recordAcksSensorMap.put(entry.getKey(), metrics.sensor(String.format("%s-%s-sensor", RECORD_ACK_SENSOR_PREFIX, entry.getValue())));
@@ -708,7 +708,7 @@ public class SharePartitionManager implements AutoCloseable {
                         metrics.metricName(
                             RECORD_ACK_RATE,
                             METRICS_GROUP_NAME,
-                            "The number of records acknowledged per acknowledgement type per second.",
+                            "The rate of number of records acknowledged per acknowledgement type.",
                             ACK_TYPE, entry.getValue()),
                         metrics.metricName(
                             RECORD_ACK_COUNT,

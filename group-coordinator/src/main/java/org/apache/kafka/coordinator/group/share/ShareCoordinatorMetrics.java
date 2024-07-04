@@ -73,12 +73,12 @@ public class ShareCoordinatorMetrics extends CoordinatorMetrics implements AutoC
     shareCoordinatorWriteLatencyAvgSensor.add(
         metrics.metricName("write-latency-avg",
             METRICS_GROUP,
-            "Average latency in write state per second."),
+            "The average time taken for a share-group state write call, including the time to write to the share-group state topic."),
         new Avg());
     shareCoordinatorWriteLatencyTotalSensor.add(
         metrics.metricName("write-latency-max",
             METRICS_GROUP,
-            "Maximum total latency in write state per second."),
+            "The maximum time taken for a share-group state write call, including the time to write to the share-group state topic."),
         new Max());
 
     this.globalSensors = Collections.unmodifiableMap(Utils.mkMap(
