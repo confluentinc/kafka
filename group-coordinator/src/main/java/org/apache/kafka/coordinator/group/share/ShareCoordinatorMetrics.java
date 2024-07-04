@@ -22,7 +22,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
-import org.apache.kafka.common.metrics.stats.CumulativeSum;
+import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Meter;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.coordinator.group.metrics.CoordinatorMetrics;
@@ -73,13 +73,13 @@ public class ShareCoordinatorMetrics extends CoordinatorMetrics implements AutoC
     shareCoordinatorWriteLatencyAvgSensor.add(
         metrics.metricName("write-latency-avg",
             METRICS_GROUP,
-            "Average latency in write state per second."),
+            "The average time taken for a share-group state write call, including the time to write to the share-group state topic."),
         new Avg());
     shareCoordinatorWriteLatencyTotalSensor.add(
-        metrics.metricName("write-latency-total",
+        metrics.metricName("write-latency-max",
             METRICS_GROUP,
-            "Cumulative total latency in write state per second."),
-        new CumulativeSum());
+            "The maximum time taken for a share-group state write call, including the time to write to the share-group state topic."),
+        new Max());
 
     this.globalSensors = Collections.unmodifiableMap(Utils.mkMap(
         Utils.mkEntry(SHARE_COORDINATOR_WRITE_SENSOR_NAME, shareCoordinatorWriteSensor),

@@ -191,7 +191,7 @@ class ShareCoordinatorServiceTest {
     verify(time, times(3)).hiResClockMs();
     Set<MetricName> expectedMetrics = new HashSet<>(Arrays.asList(
         metrics.metricName("write-latency-avg", ShareCoordinatorMetrics.METRICS_GROUP),
-        metrics.metricName("write-latency-total", ShareCoordinatorMetrics.METRICS_GROUP),
+        metrics.metricName("write-latency-max", ShareCoordinatorMetrics.METRICS_GROUP),
         metrics.metricName("write-rate", ShareCoordinatorMetrics.METRICS_GROUP),
         metrics.metricName("write-total", ShareCoordinatorMetrics.METRICS_GROUP)
     ));
