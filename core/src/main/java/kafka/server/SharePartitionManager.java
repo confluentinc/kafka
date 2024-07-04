@@ -16,6 +16,7 @@
  */
 package kafka.server;
 
+import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
@@ -680,9 +681,9 @@ public class SharePartitionManager implements AutoCloseable {
         private final Sensor partitionLoadTimeSensor;
 
         static {
-            RECORD_ACKS_MAP.put((byte) 1, "accept");
-            RECORD_ACKS_MAP.put((byte) 2, "release");
-            RECORD_ACKS_MAP.put((byte) 3, "reject");
+            RECORD_ACKS_MAP.put((byte) 1, AcknowledgeType.ACCEPT.toString());
+            RECORD_ACKS_MAP.put((byte) 2, AcknowledgeType.RELEASE.toString());
+            RECORD_ACKS_MAP.put((byte) 3, AcknowledgeType.REJECT.toString());
         }
 
         public ShareGroupMetrics(Metrics metrics, Time time) {
@@ -694,11 +695,11 @@ public class SharePartitionManager implements AutoCloseable {
                 metrics.metricName(
                     SHARE_ACK_RATE,
                     METRICS_GROUP_NAME,
-                    "The total number of offsets acknowledged for share groups per second."),
+                    "The rate of number of acknowledge requests."),
                 metrics.metricName(
                     SHARE_ACK_COUNT,
                     METRICS_GROUP_NAME,
-                    "The total number of offsets acknowledged for share groups.")));
+                    "The number of acknowledge requests.")));
 
             for (Map.Entry<Byte, String> entry : RECORD_ACKS_MAP.entrySet()) {
                 recordAcksSensorMap.put(entry.getKey(), metrics.sensor(String.format("%s-%s-sensor", RECORD_ACK_SENSOR_PREFIX, entry.getValue())));
@@ -707,7 +708,7 @@ public class SharePartitionManager implements AutoCloseable {
                         metrics.metricName(
                             RECORD_ACK_RATE,
                             METRICS_GROUP_NAME,
-                            "The number of records acknowledged per acknowledgement type per second.",
+                            "The rate of number of records acknowledged per acknowledgement type.",
                             ACK_TYPE, entry.getValue()),
                         metrics.metricName(
                             RECORD_ACK_COUNT,
