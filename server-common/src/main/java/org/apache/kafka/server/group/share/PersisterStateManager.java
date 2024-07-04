@@ -276,9 +276,9 @@ public class PersisterStateManager {
           enqueue(this);
           break;
 
-        case COORDINATOR_NOT_AVAILABLE: // retryable error codes
+        case COORDINATOR_NOT_AVAILABLE: // retriable error codes
         case COORDINATOR_LOAD_IN_PROGRESS:
-          log.warn("Received retryable error in find coordinator {}", error.message());
+          log.warn("Received retriable error in find coordinator: {}", error.message());
           if (findCoordattempts >= this.maxFindCoordAttempts) {
             log.error("Exhausted max retries to find coordinator without success.");
             findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
