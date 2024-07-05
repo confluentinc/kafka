@@ -510,7 +510,7 @@ public class SharePartitionManager implements AutoCloseable {
                     if (shareSession.epoch != reqMetadata.epoch()) {
                         log.debug("Share session error for {}: expected epoch {}, but got {} instead", key,
                                 shareSession.epoch, reqMetadata.epoch());
-                        throw  Errors.INVALID_SHARE_SESSION_EPOCH.exception();
+                        throw Errors.INVALID_SHARE_SESSION_EPOCH.exception();
                     } else {
                         cache.touch(shareSession, time.milliseconds());
                         shareSession.epoch = ShareFetchMetadata.nextEpoch(shareSession.epoch);
@@ -742,8 +742,6 @@ public class SharePartitionManager implements AutoCloseable {
         void recordAcknowledgement(byte ackType) {
             if (recordAcksSensorMap.containsKey(ackType)) {
                 recordAcksSensorMap.get(ackType).record(1.0);
-            } else {
-                log.error("Unknown ack type {}", ackType);
             }
         }
 
