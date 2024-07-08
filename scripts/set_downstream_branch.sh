@@ -32,6 +32,7 @@ kafkaMuckrakeVersionMap["3.4"]="7.4.x"
 kafkaMuckrakeVersionMap["3.5"]="7.5.x"
 kafkaMuckrakeVersionMap["3.6"]="7.6.x"
 kafkaMuckrakeVersionMap["3.7"]="7.7.x"
+kafkaMuckrakeVersionMap["3.8"]="7.8.x"
 kafkaMuckrakeVersionMap["trunk"]="master"
 kafkaMuckrakeVersionMap["master"]="master"
 
