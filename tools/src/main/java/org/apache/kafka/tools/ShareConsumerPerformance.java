@@ -81,10 +81,11 @@ public class ShareConsumerPerformance {
                 shareConsumer.close();
             });
 
-            // print final stats
+            // Print final stats for share group.
             double elapsedSec = (endMs - startMs) / 1_000.0;
             long fetchTimeInMs = (endMs - startMs) - joinTimeMs.get();
-            printStats(totalBytesRead.get(), totalMessagesRead.get(), elapsedSec, fetchTimeInMs, startMs, endMs, options.dateFormat());
+            printStats(totalBytesRead.get(), totalMessagesRead.get(), elapsedSec, fetchTimeInMs, startMs, endMs,
+                    options.dateFormat(), -1);
 
             if (!shareConsumersMetrics.isEmpty()) {
                 for (Map<MetricName, ? extends Metric> metrics : shareConsumersMetrics)
@@ -112,7 +113,7 @@ public class ShareConsumerPerformance {
         long recordFetchTimeoutMs = options.recordFetchTimeoutMs();
         shareConsumers.forEach(shareConsumer -> shareConsumer.subscribe(options.topic()));
 
-        // now start the benchmark
+        // Now start the benchmark.
         long currentTimeMs = System.currentTimeMillis();
         AtomicLong messagesRead = new AtomicLong(0);
         AtomicLong bytesRead = new AtomicLong(0);
@@ -132,9 +133,10 @@ public class ShareConsumerPerformance {
             System.out.println("Error while consuming messages in share consumer: " + e.getMessage());
         }
 
-        if (messagesRead.get() < numMessages)
+        if (messagesRead.get() < numMessages) {
             System.out.printf("WARNING: Exiting before consuming the expected number of messages: timeout (%d ms) exceeded. " +
-                "You can use the --timeout option to increase the timeout.%n", recordFetchTimeoutMs);
+                    "You can use the --timeout option to increase the timeout.%n", recordFetchTimeoutMs);
+        }
         totalMessagesRead.set(messagesRead.get());
         totalBytesRead.set(bytesRead.get());
     }
@@ -149,18 +151,13 @@ public class ShareConsumerPerformance {
                                                               long startMs,
                                                               ShareConsumerPerfOptions options,
                                                               int index) {
-        long numMessages = options.numMessages();
-        long recordFetchTimeoutMs = options.recordFetchTimeoutMs();
-        long reportingIntervalMs = options.reportingIntervalMs();
-        boolean showDetailedStats = options.showDetailedStats();
         SimpleDateFormat dateFormat = options.dateFormat();
-        boolean showShareConsumerStats = options.showShareConsumerStats();
 
         long lastBytesRead = 0L;
         long lastMessagesRead = 0L;
         long messagesReadByConsumer = 0L;
         long bytesReadByConsumer = 0L;
-        while (totalMessagesRead.get() < numMessages && currentTimeMs - lastConsumedTimeMs <= recordFetchTimeoutMs) {
+        while (totalMessagesRead.get() < options.numMessages() && currentTimeMs - lastConsumedTimeMs <= options.recordFetchTimeoutMs()) {
             ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(100));
             currentTimeMs = System.currentTimeMillis();
             if (!records.isEmpty())
@@ -176,8 +173,8 @@ public class ShareConsumerPerformance {
                     bytesReadByConsumer += record.value().length;
                     totalBytesRead.addAndGet(record.value().length);
                 }
-                if (currentTimeMs - lastReportTimeMs >= reportingIntervalMs) {
-                    if (showDetailedStats)
+                if (currentTimeMs - lastReportTimeMs >= options.reportingIntervalMs()) {
+                    if (options.showDetailedStats())
                         printConsumerProgress(0, bytesReadByConsumer, lastBytesRead, messagesReadByConsumer, lastMessagesRead,
                                 lastReportTimeMs, currentTimeMs, dateFormat, joinTimeMsInSingleRound.get());
                     joinTimeMsInSingleRound = new AtomicLong(0);
@@ -188,24 +185,39 @@ public class ShareConsumerPerformance {
             }
         }
 
-        if (showShareConsumerStats) {
+        if (options.showShareConsumerStats()) {
             long endMs = System.currentTimeMillis();
-            // print stats for consumer
+            // Print stats for share consumer.
             double elapsedSec = (endMs - startMs) / 1_000.0;
             long fetchTimeInMs = endMs - startMs;
-            System.out.printf("Share consumer %s consumption metrics- ", index + 1);
-            printStats(bytesReadByConsumer, messagesReadByConsumer, elapsedSec, fetchTimeInMs, startMs, endMs, dateFormat);
+            printStats(bytesReadByConsumer, messagesReadByConsumer, elapsedSec, fetchTimeInMs, startMs, endMs, dateFormat, index + 1);
         }
     }
 
+    // Prints stats for both share consumer and share group. For share group, index is -1. For share consumer,
+    // index is >= 1.
     private static void printStats(long bytesRead,
                                    long messagesRead,
                                    double elapsedSec,
                                    long fetchTimeInMs,
                                    long startMs,
                                    long endMs,
-                                   SimpleDateFormat dateFormat) {
+                                   SimpleDateFormat dateFormat,
+                                   int index) {
         double totalMbRead = (bytesRead * 1.0) / (1024 * 1024);
+        if (index != -1) {
+            System.out.printf("Share consumer %s consumption metrics- %s, %s, %.4f, %.4f, %.4f, %d, %d%n",
+                    index,
+                    dateFormat.format(startMs),
+                    dateFormat.format(endMs),
+                    totalMbRead,
+                    totalMbRead / elapsedSec,
+                    messagesRead / elapsedSec,
+                    messagesRead,
+                    fetchTimeInMs
+                    );
+            return;
+        }
         System.out.printf("%s, %s, %.4f, %.4f, %.4f, %d, %d%n",
                 dateFormat.format(startMs),
                 dateFormat.format(endMs),
