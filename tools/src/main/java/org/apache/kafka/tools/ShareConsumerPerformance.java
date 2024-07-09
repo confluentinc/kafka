@@ -62,7 +62,7 @@ public class ShareConsumerPerformance {
             AtomicLong joinTimeMsInSingleRound = new AtomicLong(0);
 
             if (!options.hideHeader())
-                printHeader(options.showDetailedStats());
+                printHeader();
 
             List<KafkaShareConsumer<byte[], byte[]>> shareConsumers = new ArrayList<>();
             for (int i = 0; i < options.threads(); i++) {
@@ -84,18 +84,7 @@ public class ShareConsumerPerformance {
             // print final stats
             double elapsedSec = (endMs - startMs) / 1_000.0;
             long fetchTimeInMs = (endMs - startMs) - joinTimeMs.get();
-            if (!options.showDetailedStats()) {
-                double totalMbRead = (totalBytesRead.get() * 1.0) / (1024 * 1024);
-                System.out.printf("%s, %s, %.4f, %.4f, %.4f, %d, %d%n",
-                    options.dateFormat().format(startMs),
-                    options.dateFormat().format(endMs),
-                    totalMbRead,
-                    totalMbRead / elapsedSec,
-                    totalMessagesRead.get() / elapsedSec,
-                    totalMessagesRead.get(),
-                    fetchTimeInMs
-                );
-            }
+            printStats(totalBytesRead.get(), totalMessagesRead.get(), elapsedSec, fetchTimeInMs, startMs, endMs, options.dateFormat());
 
             if (!shareConsumersMetrics.isEmpty()) {
                 for (Map<MetricName, ? extends Metric> metrics : shareConsumersMetrics)
@@ -108,7 +97,7 @@ public class ShareConsumerPerformance {
         }
     }
 
-    protected static void printHeader(boolean showDetailedStats) {
+    protected static void printHeader() {
         String newFieldsInHeader = ", fetch.time.ms";
         System.out.printf("start.time, end.time, data.consumed.in.MB, MB.sec, nMsg.sec, data.consumed.in.nMsg%s%n", newFieldsInHeader);
     }
@@ -204,18 +193,28 @@ public class ShareConsumerPerformance {
             // print stats for consumer
             double elapsedSec = (endMs - startMs) / 1_000.0;
             long fetchTimeInMs = endMs - startMs;
-            double mbReadByConsumer = (bytesReadByConsumer * 1.0) / (1024 * 1024);
-            System.out.printf("Share consumer %s consumption metrics %s, %s, %.4f, %.4f, %.4f, %d, %d%n",
-                    index + 1,
-                    dateFormat.format(startMs),
-                    dateFormat.format(endMs),
-                    mbReadByConsumer,
-                    mbReadByConsumer / elapsedSec,
-                    messagesReadByConsumer / elapsedSec,
-                    messagesReadByConsumer,
-                    fetchTimeInMs
-            );
+            System.out.printf("Share consumer %s consumption metrics- ", index + 1);
+            printStats(bytesReadByConsumer, messagesReadByConsumer, elapsedSec, fetchTimeInMs, startMs, endMs, dateFormat);
         }
+    }
+
+    private static void printStats(long bytesRead,
+                                   long messagesRead,
+                                   double elapsedSec,
+                                   long fetchTimeInMs,
+                                   long startMs,
+                                   long endMs,
+                                   SimpleDateFormat dateFormat) {
+        double totalMbRead = (bytesRead * 1.0) / (1024 * 1024);
+        System.out.printf("%s, %s, %.4f, %.4f, %.4f, %d, %d%n",
+                dateFormat.format(startMs),
+                dateFormat.format(endMs),
+                totalMbRead,
+                totalMbRead / elapsedSec,
+                messagesRead / elapsedSec,
+                messagesRead,
+                fetchTimeInMs
+        );
     }
 
     protected static class ShareConsumerPerfOptions extends CommandDefaultOptions {
