@@ -128,7 +128,8 @@ public class ShareConsumerPerformance {
         executorService.shutdown();
 
         try {
-            executorService.awaitTermination(recordFetchTimeoutMs, TimeUnit.MILLISECONDS);
+            // Adding 100 ms to the timeout so all the threads can finish.
+            executorService.awaitTermination(recordFetchTimeoutMs + 100, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             System.out.println("Error while consuming messages in share consumer: " + e.getMessage());
         }
