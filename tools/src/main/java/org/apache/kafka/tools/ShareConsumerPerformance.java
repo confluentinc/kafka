@@ -35,10 +35,15 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static joptsimple.util.RegexMatcher.regex;
@@ -49,7 +54,7 @@ public class ShareConsumerPerformance {
 
     public static void main(String[] args) {
         try {
-            LOG.info("Starting share consumer...");
+            LOG.info("Starting share consumer/consumers...");
             ShareConsumerPerfOptions options = new ShareConsumerPerfOptions(args);
             AtomicLong totalMessagesRead = new AtomicLong(0);
             AtomicLong totalBytesRead = new AtomicLong(0);
@@ -59,22 +64,22 @@ public class ShareConsumerPerformance {
             if (!options.hideHeader())
                 printHeader(options.showDetailedStats());
 
-            KafkaShareConsumer<byte[], byte[]> shareConsumer = new KafkaShareConsumer<>(options.props());
-            long bytesRead = 0L;
-            long messagesRead = 0L;
-            long lastBytesRead = 0L;
-            long lastMessagesRead = 0L;
-            long currentTimeMs = System.currentTimeMillis();
-            long startMs = currentTimeMs;
-            consume(shareConsumer, options, totalMessagesRead, totalBytesRead, bytesRead, messagesRead, lastBytesRead,
-                    lastMessagesRead, joinTimeMsInSingleRound);
+            List<KafkaShareConsumer<byte[], byte[]>> shareConsumers = new ArrayList<>();
+            for (int i = 0; i < options.threads(); i++) {
+                shareConsumers.add(new KafkaShareConsumer<>(options.props()));
+            }
+            long startMs = System.currentTimeMillis();
+            consume(shareConsumers, options, totalMessagesRead, totalBytesRead, joinTimeMsInSingleRound, startMs);
             long endMs = System.currentTimeMillis();
 
-            Map<MetricName, ? extends Metric> metrics = null;
-            if (options.printMetrics())
-                metrics = shareConsumer.metrics();
-            shareConsumer.commitAsync();
-            shareConsumer.close();
+            List<Map<MetricName, ? extends Metric>> shareConsumersMetrics = new ArrayList<>();
+            if (options.printMetrics()) {
+                shareConsumers.forEach(shareConsumer -> shareConsumersMetrics.add(shareConsumer.metrics()));
+            }
+            shareConsumers.forEach(shareConsumer -> {
+                shareConsumer.commitAsync();
+                shareConsumer.close();
+            });
 
             // print final stats
             double elapsedSec = (endMs - startMs) / 1_000.0;
@@ -92,8 +97,10 @@ public class ShareConsumerPerformance {
                 );
             }
 
-            if (metrics != null)
-                ToolsUtils.printMetrics(metrics);
+            if (!shareConsumersMetrics.isEmpty()) {
+                for (Map<MetricName, ? extends Metric> metrics : shareConsumersMetrics)
+                    ToolsUtils.printMetrics(metrics);
+            }
         } catch (Throwable e) {
             System.err.println(e.getMessage());
             System.err.println(Utils.stackTrace(e));
@@ -109,55 +116,108 @@ public class ShareConsumerPerformance {
             System.out.printf("time, threadId, data.consumed.in.MB, MB.sec, data.consumed.in.nMsg, nMsg.sec%s%n", newFieldsInHeader);
     }
 
-    private static void consume(KafkaShareConsumer<byte[], byte[]> shareConsumer,
+    private static void consume(List<KafkaShareConsumer<byte[], byte[]>> shareConsumers,
                                 ShareConsumerPerfOptions options,
                                 AtomicLong totalMessagesRead,
                                 AtomicLong totalBytesRead,
-                                long bytesRead,
-                                long messagesRead,
-                                long lastBytesRead,
-                                long lastMessagesRead,
-                                AtomicLong joinTimeMsInSingleRound) {
+                                AtomicLong joinTimeMsInSingleRound,
+                                long startMs) {
         long numMessages = options.numMessages();
         long recordFetchTimeoutMs = options.recordFetchTimeoutMs();
         long reportingIntervalMs = options.reportingIntervalMs();
         boolean showDetailedStats = options.showDetailedStats();
         SimpleDateFormat dateFormat = options.dateFormat();
-        shareConsumer.subscribe(options.topic());
+        shareConsumers.forEach(shareConsumer -> shareConsumer.subscribe(options.topic()));
 
         // now start the benchmark
         long currentTimeMs = System.currentTimeMillis();
-        long lastReportTimeMs = currentTimeMs;
-        long lastConsumedTimeMs = currentTimeMs;
+        AtomicLong messagesRead = new AtomicLong(0);
+        AtomicLong bytesRead = new AtomicLong(0);
 
-        while (messagesRead < numMessages && currentTimeMs - lastConsumedTimeMs <= recordFetchTimeoutMs) {
+        ExecutorService executorService = Executors.newFixedThreadPool(shareConsumers.size());
+        for (int i = 0; i < shareConsumers.size(); i++) {
+            final int index = i;
+            executorService.submit(() -> consumeMessagesForSingleShareConsumer(numMessages, currentTimeMs,
+                    currentTimeMs, recordFetchTimeoutMs, reportingIntervalMs, shareConsumers.get(index), currentTimeMs,
+                    showDetailedStats, joinTimeMsInSingleRound, dateFormat, messagesRead, bytesRead, startMs));
+        }
+        executorService.shutdown();
+
+        try {
+            executorService.awaitTermination(recordFetchTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            System.out.println("Error while consuming messages in share consumer: " + e.getMessage());
+        }
+
+        if (messagesRead.get() < numMessages)
+            System.out.printf("WARNING: Exiting before consuming the expected number of messages: timeout (%d ms) exceeded. " +
+                "You can use the --timeout option to increase the timeout.%n", recordFetchTimeoutMs);
+        totalMessagesRead.set(messagesRead.get());
+        totalBytesRead.set(bytesRead.get());
+    }
+
+    private static void consumeMessagesForSingleShareConsumer(long numMessages,
+                                                              long currentTimeMs,
+                                                              long lastConsumedTimeMs,
+                                                              long recordFetchTimeoutMs,
+                                                              long reportingIntervalMs,
+                                                              KafkaShareConsumer<byte[], byte[]> shareConsumer,
+                                                              long lastReportTimeMs,
+                                                              boolean showDetailedStats,
+                                                              AtomicLong joinTimeMsInSingleRound,
+                                                              SimpleDateFormat dateFormat,
+                                                              AtomicLong totalMessagesRead,
+                                                              AtomicLong totalBytesRead,
+                                                              long startMs) {
+        long lastBytesRead = 0L;
+        long lastMessagesRead = 0L;
+        long messagesReadByConsumer = 0L;
+        long bytesReadByConsumer = 0L;
+        while (totalMessagesRead.get() < numMessages && currentTimeMs - lastConsumedTimeMs <= recordFetchTimeoutMs) {
             ConsumerRecords<byte[], byte[]> records = shareConsumer.poll(Duration.ofMillis(100));
             currentTimeMs = System.currentTimeMillis();
             if (!records.isEmpty())
                 lastConsumedTimeMs = currentTimeMs;
             for (ConsumerRecord<byte[], byte[]> record : records) {
-                messagesRead += 1;
-                if (record.key() != null)
-                    bytesRead += record.key().length;
-                if (record.value() != null)
-                    bytesRead += record.value().length;
+                messagesReadByConsumer += 1;
+                totalMessagesRead.addAndGet(1);
+                if (record.key() != null) {
+                    bytesReadByConsumer += record.key().length;
+                    totalBytesRead.addAndGet(record.key().length);
+                }
+                if (record.value() != null) {
+                    bytesReadByConsumer += record.value().length;
+                    totalBytesRead.addAndGet(record.value().length);
+                }
                 if (currentTimeMs - lastReportTimeMs >= reportingIntervalMs) {
                     if (showDetailedStats)
-                        printConsumerProgress(0, bytesRead, lastBytesRead, messagesRead, lastMessagesRead,
-                            lastReportTimeMs, currentTimeMs, dateFormat, joinTimeMsInSingleRound.get());
+                        printConsumerProgress(0, bytesReadByConsumer, lastBytesRead, messagesReadByConsumer, lastMessagesRead,
+                                lastReportTimeMs, currentTimeMs, dateFormat, joinTimeMsInSingleRound.get());
                     joinTimeMsInSingleRound = new AtomicLong(0);
                     lastReportTimeMs = currentTimeMs;
-                    lastMessagesRead = messagesRead;
-                    lastBytesRead = bytesRead;
+                    lastMessagesRead = messagesReadByConsumer;
+                    lastBytesRead = bytesReadByConsumer;
                 }
             }
         }
 
-        if (messagesRead < numMessages)
-            System.out.printf("WARNING: Exiting before consuming the expected number of messages: timeout (%d ms) exceeded. " +
-                "You can use the --timeout option to increase the timeout.%n", recordFetchTimeoutMs);
-        totalMessagesRead.set(messagesRead);
-        totalBytesRead.set(bytesRead);
+        long endMs = System.currentTimeMillis();
+        // print final stats
+        double elapsedSec = (endMs - startMs) / 1_000.0;
+        long fetchTimeInMs = endMs - startMs;
+//        if (true) {
+        double mbReadByConsumer = (bytesReadByConsumer * 1.0) / (1024 * 1024);
+        System.out.printf("Share consumer consumption metrics %s, %s, %.4f, %.4f, %.4f, %d, %d%n",
+//                index + 1,
+                dateFormat.format(startMs),
+                dateFormat.format(endMs),
+                mbReadByConsumer,
+                mbReadByConsumer / elapsedSec,
+                messagesReadByConsumer / elapsedSec,
+                messagesReadByConsumer,
+                fetchTimeInMs
+        );
+//        }
     }
 
     protected static class ShareConsumerPerfOptions extends CommandDefaultOptions {
@@ -174,6 +234,7 @@ public class ShareConsumerPerformance {
         private final OptionSpec<Long> reportingIntervalOpt;
         private final OptionSpec<String> dateFormatOpt;
         private final OptionSpec<Void> hideHeaderOpt;
+        private final OptionSpec<Integer> numThreadsOpt;
 
         public ShareConsumerPerfOptions(String[] args) {
             super(args);
@@ -229,6 +290,11 @@ public class ShareConsumerPerformance {
                 .ofType(String.class)
                 .defaultsTo("yyyy-MM-dd HH:mm:ss:SSS");
             hideHeaderOpt = parser.accepts("hide-header", "If set, skips printing the header for the stats");
+            numThreadsOpt = parser.accepts("threads", "The number of share consumers to use for sharing the load.")
+                .withRequiredArg()
+                .describedAs("count")
+                .ofType(Integer.class)
+                .defaultsTo(1);
             try {
                 options = parser.parse(args);
             } catch (OptionException e) {
@@ -271,6 +337,10 @@ public class ShareConsumerPerformance {
 
         public long numMessages() {
             return options.valueOf(numMessagesOpt);
+        }
+
+        public int threads() {
+            return options.valueOf(numThreadsOpt);
         }
 
         public long reportingIntervalMs() {
