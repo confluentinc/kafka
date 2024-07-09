@@ -47,13 +47,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -82,7 +79,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     private Uuid memberId;
     private boolean fetchMoreRecords = false;
     private final Map<TopicIdPartition, Acknowledgements> fetchAcknowledgementsMap;
-    private final Queue<AcknowledgeRequestState> acknowledgeRequestStates;
+    private final Map<Integer, List<AcknowledgeRequestState>> acknowledgeRequestStates;
     private final long retryBackoffMs;
     private final long retryBackoffMaxMs;
     private boolean closing = false;
@@ -112,7 +109,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         this.retryBackoffMaxMs = retryBackoffMaxMs;
         this.sessionHandlers = new HashMap<>();
         this.nodesWithPendingRequests = new HashSet<>();
-        this.acknowledgeRequestStates = new LinkedList<>();
+        this.acknowledgeRequestStates = new HashMap<>();
         this.fetchAcknowledgementsMap = new HashMap<>();
     }
 
@@ -209,30 +206,30 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
      */
     private PollResult processAcknowledgements(long currentTimeMs) {
         List<UnsentRequest> unsentRequests = new ArrayList<>();
-        Iterator<AcknowledgeRequestState> iterator = acknowledgeRequestStates.iterator();
-        while (iterator.hasNext()) {
-            AcknowledgeRequestState acknowledgeRequestState = iterator.next();
-            if (acknowledgeRequestState.isProcessed()) {
-                iterator.remove();
-            } else if (!acknowledgeRequestState.maybeExpire()) {
-                if (nodesWithPendingRequests.contains(acknowledgeRequestState.nodeId)) {
-                    log.trace("Skipping acknowledge request because previous request to {} has not been processed", acknowledgeRequestState.nodeId);
-                } else {
-                    if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
-                        acknowledgeRequestState.onSendAttempt(currentTimeMs);
-                        UnsentRequest request = acknowledgeRequestState.buildRequest(currentTimeMs);
-                        if (request != null) {
-                            unsentRequests.add(request);
+        for (List<AcknowledgeRequestState> requestStates : acknowledgeRequestStates.values()) {
+            for (AcknowledgeRequestState acknowledgeRequestState : requestStates) {
+                if (acknowledgeRequestState == null || (acknowledgeRequestState.acknowledgementsToSend.isEmpty() && acknowledgeRequestState.incompleteAcknowledgements.isEmpty())) {
+                    continue;
+                } else if (!acknowledgeRequestState.maybeExpire()) {
+                    if (nodesWithPendingRequests.contains(acknowledgeRequestState.nodeId)) {
+                        log.trace("Skipping acknowledge request because previous request to {} has not been processed", acknowledgeRequestState.nodeId);
+                    } else {
+                        if (acknowledgeRequestState.canSendRequest(currentTimeMs)) {
+                            acknowledgeRequestState.onSendAttempt(currentTimeMs);
+                            UnsentRequest request = acknowledgeRequestState.buildRequest(currentTimeMs);
+                            if (request != null) {
+                                unsentRequests.add(request);
+                            }
                         }
                     }
+                } else {
+                    // Fill in TimeoutException
+                    for (TopicIdPartition tip : acknowledgeRequestState.incompleteAcknowledgements.keySet()) {
+                        metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getIncompleteAcknowledgementsCount(tip));
+                        acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.REQUEST_TIMED_OUT);
+                    }
+                    acknowledgeRequestState.incompleteAcknowledgements.clear();
                 }
-            } else {
-                // Fill in TimeoutException
-                for (TopicIdPartition tip : acknowledgeRequestState.acknowledgementsMap.keySet()) {
-                    metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
-                    acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.REQUEST_TIMED_OUT);
-                }
-                iterator.remove();
             }
         }
 
@@ -278,7 +275,13 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         resultCount.incrementAndGet();
                     }
                 }
-                acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
+                if (acknowledgeRequestStates.get(nodeId) == null) {
+                    acknowledgeRequestStates.put(nodeId, new ArrayList<>(2));
+                    acknowledgeRequestStates.get(nodeId).add(0, null);
+                    acknowledgeRequestStates.get(nodeId).add(1, null);
+                }
+                // There can only be one commitSync() happening at a time. So per node, there will be one acknowledge request state.
+                acknowledgeRequestStates.get(nodeId).add(1, new AcknowledgeRequestState(logContext,
                         ShareConsumeRequestManager.class.getSimpleName() + ":1",
                         deadlineMs,
                         retryBackoffMs,
@@ -311,6 +314,11 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             Node node = cluster.nodeById(nodeId);
             if (node != null) {
                 Map<TopicIdPartition, Acknowledgements> acknowledgementsMapForNode = new HashMap<>();
+                if (acknowledgeRequestStates.get(nodeId) == null) {
+                    acknowledgeRequestStates.put(nodeId, new ArrayList<>(2));
+                    acknowledgeRequestStates.get(nodeId).add(0, null);
+                    acknowledgeRequestStates.get(nodeId).add(1, null);
+                }
                 for (TopicIdPartition tip : sessionHandler.sessionPartitions()) {
                     Acknowledgements acknowledgements = acknowledgementsMap.get(tip);
                     if (acknowledgements != null) {
@@ -319,20 +327,26 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         metricsManager.recordAcknowledgementSent(acknowledgements.size());
                         log.debug("Added acknowledge request for partition {} to node {}", tip.topicPartition(), node);
                         resultCount.incrementAndGet();
+                        if (acknowledgeRequestStates.get(nodeId).get(0) == null) {
+                            acknowledgeRequestStates.get(nodeId).add(0, new AcknowledgeRequestState(logContext,
+                                    ShareConsumeRequestManager.class.getSimpleName() + ":2",
+                                    Long.MAX_VALUE,
+                                    retryBackoffMs,
+                                    retryBackoffMaxMs,
+                                    sessionHandler,
+                                    nodeId,
+                                    acknowledgementsMapForNode,
+                                    this::handleShareAcknowledgeSuccess,
+                                    this::handleShareAcknowledgeFailure,
+                                    resultHandler
+                            ));
+                        } else {
+                            acknowledgeRequestStates.get(nodeId).get(0).acknowledgementsToSend.forEach((partition, acknowledgementsForPartition) -> {
+                                acknowledgementsForPartition.merge(acknowledgements);
+                            });
+                        }
                     }
                 }
-                acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
-                        ShareConsumeRequestManager.class.getSimpleName() + ":2",
-                        Long.MAX_VALUE,
-                        retryBackoffMs,
-                        retryBackoffMaxMs,
-                        sessionHandler,
-                        nodeId,
-                        acknowledgementsMapForNode,
-                        this::handleShareAcknowledgeSuccess,
-                        this::handleShareAcknowledgeFailure,
-                        resultHandler
-                ));
             }
         });
 
@@ -372,8 +386,14 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         resultCount.incrementAndGet();
                     }
                 }
-                acknowledgeRequestStates.add(new AcknowledgeRequestState(logContext,
-                        ShareConsumeRequestManager.class.getSimpleName() + ":3",
+                if (acknowledgeRequestStates.get(nodeId) == null) {
+                    acknowledgeRequestStates.put(nodeId, new ArrayList<>(2));
+                    acknowledgeRequestStates.get(nodeId).add(0, null);
+                    acknowledgeRequestStates.get(nodeId).add(1, null);
+                }
+                // There can only be one commitSync() happening at a time. So per node, there will be one acknowledge request state.
+                acknowledgeRequestStates.get(nodeId).add(1, new AcknowledgeRequestState(logContext,
+                        ShareConsumeRequestManager.class.getSimpleName() + ":1",
                         deadlineMs,
                         retryBackoffMs,
                         retryBackoffMaxMs,
@@ -508,12 +528,13 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 acknowledgeRequestState.onFailedAttempt(currentTimeMs);
                 if (response.error().exception() instanceof RetriableException && !closing) {
                     // We retry the request until the timer expires, unless we are closing.
+                    acknowledgeRequestState.retryRequest();
                 } else {
                     requestData.topics().forEach(topic -> topic.partitions().forEach(partition -> {
                         TopicIdPartition tip = new TopicIdPartition(topic.topicId(),
                                 partition.partitionIndex(),
                                 metadata.topicNames().get(topic.topicId()));
-                        metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
+                        metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getInFlightAcknowledgementsCount(tip));
                         acknowledgeRequestState.handleAcknowledgeErrorCode(tip, response.error());
                     }));
 
@@ -525,7 +546,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                             partition.partitionIndex(),
                             metadata.topicNames().get(topic.topicId()));
                     if (partition.errorCode() != Errors.NONE.code()) {
-                        metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
+                        metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getInFlightAcknowledgementsCount(tip));
                     }
                     acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.forCode(partition.errorCode()));
                 }));
@@ -552,8 +573,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 TopicIdPartition tip = new TopicIdPartition(topic.topicId(),
                         partition.partitionIndex(),
                         metadata.topicNames().get(topic.topicId()));
-                    metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
+                    metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getInFlightAcknowledgementsCount(tip));
                     acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.forException(error));
+                    acknowledgeRequestState.inFlightAcknowledgements.remove(tip);
             }));
         } finally {
             log.debug("Removing pending request for node {} - failed", fetchTarget);
@@ -574,9 +596,10 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                         partition.partitionIndex(),
                         metadata.topicNames().get(topic.topicId()));
                 if (partition.errorCode() != Errors.NONE.code()) {
-                    metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
+                    metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getInFlightAcknowledgementsCount(tip));
                 }
                 acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.forCode(partition.errorCode()));
+                acknowledgeRequestState.inFlightAcknowledgements.remove(tip);
             }));
 
             metricsManager.recordLatency(resp.requestLatencyMs());
@@ -600,8 +623,9 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 TopicIdPartition tip = new TopicIdPartition(topic.topicId(),
                         partition.partitionIndex(),
                         metadata.topicNames().get(topic.topicId()));
-                metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getAcknowledgementsCount(tip));
+                metricsManager.recordFailedAcknowledgements(acknowledgeRequestState.getInFlightAcknowledgementsCount(tip));
                 acknowledgeRequestState.handleAcknowledgeErrorCode(tip, Errors.forException(error));
+                acknowledgeRequestState.inFlightAcknowledgements.remove(tip);
             }));
         } finally {
             log.debug("Removing pending request for node {} - failed", fetchTarget);
@@ -653,7 +677,17 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         /**
          * The map of acknowledgements to send
          */
-        private final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap;
+        private Map<TopicIdPartition, Acknowledgements> acknowledgementsToSend;
+
+        /**
+         *
+         */
+        private Map<TopicIdPartition, Acknowledgements> incompleteAcknowledgements;
+
+        /**
+         * The in-flight acknowledgements
+         */
+        private Map<TopicIdPartition, Acknowledgements> inFlightAcknowledgements;
 
         /**
          * The handler to call on a successful response from ShareAcknowledge.
@@ -664,11 +698,6 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
          * The handler to call on a failed response from ShareAcknowledge.
          */
         private ResponseHandler<Throwable> errorHandler;
-
-        /**
-         * Whether the request has been processed and will not be retried.
-         */
-        private boolean isProcessed = false;
 
         /**
          * This handles completing a future when all results are known.
@@ -710,11 +739,13 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             super(logContext, owner, retryBackoffMs, retryBackoffMaxMs, deadlineTimer(time, deadlineMs));
             this.sessionHandler = sessionHandler;
             this.nodeId = nodeId;
-            this.acknowledgementsMap = acknowledgementsMap;
             this.successHandler = successHandler;
             this.errorHandler = errorHandler;
+            this.acknowledgementsToSend = acknowledgementsMap;
             this.resultHandler = resultHandler;
             this.onClose = onClose;
+            this.inFlightAcknowledgements = new HashMap<>();
+            this.incompleteAcknowledgements = new HashMap<>();
         }
 
         UnsentRequest buildRequest(long currentTimeMs) {
@@ -723,7 +754,10 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                 sessionHandler.notifyClose();
             }
 
-            for (Map.Entry<TopicIdPartition, Acknowledgements> entry : acknowledgementsMap.entrySet()) {
+            Map<TopicIdPartition, Acknowledgements> finalAcknowledgementsToSend = new HashMap<>(
+                    incompleteAcknowledgements.isEmpty() ? acknowledgementsToSend : incompleteAcknowledgements);
+
+            for (Map.Entry<TopicIdPartition, Acknowledgements> entry : finalAcknowledgementsToSend.entrySet()) {
                 sessionHandler.addPartitionToFetch(entry.getKey(), entry.getValue());
             }
 
@@ -745,12 +779,27 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             if (requestBuilder == null) {
                 return null;
             } else {
+                inFlightAcknowledgements.putAll(finalAcknowledgementsToSend);
+                if (incompleteAcknowledgements.isEmpty()) {
+                    acknowledgementsToSend.clear();
+                } else {
+                    incompleteAcknowledgements.clear();
+                }
                 return new UnsentRequest(requestBuilder, Optional.of(nodeToSend)).whenComplete(responseHandler);
             }
         }
 
-        int getAcknowledgementsCount(TopicIdPartition tip) {
-            Acknowledgements acks = acknowledgementsMap.get(tip);
+        int getInFlightAcknowledgementsCount(TopicIdPartition tip) {
+            Acknowledgements acks = inFlightAcknowledgements.get(tip);
+            if (acks == null) {
+                return 0;
+            } else {
+                return acks.size();
+            }
+        }
+
+        int getIncompleteAcknowledgementsCount(TopicIdPartition tip) {
+            Acknowledgements acks = incompleteAcknowledgements.get(tip);
             if (acks == null) {
                 return 0;
             } else {
@@ -763,7 +812,12 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
          * through a background event.
          */
         void handleAcknowledgeErrorCode(TopicIdPartition tip, Errors acknowledgeErrorCode) {
-            Acknowledgements acks = acknowledgementsMap.get(tip);
+            Acknowledgements acks;
+            if (acknowledgeErrorCode == Errors.REQUEST_TIMED_OUT) {
+                acks = incompleteAcknowledgements.get(tip);
+            } else {
+                acks = inFlightAcknowledgements.get(tip);
+            }
             if (acks != null) {
                 acks.setAcknowledgeErrorCode(acknowledgeErrorCode);
             }
@@ -775,12 +829,18 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         }
 
         void processingComplete() {
-            isProcessed = true;
+            incompleteAcknowledgements.clear();
+            inFlightAcknowledgements.clear();
             resultHandler.completeIfEmpty();
         }
 
-        boolean isProcessed() {
-            return isProcessed;
+        void retryRequest() {
+            incompleteAcknowledgements.putAll(inFlightAcknowledgements);
+            inFlightAcknowledgements.clear();
+        }
+
+        boolean isIncompleteMapEmpty() {
+            return incompleteAcknowledgements.isEmpty();
         }
 
         boolean maybeExpire() {
