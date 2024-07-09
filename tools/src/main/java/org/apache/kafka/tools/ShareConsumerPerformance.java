@@ -110,10 +110,7 @@ public class ShareConsumerPerformance {
 
     protected static void printHeader(boolean showDetailedStats) {
         String newFieldsInHeader = ", fetch.time.ms";
-        if (!showDetailedStats)
-            System.out.printf("start.time, end.time, data.consumed.in.MB, MB.sec, nMsg.sec, data.consumed.in.nMsg%s%n", newFieldsInHeader);
-        else
-            System.out.printf("time, threadId, data.consumed.in.MB, MB.sec, data.consumed.in.nMsg, nMsg.sec%s%n", newFieldsInHeader);
+        System.out.printf("start.time, end.time, data.consumed.in.MB, MB.sec, nMsg.sec, data.consumed.in.nMsg%s%n", newFieldsInHeader);
     }
 
     private static void consume(List<KafkaShareConsumer<byte[], byte[]>> shareConsumers,
@@ -124,9 +121,6 @@ public class ShareConsumerPerformance {
                                 long startMs) {
         long numMessages = options.numMessages();
         long recordFetchTimeoutMs = options.recordFetchTimeoutMs();
-        long reportingIntervalMs = options.reportingIntervalMs();
-        boolean showDetailedStats = options.showDetailedStats();
-        SimpleDateFormat dateFormat = options.dateFormat();
         shareConsumers.forEach(shareConsumer -> shareConsumer.subscribe(options.topic()));
 
         // now start the benchmark
@@ -137,9 +131,9 @@ public class ShareConsumerPerformance {
         ExecutorService executorService = Executors.newFixedThreadPool(shareConsumers.size());
         for (int i = 0; i < shareConsumers.size(); i++) {
             final int index = i;
-            executorService.submit(() -> consumeMessagesForSingleShareConsumer(numMessages, currentTimeMs,
-                    currentTimeMs, recordFetchTimeoutMs, reportingIntervalMs, shareConsumers.get(index), currentTimeMs,
-                    showDetailedStats, joinTimeMsInSingleRound, dateFormat, messagesRead, bytesRead, startMs));
+            executorService.submit(() -> consumeMessagesForSingleShareConsumer(currentTimeMs, currentTimeMs,
+                    shareConsumers.get(index), currentTimeMs, joinTimeMsInSingleRound, messagesRead, bytesRead, startMs,
+                    options, index));
         }
         executorService.shutdown();
 
@@ -156,19 +150,23 @@ public class ShareConsumerPerformance {
         totalBytesRead.set(bytesRead.get());
     }
 
-    private static void consumeMessagesForSingleShareConsumer(long numMessages,
-                                                              long currentTimeMs,
+    private static void consumeMessagesForSingleShareConsumer(long currentTimeMs,
                                                               long lastConsumedTimeMs,
-                                                              long recordFetchTimeoutMs,
-                                                              long reportingIntervalMs,
                                                               KafkaShareConsumer<byte[], byte[]> shareConsumer,
                                                               long lastReportTimeMs,
-                                                              boolean showDetailedStats,
                                                               AtomicLong joinTimeMsInSingleRound,
-                                                              SimpleDateFormat dateFormat,
                                                               AtomicLong totalMessagesRead,
                                                               AtomicLong totalBytesRead,
-                                                              long startMs) {
+                                                              long startMs,
+                                                              ShareConsumerPerfOptions options,
+                                                              int index) {
+        long numMessages = options.numMessages();
+        long recordFetchTimeoutMs = options.recordFetchTimeoutMs();
+        long reportingIntervalMs = options.reportingIntervalMs();
+        boolean showDetailedStats = options.showDetailedStats();
+        SimpleDateFormat dateFormat = options.dateFormat();
+        boolean showShareConsumerStats = options.showShareConsumerStats();
+
         long lastBytesRead = 0L;
         long lastMessagesRead = 0L;
         long messagesReadByConsumer = 0L;
@@ -201,23 +199,23 @@ public class ShareConsumerPerformance {
             }
         }
 
-        long endMs = System.currentTimeMillis();
-        // print final stats
-        double elapsedSec = (endMs - startMs) / 1_000.0;
-        long fetchTimeInMs = endMs - startMs;
-//        if (true) {
-        double mbReadByConsumer = (bytesReadByConsumer * 1.0) / (1024 * 1024);
-        System.out.printf("Share consumer consumption metrics %s, %s, %.4f, %.4f, %.4f, %d, %d%n",
-//                index + 1,
-                dateFormat.format(startMs),
-                dateFormat.format(endMs),
-                mbReadByConsumer,
-                mbReadByConsumer / elapsedSec,
-                messagesReadByConsumer / elapsedSec,
-                messagesReadByConsumer,
-                fetchTimeInMs
-        );
-//        }
+        if (showShareConsumerStats) {
+            long endMs = System.currentTimeMillis();
+            // print stats for consumer
+            double elapsedSec = (endMs - startMs) / 1_000.0;
+            long fetchTimeInMs = endMs - startMs;
+            double mbReadByConsumer = (bytesReadByConsumer * 1.0) / (1024 * 1024);
+            System.out.printf("Share consumer %s consumption metrics %s, %s, %.4f, %.4f, %.4f, %d, %d%n",
+                    index + 1,
+                    dateFormat.format(startMs),
+                    dateFormat.format(endMs),
+                    mbReadByConsumer,
+                    mbReadByConsumer / elapsedSec,
+                    messagesReadByConsumer / elapsedSec,
+                    messagesReadByConsumer,
+                    fetchTimeInMs
+            );
+        }
     }
 
     protected static class ShareConsumerPerfOptions extends CommandDefaultOptions {
@@ -235,6 +233,7 @@ public class ShareConsumerPerformance {
         private final OptionSpec<String> dateFormatOpt;
         private final OptionSpec<Void> hideHeaderOpt;
         private final OptionSpec<Integer> numThreadsOpt;
+        private final OptionSpec<Void> showShareConsumerStatsOpt;
 
         public ShareConsumerPerfOptions(String[] args) {
             super(args);
@@ -295,6 +294,8 @@ public class ShareConsumerPerformance {
                 .describedAs("count")
                 .ofType(Integer.class)
                 .defaultsTo(1);
+            showShareConsumerStatsOpt = parser.accepts("show-consumer-stats", "If set, stats are reported for each share " +
+                    "consumer depending on the no. of threads.");
             try {
                 options = parser.parse(args);
             } catch (OptionException e) {
@@ -341,6 +342,10 @@ public class ShareConsumerPerformance {
 
         public int threads() {
             return options.valueOf(numThreadsOpt);
+        }
+
+        public boolean showShareConsumerStats() {
+            return options.has(showShareConsumerStatsOpt);
         }
 
         public long reportingIntervalMs() {
