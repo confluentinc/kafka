@@ -73,6 +73,7 @@ public class ShareConsumerPerformance {
             Map<MetricName, ? extends Metric> metrics = null;
             if (options.printMetrics())
                 metrics = shareConsumer.metrics();
+            shareConsumer.commitAsync();
             shareConsumer.close();
 
             // print final stats
