@@ -125,13 +125,25 @@ public class ShareConsumerPerformance {
                     shareConsumers.get(index), currentTimeMs, joinTimeMsInSingleRound, messagesRead, bytesRead, startMs,
                     options, index));
         }
+        LOG.debug("Shutting down of thread pool is started");
         executorService.shutdown();
 
         try {
+            // Wait a while for existing tasks to terminate.
             // Adding 100 ms to the timeout so all the threads can finish before we reach this part of code.
-            executorService.awaitTermination(recordFetchTimeoutMs + 100, TimeUnit.MILLISECONDS);
+            if (!executorService.awaitTermination(recordFetchTimeoutMs + 100, TimeUnit.MILLISECONDS)) {
+                LOG.debug("Shutting down of thread pool could not be completed. It will retry cancelling the tasks using shutdownNow.");
+                executorService.shutdownNow(); // Cancel currently executing tasks
+                // Wait a while for tasks to respond to being cancelled
+                if (!executorService.awaitTermination(recordFetchTimeoutMs + 100, TimeUnit.MILLISECONDS))
+                    LOG.debug("Shutting down of thread pool could not be completed even after retrying cancellation of the tasks using shutdownNow.");
+            }
         } catch (InterruptedException e) {
-            System.out.println("Error while consuming messages in share consumer: " + e.getMessage());
+            // (Re-)Cancel if current thread also interrupted
+            LOG.warn("Encountered InterruptedException while shutting down thread pool. It will retry cancelling the tasks using shutdownNow.");
+            executorService.shutdownNow();
+            // Preserve interrupt status
+            Thread.currentThread().interrupt();
         }
 
         if (messagesRead.get() < numMessages) {
