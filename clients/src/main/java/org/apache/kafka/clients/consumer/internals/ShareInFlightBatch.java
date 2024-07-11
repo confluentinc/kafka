@@ -64,6 +64,7 @@ public class ShareInFlightBatch<K, V> {
                 recordsAcknowledged++;
             }
         }
+        //System.out.println(recordsAcknowledged + "in SIFBatch : " + acknowledgedRecords);
         return recordsAcknowledged;
     }
 
