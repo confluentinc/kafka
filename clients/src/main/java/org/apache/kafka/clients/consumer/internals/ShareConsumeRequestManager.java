@@ -65,6 +65,7 @@ import java.util.stream.Collectors;
  * {@link ShareAcknowledgeRequest} to fetch and acknowledge records being delivered for a consumer
  * in a share group.
  */
+@SuppressWarnings("NPathComplexity")
 public class ShareConsumeRequestManager implements RequestManager, MemberStateListener, Closeable {
     private final Time time;
     private final Logger log;
@@ -86,6 +87,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     private final long retryBackoffMs;
     private final long retryBackoffMaxMs;
     private boolean closing = false;
+    private final CompletableFuture<Void> closeFuture;
 
     ShareConsumeRequestManager(final Time time,
                                final LogContext logContext,
@@ -114,6 +116,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         this.nodesWithPendingRequests = new HashSet<>();
         this.acknowledgeRequestStates = new LinkedList<>();
         this.fetchAcknowledgementsMap = new HashMap<>();
+        this.closeFuture = new CompletableFuture<>();
     }
 
     @Override
@@ -128,7 +131,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             return pollResult;
         }
 
-        if (!fetchMoreRecords) {
+        if (!fetchMoreRecords || closing) {
             return PollResult.EMPTY;
         }
 
@@ -242,7 +245,13 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         } else if (!acknowledgeRequestStates.isEmpty()) {
             // Return empty result until all the acknowledgement request states are processed
             pollResult = PollResult.EMPTY;
+        } else if (closing) {
+            if (!closeFuture.isDone()) {
+                closeFuture.complete(null);
+            }
+            pollResult = PollResult.EMPTY;
         }
+
         return pollResult;
     }
 
@@ -260,7 +269,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             final long deadlineMs) {
         final AtomicInteger resultCount = new AtomicInteger();
         final CompletableFuture<Map<TopicIdPartition, Acknowledgements>> future = new CompletableFuture<>();
-        final CommitResultHandler resultHandler = new CommitResultHandler(resultCount, Optional.of(future));
+        final ResultHandler resultHandler = new ResultHandler(resultCount, Optional.of(future));
 
         final Cluster cluster = metadata.fetch();
 
@@ -305,7 +314,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
     public void commitAsync(final Map<TopicIdPartition, Acknowledgements> acknowledgementsMap) {
         final Cluster cluster = metadata.fetch();
         final AtomicInteger resultCount = new AtomicInteger();
-        final CommitResultHandler resultHandler = new CommitResultHandler(resultCount, Optional.empty());
+        final ResultHandler resultHandler = new ResultHandler(resultCount, Optional.empty());
 
         sessionHandlers.forEach((nodeId, sessionHandler) -> {
             Node node = cluster.nodeById(nodeId);
@@ -353,8 +362,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
                                                       final long deadlineMs) {
         final Cluster cluster = metadata.fetch();
         final AtomicInteger resultCount = new AtomicInteger();
-        final CompletableFuture<Void> future = new CompletableFuture<>();
-        final CloseResultHandler resultHandler = new CloseResultHandler(resultCount, future);
+        final ResultHandler resultHandler = new ResultHandler(resultCount, Optional.empty());
 
         closing = true;
 
@@ -389,7 +397,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         });
 
         resultHandler.completeIfEmpty();
-        return future;
+        return closeFuture;
     }
 
     private void handleShareFetchSuccess(Node fetchTarget,
@@ -658,12 +666,12 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         /**
          * The handler to call on a successful response from ShareAcknowledge.
          */
-        private ResponseHandler<ClientResponse> successHandler;
+        private final ResponseHandler<ClientResponse> successHandler;
 
         /**
          * The handler to call on a failed response from ShareAcknowledge.
          */
-        private ResponseHandler<Throwable> errorHandler;
+        private final ResponseHandler<Throwable> errorHandler;
 
         /**
          * Whether the request has been processed and will not be retried.
@@ -743,6 +751,7 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             };
 
             if (requestBuilder == null) {
+                handleSessionErrorCode(Errors.SHARE_SESSION_NOT_FOUND);
                 return null;
             } else {
                 return new UnsentRequest(requestBuilder, Optional.of(nodeToSend)).whenComplete(responseHandler);
@@ -763,11 +772,27 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
          * through a background event.
          */
         void handleAcknowledgeErrorCode(TopicIdPartition tip, Errors acknowledgeErrorCode) {
-            Acknowledgements acks = acknowledgementsMap.get(tip);
+            Acknowledgements acks = acknowledgementsMap.remove(tip);
             if (acks != null) {
                 acks.setAcknowledgeErrorCode(acknowledgeErrorCode);
             }
             resultHandler.complete(tip, acks);
+        }
+
+        /**
+         * Set the error code for all remaining acknowledgements in the event
+         * of a session error which prevents the remains acknowledgements from
+         * being sent.
+         */
+        void handleSessionErrorCode(Errors errorCode) {
+            acknowledgementsMap.forEach((tip, acks) -> {
+                if (acks != null) {
+                    acks.setAcknowledgeErrorCode(errorCode);
+                }
+                resultHandler.complete(tip, acks);
+            });
+            acknowledgementsMap.clear();
+            processingComplete();
         }
 
         ShareSessionHandler sessionHandler() {
@@ -800,37 +825,28 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
         void handle(Node target, ShareAcknowledgeRequestData request, AcknowledgeRequestState requestState, T response, long currentTimeMs);
     }
 
-    private interface ResultHandler {
-        /**
-         * Handle the result of a ShareAcknowledge request sent to one or more nodes and
-         * signal the completion when all results are known.
-         */
-        void complete(TopicIdPartition partition, Acknowledgements acknowledgements);
-
-        /**
-         * Handles the case where there are no results pending after initialization.
-         */
-        void completeIfEmpty();
-    }
-
     /**
      * Sends a ShareAcknowledgeCommitCallback event to the application when it is done
      * processing all the remaining acknowledgement request states.
      * Also manages completing the future for synchronous acknowledgement commit by counting
      * down the results as they are known and completing the future at the end.
      */
-    class CommitResultHandler implements ResultHandler {
+    class ResultHandler {
         private final Map<TopicIdPartition, Acknowledgements> result;
         private final AtomicInteger remainingResults;
         private final Optional<CompletableFuture<Map<TopicIdPartition, Acknowledgements>>> future;
 
-        CommitResultHandler(final AtomicInteger remainingResults,
-                            final Optional<CompletableFuture<Map<TopicIdPartition, Acknowledgements>>> future) {
+        ResultHandler(final AtomicInteger remainingResults,
+                      final Optional<CompletableFuture<Map<TopicIdPartition, Acknowledgements>>> future) {
             result = new HashMap<>();
             this.remainingResults = remainingResults;
             this.future = future;
         }
 
+        /**
+         * Handle the result of a ShareAcknowledge request sent to one or more nodes and
+         * signal the completion when all results are known.
+         */
         public void complete(TopicIdPartition partition, Acknowledgements acknowledgements) {
             if (acknowledgements != null) {
                 result.put(partition, acknowledgements);
@@ -842,45 +858,12 @@ public class ShareConsumeRequestManager implements RequestManager, MemberStateLi
             }
         }
 
+        /**
+         * Handles the case where there are no results pending after initialization.
+         */
         public void completeIfEmpty() {
             if (remainingResults.get() == 0) {
                 future.ifPresent(future -> future.complete(result));
-            }
-        }
-    }
-
-    /**
-     * Sends a ShareAcknowledgeCommitCallback event to the application when it is done
-     * processing all the remaining acknowledgement request states.
-     * Also manages completing the future for acknowledgement commit by counting
-     * down the results as they are known and completing the future at the end.
-     */
-    class CloseResultHandler implements ResultHandler {
-        private final Map<TopicIdPartition, Acknowledgements> result;
-        private final AtomicInteger remainingResults;
-        private final CompletableFuture<Void> future;
-
-        CloseResultHandler(final AtomicInteger remainingResults,
-                           final CompletableFuture<Void> future) {
-            result = new HashMap<>();
-            this.remainingResults = remainingResults;
-            this.future = future;
-        }
-
-        public void complete(TopicIdPartition partition, Acknowledgements acknowledgements) {
-            if (acknowledgements != null) {
-                result.put(partition, acknowledgements);
-            }
-            if (remainingResults.decrementAndGet() == 0) {
-                ShareAcknowledgementCommitCallbackEvent event = new ShareAcknowledgementCommitCallbackEvent(result);
-                backgroundEventHandler.add(event);
-                future.complete(null);
-            }
-        }
-
-        public void completeIfEmpty() {
-            if (remainingResults.get() == 0) {
-                future.complete(null);
             }
         }
     }
