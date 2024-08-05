@@ -114,8 +114,9 @@
 
         <subpackage name="group">
             <subpackage name="share">
-                <allow pkg="org.apache.kafka.clients"></allow>
-                <allow pkg="org.apache.kafka.server.util"></allow>
+                <allow pkg="org.apache.kafka.clients" />
+                <allow pkg="org.apache.kafka.server.util" />
+                <allow pkg="org.apache.kafka.test" />
             </subpackage>
         </subpackage>
     </subpackage>
