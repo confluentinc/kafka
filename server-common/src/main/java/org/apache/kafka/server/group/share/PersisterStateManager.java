@@ -29,6 +29,7 @@ import org.apache.kafka.common.message.FindCoordinatorResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
+import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.AbstractRequest;
@@ -45,14 +46,22 @@ import org.apache.kafka.server.util.RequestAndCompletionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class PersisterStateManager {
@@ -64,7 +73,18 @@ public class PersisterStateManager {
   public static final long REQUEST_BACKOFF_MAX_MS = 30_000L;
   private static final int MAX_FIND_COORD_ATTEMPTS = 5;
   private final Time time;
+  private final Map<RPCType, Set<Node>> inFlight = new HashMap<>();
+  private final Map<Node, Map<RPCType, Map<String, List<PersisterStateManagerHandler>>>> nodeRPCMap = new HashMap<>();
+  private final Object nodeMapLock = new Object();
+  private Runnable generateCallback;
 
+  public enum RPCType {
+    READ,
+    WRITE,
+    DELETE,
+    SUMMARY,
+    UNKNOWN
+  }
 
   public PersisterStateManager(KafkaClient client, Time time, ShareCoordinatorMetadataCacheHelper cacheHelper) {
     if (client == null) {
@@ -101,6 +121,15 @@ public class PersisterStateManager {
     }
   }
 
+  // test visibility
+  Map<Node, Map<RPCType, Map<String, List<PersisterStateManagerHandler>>>> nodeRPCMap() {
+    return nodeRPCMap;
+  }
+
+  public void setGenerateCallback(Runnable generateCallback) {
+    this.generateCallback = generateCallback;
+  }
+
   public abstract class PersisterStateManagerHandler implements RequestCompletionHandler {
     protected Node coordinatorNode;
     protected final String groupId;
@@ -110,6 +139,7 @@ public class PersisterStateManager {
     private int findCoordattempts = 0;
     private final int maxFindCoordAttempts;
     protected final Logger log = LoggerFactory.getLogger(getClass());
+    private Consumer<ClientResponse> onCompleteCallback;
 
     public PersisterStateManagerHandler(
         String groupId,
@@ -169,6 +199,13 @@ public class PersisterStateManager {
     protected abstract String name();
 
     /**
+     * Child class must return appropriate type of RPC here
+     *
+     * @return String
+     */
+    protected abstract RPCType rpcType();
+
+    /**
      * Returns builder for share coordinator
      *
      * @return builder for find coordinator
@@ -179,13 +216,18 @@ public class PersisterStateManager {
           .setKey(coordinatorKey()));
     }
 
-    /**
-     * Return the share coordinator node
-     *
-     * @return Node
-     */
-    protected Node shareCoordinatorNode() {
-      return coordinatorNode;
+    public void addRequestToNodeMap(Node node, PersisterStateManagerHandler handler) {
+      if (!handler.isBatchable()) {
+        return;
+      }
+      synchronized (nodeMapLock) {
+        nodeRPCMap.computeIfAbsent(node, k -> new HashMap<>());
+        nodeRPCMap.get(node).computeIfAbsent(handler.rpcType(), k -> new HashMap<>());
+        nodeRPCMap.get(node).get(handler.rpcType()).computeIfAbsent(handler.groupId, k -> new LinkedList<>());
+
+        nodeRPCMap.get(node).get(handler.rpcType()).get(handler.groupId).add(handler);
+        sender.wakeup();
+      }
     }
 
     /**
@@ -203,6 +245,7 @@ public class PersisterStateManager {
         if (node != Node.noNode()) {
           log.debug("Found coordinator node in cache: {}", node);
           coordinatorNode = node;
+          addRequestToNodeMap(node, this);
           return false;
         }
       }
@@ -230,6 +273,9 @@ public class PersisterStateManager {
 
     @Override
     public void onComplete(ClientResponse response) {
+      if (onCompleteCallback != null) {
+        onCompleteCallback.accept(response);
+      }
       if (response != null && response.hasResponse()) {
         if (isFindCoordinatorResponse(response)) {
           handleFindCoordinatorResponse(response);
@@ -237,6 +283,7 @@ public class PersisterStateManager {
           handleRequestResponse(response);
         }
       }
+      sender.wakeup();
     }
 
     private void resetAttempts() {
@@ -254,7 +301,7 @@ public class PersisterStateManager {
      */
     protected void handleFindCoordinatorResponse(ClientResponse response) {
       log.debug("Find coordinator response received - {}", response);
-      
+
       // Incrementing the number of find coordinator attempts
       findCoordattempts++;
       List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
@@ -273,7 +320,11 @@ public class PersisterStateManager {
           resetAttempts();
           coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
           // now we want the actual share state RPC call to happen
-          enqueue(this);
+          if (this.isBatchable()) {
+            addRequestToNodeMap(coordinatorNode, this);
+          } else {
+            enqueue(this);
+          }
           break;
 
         case COORDINATOR_NOT_AVAILABLE: // retriable error codes
@@ -303,6 +354,17 @@ public class PersisterStateManager {
     // Visible for testing
     public Node getCoordinatorNode() {
       return coordinatorNode;
+    }
+
+    protected abstract boolean isBatchable();
+
+    /**
+     * This method can be called by child class objects to register a callback
+     * which will be called when the onComplete cb is called on request completion.
+     * @param callback
+     */
+    protected void setOnCompleteCallback(Consumer<ClientResponse> callback) {
+      this.onCompleteCallback = callback;
     }
   }
 
@@ -342,7 +404,8 @@ public class PersisterStateManager {
         int leaderEpoch,
         long startOffset,
         List<PersisterStateBatch> batches,
-        CompletableFuture<WriteShareGroupStateResponse> result
+        CompletableFuture<WriteShareGroupStateResponse> result,
+        Consumer<ClientResponse> onCompleteCallback
     ) {
       this(
           groupId,
@@ -366,23 +429,7 @@ public class PersisterStateManager {
 
     @Override
     protected AbstractRequest.Builder<? extends AbstractRequest> requestBuilder() {
-      return new WriteShareGroupStateRequest.Builder(new WriteShareGroupStateRequestData()
-          .setGroupId(groupId)
-          .setTopics(Collections.singletonList(
-              new WriteShareGroupStateRequestData.WriteStateData()
-                  .setTopicId(topicId)
-                  .setPartitions(Collections.singletonList(new WriteShareGroupStateRequestData.PartitionData()
-                      .setPartition(partition)
-                      .setStateEpoch(stateEpoch)
-                      .setLeaderEpoch(leaderEpoch)
-                      .setStartOffset(startOffset)
-                      .setStateBatches(batches.stream()
-                          .map(batch -> new WriteShareGroupStateRequestData.StateBatch()
-                              .setFirstOffset(batch.firstOffset())
-                              .setLastOffset(batch.lastOffset())
-                              .setDeliveryState(batch.deliveryState())
-                              .setDeliveryCount(batch.deliveryCount()))
-                          .collect(Collectors.toList())))))));
+      throw new RuntimeException("Write requests are batchable, hence individual requests not needed.");
     }
 
     @Override
@@ -393,7 +440,22 @@ public class PersisterStateManager {
     @Override
     protected void handleRequestResponse(ClientResponse response) {
       log.debug("Write state response received - {}", response);
-      this.result.complete((WriteShareGroupStateResponse) response.responseBody());
+      // response can be a combined one for large number of requests
+      // we need to deconstruct it
+      WriteShareGroupStateResponse combinedResponse = (WriteShareGroupStateResponse) response.responseBody();
+      for (WriteShareGroupStateResponseData.WriteStateResult writeStateResult : combinedResponse.data().results()) {
+        if (writeStateResult.topicId().equals(topicId)) {
+          Optional<WriteShareGroupStateResponseData.PartitionResult> partitionStateData =
+                  writeStateResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partition)
+                          .findFirst();
+          if (partitionStateData.isPresent()) {
+            WriteShareGroupStateResponseData.WriteStateResult result = WriteShareGroupStateResponse.toResponseWriteStateResult(topicId, Collections.singletonList(partitionStateData.get()));
+            this.result.complete(new WriteShareGroupStateResponse(
+                    new WriteShareGroupStateResponseData().setResults(Collections.singletonList(result))));
+            return;
+          }
+        }
+      }
     }
 
     @Override
@@ -406,6 +468,16 @@ public class PersisterStateManager {
     // Visible for testing
     public CompletableFuture<WriteShareGroupStateResponse> getResult() {
       return result;
+    }
+
+    @Override
+    protected boolean isBatchable() {
+      return true;
+    }
+
+    @Override
+    protected RPCType rpcType() {
+      return RPCType.WRITE;
     }
   }
 
@@ -422,7 +494,8 @@ public class PersisterStateManager {
         CompletableFuture<ReadShareGroupStateResponse> result,
         long backoffMs,
         long backoffMaxMs,
-        int maxFindCoordAttempts
+        int maxFindCoordAttempts,
+        Consumer<ClientResponse> onCompleteCallback
     ) {
       super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxFindCoordAttempts);
       this.leaderEpoch = leaderEpoch;
@@ -435,7 +508,8 @@ public class PersisterStateManager {
         Uuid topicId,
         int partition,
         int leaderEpoch,
-        CompletableFuture<ReadShareGroupStateResponse> result
+        CompletableFuture<ReadShareGroupStateResponse> result,
+        Consumer<ClientResponse> onCompleteCallback
     ) {
       this(
           groupId,
@@ -445,7 +519,8 @@ public class PersisterStateManager {
           result,
           REQUEST_BACKOFF_MS,
           REQUEST_BACKOFF_MAX_MS,
-          MAX_FIND_COORD_ATTEMPTS
+          MAX_FIND_COORD_ATTEMPTS,
+          onCompleteCallback
       );
     }
 
@@ -456,15 +531,7 @@ public class PersisterStateManager {
 
     @Override
     protected AbstractRequest.Builder<? extends AbstractRequest> requestBuilder() {
-      return new ReadShareGroupStateRequest.Builder(new ReadShareGroupStateRequestData()
-          .setGroupId(groupId)
-          .setTopics(Collections.singletonList(
-              new ReadShareGroupStateRequestData.ReadStateData()
-                  .setTopicId(topicId)
-                  .setPartitions(Collections.singletonList(
-                      new ReadShareGroupStateRequestData.PartitionData()
-                          .setPartition(partition)
-                          .setLeaderEpoch(leaderEpoch))))));
+      throw new RuntimeException("Read requests are batchable, hence individual requests not needed.");
     }
 
     @Override
@@ -476,7 +543,22 @@ public class PersisterStateManager {
     protected void handleRequestResponse(ClientResponse response) {
       log.debug("Read state response received - {}", response);
 
-      ReadShareGroupStateResponseData readShareGroupStateResponseData = ((ReadShareGroupStateResponse) response.responseBody()).data();
+      ReadShareGroupStateResponse combinedResponse = (ReadShareGroupStateResponse) response.responseBody();
+      ReadShareGroupStateResponseData readShareGroupStateResponseData = new ReadShareGroupStateResponseData();
+      for (ReadShareGroupStateResponseData.ReadStateResult readStateResult : combinedResponse.data().results()) {
+        if (readStateResult.topicId().equals(topicId)) {
+          Optional<ReadShareGroupStateResponseData.PartitionResult> partitionStateData =
+                  readStateResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partition)
+                          .findFirst();
+
+          if (partitionStateData.isPresent()) {
+            ReadShareGroupStateResponseData.ReadStateResult result = ReadShareGroupStateResponse.toResponseReadStateResult(topicId, Collections.singletonList(partitionStateData.get()));
+            readShareGroupStateResponseData.setResults(Collections.singletonList(result));
+            break;
+          }
+        }
+      }
+
       String errorMessage = "Failed to read state for partition " + partition + " in topic " + topicId + " for group " + groupId;
       if (readShareGroupStateResponseData.results().size() != 1) {
         log.error("ReadState response for {} is invalid", coordinatorKey);
@@ -500,7 +582,7 @@ public class PersisterStateManager {
         this.result.complete(new ReadShareGroupStateResponse(
             ReadShareGroupStateResponse.toErrorResponseData(topicId, partition, Errors.forException(new IllegalStateException(errorMessage)), errorMessage)));
       }
-      result.complete((ReadShareGroupStateResponse) response.responseBody());
+      result.complete(new ReadShareGroupStateResponse(readShareGroupStateResponseData));
     }
 
     @Override
@@ -513,6 +595,16 @@ public class PersisterStateManager {
     // Visible for testing
     public CompletableFuture<ReadShareGroupStateResponse> getResult() {
       return result;
+    }
+
+    @Override
+    protected boolean isBatchable() {
+      return true;
+    }
+
+    @Override
+    protected RPCType rpcType() {
+      return RPCType.READ;
     }
   }
 
@@ -550,6 +642,13 @@ public class PersisterStateManager {
      */
     @Override
     public Collection<RequestAndCompletionHandler> generateRequests() {
+      // we want to use the nodeRPC map and the queue to generate requests
+      // and maybe coalesce write requests for single node
+      if (generateCallback != null) {
+        generateCallback.run();
+      }
+      List<RequestAndCompletionHandler> requests = new ArrayList<>();
+
       if (!queue.isEmpty()) {
         PersisterStateManagerHandler handler = queue.peek();
         queue.poll();
@@ -571,31 +670,148 @@ public class PersisterStateManager {
               handler
           ));
         } else {
-          log.debug("Sending share state RPC - {}", handler.name());
-          // share coord node already available
-          return Collections.singletonList(new RequestAndCompletionHandler(
-              time.milliseconds(),
-              handler.shareCoordinatorNode(),
-              handler.requestBuilder(),
-              handler
-          ));
+          // useful for tests and
+          // other RPCs which might not be batchable
+          if (!handler.isBatchable()) {
+            requests.add(new RequestAndCompletionHandler(
+                time.milliseconds(),
+                handler.coordinatorNode,
+                handler.requestBuilder(),
+                handler
+            ));
+          }
         }
       }
-      return Collections.emptyList();
+
+      // node1: {
+      //   group1: {
+      //      write: [w1, w2],
+      //      read: [r1, r2],
+      //      delete: [d1],
+      //      summary: [s1]
+      //   }
+      //   group2: {
+      //      write: [w3, w4]
+      //   }
+      // }
+      // For a sequence of writes, the flow would be:
+      // 1. 1st write request arrives
+      // 2. it is enqueued in the send thread
+      // 3. wakeup event causes the generate requests to find the coordinator
+      // 4. It will cause either RPC or cache lookup
+      // 5. Once complete, the write handler is added to the nodeMap and not the queue
+      // 6. wakeup event causes generate requests to iterate over the map and send the write request (W1) and remove node from the nodeMap and add it to inFlight
+      // 7. Until W1 completes, more write requests (W2, W3, ...) could come in and get added to the nodeMap as per point 3, 4, 5.
+      // 8. If these belong to same node as W1. They will not be sent as the membership test with inFlight will pass.
+      // 9. When W1 completes, it will clear inFlight and raise wakeup event.
+      // 10. At this point W2, W3, etc. could be sent as a combined request thus achieving batching.
+      final Map<RPCType, Set<Node>> sending = new HashMap<>();
+      synchronized (nodeMapLock) {
+        nodeRPCMap.forEach((coordNode, rpcTypesPerNode) ->
+                rpcTypesPerNode.forEach((rpcType, groupsPerRpcType) ->
+                        groupsPerRpcType.forEach((groupId, handlersPerGroup) -> {
+                          if (!inFlight.containsKey(rpcType) || !inFlight.get(rpcType).contains(coordNode)) { // this will wait for similar rpc type requests to batch
+                            AbstractRequest.Builder<? extends AbstractRequest> combinedRequestPerTypePerGroup =
+                                    RequestCoalescerHelper.coalesceRequests(groupId, rpcType, handlersPerGroup);
+                            requests.add(new RequestAndCompletionHandler(
+                                    time.milliseconds(),
+                                    coordNode,
+                                    combinedRequestPerTypePerGroup,
+                                    response -> {
+                                      inFlight.computeIfPresent(rpcType, (key, oldVal) -> {
+                                        oldVal.remove(coordNode);
+                                        return oldVal;
+                                      });
+                                      handlersPerGroup.forEach(handler1 -> handler1.onComplete(response));
+                                      wakeup();
+                                    }));
+                            sending.computeIfAbsent(rpcType, key -> new HashSet<>()).add(coordNode);
+                          }
+                        })));
+
+        sending.forEach((rpcType, nodeSet) -> {
+          // we need to add these nodes to inFlight
+          inFlight.computeIfAbsent(rpcType, key -> new HashSet<>()).addAll(nodeSet);
+
+          // remove from nodeMap
+          nodeSet.forEach(node -> nodeRPCMap.computeIfPresent(node, (nodeKey, oldRPCTypeSet) -> {
+            oldRPCTypeSet.remove(rpcType);
+            return oldRPCTypeSet;
+          }));
+        });
+      } // close of synchronized context
+
+      return requests;
     }
 
     public void enqueue(PersisterStateManagerHandler handler) {
       queue.add(handler);
+      wakeup();
+    }
+  }
+
+  private static class RequestCoalescerHelper {
+    public static AbstractRequest.Builder<? extends AbstractRequest> coalesceRequests(String groupId, RPCType rpcType, List<? extends PersisterStateManagerHandler> handlers) {
+      switch (rpcType) {
+        case WRITE:
+          return coalesceWrites(groupId, handlers);
+        case READ:
+          return coalesceReads(groupId, handlers);
+        default:
+          throw new RuntimeException("Unknown rpc type: " + rpcType);
+      }
     }
 
-    @Override
-    public void doWork() {
-      try {
-        TimeUnit.MILLISECONDS.sleep(10);
-        this.pollOnce(100L);
-      } catch (Exception e) {
-        log.error("Timed out", e);
-      }
+    private static AbstractRequest.Builder<? extends AbstractRequest> coalesceWrites(String groupId, List<? extends PersisterStateManagerHandler> handlers) {
+      Map<Uuid, List<WriteShareGroupStateRequestData.PartitionData>> partitionData = new HashMap<>();
+      handlers.forEach(persHandler -> {
+        assert persHandler instanceof WriteStateHandler;
+        WriteStateHandler handler = (WriteStateHandler) persHandler;
+        partitionData.computeIfAbsent(handler.topicId, topicId -> new LinkedList<>());
+        partitionData.get(handler.topicId).add(
+                new WriteShareGroupStateRequestData.PartitionData()
+                        .setPartition(handler.partition)
+                        .setStateEpoch(handler.stateEpoch)
+                        .setLeaderEpoch(handler.leaderEpoch)
+                        .setStartOffset(handler.startOffset)
+                        .setStateBatches(handler.batches.stream()
+                                .map(batch -> new WriteShareGroupStateRequestData.StateBatch()
+                                        .setFirstOffset(batch.firstOffset())
+                                        .setLastOffset(batch.lastOffset())
+                                        .setDeliveryState(batch.deliveryState())
+                                        .setDeliveryCount(batch.deliveryCount()))
+                                .collect(Collectors.toList())));
+      });
+
+      return new WriteShareGroupStateRequest.Builder(new WriteShareGroupStateRequestData()
+              .setGroupId(groupId)
+              .setTopics(partitionData.entrySet().stream().map(
+                              entry -> new WriteShareGroupStateRequestData.WriteStateData()
+                                      .setTopicId(entry.getKey())
+                                      .setPartitions(entry.getValue()))
+                      .collect(Collectors.toList())));
+    }
+
+    private static AbstractRequest.Builder<? extends AbstractRequest> coalesceReads(String groupId, List<? extends PersisterStateManagerHandler> handlers) {
+      Map<Uuid, List<ReadShareGroupStateRequestData.PartitionData>> partitionData = new HashMap<>();
+      handlers.forEach(persHandler -> {
+        assert persHandler instanceof ReadStateHandler;
+        ReadStateHandler handler = (ReadStateHandler) persHandler;
+        partitionData.computeIfAbsent(handler.topicId, topicId -> new LinkedList<>());
+        partitionData.get(handler.topicId).add(
+                new ReadShareGroupStateRequestData.PartitionData()
+                        .setPartition(handler.partition)
+                        .setLeaderEpoch(handler.leaderEpoch)
+        );
+      });
+
+      return new ReadShareGroupStateRequest.Builder(new ReadShareGroupStateRequestData()
+              .setGroupId(groupId)
+              .setTopics(partitionData.entrySet().stream().map(
+                              entry -> new ReadShareGroupStateRequestData.ReadStateData()
+                                      .setTopicId(entry.getKey())
+                                      .setPartitions(entry.getValue()))
+                      .collect(Collectors.toList())));
     }
   }
 }

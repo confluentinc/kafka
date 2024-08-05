@@ -35,12 +35,17 @@ import org.apache.kafka.common.requests.WriteShareGroupStateRequest;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.util.MockTime;
+import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -129,6 +134,16 @@ class PersisterStateManagerTest {
 
     CompletableFuture<Errors> getResult() {
       return this.result;
+    }
+
+    @Override
+    protected boolean isBatchable() {
+      return false;
+    }
+
+    @Override
+    protected PersisterStateManager.RPCType rpcType() {
+      return PersisterStateManager.RPCType.UNKNOWN;
     }
   }
 
@@ -420,7 +435,8 @@ class PersisterStateManagerTest {
         future,
         REQUEST_BACKOFF_MS,
         REQUEST_BACKOFF_MAX_MS,
-        MAX_FIND_COORD_ATTEMPTS
+        MAX_FIND_COORD_ATTEMPTS,
+        null
     ));
 
     stateManager.enqueue(handler);
@@ -435,7 +451,7 @@ class PersisterStateManagerTest {
     }
 
     verify(handler, times(1)).findShareCoordinatorBuilder();
-    verify(handler, times(1)).requestBuilder();
+    verify(handler, times(0)).requestBuilder();
 
     try {
       // Stopping the state manager
@@ -539,7 +555,7 @@ class PersisterStateManagerTest {
     WriteShareGroupStateResponseData.PartitionResult partitionResult = result.data().results().get(0).partitions().get(0);
 
     verify(handler, times(1)).findShareCoordinatorBuilder();
-    verify(handler, times(1)).requestBuilder();
+    verify(handler, times(0)).requestBuilder();
 
     // Verifying the coordinator node was populated correctly by the FIND_COORDINATOR request
     assertEquals(handler.getCoordinatorNode(), coordinatorNode);
@@ -663,7 +679,7 @@ class PersisterStateManagerTest {
     WriteShareGroupStateResponseData.PartitionResult partitionResult = result.data().results().get(0).partitions().get(0);
 
     verify(handler, times(2)).findShareCoordinatorBuilder();
-    verify(handler, times(1)).requestBuilder();
+    verify(handler, times(0)).requestBuilder();
 
     // Verifying the coordinator node was populated correctly by the FIND_COORDINATOR request
     assertEquals(handler.getCoordinatorNode(), coordinatorNode);
@@ -755,7 +771,7 @@ class PersisterStateManagerTest {
     WriteShareGroupStateResponseData.PartitionResult partitionResult = result.data().results().get(0).partitions().get(0);
 
     verify(handler, times(0)).findShareCoordinatorBuilder();
-    verify(handler, times(1)).requestBuilder();
+    verify(handler, times(0)).requestBuilder();
 
     // Verifying the coordinator node was populated correctly by the FIND_COORDINATOR request
     assertEquals(handler.getCoordinatorNode(), coordinatorNode);
@@ -770,6 +786,87 @@ class PersisterStateManagerTest {
     } catch (InterruptedException e) {
       fail("Failed to stop state manager", e);
     }
+  }
+
+  @Test
+  public void testWriteStateRequestBatchingWithCoordinatorNode() throws ExecutionException, InterruptedException {
+
+    MockClient client = new MockClient(MOCK_TIME);
+
+    String groupId = "group1";
+    Uuid topicId = Uuid.randomUuid();
+    int partition = 10;
+    List<PersisterStateBatch> stateBatches = Arrays.asList(
+            new PersisterStateBatch(0, 9, (byte) 0, (short) 1),
+            new PersisterStateBatch(10, 19, (byte) 1, (short) 1)
+    );
+
+    Node coordinatorNode = new Node(1, HOST, PORT);
+
+    client.prepareResponseFrom(body -> {
+      WriteShareGroupStateRequest request = (WriteShareGroupStateRequest) body;
+      String requestGroupId = request.data().groupId();
+      Uuid requestTopicId = request.data().topics().get(0).topicId();
+      int requestPartition = request.data().topics().get(0).partitions().get(0).partition();
+
+      return requestGroupId.equals(groupId) && requestTopicId == topicId && requestPartition == partition;
+    }, new WriteShareGroupStateResponse(
+            new WriteShareGroupStateResponseData()
+                    .setResults(Collections.singletonList(
+                            new WriteShareGroupStateResponseData.WriteStateResult()
+                                    .setTopicId(topicId)
+                                    .setPartitions(Collections.singletonList(
+                                            new WriteShareGroupStateResponseData.PartitionResult()
+                                                    .setPartition(partition)
+                                                    .setErrorCode(Errors.NONE.code())
+                                                    .setErrorMessage("")
+                                    ))
+                    ))
+    ), coordinatorNode);
+
+    ShareCoordinatorMetadataCacheHelper cacheHelper = getCoordinatorCacheHelper(coordinatorNode);
+
+    PersisterStateManager stateManager = PersisterStateManagerBuilder.builder()
+            .withKafkaClient(client)
+            .withCacheHelper(cacheHelper)
+            .build();
+
+    AtomicBoolean isBatchingSuccess = new AtomicBoolean(false);
+    stateManager.setGenerateCallback(() -> {
+      Map<PersisterStateManager.RPCType, Map<String, List<PersisterStateManager.PersisterStateManagerHandler>>> handlersPerType = stateManager.nodeRPCMap().get(coordinatorNode);
+      if (handlersPerType != null && handlersPerType.containsKey(PersisterStateManager.RPCType.WRITE) && handlersPerType.get(PersisterStateManager.RPCType.WRITE).containsKey(groupId)) {
+        if (handlersPerType.get(PersisterStateManager.RPCType.WRITE).get(groupId).size() > 2)
+          isBatchingSuccess.set(true);
+      }
+    });
+
+    stateManager.start();
+
+    CompletableFuture<WriteShareGroupStateResponse> future = new CompletableFuture<>();
+
+    List<PersisterStateManager.WriteStateHandler> handlers = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      PersisterStateManager.WriteStateHandler handler = spy(stateManager.new WriteStateHandler(
+              groupId,
+              topicId,
+              partition,
+              0,
+              0,
+              0,
+              stateBatches,
+              future,
+              REQUEST_BACKOFF_MS,
+              REQUEST_BACKOFF_MAX_MS,
+              MAX_FIND_COORD_ATTEMPTS
+      ));
+      handlers.add(handler);
+      stateManager.enqueue(handler);
+    }
+
+    CompletableFuture.allOf(handlers.stream()
+            .map(PersisterStateManager.WriteStateHandler::getResult).toArray(CompletableFuture[]::new)).get();
+
+    TestUtils.waitForCondition(isBatchingSuccess::get, TestUtils.DEFAULT_MAX_WAIT_MS, 10L, () -> "unable to verify batching");
   }
 
   @Test
@@ -845,7 +942,8 @@ class PersisterStateManagerTest {
         future,
         REQUEST_BACKOFF_MS,
         REQUEST_BACKOFF_MAX_MS,
-        MAX_FIND_COORD_ATTEMPTS
+        MAX_FIND_COORD_ATTEMPTS,
+        null
     ));
 
     stateManager.enqueue(handler);
@@ -862,7 +960,7 @@ class PersisterStateManagerTest {
     ReadShareGroupStateResponseData.PartitionResult partitionResult = result.data().results().get(0).partitions().get(0);
 
     verify(handler, times(1)).findShareCoordinatorBuilder();
-    verify(handler, times(1)).requestBuilder();
+    verify(handler, times(0)).requestBuilder();
 
     // Verifying the coordinator node was populated correctly by the FIND_COORDINATOR request
     assertEquals(handler.getCoordinatorNode(), coordinatorNode);
@@ -967,7 +1065,8 @@ class PersisterStateManagerTest {
         future,
         REQUEST_BACKOFF_MS,
         REQUEST_BACKOFF_MAX_MS,
-        MAX_FIND_COORD_ATTEMPTS
+        MAX_FIND_COORD_ATTEMPTS,
+        null
     ));
 
     stateManager.enqueue(handler);
@@ -984,7 +1083,7 @@ class PersisterStateManagerTest {
     ReadShareGroupStateResponseData.PartitionResult partitionResult = result.data().results().get(0).partitions().get(0);
 
     verify(handler, times(2)).findShareCoordinatorBuilder();
-    verify(handler, times(1)).requestBuilder();
+    verify(handler, times(0)).requestBuilder();
 
     // Verifying the coordinator node was populated correctly by the FIND_COORDINATOR request
     assertEquals(handler.getCoordinatorNode(), coordinatorNode);
@@ -1057,7 +1156,8 @@ class PersisterStateManagerTest {
         future,
         REQUEST_BACKOFF_MS,
         REQUEST_BACKOFF_MAX_MS,
-        MAX_FIND_COORD_ATTEMPTS
+        MAX_FIND_COORD_ATTEMPTS,
+        null
     ));
 
     stateManager.enqueue(handler);
@@ -1074,7 +1174,7 @@ class PersisterStateManagerTest {
     ReadShareGroupStateResponseData.PartitionResult partitionResult = result.data().results().get(0).partitions().get(0);
 
     verify(handler, times(0)).findShareCoordinatorBuilder();
-    verify(handler, times(1)).requestBuilder();
+    verify(handler, times(0)).requestBuilder();
 
     // Verifying the coordinator node was populated correctly by the constructor
     assertEquals(handler.getCoordinatorNode(), coordinatorNode);

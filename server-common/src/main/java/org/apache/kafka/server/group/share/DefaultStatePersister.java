@@ -116,7 +116,7 @@ public class DefaultStatePersister implements Persister {
               }
               return stateManager.new WriteStateHandler(
                   groupId, topicData.topicId(), partitionData.partition(), partitionData.stateEpoch(), partitionData.leaderEpoch(), partitionData.startOffset(), partitionData.stateBatches(),
-                  partMap.get(partitionData.partition()));
+                  partMap.get(partitionData.partition()), null);
             })
             .collect(Collectors.toList()))
         .flatMap(Collection::stream)
@@ -188,7 +188,8 @@ public class DefaultStatePersister implements Persister {
                   topicData.topicId(),
                   partitionData.partition(),
                   partitionData.leaderEpoch(),
-                  partMap.get(partitionData.partition()));
+                  partMap.get(partitionData.partition()),
+                  null);
             })
             .collect(Collectors.toList()))
         .flatMap(Collection::stream)
