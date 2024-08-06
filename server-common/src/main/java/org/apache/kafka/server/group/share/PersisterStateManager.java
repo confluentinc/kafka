@@ -73,9 +73,22 @@ public class PersisterStateManager {
   public static final long REQUEST_BACKOFF_MAX_MS = 30_000L;
   private static final int MAX_FIND_COORD_ATTEMPTS = 5;
   private final Time time;
+  // holds the set of share coord nodes for each RPC type which is currently sent but not completed
   private final Map<RPCType, Set<Node>> inFlight = new HashMap<>();
+
+  // Mapping of batchable RPCs. The top level grouping is based on destination share coordinator node
+  // Since kafkaApis for each RPC type are separate, we cannot batch different types of RPCs, hence we need
+  // RPCType'd key inner map. The RPC schemas defined in kip-932 are have a single group id per request
+  // hence, we cannot batch RPCs with different groupIds, therefore another inner map keyed on groupId is needed.
+  // Finally, the value is a list of handlers
   private final Map<Node, Map<RPCType, Map<String, List<PersisterStateManagerHandler>>>> nodeRPCMap = new HashMap<>();
+
+  // Final object to serve synchronization needs.
   private final Object nodeMapLock = new Object();
+
+  // Called when the generateRequests method is executed by InterBrokerSendThread, returning requests.
+  // Mainly for testing and introspection purpose to inspect the state of the nodeRPC map
+  // when generateRequests is called.
   private Runnable generateCallback;
 
   public enum RPCType {
@@ -130,13 +143,18 @@ public class PersisterStateManager {
     this.generateCallback = generateCallback;
   }
 
+  /**
+   * Parent class of all RPCs. Uses template pattern to implement core methods.
+   * Various child classes can extend this class to define how to handle RPC specific
+   * responses, retries, batching etc.
+   */
   public abstract class PersisterStateManagerHandler implements RequestCompletionHandler {
     protected Node coordinatorNode;
     protected final String groupId;
     protected final Uuid topicId;
     protected final int partition;
-    private final ExponentialBackoff findCoordbackoff;
-    private int findCoordattempts = 0;
+    private final ExponentialBackoff findCoordBackoff;
+    private int findCoordAttempts = 0;
     private final int maxFindCoordAttempts;
     protected final Logger log = LoggerFactory.getLogger(getClass());
     private Consumer<ClientResponse> onCompleteCallback;
@@ -152,7 +170,7 @@ public class PersisterStateManager {
       this.groupId = groupId;
       this.topicId = topicId;
       this.partition = partition;
-      this.findCoordbackoff = new ExponentialBackoff(
+      this.findCoordBackoff = new ExponentialBackoff(
           backoffMs,
           CommonClientConfigs.RETRY_BACKOFF_EXP_BASE,
           backoffMaxMs,
@@ -221,13 +239,12 @@ public class PersisterStateManager {
         return;
       }
       synchronized (nodeMapLock) {
-        nodeRPCMap.computeIfAbsent(node, k -> new HashMap<>());
-        nodeRPCMap.get(node).computeIfAbsent(handler.rpcType(), k -> new HashMap<>());
-        nodeRPCMap.get(node).get(handler.rpcType()).computeIfAbsent(handler.groupId, k -> new LinkedList<>());
-
-        nodeRPCMap.get(node).get(handler.rpcType()).get(handler.groupId).add(handler);
-        sender.wakeup();
+        nodeRPCMap.computeIfAbsent(node, k -> new HashMap<>())
+                .computeIfAbsent(handler.rpcType(), k -> new HashMap<>())
+                .computeIfAbsent(handler.groupId, k -> new LinkedList<>())
+                .add(handler);
       }
+      sender.wakeup();
     }
 
     /**
@@ -287,7 +304,7 @@ public class PersisterStateManager {
     }
 
     private void resetAttempts() {
-      findCoordattempts = 0;
+      findCoordAttempts = 0;
     }
 
     private void resetCoordinatorNode() {
@@ -303,7 +320,7 @@ public class PersisterStateManager {
       log.debug("Find coordinator response received - {}", response);
 
       // Incrementing the number of find coordinator attempts
-      findCoordattempts++;
+      findCoordAttempts++;
       List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
       if (coordinators.size() != 1) {
         log.error("Find coordinator response for {} is invalid", coordinatorKey());
@@ -330,14 +347,14 @@ public class PersisterStateManager {
         case COORDINATOR_NOT_AVAILABLE: // retriable error codes
         case COORDINATOR_LOAD_IN_PROGRESS:
           log.warn("Received retriable error in find coordinator: {}", error.message());
-          if (findCoordattempts >= this.maxFindCoordAttempts) {
+          if (findCoordAttempts >= this.maxFindCoordAttempts) {
             log.error("Exhausted max retries to find coordinator without success.");
             findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
             break;
           }
           log.debug("Waiting before retrying find coordinator RPC.");
           try {
-            TimeUnit.MILLISECONDS.sleep(findCoordbackoff.backoff(findCoordattempts));
+            TimeUnit.MILLISECONDS.sleep(findCoordBackoff.backoff(findCoordAttempts));
           } catch (InterruptedException e) {
             log.warn("Interrupted waiting before retrying find coordinator request", e);
           }
@@ -642,8 +659,10 @@ public class PersisterStateManager {
      */
     @Override
     public Collection<RequestAndCompletionHandler> generateRequests() {
-      // we want to use the nodeRPC map and the queue to generate requests
-      // and maybe coalesce write requests for single node
+      // There are two sources for requests here:
+      // 1. A queue which will contain FIND_CORD RPCs and other non-batchable RPCs.
+      // 2. A hashMap keyed on the share coord node which may contain batched requests.
+
       if (generateCallback != null) {
         generateCallback.run();
       }
@@ -785,10 +804,10 @@ public class PersisterStateManager {
 
       return new WriteShareGroupStateRequest.Builder(new WriteShareGroupStateRequestData()
               .setGroupId(groupId)
-              .setTopics(partitionData.entrySet().stream().map(
-                              entry -> new WriteShareGroupStateRequestData.WriteStateData()
-                                      .setTopicId(entry.getKey())
-                                      .setPartitions(entry.getValue()))
+              .setTopics(partitionData.entrySet().stream()
+                      .map(entry -> new WriteShareGroupStateRequestData.WriteStateData()
+                              .setTopicId(entry.getKey())
+                              .setPartitions(entry.getValue()))
                       .collect(Collectors.toList())));
     }
 
@@ -807,10 +826,10 @@ public class PersisterStateManager {
 
       return new ReadShareGroupStateRequest.Builder(new ReadShareGroupStateRequestData()
               .setGroupId(groupId)
-              .setTopics(partitionData.entrySet().stream().map(
-                              entry -> new ReadShareGroupStateRequestData.ReadStateData()
-                                      .setTopicId(entry.getKey())
-                                      .setPartitions(entry.getValue()))
+              .setTopics(partitionData.entrySet().stream()
+                      .map(entry -> new ReadShareGroupStateRequestData.ReadStateData()
+                              .setTopicId(entry.getKey())
+                              .setPartitions(entry.getValue()))
                       .collect(Collectors.toList())));
     }
   }
