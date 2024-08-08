@@ -1594,7 +1594,7 @@ public class SharePartitionManagerTest {
         // Simulating the case where the SharePartition has reached the maximum in-flight records limit, and the
         // nextFetchOffset points to endOffset + 1
         when(sp0.nextFetchOffset()).thenReturn((long) 200);
-        when(sp0.canAcquireMore()).thenReturn(false);
+        when(sp0.canAcquireRecords()).thenReturn(false);
         when(sp0.endOffset()).thenReturn((long) 199);
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new HashMap<>();
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp0), sp0);
@@ -1630,7 +1630,7 @@ public class SharePartitionManagerTest {
         // Simulating the case where the SharePartition has reached the maximum in-flight records limit, and the
         // nextFetchOffset does not point to endOffset + 1
         when(sp0.nextFetchOffset()).thenReturn((long) 100);
-        when(sp0.canAcquireMore()).thenReturn(false);
+        when(sp0.canAcquireRecords()).thenReturn(false);
         when(sp0.endOffset()).thenReturn((long) 199);
         Map<SharePartitionManager.SharePartitionKey, SharePartition> partitionCacheMap = new HashMap<>();
         partitionCacheMap.put(new SharePartitionManager.SharePartitionKey(groupId, tp0), sp0);
