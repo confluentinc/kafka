@@ -13,9 +13,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+plugins {
+    id 'com.gradle.develocity' version '3.17.6'
+    id 'com.gradle.common-custom-user-data-gradle-plugin' version '2.0.2'
+}
 
-//DO NOT MERGE gradle enterprise from AK due to licensing issues
-//see more discussion here https://github.com/apache/kafka/pull/13676#issuecomment-1599025907
+// CONFLUENT
+// Due to licensing issues with Gradle Enterprise, we must disable the enterprise features here. 
+// When merging changes to develocity from AK, ensure we keep these features disabled.
+// See more discussion here https://github.com/apache/kafka/pull/13676#issuecomment-1599025907
+
+develocity {
+    buildScan {
+        publishing.onlyIf { false }
+    }
+
+    buildCache {
+        local {
+            enabled = false
+        }
+
+        remote(develocity.buildCache) {
+            enabled = false
+        }
+    }
+}
+
+
 include 'clients',
     'connect:api',
     'connect:basic-auth-extension',
@@ -26,6 +50,7 @@ include 'clients',
     'connect:runtime',
     'connect:test-plugins',
     'connect:transforms',
+    'coordinator-common',
     'core',
     'examples',
     'generator',
@@ -37,6 +62,8 @@ include 'clients',
     'raft',
     'server',
     'server-common',
+    'share',
+    'share-coordinator',
     'shell',
     'storage',
     'storage:api',
@@ -75,3 +102,4 @@ include 'clients',
 
 project(":storage:api").name = "storage-api"
 rootProject.name = 'kafka'
+
