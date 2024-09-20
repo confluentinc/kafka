@@ -1,3 +1,5 @@
+[![Open in DevZero](https://assets.devzero.io/open-in-devzero.svg)](https://www.devzero.io/dashboard/recipes/new?repo-url=https://github.com/confluentinc/kafka)
+
 Apache Kafka
 =================
 See our [web site](https://kafka.apache.org) for details on the project.
