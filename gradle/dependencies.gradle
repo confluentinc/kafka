@@ -149,6 +149,7 @@ versions += [
   opentelemetryProto: "1.0.0-alpha",
   pcollections: "4.0.1",
   powermock: "2.0.9",
+  protobuf: "3.25.5",
   reflections: "0.10.2",
   reload4j: "1.2.25",
   rocksDB: "7.9.2",
@@ -263,4 +264,5 @@ libs += [
   mavenArtifact: "org.apache.maven:maven-artifact:$versions.mavenArtifact",
   zstd: "com.github.luben:zstd-jni:$versions.zstd",
   httpclient: "org.apache.httpcomponents:httpclient:$versions.httpclient",
+  protobuf: "com.google.protobuf:protobuf-java:$versions.protobuf",
 ]
