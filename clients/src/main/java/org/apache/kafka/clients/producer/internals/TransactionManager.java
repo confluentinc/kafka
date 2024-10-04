@@ -1568,6 +1568,17 @@ public class TransactionManager {
             Errors error = endTxnResponse.error();
 
             if (error == Errors.NONE) {
+                // For transaction version 5+, the broker includes the producerId and producerEpoch in the EndTxnResponse.
+                // KIP-890 Part 2 mandates bumping the epoch after every transaction. If the epoch overflows,
+                // a new producerId is returned with epoch set to 0.
+                if (isTransactionV2Enabled) {
+                    ProducerIdAndEpoch producerIdAndEpoch = new ProducerIdAndEpoch(
+                        endTxnResponse.data().producerId(),
+                        endTxnResponse.data().producerEpoch()
+                    );
+                    setProducerIdAndEpoch(producerIdAndEpoch);
+                    resetSequenceNumbers();
+                }
                 completeTransaction();
                 result.done();
             } else if (error == Errors.COORDINATOR_NOT_AVAILABLE || error == Errors.NOT_COORDINATOR) {
