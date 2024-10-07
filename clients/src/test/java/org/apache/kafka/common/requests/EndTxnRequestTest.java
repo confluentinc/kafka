@@ -98,8 +98,12 @@ public class EndTxnRequestTest {
                 .setCommitted(true);
         // Do not set producerId and producerEpoch when transactions V2 are disabled
 
-        EndTxnRequest.Builder builder = new EndTxnRequest.Builder(requestData);
-        EndTxnRequest request = builder.build(desiredVersion);
+        EndTxnRequest.Builder builder = new EndTxnRequest.Builder(
+                requestData,
+                false,
+                isTransactionV2Enabled
+        );
+        EndTxnRequest request = builder.build(latestVersion);
 
         // Verify that the request is built with the desired version
         assertEquals(desiredVersion, request.version());
