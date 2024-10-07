@@ -3063,12 +3063,14 @@ public class RequestResponseTest {
     }
 
     private EndTxnRequest createEndTxnRequest(short version) {
+        boolean isTransactionV2Enabled = true;
         return new EndTxnRequest.Builder(
             new EndTxnRequestData()
                 .setTransactionalId("tid")
                 .setProducerId(21L)
                 .setProducerEpoch((short) 42)
-                .setCommitted(TransactionResult.COMMIT.id)
+                .setCommitted(TransactionResult.COMMIT.id),
+            isTransactionV2Enabled
             ).build(version);
     }
 

@@ -32,8 +32,8 @@ public class EndTxnRequest extends AbstractRequest {
         public final EndTxnRequestData data;
         public final boolean isTransactionV2Enabled;
 
-        public Builder(EndTxnRequestData data) {
-            this(data, false, true);
+        public Builder(EndTxnRequestData data, boolean isTransactionV2Enabled) {
+            this(data, false, isTransactionV2Enabled);
         }
 
         public Builder(EndTxnRequestData data, boolean enableUnstableLastVersion, boolean isTransactionV2Enabled) {

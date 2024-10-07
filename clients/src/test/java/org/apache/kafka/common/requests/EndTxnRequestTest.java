@@ -34,13 +34,16 @@ public class EndTxnRequestTest {
         int producerId = 1;
         String transactionId = "txn_id";
         int throttleTimeMs = 10;
+        boolean isTransactionV2Enabled = true;
 
         EndTxnRequest.Builder builder = new EndTxnRequest.Builder(
             new EndTxnRequestData()
                 .setCommitted(true)
                 .setProducerEpoch(producerEpoch)
                 .setProducerId(producerId)
-                .setTransactionalId(transactionId));
+                .setTransactionalId(transactionId),
+            isTransactionV2Enabled
+        );
 
         for (short version : ApiKeys.END_TXN.allVersions()) {
             EndTxnRequest request = builder.build(version);
