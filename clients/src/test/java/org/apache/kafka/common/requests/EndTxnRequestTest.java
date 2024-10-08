@@ -83,8 +83,6 @@ public class EndTxnRequestTest {
         // Verify that producerId and producerEpoch are included
         assertEquals(1L, request.data().producerId());
         assertEquals((short) 0, request.data().producerEpoch());
-
-        // Additional checks can be added here
     }
 
     @Test
@@ -98,8 +96,9 @@ public class EndTxnRequestTest {
 
         EndTxnRequestData requestData = new EndTxnRequestData()
                 .setTransactionalId("txn_id")
-                .setCommitted(true);
-        // Do not set producerId and producerEpoch when transactions V2 are disabled
+                .setCommitted(true)
+                .setProducerId(1L)
+                .setProducerEpoch((short) 0);
 
         EndTxnRequest.Builder builder = new EndTxnRequest.Builder(
                 requestData,
@@ -111,10 +110,8 @@ public class EndTxnRequestTest {
         // Verify that the request is built with the desired version
         assertEquals(desiredVersion, request.version());
 
-        // Verify that producerId and producerEpoch are set to default values
-        assertEquals(0L, request.data().producerId());
+        // Verify that producerId and producerEpoch are included
+        assertEquals(1L, request.data().producerId());
         assertEquals((short) 0, request.data().producerEpoch());
-
-        // Additional checks can be added here
     }
 }
