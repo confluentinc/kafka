@@ -124,7 +124,7 @@ class KafkaApisTest extends Logging {
   private val brokerId = 1
   // KRaft tests should override this with a KRaftMetadataCache
   private var metadataCache: MetadataCache = MetadataCache.zkMetadataCache(brokerId, MetadataVersion.latestTesting())
-  private val brokerEpochManager: ZkBrokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
+  private var brokerEpochManager: ZkBrokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
   private val clientQuotaManager: ClientQuotaManager = mock(classOf[ClientQuotaManager])
   private val clientRequestQuotaManager: ClientRequestQuotaManager = mock(classOf[ClientRequestQuotaManager])
   private val clientControllerQuotaManager: ControllerMutationQuotaManager = mock(classOf[ControllerMutationQuotaManager])
@@ -2829,6 +2829,8 @@ class KafkaApisTest extends Logging {
 
   @Test
   def shouldThrowUnsupportedVersionExceptionOnHandleAddOffsetToTxnRequestWhenInterBrokerProtocolNotSupported(): Unit = {
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_0_10_2_IV0)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_0_10_2_IV0)
     assertThrows(classOf[UnsupportedVersionException],
       () => kafkaApis.handleAddOffsetsToTxnRequest(null, RequestLocal.withThreadConfinedCaching))
@@ -2836,6 +2838,8 @@ class KafkaApisTest extends Logging {
 
   @Test
   def shouldThrowUnsupportedVersionExceptionOnHandleAddPartitionsToTxnRequestWhenInterBrokerProtocolNotSupported(): Unit = {
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_0_10_2_IV0)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_0_10_2_IV0)
     assertThrows(classOf[UnsupportedVersionException],
       () => kafkaApis.handleAddPartitionsToTxnRequest(null, RequestLocal.withThreadConfinedCaching))
@@ -2843,6 +2847,8 @@ class KafkaApisTest extends Logging {
 
   @Test
   def shouldThrowUnsupportedVersionExceptionOnHandleTxnOffsetCommitRequestWhenInterBrokerProtocolNotSupported(): Unit = {
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_0_10_2_IV0)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_0_10_2_IV0)
     assertThrows(classOf[UnsupportedVersionException],
       () => kafkaApis.handleAddPartitionsToTxnRequest(null, RequestLocal.withThreadConfinedCaching))
@@ -2850,6 +2856,8 @@ class KafkaApisTest extends Logging {
 
   @Test
   def shouldThrowUnsupportedVersionExceptionOnHandleEndTxnRequestWhenInterBrokerProtocolNotSupported(): Unit = {
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_0_10_2_IV0)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_0_10_2_IV0)
     assertThrows(classOf[UnsupportedVersionException],
       () => kafkaApis.handleEndTxnRequest(null, RequestLocal.withThreadConfinedCaching))
@@ -2857,6 +2865,8 @@ class KafkaApisTest extends Logging {
 
   @Test
   def shouldThrowUnsupportedVersionExceptionOnHandleWriteTxnMarkersRequestWhenInterBrokerProtocolNotSupported(): Unit = {
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_0_10_2_IV0)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_0_10_2_IV0)
     assertThrows(classOf[UnsupportedVersionException],
       () => kafkaApis.handleWriteTxnMarkersRequest(null, RequestLocal.withThreadConfinedCaching))
@@ -4000,7 +4010,7 @@ class KafkaApisTest extends Logging {
         .setPartitionIndex(tp.partition)
         .setTimestamp(ListOffsetsRequest.EARLIEST_TIMESTAMP)
         .setCurrentLeaderEpoch(currentLeaderEpoch.get)).asJava)).asJava
-    val listOffsetRequest = ListOffsetsRequest.Builder.forConsumer(true, isolationLevel, false)
+    val listOffsetRequest = ListOffsetsRequest.Builder.forConsumer(true, isolationLevel)
       .setTargetTimes(targetTimes).build()
     val request = buildRequest(listOffsetRequest)
     when(clientRequestQuotaManager.maybeRecordAndGetThrottleTimeMs(any[RequestChannel.Request](),
@@ -4027,6 +4037,31 @@ class KafkaApisTest extends Logging {
   @Test
   def testReadCommittedConsumerListOffsetLatest(): Unit = {
     testConsumerListOffsetLatest(IsolationLevel.READ_COMMITTED)
+  }
+
+  @Test
+  def testListOffsetMaxTimestampWithUnsupportedVersion(): Unit = {
+    testConsumerListOffsetWithUnsupportedVersion(ListOffsetsRequest.MAX_TIMESTAMP, 6)
+  }
+
+  @Test
+  def testListOffsetEarliestLocalTimestampWithUnsupportedVersion(): Unit = {
+    testConsumerListOffsetWithUnsupportedVersion(ListOffsetsRequest.EARLIEST_LOCAL_TIMESTAMP, 7)
+  }
+
+  @Test
+  def testListOffsetLatestTieredTimestampWithUnsupportedVersion(): Unit = {
+    testConsumerListOffsetWithUnsupportedVersion(ListOffsetsRequest.LATEST_TIERED_TIMESTAMP, 8)
+  }
+
+  @Test
+  def testListOffsetNegativeTimestampWithZeroVersion(): Unit = {
+    testConsumerListOffsetWithUnsupportedVersion(-3, 0)
+  }
+
+  @Test
+  def testListOffsetNegativeTimestampWithOneOrAboveVersion(): Unit = {
+    testConsumerListOffsetWithUnsupportedVersion(-6, 1)
   }
 
   /**
@@ -4807,6 +4842,8 @@ class KafkaApisTest extends Logging {
     ).build()
 
     val requestChannelRequest = buildRequest(joinGroupRequest)
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_2_2_IV1)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_2_2_IV1)
     kafkaApis.handleJoinGroupRequest(requestChannelRequest, RequestLocal.withThreadConfinedCaching)
 
@@ -4825,6 +4862,8 @@ class KafkaApisTest extends Logging {
     ).build()
 
     val requestChannelRequest = buildRequest(syncGroupRequest)
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_2_2_IV1)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_2_2_IV1)
     kafkaApis.handleSyncGroupRequest(requestChannelRequest, RequestLocal.withThreadConfinedCaching)
 
@@ -4842,6 +4881,8 @@ class KafkaApisTest extends Logging {
         .setGenerationId(1)
     ).build()
     val requestChannelRequest = buildRequest(heartbeatRequest)
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_2_2_IV1)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_2_2_IV1)
     kafkaApis.handleHeartbeatRequest(requestChannelRequest)
 
@@ -4871,6 +4912,9 @@ class KafkaApisTest extends Logging {
     ).build()
 
     val requestChannelRequest = buildRequest(offsetCommitRequest)
+    
+    metadataCache = MetadataCache.zkMetadataCache(brokerId, IBP_2_2_IV1)
+    brokerEpochManager = new ZkBrokerEpochManager(metadataCache, controller, None)
     kafkaApis = createKafkaApis(IBP_2_2_IV1)
     kafkaApis.handleOffsetCommitRequest(requestChannelRequest, RequestLocal.withThreadConfinedCaching)
 
@@ -6133,6 +6177,30 @@ class KafkaApisTest extends Logging {
     verifyNoThrottling[MetadataResponse](requestChannelRequest)
   }
 
+  private def testConsumerListOffsetWithUnsupportedVersion(timestamp: Long, version: Short): Unit = {
+    val tp = new TopicPartition("foo", 0)
+    val targetTimes = List(new ListOffsetsTopic()
+      .setName(tp.topic)
+      .setPartitions(List(new ListOffsetsPartition()
+        .setPartitionIndex(tp.partition)
+        .setTimestamp(timestamp)).asJava)).asJava
+
+    val data = new ListOffsetsRequestData().setTopics(targetTimes).setReplicaId(ListOffsetsRequest.CONSUMER_REPLICA_ID)
+    val listOffsetRequest = ListOffsetsRequest.parse(MessageUtil.toByteBuffer(data, version), version)
+    val request = buildRequest(listOffsetRequest)
+
+    kafkaApis = createKafkaApis()
+    kafkaApis.handleListOffsetRequest(request)
+
+    val response = verifyNoThrottling[ListOffsetsResponse](request)
+    val partitionDataOptional = response.topics.asScala.find(_.name == tp.topic).get
+      .partitions.asScala.find(_.partitionIndex == tp.partition)
+    assertTrue(partitionDataOptional.isDefined)
+
+    val partitionData = partitionDataOptional.get
+    assertEquals(Errors.UNSUPPORTED_VERSION.code, partitionData.errorCode)
+  }
+
   private def testConsumerListOffsetLatest(isolationLevel: IsolationLevel): Unit = {
     val tp = new TopicPartition("foo", 0)
     val latestOffset = 15L
@@ -6151,7 +6219,7 @@ class KafkaApisTest extends Logging {
       .setPartitions(List(new ListOffsetsPartition()
         .setPartitionIndex(tp.partition)
         .setTimestamp(ListOffsetsRequest.LATEST_TIMESTAMP)).asJava)).asJava
-    val listOffsetRequest = ListOffsetsRequest.Builder.forConsumer(true, isolationLevel, false)
+    val listOffsetRequest = ListOffsetsRequest.Builder.forConsumer(true, isolationLevel)
       .setTargetTimes(targetTimes).build()
     val request = buildRequest(listOffsetRequest)
     kafkaApis = createKafkaApis()

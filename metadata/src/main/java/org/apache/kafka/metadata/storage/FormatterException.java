@@ -14,16 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.raft.errors;
 
-/**
- * Indicates that an append operation cannot be completed because it would have resulted in an
- * unexpected base offset.
- */
-public class UnexpectedBaseOffsetException extends RaftException {
-    private static final long serialVersionUID = 1L;
+package org.apache.kafka.metadata.storage;
 
-    public UnexpectedBaseOffsetException(String s) {
-        super(s);
+public class FormatterException extends RuntimeException {
+    public FormatterException(String what) {
+        super(what);
+    }
+
+    public FormatterException(String what, Exception cause) {
+        super(what, cause);
     }
 }
