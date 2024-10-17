@@ -18,13 +18,14 @@
 package kafka.server
 
 import java.util.Collections
-
 import kafka.utils._
 import org.apache.kafka.common.message.DeleteTopicsRequestData
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.{DeleteTopicsRequest, DeleteTopicsResponse}
+import org.apache.kafka.server.config.ServerConfigs
 import org.junit.jupiter.api.Assertions._
+import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 
@@ -32,9 +33,9 @@ class DeleteTopicsRequestWithDeletionDisabledTest extends BaseRequestTest {
 
   override def brokerCount: Int = 1
 
-  override def kraftControllerConfigs() = {
-    val props = super.kraftControllerConfigs()
-    props.head.setProperty(KafkaConfig.DeleteTopicEnableProp, "false")
+  override def kraftControllerConfigs(testInfo: TestInfo) = {
+    val props = super.kraftControllerConfigs(testInfo)
+    props.head.setProperty(ServerConfigs.DELETE_TOPIC_ENABLE_CONFIG, "false")
     props
   }
 
@@ -47,7 +48,7 @@ class DeleteTopicsRequestWithDeletionDisabledTest extends BaseRequestTest {
     props.map(KafkaConfig.fromProps)
   }
 
-  @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumName)
+  @ParameterizedTest
   @ValueSource(strings = Array("zk", "kraft"))
   def testDeleteRecordsRequest(quorum: String): Unit = {
     val topic = "topic-1"

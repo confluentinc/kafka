@@ -19,6 +19,7 @@ package org.apache.kafka.streams.processor.internals;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.streams.processor.TaskId;
+
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
@@ -26,9 +27,9 @@ import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
-import static org.apache.kafka.common.utils.Utils.mkSet;
 import static org.apache.kafka.test.StreamsTestUtils.TaskBuilder.standbyTask;
 import static org.apache.kafka.test.StreamsTestUtils.TaskBuilder.statefulTask;
 import static org.apache.kafka.test.StreamsTestUtils.TaskBuilder.statelessTask;
@@ -49,7 +50,7 @@ class ReadOnlyTaskTest {
             add("changelogOffsets");
             add("state");
             add("id");
-            add("getStore");
+            add("store");
         }
     };
 
@@ -133,7 +134,7 @@ class ReadOnlyTaskTest {
     @Test
     public void shouldDelegateCommitNeededIfStandby() {
         final StandbyTask standbyTask =
-            standbyTask(new TaskId(1, 0), mkSet(new TopicPartition("topic", 0))).build();
+            standbyTask(new TaskId(1, 0), Set.of(new TopicPartition("topic", 0))).build();
         final ReadOnlyTask readOnlyTask = new ReadOnlyTask(standbyTask);
 
         readOnlyTask.commitNeeded();
@@ -144,7 +145,7 @@ class ReadOnlyTaskTest {
     @Test
     public void shouldThrowUnsupportedOperationExceptionForCommitNeededIfActive() {
         final StreamTask statefulTask =
-            statefulTask(new TaskId(1, 0), mkSet(new TopicPartition("topic", 0))).build();
+            statefulTask(new TaskId(1, 0), Set.of(new TopicPartition("topic", 0))).build();
         final ReadOnlyTask readOnlyTask = new ReadOnlyTask(statefulTask);
 
         final Exception exception = assertThrows(UnsupportedOperationException.class, readOnlyTask::commitNeeded);

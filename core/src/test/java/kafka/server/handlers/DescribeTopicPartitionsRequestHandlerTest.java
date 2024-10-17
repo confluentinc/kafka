@@ -22,6 +22,7 @@ import kafka.server.AuthHelper;
 import kafka.server.KafkaConfig;
 import kafka.server.metadata.KRaftMetadataCache;
 import kafka.utils.TestUtils;
+
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.errors.InvalidRequestException;
@@ -58,10 +59,15 @@ import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.image.MetadataProvenance;
 import org.apache.kafka.metadata.LeaderRecoveryState;
+import org.apache.kafka.network.metrics.RequestChannelMetrics;
+import org.apache.kafka.raft.QuorumConfig;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizationResult;
 import org.apache.kafka.server.authorizer.Authorizer;
+import org.apache.kafka.server.common.KRaftVersion;
 import org.apache.kafka.server.common.MetadataVersion;
+import org.apache.kafka.server.config.KRaftConfigs;
+
 import org.junit.jupiter.api.Test;
 
 import java.net.InetAddress;
@@ -76,17 +82,17 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class DescribeTopicPartitionsRequestHandlerTest {
-    private int brokerId = 1;
-    private RequestChannel.Metrics requestChannelMetrics = mock(RequestChannel.Metrics.class);
-    private KafkaPrincipalSerde kafkaPrincipalSerde = new KafkaPrincipalSerde() {
+    private final RequestChannelMetrics requestChannelMetrics = mock(RequestChannelMetrics.class);
+    private final KafkaPrincipalSerde kafkaPrincipalSerde = new KafkaPrincipalSerde() {
         @Override
         public byte[] serialize(KafkaPrincipal principal) throws SerializationException {
             return Utils.utf8(principal.toString());
@@ -122,11 +128,10 @@ class DescribeTopicPartitionsRequestHandlerTest {
         Action expectedActions2 = new Action(AclOperation.DESCRIBE, new ResourcePattern(ResourceType.TOPIC, authorizedTopic, PatternType.LITERAL), 1, true, true);
         Action expectedActions3 = new Action(AclOperation.DESCRIBE, new ResourcePattern(ResourceType.TOPIC, authorizedNonExistTopic, PatternType.LITERAL), 1, true, true);
 
-        // Here we need to use AuthHelperTest.matchSameElements instead of EasyMock.eq since the order of the request is unknown
         when(authorizer.authorize(any(RequestContext.class), argThat(t ->
             t.contains(expectedActions1) || t.contains(expectedActions2) || t.contains(expectedActions3))))
             .thenAnswer(invocation -> {
-                List<Action> actions = (List<Action>) invocation.getArgument(1);
+                List<Action> actions = invocation.getArgument(1);
                 return actions.stream().map(action -> {
                     if (action.resourcePattern().name().startsWith("authorized"))
                         return AuthorizationResult.ALLOWED;
@@ -194,7 +199,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
                 .setPartitionEpoch(2)
                 .setLeaderRecoveryState(LeaderRecoveryState.RECOVERED.value())
         );
-        KRaftMetadataCache metadataCache = new KRaftMetadataCache(0);
+        KRaftMetadataCache metadataCache = new KRaftMetadataCache(0, () -> KRaftVersion.KRAFT_VERSION_1);
         updateKraftMetadataCache(metadataCache, records);
         DescribeTopicPartitionsRequestHandler handler =
             new DescribeTopicPartitionsRequestHandler(metadataCache, new AuthHelper(scala.Option.apply(authorizer)), createKafkaDefaultConfig());
@@ -211,7 +216,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             request = buildRequest(describeTopicPartitionsRequest, plaintextListener);
         } catch (Exception e) {
-            assertTrue(false, e.getMessage());
+            fail(e.getMessage());
             return;
         }
         DescribeTopicPartitionsResponseData response = handler.handleDescribeTopicPartitionsRequest(request);
@@ -240,7 +245,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             request = buildRequest(describeTopicPartitionsRequest, plaintextListener);
         } catch (Exception e) {
-            assertTrue(false, e.getMessage());
+            fail(e.getMessage());
             return;
         }
         response = handler.handleDescribeTopicPartitionsRequest(request);
@@ -262,7 +267,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             request = buildRequest(describeTopicPartitionsRequest, plaintextListener);
         } catch (Exception e) {
-            assertTrue(false, e.getMessage());
+            fail(e.getMessage());
             return;
         }
         response = handler.handleDescribeTopicPartitionsRequest(request);
@@ -281,7 +286,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             request = buildRequest(describeTopicPartitionsRequest, plaintextListener);
         } catch (Exception e) {
-            assertTrue(false, e.getMessage());
+            fail(e.getMessage());
             return;
         }
         response = handler.handleDescribeTopicPartitionsRequest(request);
@@ -300,7 +305,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             request = buildRequest(describeTopicPartitionsRequest, plaintextListener);
         } catch (Exception e) {
-            assertTrue(false, e.getMessage());
+            fail(e.getMessage());
             return;
         }
         response = handler.handleDescribeTopicPartitionsRequest(request);
@@ -325,11 +330,10 @@ class DescribeTopicPartitionsRequestHandlerTest {
         Action expectedActions1 = new Action(AclOperation.DESCRIBE, new ResourcePattern(ResourceType.TOPIC, authorizedTopic, PatternType.LITERAL), 1, true, true);
         Action expectedActions2 = new Action(AclOperation.DESCRIBE, new ResourcePattern(ResourceType.TOPIC, authorizedTopic2, PatternType.LITERAL), 1, true, true);
 
-        // Here we need to use AuthHelperTest.matchSameElements instead of EasyMock.eq since the order of the request is unknown
         when(authorizer.authorize(any(RequestContext.class), argThat(t ->
             t.contains(expectedActions1) || t.contains(expectedActions2))))
             .thenAnswer(invocation -> {
-                List<Action> actions = (List<Action>) invocation.getArgument(1);
+                List<Action> actions = invocation.getArgument(1);
                 return actions.stream().map(action -> {
                     if (action.resourcePattern().name().startsWith("authorized"))
                         return AuthorizationResult.ALLOWED;
@@ -397,7 +401,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
                 .setPartitionEpoch(2)
                 .setLeaderRecoveryState(LeaderRecoveryState.RECOVERED.value())
         );
-        KRaftMetadataCache metadataCache = new KRaftMetadataCache(0);
+        KRaftMetadataCache metadataCache = new KRaftMetadataCache(0, () -> KRaftVersion.KRAFT_VERSION_1);
         updateKraftMetadataCache(metadataCache, records);
         DescribeTopicPartitionsRequestHandler handler =
             new DescribeTopicPartitionsRequestHandler(metadataCache, new AuthHelper(scala.Option.apply(authorizer)), createKafkaDefaultConfig());
@@ -415,7 +419,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             request = buildRequest(describeTopicPartitionsRequest, plaintextListener);
         } catch (Exception e) {
-            assertTrue(false, e.getMessage());
+            fail(e.getMessage());
             return;
         }
         DescribeTopicPartitionsResponseData response = handler.handleDescribeTopicPartitionsRequest(request);
@@ -445,7 +449,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             request = buildRequest(describeTopicPartitionsRequest, plaintextListener);
         } catch (Exception e) {
-            assertTrue(false, e.getMessage());
+            fail(e.getMessage());
             return;
         }
         response = handler.handleDescribeTopicPartitionsRequest(request);
@@ -469,14 +473,29 @@ class DescribeTopicPartitionsRequestHandlerTest {
         try {
             handler.handleDescribeTopicPartitionsRequest(buildRequest(describeTopicPartitionsRequest, plaintextListener));
         } catch (Exception e) {
-            assertTrue(e instanceof InvalidRequestException, e.getMessage());
+            assertInstanceOf(InvalidRequestException.class, e, e.getMessage());
+        }
+
+        // 3.4 With cursor point to a negative partition id. Exception should be thrown if not querying all the topics.
+        describeTopicPartitionsRequest = new DescribeTopicPartitionsRequest(new DescribeTopicPartitionsRequestData()
+            .setTopics(Arrays.asList(
+                new DescribeTopicPartitionsRequestData.TopicRequest().setName(authorizedTopic),
+                new DescribeTopicPartitionsRequestData.TopicRequest().setName(authorizedTopic2)
+            ))
+            .setCursor(new DescribeTopicPartitionsRequestData.Cursor().setTopicName(authorizedTopic).setPartitionIndex(-1))
+        );
+
+        try {
+            handler.handleDescribeTopicPartitionsRequest(buildRequest(describeTopicPartitionsRequest, plaintextListener));
+        } catch (Exception e) {
+            assertInstanceOf(InvalidRequestException.class, e, e.getMessage());
         }
     }
 
     void updateKraftMetadataCache(KRaftMetadataCache kRaftMetadataCache, List<ApiMessage> records) {
         MetadataImage image = kRaftMetadataCache.currentImage();
         MetadataImage partialImage = new MetadataImage(
-            new MetadataProvenance(100L, 10, 1000L),
+            new MetadataProvenance(100L, 10, 1000L, true),
             image.features(),
             ClusterImage.EMPTY,
             image.topics(),
@@ -489,7 +508,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
         );
         MetadataDelta delta = new MetadataDelta.Builder().setImage(partialImage).build();
         records.stream().forEach(record -> delta.replay(record));
-        kRaftMetadataCache.setImage(delta.apply(new MetadataProvenance(100L, 10, 1000L)));
+        kRaftMetadataCache.setImage(delta.apply(new MetadataProvenance(100L, 10, 1000L, true)));
     }
 
     private RequestChannel.Request buildRequest(AbstractRequest request,
@@ -512,6 +531,7 @@ class DescribeTopicPartitionsRequestHandlerTest {
     }
 
     KafkaConfig createKafkaDefaultConfig() {
+        int brokerId = 1;
         Properties properties = TestUtils.createBrokerConfig(
             brokerId,
             "",
@@ -534,11 +554,11 @@ class DescribeTopicPartitionsRequestHandlerTest {
             1,
             (short) 1,
             false);
-        properties.put(KafkaConfig.NodeIdProp(), Integer.toString(brokerId));
-        properties.put(KafkaConfig.ProcessRolesProp(), "broker");
+        properties.put(KRaftConfigs.NODE_ID_CONFIG, Integer.toString(brokerId));
+        properties.put(KRaftConfigs.PROCESS_ROLES_CONFIG, "broker");
         int voterId = brokerId + 1;
-        properties.put(KafkaConfig.QuorumVotersProp(), voterId + "@localhost:9093");
-        properties.put(KafkaConfig.ControllerListenerNamesProp(), "SSL");
+        properties.put(QuorumConfig.QUORUM_VOTERS_CONFIG, voterId + "@localhost:9093");
+        properties.put(KRaftConfigs.CONTROLLER_LISTENER_NAMES_CONFIG, "SSL");
         TestUtils.setIbpAndMessageFormatVersions(properties, MetadataVersion.latestProduction());
         return new KafkaConfig(properties);
     }

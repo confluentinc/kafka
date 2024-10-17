@@ -50,7 +50,6 @@ class ControllerRegistrationManager(
   val time: Time,
   val threadNamePrefix: String,
   val supportedFeatures: util.Map[String, VersionRange],
-  val zkMigrationEnabled: Boolean,
   val incarnationId: Uuid,
   val listenerInfo: ListenerInfo,
   val resendExponentialBackoff: ExponentialBackoff = new ExponentialBackoff(100, 2, 120000L, 0.02)
@@ -205,7 +204,7 @@ class ControllerRegistrationManager(
       debug("maybeSendControllerRegistration: cannot register yet because the channel manager has " +
           "not been initialized.")
     } else if (!metadataVersion.isControllerRegistrationSupported) {
-      info("maybeSendControllerRegistration: cannot register yet because the metadata version is " +
+      info("maybeSendControllerRegistration: cannot register yet because the metadata.version is " +
           s"still $metadataVersion, which does not support KIP-919 controller registration.")
     } else if (pendingRpc) {
       info("maybeSendControllerRegistration: waiting for the previous RPC to complete.")
@@ -227,7 +226,7 @@ class ControllerRegistrationManager(
       setFeatures(features).
       setIncarnationId(incarnationId).
       setListeners(listenerInfo.toControllerRegistrationRequest).
-      setZkMigrationReady(zkMigrationEnabled)
+      setZkMigrationReady(false)
 
     info(s"sendControllerRegistration: attempting to send $data")
     _channelManager.sendRequest(new ControllerRegistrationRequest.Builder(data),

@@ -30,7 +30,6 @@ import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.integration.utils.EmbeddedKafkaCluster;
 import org.apache.kafka.streams.integration.utils.IntegrationTestUtils;
 import org.apache.kafka.streams.kstream.Consumed;
-import org.apache.kafka.streams.kstream.Transformer;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.TaskId;
 import org.apache.kafka.streams.processor.internals.StateDirectory;
@@ -38,24 +37,20 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.Stores;
 import org.apache.kafka.streams.state.internals.OffsetCheckpoint;
-import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.rules.TestName;
-import org.junit.rules.Timeout;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
@@ -66,32 +61,18 @@ import static java.util.Arrays.asList;
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.safeUniqueTestName;
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.startApplicationAndWaitUntilRunning;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An integration test to verify the conversion of a dirty-closed EOS
  * task towards a standby task is safe across restarts of the application.
  */
-@RunWith(Parameterized.class)
-@Category(IntegrationTest.class)
+@Tag("integration")
+@Timeout(600)
 public class StandbyTaskEOSIntegrationTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
-    private final static long REBALANCE_TIMEOUT = Duration.ofMinutes(2L).toMillis();
-    private final static int KEY_0 = 0;
-    private final static int KEY_1 = 1;
-
-    @SuppressWarnings("deprecation")
-    @Parameterized.Parameters(name = "{0}")
-    public static Collection<String[]> data() {
-        return asList(new String[][] {
-            {StreamsConfig.EXACTLY_ONCE},
-            {StreamsConfig.EXACTLY_ONCE_V2}
-        });
-    }
-
-    @Parameterized.Parameter
-    public String eosConfig;
+    private static final long REBALANCE_TIMEOUT = Duration.ofMinutes(2L).toMillis();
+    private static final int KEY_0 = 0;
+    private static final int KEY_1 = 1;
 
     private final AtomicBoolean skipRecord = new AtomicBoolean(false);
 
@@ -106,41 +87,38 @@ public class StandbyTaskEOSIntegrationTest {
 
     private static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(3);
 
-    @BeforeClass
+    @BeforeAll
     public static void startCluster() throws IOException {
         CLUSTER.start();
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeCluster() {
         CLUSTER.stop();
     }
 
-    @Rule
-    public TestName testName = new TestName();
-
-    @Before
-    public void createTopics() throws Exception {
-        final String safeTestName = safeUniqueTestName(testName);
+    @BeforeEach
+    public void createTopics(final TestInfo testInfo) throws Exception {
+        final String safeTestName = safeUniqueTestName(testInfo);
         appId = "app-" + safeTestName;
         inputTopic = "input-" + safeTestName;
         outputTopic = "output-" + safeTestName;
         storeName = "store-" + safeTestName;
-        CLUSTER.deleteTopicsAndWait(inputTopic, outputTopic, appId + "-KSTREAM-AGGREGATE-STATE-STORE-0000000001-changelog");
+        CLUSTER.deleteTopics(inputTopic, outputTopic, appId + "-KSTREAM-AGGREGATE-STATE-STORE-0000000001-changelog");
         CLUSTER.createTopic(inputTopic, 1, 3);
         CLUSTER.createTopic(outputTopic, 1, 3);
     }
 
-    @After
+    @AfterEach
     public void cleanUp() {
         if (streamInstanceOne != null) {
-            streamInstanceOne.close();
+            streamInstanceOne.close(Duration.ofSeconds(60));
         }
         if (streamInstanceTwo != null) {
-            streamInstanceTwo.close();
+            streamInstanceTwo.close(Duration.ofSeconds(60));
         }
         if (streamInstanceOneRecovery != null) {
-            streamInstanceOneRecovery.close();
+            streamInstanceOneRecovery.close(Duration.ofSeconds(60));
         }
     }
 
@@ -352,7 +330,7 @@ public class StandbyTaskEOSIntegrationTest {
         );
         builder.<Integer, Integer>stream(inputTopic)
             .transform(
-                () -> new Transformer<Integer, Integer, KeyValue<Integer, Integer>>() {
+                () -> new org.apache.kafka.streams.kstream.Transformer<Integer, Integer, KeyValue<Integer, Integer>>() {
                     private KeyValueStore<Integer, Integer> store;
 
                     @SuppressWarnings("unchecked")
@@ -403,9 +381,9 @@ public class StandbyTaskEOSIntegrationTest {
         streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0);
         streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, stateDirPath);
         streamsConfiguration.put(StreamsConfig.NUM_STANDBY_REPLICAS_CONFIG, 1);
-        streamsConfiguration.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, eosConfig);
-        streamsConfiguration.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.Integer().getClass());
-        streamsConfiguration.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.Integer().getClass());
+        streamsConfiguration.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE_V2);
+        streamsConfiguration.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.IntegerSerde.class);
+        streamsConfiguration.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.IntegerSerde.class);
         streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 1000L);
         // need to set to zero to get predictable active/standby task assignments
         streamsConfiguration.put(StreamsConfig.ACCEPTABLE_RECOVERY_LAG_CONFIG, 0);

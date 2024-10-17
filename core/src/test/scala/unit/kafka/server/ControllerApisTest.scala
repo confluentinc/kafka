@@ -21,13 +21,13 @@ import kafka.network.RequestChannel
 import kafka.raft.RaftManager
 import kafka.server.QuotaFactory.QuotaManagers
 import kafka.server.metadata.KRaftMetadataCache
-import kafka.test.MockController
-import kafka.utils.NotNothing
+import org.apache.kafka.common.test.MockController
 import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.common.Uuid.ZERO_UUID
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.config.{ConfigResource, TopicConfig}
 import org.apache.kafka.common.errors._
+import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.memory.MemoryPool
 import org.apache.kafka.common.message.AlterConfigsRequestData.{AlterConfigsResource => OldAlterConfigsResource, AlterConfigsResourceCollection => OldAlterConfigsResourceCollection, AlterableConfig => OldAlterableConfig, AlterableConfigCollection => OldAlterableConfigCollection}
 import org.apache.kafka.common.message.AlterConfigsResponseData.{AlterConfigsResourceResponse => OldAlterConfigsResourceResponse}
@@ -52,9 +52,13 @@ import org.apache.kafka.common.{ElectionType, Uuid}
 import org.apache.kafka.controller.ControllerRequestContextUtil.ANONYMOUS_CONTEXT
 import org.apache.kafka.controller.{Controller, ControllerRequestContext, ResultOrError}
 import org.apache.kafka.image.publisher.ControllerRegistrationsPublisher
+import org.apache.kafka.network.metrics.RequestChannelMetrics
+import org.apache.kafka.raft.QuorumConfig
 import org.apache.kafka.server.authorizer.{Action, AuthorizableRequestContext, AuthorizationResult, Authorizer}
-import org.apache.kafka.server.common.{ApiMessageAndVersion, Features, MetadataVersion, ProducerIdsBlock}
+import org.apache.kafka.server.common.{ApiMessageAndVersion, FinalizedFeatures, KRaftVersion, MetadataVersion, ProducerIdsBlock, RequestLocal}
+import org.apache.kafka.server.config.{KRaftConfigs, ServerConfigs}
 import org.apache.kafka.server.util.FutureUtils
+import org.apache.kafka.storage.internals.log.CleanerConfig
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, Test}
 import org.junit.jupiter.params.ParameterizedTest
@@ -70,7 +74,6 @@ import java.util.Collections.{singleton, singletonList, singletonMap}
 import java.util.concurrent.{CompletableFuture, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.{Collections, Properties}
-import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
@@ -101,7 +104,7 @@ class ControllerApisTest {
   private val nodeId = 1
   private val brokerRack = "Rack1"
   private val clientID = "Client1"
-  private val requestChannelMetrics: RequestChannel.Metrics = mock(classOf[RequestChannel.Metrics])
+  private val requestChannelMetrics: RequestChannelMetrics = mock(classOf[RequestChannelMetrics])
   private val requestChannel: RequestChannel = mock(classOf[RequestChannel])
   private val time = new MockTime
   private val clientQuotaManager: ClientQuotaManager = mock(classOf[ClientQuotaManager])
@@ -122,7 +125,7 @@ class ControllerApisTest {
   )
   private val replicaQuotaManager: ReplicationQuotaManager = mock(classOf[ReplicationQuotaManager])
   private val raftManager: RaftManager[ApiMessageAndVersion] = mock(classOf[RaftManager[ApiMessageAndVersion]])
-  private val metadataCache: KRaftMetadataCache = MetadataCache.kRaftMetadataCache(0)
+  private val metadataCache: KRaftMetadataCache = MetadataCache.kRaftMetadataCache(0, () => KRaftVersion.KRAFT_VERSION_0)
 
   private val quotasNeverThrottleControllerMutations = QuotaManagers(
     clientQuotaManager,
@@ -150,10 +153,10 @@ class ControllerApisTest {
                                    controller: Controller,
                                    props: Properties = new Properties(),
                                    throttle: Boolean = false): ControllerApis = {
-    props.put(KafkaConfig.NodeIdProp, nodeId: java.lang.Integer)
-    props.put(KafkaConfig.ProcessRolesProp, "controller")
-    props.put(KafkaConfig.ControllerListenerNamesProp, "PLAINTEXT")
-    props.put(KafkaConfig.QuorumVotersProp, s"$nodeId@localhost:9092")
+    props.put(KRaftConfigs.NODE_ID_CONFIG, nodeId: java.lang.Integer)
+    props.put(KRaftConfigs.PROCESS_ROLES_CONFIG, "controller")
+    props.put(KRaftConfigs.CONTROLLER_LISTENER_NAMES_CONFIG, "PLAINTEXT")
+    props.put(QuorumConfig.QUORUM_VOTERS_CONFIG, s"$nodeId@localhost:9092")
     new ControllerApis(
       requestChannel,
       authorizer,
@@ -167,8 +170,7 @@ class ControllerApisTest {
       new SimpleApiVersionManager(
         ListenerType.CONTROLLER,
         true,
-        false,
-        () => Features.fromKRaftVersion(MetadataVersion.latestTesting())),
+        () => FinalizedFeatures.fromKRaftVersion(MetadataVersion.latestTesting())),
       metadataCache
     )
   }
@@ -218,6 +220,7 @@ class ControllerApisTest {
   def testFetchSentToKRaft(): Unit = {
     when(
       raftManager.handleRequest(
+        any(classOf[RequestContext]),
         any(classOf[RequestHeader]),
         any(classOf[ApiMessage]),
         any(classOf[Long])
@@ -232,6 +235,7 @@ class ControllerApisTest {
     verify(raftManager).handleRequest(
       ArgumentMatchers.any(),
       ArgumentMatchers.any(),
+      ArgumentMatchers.any(),
       ArgumentMatchers.any()
     )
   }
@@ -244,6 +248,7 @@ class ControllerApisTest {
 
     when(
       raftManager.handleRequest(
+        any(classOf[RequestContext]),
         any(classOf[RequestHeader]),
         any(classOf[ApiMessage]),
         any(classOf[Long])
@@ -257,10 +262,11 @@ class ControllerApisTest {
     val fetchRequestData = new FetchRequestData()
     val request = buildRequest(new FetchRequest(fetchRequestData, ApiKeys.FETCH.latestVersion))
     controllerApis = createControllerApis(None, new MockController.Builder().build())
-    controllerApis.handle(request, RequestLocal.NoCaching)
+    controllerApis.handle(request, RequestLocal.noCaching)
 
 
     verify(raftManager).handleRequest(
+      ArgumentMatchers.eq(request.context),
       ArgumentMatchers.eq(request.header),
       ArgumentMatchers.eq(fetchRequestData),
       ArgumentMatchers.eq(initialTimeMs)
@@ -284,6 +290,7 @@ class ControllerApisTest {
   def testFetchSnapshotSentToKRaft(): Unit = {
     when(
       raftManager.handleRequest(
+        any(classOf[RequestContext]),
         any(classOf[RequestHeader]),
         any(classOf[ApiMessage]),
         any(classOf[Long])
@@ -296,6 +303,7 @@ class ControllerApisTest {
     controllerApis.handleFetchSnapshot(buildRequest(new FetchSnapshotRequest(new FetchSnapshotRequestData(), 0)))
 
     verify(raftManager).handleRequest(
+      ArgumentMatchers.any(),
       ArgumentMatchers.any(),
       ArgumentMatchers.any(),
       ArgumentMatchers.any()
@@ -318,19 +326,19 @@ class ControllerApisTest {
           setResourceName("1").
           setResourceType(ConfigResource.Type.BROKER.id()).
           setConfigs(new OldAlterableConfigCollection(util.Arrays.asList(new OldAlterableConfig().
-            setName(KafkaConfig.LogCleanerBackoffMsProp).
+            setName(CleanerConfig.LOG_CLEANER_BACKOFF_MS_PROP).
             setValue("100000")).iterator())),
         new OldAlterConfigsResource().
           setResourceName("2").
           setResourceType(ConfigResource.Type.BROKER.id()).
           setConfigs(new OldAlterableConfigCollection(util.Arrays.asList(new OldAlterableConfig().
-            setName(KafkaConfig.LogCleanerBackoffMsProp).
+            setName(CleanerConfig.LOG_CLEANER_BACKOFF_MS_PROP).
             setValue("100000")).iterator())),
         new OldAlterConfigsResource().
           setResourceName("2").
           setResourceType(ConfigResource.Type.BROKER.id()).
           setConfigs(new OldAlterableConfigCollection(util.Arrays.asList(new OldAlterableConfig().
-            setName(KafkaConfig.LogCleanerBackoffMsProp).
+            setName(CleanerConfig.LOG_CLEANER_BACKOFF_MS_PROP).
             setValue("100000")).iterator())),
         new OldAlterConfigsResource().
           setResourceName("baz").
@@ -472,7 +480,7 @@ class ControllerApisTest {
           setResourceName("1").
           setResourceType(ConfigResource.Type.BROKER.id()).
           setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
-            setName(KafkaConfig.LogCleanerBackoffMsProp).
+            setName(CleanerConfig.LOG_CLEANER_BACKOFF_MS_PROP).
             setValue("100000").
             setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator())),
         new AlterConfigsResource().
@@ -488,6 +496,13 @@ class ControllerApisTest {
           setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
             setName("interval.ms").
             setValue("100000").
+            setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator())),
+        new AlterConfigsResource().
+          setResourceName("group-foo").
+          setResourceType(ConfigResource.Type.GROUP.id()).
+          setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
+            setName("consumer.session.timeout.ms").
+            setValue("50000").
             setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator()))
         ).iterator()))
     val request = buildRequest(new IncrementalAlterConfigsRequest.Builder(requestData).build(0))
@@ -516,7 +531,12 @@ class ControllerApisTest {
         setErrorCode(CLUSTER_AUTHORIZATION_FAILED.code()).
         setErrorMessage(CLUSTER_AUTHORIZATION_FAILED.message()).
         setResourceName("sub").
-        setResourceType(ConfigResource.Type.CLIENT_METRICS.id())),
+        setResourceType(ConfigResource.Type.CLIENT_METRICS.id()),
+      new AlterConfigsResourceResponse().
+        setErrorCode(GROUP_AUTHORIZATION_FAILED.code()).
+        setErrorMessage(GROUP_AUTHORIZATION_FAILED.message()).
+        setResourceName("group-foo").
+        setResourceType(ConfigResource.Type.GROUP.id())),
       response.data().responses().asScala.toSet)
   }
 
@@ -536,14 +556,14 @@ class ControllerApisTest {
           setResourceName("3").
           setResourceType(ConfigResource.Type.BROKER.id()).
           setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
-            setName(KafkaConfig.LogCleanerBackoffMsProp).
+            setName(CleanerConfig.LOG_CLEANER_BACKOFF_MS_PROP).
             setValue("100000").
             setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator())),
         new AlterConfigsResource().
           setResourceName("3").
           setResourceType(ConfigResource.Type.BROKER.id()).
           setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
-            setName(KafkaConfig.LogCleanerBackoffMsProp).
+            setName(CleanerConfig.LOG_CLEANER_BACKOFF_MS_PROP).
             setValue("100000").
             setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator())),
         new AlterConfigsResource().
@@ -573,6 +593,27 @@ class ControllerApisTest {
           setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
             setName("interval.ms").
             setValue("1").
+            setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator())),
+        new AlterConfigsResource().
+          setResourceName("group-foo").
+          setResourceType(ConfigResource.Type.GROUP.id()).
+          setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
+            setName("consumer.session.timeout.ms").
+            setValue("50000").
+            setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator())),
+        new AlterConfigsResource().
+          setResourceName("group-foo1").
+          setResourceType(ConfigResource.Type.GROUP.id()).
+          setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
+            setName("consumer.session.timeout.ms").
+            setValue("50000").
+            setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator())),
+        new AlterConfigsResource().
+          setResourceName("group-foo1").
+          setResourceType(ConfigResource.Type.GROUP.id()).
+          setConfigs(new AlterableConfigCollection(util.Arrays.asList(new AlterableConfig().
+            setName("consumer.session.timeout.ms").
+            setValue("50000").
             setConfigOperation(AlterConfigOp.OpType.SET.id())).iterator()))
         ).iterator()))
     val request = buildRequest(new IncrementalAlterConfigsRequest.Builder(requestData).build(0))
@@ -616,7 +657,17 @@ class ControllerApisTest {
         setErrorCode(INVALID_REQUEST.code()).
         setErrorMessage("Duplicate resource.").
         setResourceName("sub1").
-        setResourceType(ConfigResource.Type.CLIENT_METRICS.id())),
+        setResourceType(ConfigResource.Type.CLIENT_METRICS.id()),
+      new AlterConfigsResourceResponse().
+        setErrorCode(if (denyAllAuthorizer) GROUP_AUTHORIZATION_FAILED.code() else NONE.code()).
+        setErrorMessage(if (denyAllAuthorizer) GROUP_AUTHORIZATION_FAILED.message() else null).
+        setResourceName("group-foo").
+        setResourceType(ConfigResource.Type.GROUP.id()),
+      new AlterConfigsResourceResponse().
+        setErrorCode(INVALID_REQUEST.code()).
+        setErrorMessage("Duplicate resource.").
+        setResourceName("group-foo1").
+        setResourceType(ConfigResource.Type.GROUP.id())),
       response.data().responses().asScala.toSet)
   }
 
@@ -660,6 +711,7 @@ class ControllerApisTest {
         new CreatableTopic().setName("baz").setNumPartitions(2).setReplicationFactor(3),
         new CreatableTopic().setName("indescribable").setNumPartitions(2).setReplicationFactor(3),
         new CreatableTopic().setName("quux").setNumPartitions(2).setReplicationFactor(3),
+        new CreatableTopic().setName(Topic.CLUSTER_METADATA_TOPIC_NAME).setNumPartitions(2).setReplicationFactor(3),
       ).iterator()))
     val expectedResponse = Set(new CreatableTopicResult().setName("foo").
       setErrorCode(INVALID_REQUEST.code()).
@@ -679,9 +731,12 @@ class ControllerApisTest {
         setTopicConfigErrorCode(TOPIC_AUTHORIZATION_FAILED.code()),
       new CreatableTopicResult().setName("quux").
         setErrorCode(TOPIC_AUTHORIZATION_FAILED.code()).
-        setErrorMessage("Authorization failed."))
+        setErrorMessage("Authorization failed."),
+      new CreatableTopicResult().setName(Topic.CLUSTER_METADATA_TOPIC_NAME).
+        setErrorCode(INVALID_REQUEST.code()).
+        setErrorMessage(s"Creation of internal topic ${Topic.CLUSTER_METADATA_TOPIC_NAME} is prohibited."))
     assertEquals(expectedResponse, controllerApis.createTopics(ANONYMOUS_CONTEXT, request,
-      false,
+      hasClusterAuth = false,
       _ => Set("baz", "indescribable"),
       _ => Set("baz")).get().topics().asScala.toSet)
   }
@@ -730,7 +785,7 @@ class ControllerApisTest {
       new DeletableTopicResult().setName("foo").setTopicId(fooId))
     assertEquals(expectedResponse, controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
       ApiKeys.DELETE_TOPICS.latestVersion().toInt,
-      true,
+      hasClusterAuth = true,
       _ => Set.empty,
       _ => Set.empty).get().asScala.toSet)
   }
@@ -756,7 +811,7 @@ class ControllerApisTest {
       new DeletableTopicResult().setName("foo").setTopicId(fooId))
     assertEquals(response, controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
       ApiKeys.DELETE_TOPICS.latestVersion().toInt,
-      true,
+      hasClusterAuth = true,
       _ => Set.empty,
       _ => Set.empty).get().asScala.toSet)
   }
@@ -798,7 +853,7 @@ class ControllerApisTest {
         setErrorMessage("Duplicate topic id."))
     assertEquals(response, controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
       ApiKeys.DELETE_TOPICS.latestVersion().toInt,
-      false,
+      hasClusterAuth = false,
       names => names.toSet,
       names => names.toSet).get().asScala.toSet)
   }
@@ -834,7 +889,7 @@ class ControllerApisTest {
         setErrorMessage(TOPIC_AUTHORIZATION_FAILED.message))
     assertEquals(response, controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
       ApiKeys.DELETE_TOPICS.latestVersion().toInt,
-      false,
+      hasClusterAuth = false,
       _ => Set("foo", "baz"),
       _ => Set.empty).get().asScala.toSet)
   }
@@ -859,7 +914,7 @@ class ControllerApisTest {
         setErrorMessage(UNKNOWN_TOPIC_ID.message))
     assertEquals(expectedResponse, controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
       ApiKeys.DELETE_TOPICS.latestVersion().toInt,
-      false,
+      hasClusterAuth = false,
       _ => Set("foo"),
       _ => Set.empty).get().asScala.toSet)
   }
@@ -878,7 +933,7 @@ class ControllerApisTest {
     assertEquals(classOf[NotControllerException], assertThrows(
       classOf[ExecutionException], () => controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
         ApiKeys.DELETE_TOPICS.latestVersion().toInt,
-        false,
+        hasClusterAuth = false,
         _ => Set("foo", "bar"),
         _ => Set("foo", "bar")).get()).getCause.getClass)
   }
@@ -889,20 +944,20 @@ class ControllerApisTest {
     val controller = new MockController.Builder().
       newInitialTopic("foo", fooId).build()
     val props = new Properties()
-    props.put(KafkaConfig.DeleteTopicEnableProp, "false")
+    props.put(ServerConfigs.DELETE_TOPIC_ENABLE_CONFIG, "false")
     controllerApis = createControllerApis(None, controller, props)
     val request = new DeleteTopicsRequestData()
     request.topics().add(new DeleteTopicState().setName("foo").setTopicId(ZERO_UUID))
     assertThrows(classOf[TopicDeletionDisabledException],
       () => controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
         ApiKeys.DELETE_TOPICS.latestVersion().toInt,
-        false,
+        hasClusterAuth = false,
         _ => Set("foo", "bar"),
         _ => Set("foo", "bar")))
     assertThrows(classOf[InvalidRequestException],
       () => controllerApis.deleteTopics(ANONYMOUS_CONTEXT, request,
         1,
-        false,
+        hasClusterAuth = false,
         _ => Set("foo", "bar"),
         _ => Set("foo", "bar")))
   }
@@ -1175,12 +1230,11 @@ class ControllerApisTest {
     request: AbstractRequest,
     controllerApis: ControllerApis
   )(
-    implicit classTag: ClassTag[T],
-    @nowarn("cat=unused") nn: NotNothing[T]
+    implicit classTag: ClassTag[T]
   ): T = {
     val req = buildRequest(request)
 
-    controllerApis.handle(req, RequestLocal.NoCaching)
+    controllerApis.handle(req, RequestLocal.noCaching)
 
     val capturedResponse: ArgumentCaptor[AbstractResponse] =
       ArgumentCaptor.forClass(classOf[AbstractResponse])
@@ -1207,7 +1261,7 @@ class ControllerApisTest {
     val response = new FetchResponseData()
     val responseFuture = new CompletableFuture[ApiMessage]()
     val errorResponseFuture = new AtomicReference[AbstractResponse]()
-    when(raftManager.handleRequest(any(), any(), any())).thenReturn(responseFuture)
+    when(raftManager.handleRequest(any(), any(), any(), any())).thenReturn(responseFuture)
     when(requestChannel.sendResponse(any(), any(), any())).thenAnswer { _ =>
       // Simulate an encoding failure in the initial fetch response
       throw new UnsupportedVersionException("Something went wrong")

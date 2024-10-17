@@ -17,14 +17,6 @@
 
 package org.apache.kafka.streams.integration;
 
-import java.io.IOException;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
-import java.util.Optional;
-import java.util.Arrays;
-
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.Serdes;
@@ -58,46 +50,49 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
 
 import static java.time.Duration.ofSeconds;
 import static java.util.Arrays.asList;
-import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.startApplicationAndWaitUntilRunning;
-import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.waitUntilMinKeyValueRecordsReceived;
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.safeUniqueTestName;
+import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.startApplicationAndWaitUntilRunning;
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.waitForApplicationState;
-
+import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.waitUntilMinKeyValueRecordsReceived;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 
 @Timeout(600)
 @Tag("integration")
 public class KTableKTableForeignKeyInnerJoinCustomPartitionerIntegrationTest {
-    private final static int NUM_BROKERS = 1;
+    private static final int NUM_BROKERS = 1;
 
-    public final static EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(NUM_BROKERS);
-    private final static MockTime MOCK_TIME = CLUSTER.time;
-    private final static String TABLE_1 = "table1";
-    private final static String TABLE_2 = "table2";
-    private final static String OUTPUT = "output-";
+    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(NUM_BROKERS);
+    private static final MockTime MOCK_TIME = CLUSTER.time;
+    private static final String TABLE_1 = "table1";
+    private static final String TABLE_2 = "table2";
+    private static final String OUTPUT = "output-";
     private Properties streamsConfig;
     private Properties streamsConfigTwo;
     private Properties streamsConfigThree;
     private KafkaStreams streams;
     private KafkaStreams streamsTwo;
     private KafkaStreams streamsThree;
-    private final static Properties CONSUMER_CONFIG = new Properties();
-    private final static Properties PRODUCER_CONFIG_1 = new Properties();
-    private final static Properties PRODUCER_CONFIG_2 = new Properties();
+    private static final Properties CONSUMER_CONFIG = new Properties();
+    private static final Properties PRODUCER_CONFIG_1 = new Properties();
+    private static final Properties PRODUCER_CONFIG_2 = new Properties();
 
     static class MultiPartitioner implements StreamPartitioner<String, Void> {
-
-        @Override
-        @Deprecated
-        public Integer partition(final String topic, final String key, final Void value, final int numPartitions) {
-            return null;
-        }
 
         @Override
         public Optional<Set<Integer>> partitions(final String topic, final String key, final Void value, final int numPartitions) {
@@ -164,15 +159,15 @@ public class KTableKTableForeignKeyInnerJoinCustomPartitionerIntegrationTest {
     @AfterEach
     public void after() throws IOException {
         if (streams != null) {
-            streams.close();
+            streams.close(Duration.ofSeconds(60));
             streams = null;
         }
         if (streamsTwo != null) {
-            streamsTwo.close();
+            streamsTwo.close(Duration.ofSeconds(60));
             streamsTwo = null;
         }
         if (streamsThree != null) {
-            streamsThree.close();
+            streamsThree.close(Duration.ofSeconds(60));
             streamsThree = null;
         }
         IntegrationTestUtils.purgeLocalStreamsState(asList(streamsConfig, streamsConfigTwo, streamsConfigThree));
@@ -274,8 +269,8 @@ public class KTableKTableForeignKeyInnerJoinCustomPartitionerIntegrationTest {
         final ValueJoiner<String, String, String> joiner = (value1, value2) -> "value1=" + value1 + ",value2=" + value2;
 
         final TableJoined<String, String> tableJoined = TableJoined.with(
-            (topic, key, value, numPartitions) -> Math.abs(getKeyB(key).hashCode()) % numPartitions,
-            (topic, key, value, numPartitions) -> Math.abs(key.hashCode()) % numPartitions
+            (topic, key, value, numPartitions) -> Optional.of(Collections.singleton(Math.abs(getKeyB(key).hashCode()) % numPartitions)),
+            (topic, key, value, numPartitions) -> Optional.of(Collections.singleton(Math.abs(key.hashCode()) % numPartitions))
         );
 
         table1.join(table2, KTableKTableForeignKeyInnerJoinCustomPartitionerIntegrationTest::getKeyB, joiner, tableJoined, materialized)
@@ -317,7 +312,7 @@ public class KTableKTableForeignKeyInnerJoinCustomPartitionerIntegrationTest {
 
         final TableJoined<String, String> tableJoined = TableJoined.with(
                 new MultiPartitioner(),
-                (topic, key, value, numPartitions) -> Math.abs(key.hashCode()) % numPartitions
+                (topic, key, value, numPartitions) -> Optional.of(Collections.singleton(Math.abs(key.hashCode()) % numPartitions))
         );
 
         table1.join(table2, KTableKTableForeignKeyInnerJoinCustomPartitionerIntegrationTest::getKeyB, joiner, tableJoined, materialized)
@@ -332,14 +327,14 @@ public class KTableKTableForeignKeyInnerJoinCustomPartitionerIntegrationTest {
     private static Repartitioned<String, String> repartitionA() {
         final Repartitioned<String, String> repartitioned = Repartitioned.as("a");
         return repartitioned.withKeySerde(Serdes.String()).withValueSerde(Serdes.String())
-            .withStreamPartitioner((topic, key, value, numPartitions) -> Math.abs(getKeyB(key).hashCode()) % numPartitions)
+            .withStreamPartitioner((topic, key, value, numPartitions) -> Optional.of(Collections.singleton(Math.abs(getKeyB(key).hashCode()) % numPartitions)))
             .withNumberOfPartitions(4);
     }
 
     private static Repartitioned<String, String> repartitionB() {
         final Repartitioned<String, String> repartitioned = Repartitioned.as("b");
         return repartitioned.withKeySerde(Serdes.String()).withValueSerde(Serdes.String())
-            .withStreamPartitioner((topic, key, value, numPartitions) -> Math.abs(key.hashCode()) % numPartitions)
+            .withStreamPartitioner((topic, key, value, numPartitions) -> Optional.of(Collections.singleton(Math.abs(key.hashCode()) % numPartitions)))
             .withNumberOfPartitions(4);
     }
 

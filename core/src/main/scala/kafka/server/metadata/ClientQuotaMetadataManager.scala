@@ -20,16 +20,16 @@ package kafka.server.metadata
 import kafka.network.ConnectionQuotas
 import kafka.server.QuotaFactory.QuotaManagers
 import kafka.utils.Logging
-import org.apache.kafka.common.config.internals.QuotaConfigs
 import org.apache.kafka.common.metrics.Quota
 import org.apache.kafka.common.quota.ClientQuotaEntity
 import org.apache.kafka.common.utils.Sanitizer
+
 import java.net.{InetAddress, UnknownHostException}
-
 import org.apache.kafka.image.{ClientQuotaDelta, ClientQuotasDelta}
-import org.apache.kafka.server.config.ConfigEntityName
+import org.apache.kafka.server.config.{QuotaConfigs, ZooKeeperInternals}
 
-import scala.compat.java8.OptionConverters._
+import scala.jdk.OptionConverters.RichOptionalDouble
+
 
 
 // A strict hierarchy of entities that we support
@@ -52,8 +52,8 @@ class ClientQuotaMetadataManager(private[metadata] val quotaManagers: QuotaManag
                                  private[metadata] val connectionQuotas: ConnectionQuotas) extends Logging {
 
   def update(quotasDelta: ClientQuotasDelta): Unit = {
-    quotasDelta.changes().entrySet().forEach { e =>
-      update(e.getKey, e.getValue)
+    quotasDelta.changes().forEach { (key, value) =>
+      update(key, value)
     }
   }
 
@@ -97,8 +97,8 @@ class ClientQuotaMetadataManager(private[metadata] val quotaManagers: QuotaManag
           ClientIdEntity(clientIdVal)
         }
       }
-      quotaDelta.changes().entrySet().forEach { e =>
-        handleUserClientQuotaChange(userClientEntity, e.getKey, e.getValue.asScala)
+      quotaDelta.changes().forEach { (key, value) =>
+        handleUserClientQuotaChange(userClientEntity, key, value.toScala)
       }
     } else {
       warn(s"Ignoring unsupported quota entity $entity.")
@@ -117,15 +117,15 @@ class ClientQuotaMetadataManager(private[metadata] val quotaManagers: QuotaManag
       case _ => throw new IllegalStateException("Should only handle IP quota entities here")
     }
 
-    quotaDelta.changes().entrySet().forEach { e =>
+    quotaDelta.changes().forEach { (key, value) =>
       // The connection quota only understands the connection rate limit
-      val quotaName = e.getKey
-      val quotaValue = e.getValue
+      val quotaName = key
+      val quotaValue = value
       if (!quotaName.equals(QuotaConfigs.IP_CONNECTION_RATE_OVERRIDE_CONFIG)) {
         warn(s"Ignoring unexpected quota key $quotaName for entity $ipEntity")
       } else {
         try {
-          connectionQuotas.updateIpConnectionRateQuota(inetAddress, quotaValue.asScala.map(_.toInt))
+          connectionQuotas.updateIpConnectionRateQuota(inetAddress, quotaValue.toScala.map(_.toInt))
         } catch {
           case t: Throwable => error(s"Failed to update IP quota $ipEntity", t)
         }
@@ -147,13 +147,13 @@ class ClientQuotaMetadataManager(private[metadata] val quotaManagers: QuotaManag
     // Convert entity into Options with sanitized values for QuotaManagers
     val (sanitizedUser, sanitizedClientId) = quotaEntity match {
       case UserEntity(user) => (Some(Sanitizer.sanitize(user)), None)
-      case DefaultUserEntity => (Some(ConfigEntityName.DEFAULT), None)
+      case DefaultUserEntity => (Some(ZooKeeperInternals.DEFAULT_STRING), None)
       case ClientIdEntity(clientId) => (None, Some(Sanitizer.sanitize(clientId)))
-      case DefaultClientIdEntity => (None, Some(ConfigEntityName.DEFAULT))
+      case DefaultClientIdEntity => (None, Some(ZooKeeperInternals.DEFAULT_STRING))
       case ExplicitUserExplicitClientIdEntity(user, clientId) => (Some(Sanitizer.sanitize(user)), Some(Sanitizer.sanitize(clientId)))
-      case ExplicitUserDefaultClientIdEntity(user) => (Some(Sanitizer.sanitize(user)), Some(ConfigEntityName.DEFAULT))
-      case DefaultUserExplicitClientIdEntity(clientId) => (Some(ConfigEntityName.DEFAULT), Some(Sanitizer.sanitize(clientId)))
-      case DefaultUserDefaultClientIdEntity => (Some(ConfigEntityName.DEFAULT), Some(ConfigEntityName.DEFAULT))
+      case ExplicitUserDefaultClientIdEntity(user) => (Some(Sanitizer.sanitize(user)), Some(ZooKeeperInternals.DEFAULT_STRING))
+      case DefaultUserExplicitClientIdEntity(clientId) => (Some(ZooKeeperInternals.DEFAULT_STRING), Some(Sanitizer.sanitize(clientId)))
+      case DefaultUserDefaultClientIdEntity => (Some(ZooKeeperInternals.DEFAULT_STRING), Some(ZooKeeperInternals.DEFAULT_STRING))
       case IpEntity(_) | DefaultIpEntity => throw new IllegalStateException("Should not see IP quota entities here")
     }
 

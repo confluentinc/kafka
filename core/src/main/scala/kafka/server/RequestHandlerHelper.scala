@@ -27,6 +27,7 @@ import org.apache.kafka.common.network.Send
 import org.apache.kafka.common.requests.{AbstractRequest, AbstractResponse}
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.coordinator.group.GroupCoordinator
+import org.apache.kafka.server.quota.ThrottleCallback
 
 import java.util.OptionalInt
 
@@ -82,7 +83,7 @@ class RequestHandlerHelper(
       sendErrorResponseExemptThrottle(request, e)
   }
 
-  def sendErrorOrCloseConnection(
+  private def sendErrorOrCloseConnection(
     request: RequestChannel.Request,
     error: Throwable,
     throttleMs: Int
@@ -178,7 +179,7 @@ class RequestHandlerHelper(
     requestChannel.sendResponse(request, response, onComplete)
   }
 
-  def sendErrorResponseExemptThrottle(request: RequestChannel.Request, error: Throwable): Unit = {
+  private def sendErrorResponseExemptThrottle(request: RequestChannel.Request, error: Throwable): Unit = {
     quotas.request.maybeRecordExempt(request)
     sendErrorOrCloseConnection(request, error, 0)
   }

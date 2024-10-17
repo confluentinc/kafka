@@ -69,6 +69,7 @@ import org.apache.kafka.common.requests.TxnOffsetCommitRequest.CommittedOffset;
 import org.apache.kafka.common.requests.TxnOffsetCommitResponse;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.ProducerIdAndEpoch;
+
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -192,6 +193,8 @@ public class TransactionManager {
     private volatile ProducerIdAndEpoch producerIdAndEpoch;
     private volatile boolean transactionStarted = false;
     private volatile boolean epochBumpRequired = false;
+    private volatile long latestFinalizedFeaturesEpoch = -1;
+    private volatile boolean isTransactionV2Enabled = false;
 
     private enum State {
         UNINITIALIZED,
@@ -309,6 +312,7 @@ public class TransactionManager {
         throwIfPendingState("beginTransaction");
         maybeFailWithError();
         transitionTo(State.IN_TRANSACTION);
+        maybeUpdateTransactionV2Enabled();
     }
 
     public synchronized TransactionalRequestResult beginCommit() {
@@ -424,6 +428,21 @@ public class TransactionManager {
         return transactionalId != null;
     }
 
+    // Check all the finalized features from apiVersions to whether the transaction V2 is enabled.
+    public synchronized void maybeUpdateTransactionV2Enabled() {
+        if (latestFinalizedFeaturesEpoch >= apiVersions.getMaxFinalizedFeaturesEpoch()) {
+            return;
+        }
+        ApiVersions.FinalizedFeaturesInfo info = apiVersions.getFinalizedFeaturesInfo();
+        latestFinalizedFeaturesEpoch = info.finalizedFeaturesEpoch;
+        Short transactionVersion = info.finalizedFeatures.get("transaction.version");
+        isTransactionV2Enabled = transactionVersion != null && transactionVersion >= 2;
+    }
+
+    public boolean isTransactionV2Enabled() {
+        return isTransactionV2Enabled;
+    }
+
     synchronized boolean hasPartitionsToAdd() {
         return !newPartitionsInTransaction.isEmpty() || !pendingPartitionsInTransaction.isEmpty();
     }
@@ -480,7 +499,7 @@ public class TransactionManager {
         return producerIdAndEpoch;
     }
 
-    synchronized public void maybeUpdateProducerIdAndEpoch(TopicPartition topicPartition) {
+    public synchronized void maybeUpdateProducerIdAndEpoch(TopicPartition topicPartition) {
         if (hasFatalError()) {
             log.debug("Ignoring producer ID and epoch update request since the producer is in fatal error state");
             return;
@@ -1330,6 +1349,8 @@ public class TransactionManager {
                 // We could still receive INVALID_PRODUCER_EPOCH from old versioned transaction coordinator,
                 // just treat it the same as PRODUCE_FENCED.
                 fatalError(Errors.PRODUCER_FENCED.exception());
+            } else if (error == Errors.TRANSACTION_ABORTABLE) {
+                abortableError(error.exception());
             } else {
                 fatalError(new KafkaException("Unexpected error in InitProducerIdResponse; " + error.message()));
             }
@@ -1386,10 +1407,8 @@ public class TransactionManager {
                     // just treat it the same as PRODUCE_FENCED.
                     fatalError(Errors.PRODUCER_FENCED.exception());
                     return;
-                } else if (error == Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED) {
-                    fatalError(error.exception());
-                    return;
-                } else if (error == Errors.INVALID_TXN_STATE) {
+                } else if (error == Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED ||
+                        error == Errors.INVALID_TXN_STATE) {
                     fatalError(error.exception());
                     return;
                 } else if (error == Errors.TOPIC_AUTHORIZATION_FAILED) {
@@ -1400,6 +1419,9 @@ public class TransactionManager {
                     hasPartitionErrors = true;
                 } else if (error == Errors.UNKNOWN_PRODUCER_ID || error == Errors.INVALID_PRODUCER_ID_MAPPING) {
                     abortableErrorIfPossible(error.exception());
+                    return;
+                } else if (error == Errors.TRANSACTION_ABORTABLE) {
+                    abortableError(error.exception());
                     return;
                 } else {
                     log.error("Could not add partition {} due to unexpected error {}", topicPartition, error);
@@ -1494,7 +1516,10 @@ public class TransactionManager {
                         break;
                     case TRANSACTION:
                         transactionCoordinator = node;
-
+                        break;
+                    default:
+                        log.error("Group coordinator lookup failed: Unexpected coordinator type in response");
+                        fatalError(new IllegalStateException("Group coordinator lookup failed: Unexpected coordinator type in response"));
                 }
                 result.done();
                 log.info("Discovered {} coordinator {}", coordinatorType.toString().toLowerCase(Locale.ROOT), node);
@@ -1504,6 +1529,8 @@ public class TransactionManager {
                 fatalError(error.exception());
             } else if (error == Errors.GROUP_AUTHORIZATION_FAILED) {
                 abortableError(GroupAuthorizationException.forGroupId(key));
+            } else if (error == Errors.TRANSACTION_ABORTABLE) {
+                abortableError(error.exception());
             } else {
                 fatalError(new KafkaException(String.format("Could not find a coordinator with type %s with key %s due to " +
                         "unexpected error: %s", coordinatorType, key,
@@ -1552,12 +1579,13 @@ public class TransactionManager {
                 // We could still receive INVALID_PRODUCER_EPOCH from old versioned transaction coordinator,
                 // just treat it the same as PRODUCE_FENCED.
                 fatalError(Errors.PRODUCER_FENCED.exception());
-            } else if (error == Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED) {
-                fatalError(error.exception());
-            } else if (error == Errors.INVALID_TXN_STATE) {
+            } else if (error == Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED ||
+                    error == Errors.INVALID_TXN_STATE) {
                 fatalError(error.exception());
             } else if (error == Errors.UNKNOWN_PRODUCER_ID || error == Errors.INVALID_PRODUCER_ID_MAPPING) {
                 abortableErrorIfPossible(error.exception());
+            } else if (error == Errors.TRANSACTION_ABORTABLE) {
+                abortableError(error.exception());
             } else {
                 fatalError(new KafkaException("Unhandled error in EndTxnResponse: " + error.message()));
             }
@@ -1611,12 +1639,13 @@ public class TransactionManager {
                 // We could still receive INVALID_PRODUCER_EPOCH from old versioned transaction coordinator,
                 // just treat it the same as PRODUCE_FENCED.
                 fatalError(Errors.PRODUCER_FENCED.exception());
-            } else if (error == Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED) {
-                fatalError(error.exception());
-            } else if (error == Errors.INVALID_TXN_STATE) {
+            } else if (error == Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED ||
+                    error == Errors.INVALID_TXN_STATE) {
                 fatalError(error.exception());
             } else if (error == Errors.GROUP_AUTHORIZATION_FAILED) {
                 abortableError(GroupAuthorizationException.forGroupId(builder.data.groupId()));
+            } else if (error == Errors.TRANSACTION_ABORTABLE) {
+                abortableError(error.exception());
             } else {
                 fatalError(new KafkaException("Unexpected error in AddOffsetsToTxnResponse: " + error.message()));
             }
@@ -1679,7 +1708,8 @@ public class TransactionManager {
                 } else if (error == Errors.GROUP_AUTHORIZATION_FAILED) {
                     abortableError(GroupAuthorizationException.forGroupId(builder.data.groupId()));
                     break;
-                } else if (error == Errors.FENCED_INSTANCE_ID) {
+                } else if (error == Errors.FENCED_INSTANCE_ID ||
+                        error == Errors.TRANSACTION_ABORTABLE) {
                     abortableError(error.exception());
                     break;
                 } else if (error == Errors.UNKNOWN_MEMBER_ID

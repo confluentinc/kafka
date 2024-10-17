@@ -16,8 +16,6 @@
  */
 package org.apache.kafka.streams.integration;
 
-import java.util.stream.Stream;
-import kafka.server.KafkaConfig;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -31,6 +29,7 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.server.config.ServerConfigs;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
@@ -46,11 +45,14 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.Stores;
 import org.apache.kafka.test.NoRetryException;
 import org.apache.kafka.test.TestUtils;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -64,16 +66,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
-import static java.util.Arrays.asList;
 import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
 import static org.apache.kafka.common.utils.Utils.mkObjectProperties;
 import static org.apache.kafka.common.utils.Utils.mkProperties;
-import static org.apache.kafka.common.utils.Utils.mkSet;
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.safeUniqueTestName;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -82,27 +79,11 @@ import static org.hamcrest.Matchers.is;
 @Tag("integration")
 public class HighAvailabilityTaskAssignorIntegrationTest {
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(3,
-        new Properties(),
-        asList(
-            new Properties() {{
-                    setProperty(KafkaConfig.RackProp(), AssignmentTestUtils.RACK_0);
-                }},
-            new Properties() {{
-                    setProperty(KafkaConfig.RackProp(), AssignmentTestUtils.RACK_1);
-                }},
-            new Properties() {{
-                    setProperty(KafkaConfig.RackProp(), AssignmentTestUtils.RACK_2);
-                }}
-        )
-    );
-
-    public static Stream<Arguments> data() {
-        return Stream.of(
-            Arguments.of(StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_NONE),
-            Arguments.of(StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_MIN_TRAFFIC),
-            Arguments.of(StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_BALANCE_SUBTOPOLOGY)
-        );
-    }
+        new Properties(), mkMap(
+            mkEntry(0, mkMap(mkEntry(ServerConfigs.BROKER_RACK_CONFIG, AssignmentTestUtils.RACK_0))),
+            mkEntry(1, mkMap(mkEntry(ServerConfigs.BROKER_RACK_CONFIG, AssignmentTestUtils.RACK_1))),
+            mkEntry(2, mkMap(mkEntry(ServerConfigs.BROKER_RACK_CONFIG, AssignmentTestUtils.RACK_2)))
+    ));
 
     @BeforeAll
     public static void startCluster() throws IOException {
@@ -115,7 +96,10 @@ public class HighAvailabilityTaskAssignorIntegrationTest {
     }
 
     @ParameterizedTest
-    @MethodSource("data")
+    @ValueSource(strings = {
+            StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_NONE,
+            StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_MIN_TRAFFIC,
+            StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_BALANCE_SUBTOPOLOGY})
     public void shouldScaleOutWithWarmupTasksAndInMemoryStores(final String rackAwareStrategy, final TestInfo testInfo) throws InterruptedException {
         // NB: this test takes at least a minute to run, because it needs a probing rebalance, and the minimum
         // value is one minute
@@ -123,7 +107,10 @@ public class HighAvailabilityTaskAssignorIntegrationTest {
     }
 
     @ParameterizedTest
-    @MethodSource("data")
+    @ValueSource(strings = {
+            StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_NONE,
+            StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_MIN_TRAFFIC,
+            StreamsConfig.RACK_AWARE_ASSIGNMENT_STRATEGY_BALANCE_SUBTOPOLOGY})
     public void shouldScaleOutWithWarmupTasksAndPersistentStores(final String rackAwareStrategy, final TestInfo testInfo) throws InterruptedException {
         // NB: this test takes at least a minute to run, because it needs a probing rebalance, and the minimum
         // value is one minute
@@ -137,14 +124,14 @@ public class HighAvailabilityTaskAssignorIntegrationTest {
         final String testId = safeUniqueTestName(testInfo).replaceAll("balance_subtopology", "balance");
         final String appId = "appId_" + System.currentTimeMillis() + "_" + testId;
         final String inputTopic = "input" + testId;
-        final Set<TopicPartition> inputTopicPartitions = mkSet(
+        final Set<TopicPartition> inputTopicPartitions = Set.of(
             new TopicPartition(inputTopic, 0),
             new TopicPartition(inputTopic, 1)
         );
 
         final String storeName = "store" + testId;
         final String storeChangelog = appId + "-store" + testId + "-changelog";
-        final Set<TopicPartition> changelogTopicPartitions = mkSet(
+        final Set<TopicPartition> changelogTopicPartitions = Set.of(
             new TopicPartition(storeChangelog, 0),
             new TopicPartition(storeChangelog, 1)
         );
@@ -261,7 +248,7 @@ public class HighAvailabilityTaskAssignorIntegrationTest {
 
             restoreCompleteLatch.await();
             // We should finalize the restoration without having restored any records (because they're already in
-            // the store. Otherwise, we failed to properly re-use the state from the standby.
+            // the store). Otherwise, we failed to properly re-use the state from the standby.
             assertThat(instance1TotalRestored.get(), is(0L));
             // Belt-and-suspenders check that we never even attempt to restore any records.
             assertThat(instance1NumRestored.get(), is(-1L));

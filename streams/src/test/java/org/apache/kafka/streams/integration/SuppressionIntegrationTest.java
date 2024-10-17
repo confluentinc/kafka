@@ -42,17 +42,17 @@ import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.state.KeyValueStore;
-import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
+
 import org.hamcrest.Matchers;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.rules.Timeout;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -81,23 +81,18 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.empty;
 
-@Category(IntegrationTest.class)
+@Tag("integration")
+@Timeout(600)
 public class SuppressionIntegrationTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
+    private static final long NOW = Instant.now().toEpochMilli();
+    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(1);
 
-    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(
-        1,
-        mkProperties(mkMap()),
-        0L
-    );
-
-    @BeforeClass
+    @BeforeAll
     public static void startCluster() throws IOException {
         CLUSTER.start();
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeCluster() {
         CLUSTER.stop();
     }
@@ -527,7 +522,7 @@ public class SuppressionIntegrationTest {
      * just to exercise that everything works properly in the presence of commits.
      */
     private static long scaledTime(final long unscaledTime) {
-        return COMMIT_INTERVAL * 2 * unscaledTime;
+        return NOW + COMMIT_INTERVAL * 2 * unscaledTime;
     }
 
     private static void produceSynchronously(final String topic, final List<KeyValueTimestamp<String, String>> toProduce) {

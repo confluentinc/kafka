@@ -25,14 +25,15 @@ import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.SaslAuthenticationException;
 import org.apache.kafka.common.errors.UnsupportedSaslMechanismException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
+import org.apache.kafka.common.internals.SecurityManagerCompatibility;
 import org.apache.kafka.common.message.SaslAuthenticateResponseData;
 import org.apache.kafka.common.message.SaslHandshakeResponseData;
-import org.apache.kafka.common.network.InvalidReceiveException;
 import org.apache.kafka.common.network.Authenticator;
 import org.apache.kafka.common.network.ByteBufferSend;
 import org.apache.kafka.common.network.ChannelBuilders;
 import org.apache.kafka.common.network.ChannelMetadataRegistry;
 import org.apache.kafka.common.network.ClientInformation;
+import org.apache.kafka.common.network.InvalidReceiveException;
 import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.network.NetworkReceive;
 import org.apache.kafka.common.network.ReauthenticationContext;
@@ -64,21 +65,15 @@ import org.apache.kafka.common.security.scram.ScramLoginModule;
 import org.apache.kafka.common.security.scram.internals.ScramMechanism;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLSession;
-import javax.security.auth.Subject;
-import javax.security.sasl.Sasl;
-import javax.security.sasl.SaslException;
-import javax.security.sasl.SaslServer;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -86,7 +81,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Supplier;
+import java.util.concurrent.CompletionException;
+import java.util.function.Function;
+
+import javax.net.ssl.SSLSession;
+import javax.security.auth.Subject;
+import javax.security.sasl.Sasl;
+import javax.security.sasl.SaslException;
+import javax.security.sasl.SaslServer;
 
 public class SaslServerAuthenticator implements Authenticator {
     private static final Logger LOG = LoggerFactory.getLogger(SaslServerAuthenticator.class);
@@ -127,7 +129,7 @@ public class SaslServerAuthenticator implements Authenticator {
     private final Time time;
     private final ReauthInfo reauthInfo;
     private final ChannelMetadataRegistry metadataRegistry;
-    private final Supplier<ApiVersionsResponse> apiVersionSupplier;
+    private final Function<Short, ApiVersionsResponse> apiVersionSupplier;
 
     // Current SASL state
     private SaslState saslState = SaslState.INITIAL_REQUEST;
@@ -157,7 +159,7 @@ public class SaslServerAuthenticator implements Authenticator {
                                    Map<String, Long> connectionsMaxReauthMsByMechanism,
                                    ChannelMetadataRegistry metadataRegistry,
                                    Time time,
-                                   Supplier<ApiVersionsResponse> apiVersionSupplier) {
+                                   Function<Short, ApiVersionsResponse> apiVersionSupplier) {
         this.callbackHandlers = callbackHandlers;
         this.connectionId = connectionId;
         this.subjects = subjects;
@@ -182,7 +184,7 @@ public class SaslServerAuthenticator implements Authenticator {
                 throw new IllegalArgumentException("Callback handler not specified for SASL mechanism " + mechanism);
             if (!subjects.containsKey(mechanism))
                 throw new IllegalArgumentException("Subject cannot be null for SASL mechanism " + mechanism);
-            LOG.trace("{} for mechanism={}: {}", BrokerSecurityConfigs.CONNECTIONS_MAX_REAUTH_MS, mechanism,
+            LOG.trace("{} for mechanism={}: {}", BrokerSecurityConfigs.CONNECTIONS_MAX_REAUTH_MS_CONFIG, mechanism,
                     connectionsMaxReauthMsByMechanism.get(mechanism));
         }
 
@@ -203,12 +205,12 @@ public class SaslServerAuthenticator implements Authenticator {
             saslServer = createSaslKerberosServer(callbackHandler, configs, subject);
         } else {
             try {
-                saslServer = Subject.doAs(subject, (PrivilegedExceptionAction<SaslServer>) () ->
+                saslServer = SecurityManagerCompatibility.get().callAs(subject, () ->
                     Sasl.createSaslServer(saslMechanism, "kafka", serverAddress().getHostName(), configs, callbackHandler));
                 if (saslServer == null) {
                     throw new SaslException("Kafka Server failed to create a SaslServer to interact with a client during session authentication with server mechanism " + saslMechanism);
                 }
-            } catch (PrivilegedActionException e) {
+            } catch (CompletionException e) {
                 throw new SaslException("Kafka Server failed to create a SaslServer to interact with a client during session authentication with server mechanism " + saslMechanism, e.getCause());
             }
         }
@@ -229,9 +231,9 @@ public class SaslServerAuthenticator implements Authenticator {
         LOG.debug("Creating SaslServer for {} with mechanism {}", kerberosName, saslMechanism);
 
         try {
-            return Subject.doAs(subject, (PrivilegedExceptionAction<SaslServer>) () ->
+            return SecurityManagerCompatibility.get().callAs(subject, () ->
                     Sasl.createSaslServer(saslMechanism, servicePrincipalName, serviceHostname, configs, saslServerCallbackHandler));
-        } catch (PrivilegedActionException e) {
+        } catch (CompletionException e) {
             throw new SaslException("Kafka Server failed to create a SaslServer to interact with a client during session authentication", e.getCause());
         }
     }
@@ -594,7 +596,7 @@ public class SaslServerAuthenticator implements Authenticator {
         else {
             metadataRegistry.registerClientInformation(new ClientInformation(apiVersionsRequest.data().clientSoftwareName(),
                 apiVersionsRequest.data().clientSoftwareVersion()));
-            sendKafkaResponse(context, apiVersionSupplier.get());
+            sendKafkaResponse(context, apiVersionSupplier.apply(apiVersionsRequest.version()));
             setSaslState(SaslState.HANDSHAKE_REQUEST);
         }
     }

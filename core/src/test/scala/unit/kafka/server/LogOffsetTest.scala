@@ -17,7 +17,7 @@
 
 package kafka.server
 
-import kafka.log.UnifiedLog
+import kafka.log.{OffsetResultHolder, UnifiedLog}
 import kafka.utils.TestUtils
 import org.apache.kafka.common.message.ListOffsetsRequestData.{ListOffsetsPartition, ListOffsetsTopic}
 import org.apache.kafka.common.message.ListOffsetsResponseData.{ListOffsetsPartitionResponse, ListOffsetsTopicResponse}
@@ -39,7 +39,7 @@ import java.util
 import java.util.Arrays.asList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Optional, Properties, Random}
-import scala.collection.mutable.Buffer
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 @Timeout(300)
@@ -60,7 +60,7 @@ class LogOffsetTest extends BaseRequestTest {
   @ValueSource(strings = Array("zk", "kraft"))
   def testGetOffsetsForUnknownTopic(quorum: String): Unit = {
     val topicPartition = new TopicPartition("foo", 0)
-    val request = ListOffsetsRequest.Builder.forConsumer(false, IsolationLevel.READ_UNCOMMITTED, false)
+    val request = ListOffsetsRequest.Builder.forConsumer(false, IsolationLevel.READ_UNCOMMITTED)
       .setTargetTimes(buildTargetTimes(topicPartition, ListOffsetsRequest.LATEST_TIMESTAMP, 10).asJava).build(0)
     val response = sendListOffsetsRequest(request)
     assertEquals(Errors.UNKNOWN_TOPIC_OR_PARTITION.code, findPartition(response.topics.asScala, topicPartition).errorCode)
@@ -85,7 +85,7 @@ class LogOffsetTest extends BaseRequestTest {
     val offsets = log.legacyFetchOffsetsBefore(ListOffsetsRequest.LATEST_TIMESTAMP, 15)
     assertEquals(Seq(20L, 18L, 16L, 14L, 12L, 10L, 8L, 6L, 4L, 3L), offsets)
 
-    TestUtils.waitUntilTrue(() => TestUtils.isLeaderLocalOnBroker(topic, topicPartition.partition, broker),
+    TestUtils.waitUntilTrue(() => isLeaderLocalOnBroker(topic, topicPartition.partition, broker),
       "Leader should be elected")
     val request = ListOffsetsRequest.Builder.forReplica(0, 0)
       .setTargetTimes(buildTargetTimes(topicPartition, ListOffsetsRequest.LATEST_TIMESTAMP, 15).asJava).build()
@@ -106,15 +106,13 @@ class LogOffsetTest extends BaseRequestTest {
 
     log.updateHighWatermark(log.logEndOffset)
 
-    val firstOffset = log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP)
+    val firstOffset = log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP).timestampAndOffsetOpt
     assertEquals(19L, firstOffset.get.offset)
     assertEquals(19L, firstOffset.get.timestamp)
 
     log.truncateTo(0)
 
-    val secondOffset = log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP)
-    assertEquals(0L, secondOffset.get.offset)
-    assertEquals(-1L, secondOffset.get.timestamp)
+    assertEquals(Option.empty, log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP).timestampAndOffsetOpt)
   }
 
   @ParameterizedTest
@@ -130,7 +128,7 @@ class LogOffsetTest extends BaseRequestTest {
 
     log.updateHighWatermark(log.logEndOffset)
 
-    val maxTimestampOffset = log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP)
+    val maxTimestampOffset = log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP).timestampAndOffsetOpt
     assertEquals(7L, log.logEndOffset)
     assertEquals(5L, maxTimestampOffset.get.offset)
     assertEquals(6L, maxTimestampOffset.get.timestamp)
@@ -154,7 +152,7 @@ class LogOffsetTest extends BaseRequestTest {
     val offsets = log.legacyFetchOffsetsBefore(ListOffsetsRequest.LATEST_TIMESTAMP, 15)
     assertEquals(Seq(20L, 18L, 16L, 14L, 12L, 10L, 8L, 6L, 4L, 2L, 0L), offsets)
 
-    TestUtils.waitUntilTrue(() => TestUtils.isLeaderLocalOnBroker(topic, 0, broker),
+    TestUtils.waitUntilTrue(() => isLeaderLocalOnBroker(topic, 0, broker),
       "Leader should be elected")
     val request = ListOffsetsRequest.Builder.forReplica(0, 0)
       .setTargetTimes(buildTargetTimes(topicPartition, ListOffsetsRequest.LATEST_TIMESTAMP, 15).asJava).build()
@@ -179,7 +177,7 @@ class LogOffsetTest extends BaseRequestTest {
     val topicLogDir = new File(topicPartitionPath)
     topicLogDir.mkdir()
 
-    createTopic(topic, numPartitions = 1, replicationFactor = 1)
+    createTopic(topic)
 
     var offsetChanged = false
     for (_ <- 1 to 14) {
@@ -202,10 +200,8 @@ class LogOffsetTest extends BaseRequestTest {
 
     log.updateHighWatermark(log.logEndOffset)
 
-    val maxTimestampOffset = log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP)
     assertEquals(0L, log.logEndOffset)
-    assertEquals(0L, maxTimestampOffset.get.offset)
-    assertEquals(-1L, maxTimestampOffset.get.timestamp)
+    assertEquals(OffsetResultHolder(None), log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP))
   }
 
   @deprecated("legacyFetchOffsetsBefore", since = "")
@@ -216,7 +212,7 @@ class LogOffsetTest extends BaseRequestTest {
     val topic = "kafka-"
     val topicPartition = new TopicPartition(topic, random.nextInt(3))
 
-    createTopic(topic, 3, 1)
+    createTopic(topic, 3)
 
     val logManager = broker.logManager
     val log = logManager.getOrCreateLog(topicPartition, topicId = None)
@@ -230,7 +226,7 @@ class LogOffsetTest extends BaseRequestTest {
     val offsets = log.legacyFetchOffsetsBefore(now, 15)
     assertEquals(Seq(20L, 18L, 16L, 14L, 12L, 10L, 8L, 6L, 4L, 2L, 0L), offsets)
 
-    TestUtils.waitUntilTrue(() => TestUtils.isLeaderLocalOnBroker(topic, topicPartition.partition, broker),
+    TestUtils.waitUntilTrue(() => isLeaderLocalOnBroker(topic, topicPartition.partition, broker),
       "Leader should be elected")
     val request = ListOffsetsRequest.Builder.forReplica(0, 0)
       .setTargetTimes(buildTargetTimes(topicPartition, now, 15).asJava).build()
@@ -246,7 +242,7 @@ class LogOffsetTest extends BaseRequestTest {
     val topic = "kafka-"
     val topicPartition = new TopicPartition(topic, random.nextInt(3))
 
-    createTopic(topic, 3, 1)
+    createTopic(topic, 3)
 
     val logManager = broker.logManager
     val log = logManager.getOrCreateLog(topicPartition, topicId = None)
@@ -254,17 +250,15 @@ class LogOffsetTest extends BaseRequestTest {
       log.appendAsLeader(TestUtils.singletonRecords(value = Integer.toString(42).getBytes()), leaderEpoch = 0)
     log.flush(false)
 
-    for (timestamp <- Seq(ListOffsetsRequest.EARLIEST_TIMESTAMP, ListOffsetsRequest.EARLIEST_LOCAL_TIMESTAMP)) {
-      val offsets = log.legacyFetchOffsetsBefore(timestamp, 10)
-      assertEquals(Seq(0L), offsets)
+    val offsets = log.legacyFetchOffsetsBefore(ListOffsetsRequest.EARLIEST_TIMESTAMP, 10)
+    assertEquals(Seq(0L), offsets)
 
-      TestUtils.waitUntilTrue(() => TestUtils.isLeaderLocalOnBroker(topic, topicPartition.partition, broker),
-        "Leader should be elected")
-      val request = ListOffsetsRequest.Builder.forReplica(0, 0)
-        .setTargetTimes(buildTargetTimes(topicPartition, timestamp, 10).asJava).build()
-      val consumerOffsets = findPartition(sendListOffsetsRequest(request).topics.asScala, topicPartition).oldStyleOffsets.asScala
-      assertEquals(Seq(0L), consumerOffsets)
-    }
+    TestUtils.waitUntilTrue(() => isLeaderLocalOnBroker(topic, topicPartition.partition, broker),
+      "Leader should be elected")
+    val request = ListOffsetsRequest.Builder.forReplica(0, 0)
+      .setTargetTimes(buildTargetTimes(topicPartition, ListOffsetsRequest.EARLIEST_TIMESTAMP, 10).asJava).build()
+    val consumerOffsets = findPartition(sendListOffsetsRequest(request).topics.asScala, topicPartition).oldStyleOffsets.asScala
+    assertEquals(Seq(0L), consumerOffsets)
   }
 
   /* We test that `fetchOffsetsBefore` works correctly if `LogSegment.size` changes after each invocation (simulating
@@ -319,13 +313,13 @@ class LogOffsetTest extends BaseRequestTest {
     )
   }
 
-  private def findPartition(topics: Buffer[ListOffsetsTopicResponse], tp: TopicPartition): ListOffsetsPartitionResponse = {
+  private def findPartition(topics: mutable.Buffer[ListOffsetsTopicResponse], tp: TopicPartition): ListOffsetsPartitionResponse = {
     topics.find(_.name == tp.topic).get
       .partitions.asScala.find(_.partitionIndex == tp.partition).get
   }
 
   private def createTopicAndGetLog(topic: String, topicPartition: TopicPartition): UnifiedLog = {
-    createTopic(topic, 1, 1)
+    createTopic(topic)
 
     val logManager = broker.logManager
     TestUtils.waitUntilTrue(() => logManager.getLog(topicPartition).isDefined,
@@ -333,4 +327,7 @@ class LogOffsetTest extends BaseRequestTest {
     logManager.getLog(topicPartition).get
   }
 
+  private def isLeaderLocalOnBroker(topic: String, partitionId: Int, broker: KafkaBroker): Boolean = {
+    broker.replicaManager.onlinePartition(new TopicPartition(topic, partitionId)).exists(_.leaderLogIfLocal.isDefined)
+  }
 }

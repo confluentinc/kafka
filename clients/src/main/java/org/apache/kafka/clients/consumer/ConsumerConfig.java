@@ -18,6 +18,7 @@ package org.apache.kafka.clients.consumer;
 
 import org.apache.kafka.clients.ClientDnsLookup;
 import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.MetadataRecoveryStrategy;
 import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
@@ -26,6 +27,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SecurityConfig;
 import org.apache.kafka.common.errors.InvalidConfigurationException;
+import org.apache.kafka.common.metrics.JmxReporter;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
@@ -198,7 +200,10 @@ public class ConsumerConfig extends AbstractConfig {
      * <code>fetch.max.wait.ms</code>
      */
     public static final String FETCH_MAX_WAIT_MS_CONFIG = "fetch.max.wait.ms";
-    private static final String FETCH_MAX_WAIT_MS_DOC = "The maximum amount of time the server will block before answering the fetch request if there isn't sufficient data to immediately satisfy the requirement given by fetch.min.bytes.";
+    private static final String FETCH_MAX_WAIT_MS_DOC = "The maximum amount of time the server will block before " +
+            "answering the fetch request there isn't sufficient data to immediately satisfy the requirement given by " +
+            "fetch.min.bytes. This config is used only for local log fetch. To tune the remote fetch maximum wait " +
+            "time, please refer to 'remote.fetch.max.wait.ms' broker config";
     public static final int DEFAULT_FETCH_MAX_WAIT_MS = 500;
 
     /** <code>metadata.max.age.ms</code> */
@@ -280,12 +285,6 @@ public class ConsumerConfig extends AbstractConfig {
     public static final String METRIC_REPORTER_CLASSES_CONFIG = CommonClientConfigs.METRIC_REPORTER_CLASSES_CONFIG;
 
     /**
-     * <code>auto.include.jmx.reporter</code>
-     * */
-    @Deprecated
-    public static final String AUTO_INCLUDE_JMX_REPORTER_CONFIG = CommonClientConfigs.AUTO_INCLUDE_JMX_REPORTER_CONFIG;
-
-    /**
      * <code>check.crcs</code>
      */
     public static final String CHECK_CRCS_CONFIG = "check.crcs";
@@ -363,14 +362,14 @@ public class ConsumerConfig extends AbstractConfig {
             " consumers will not be able to read up to the high watermark when there are in flight transactions.</p><p> Further, when in <code>read_committed</code> the seekToEnd method will" +
             " return the LSO</p>";
 
-    public static final String DEFAULT_ISOLATION_LEVEL = IsolationLevel.READ_UNCOMMITTED.toString().toLowerCase(Locale.ROOT);
+    public static final String DEFAULT_ISOLATION_LEVEL = IsolationLevel.READ_UNCOMMITTED.toString();
 
     /** <code>allow.auto.create.topics</code> */
     public static final String ALLOW_AUTO_CREATE_TOPICS_CONFIG = "allow.auto.create.topics";
     private static final String ALLOW_AUTO_CREATE_TOPICS_DOC = "Allow automatic topic creation on the broker when" +
             " subscribing to or assigning a topic. A topic being subscribed to will be automatically created only if the" +
             " broker allows for it using `auto.create.topics.enable` broker configuration. This configuration must" +
-            " be set to `false` when using brokers older than 0.11.0";
+            " be set to `true` when using brokers older than 0.11.0";
     public static final boolean DEFAULT_ALLOW_AUTO_CREATE_TOPICS = true;
 
     /**
@@ -541,15 +540,10 @@ public class ConsumerConfig extends AbstractConfig {
                                         CommonClientConfigs.METRICS_RECORDING_LEVEL_DOC)
                                 .define(METRIC_REPORTER_CLASSES_CONFIG,
                                         Type.LIST,
-                                        Collections.emptyList(),
+                                        JmxReporter.class.getName(),
                                         new ConfigDef.NonNullValidator(),
                                         Importance.LOW,
                                         CommonClientConfigs.METRIC_REPORTER_CLASSES_DOC)
-                                .define(AUTO_INCLUDE_JMX_REPORTER_CONFIG,
-                                        Type.BOOLEAN,
-                                        true,
-                                        Importance.LOW,
-                                        CommonClientConfigs.AUTO_INCLUDE_JMX_REPORTER_DOC)
                                 .define(KEY_DESERIALIZER_CLASS_CONFIG,
                                         Type.CLASS,
                                         Importance.HIGH,
@@ -620,7 +614,7 @@ public class ConsumerConfig extends AbstractConfig {
                                 .define(ISOLATION_LEVEL_CONFIG,
                                         Type.STRING,
                                         DEFAULT_ISOLATION_LEVEL,
-                                        in(IsolationLevel.READ_COMMITTED.toString().toLowerCase(Locale.ROOT), IsolationLevel.READ_UNCOMMITTED.toString().toLowerCase(Locale.ROOT)),
+                                        in(IsolationLevel.READ_COMMITTED.toString(), IsolationLevel.READ_UNCOMMITTED.toString()),
                                         Importance.MEDIUM,
                                         ISOLATION_LEVEL_DOC)
                                 .define(ALLOW_AUTO_CREATE_TOPICS_CONFIG,
@@ -653,7 +647,14 @@ public class ConsumerConfig extends AbstractConfig {
                                         Importance.MEDIUM,
                                         CommonClientConfigs.SECURITY_PROTOCOL_DOC)
                                 .withClientSslSupport()
-                                .withClientSaslSupport();
+                                .withClientSaslSupport()
+                                .define(CommonClientConfigs.METADATA_RECOVERY_STRATEGY_CONFIG,
+                                        Type.STRING,
+                                        CommonClientConfigs.DEFAULT_METADATA_RECOVERY_STRATEGY,
+                                        ConfigDef.CaseInsensitiveValidString
+                                                .in(Utils.enumOptions(MetadataRecoveryStrategy.class)),
+                                        Importance.LOW,
+                                        CommonClientConfigs.METADATA_RECOVERY_STRATEGY_DOC);
     }
 
     @Override
@@ -663,6 +664,7 @@ public class ConsumerConfig extends AbstractConfig {
         Map<String, Object> refinedConfigs = CommonClientConfigs.postProcessReconnectBackoffConfigs(this, parsedValues);
         maybeOverrideClientId(refinedConfigs);
         maybeOverrideEnableAutoCommit(refinedConfigs);
+        checkGroupRemoteAssignor();
         return refinedConfigs;
     }
 
@@ -706,6 +708,12 @@ public class ConsumerConfig extends AbstractConfig {
             } else if (enableAutoCommit) {
                 throw new InvalidConfigurationException(ENABLE_AUTO_COMMIT_CONFIG + " cannot be set to true when default group id (null) is used.");
             }
+        }
+    }
+
+    private void checkGroupRemoteAssignor() {
+        if (getString(GROUP_PROTOCOL_CONFIG).equalsIgnoreCase(GroupProtocol.CLASSIC.name()) && getString(GROUP_REMOTE_ASSIGNOR_CONFIG) != null && !getString(GROUP_REMOTE_ASSIGNOR_CONFIG).isEmpty()) {
+            throw new ConfigException(GROUP_REMOTE_ASSIGNOR_CONFIG + " cannot be set when " + GROUP_PROTOCOL_CONFIG + "=" + GroupProtocol.CLASSIC.name());
         }
     }
 

@@ -43,15 +43,16 @@ import org.apache.kafka.streams.state.QueryableStoreType;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.apache.kafka.test.TestCondition;
 import org.apache.kafka.test.TestUtils;
+
 import org.hamcrest.Matcher;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,15 +60,15 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.Set;
-import java.util.Collections;
 
 import static java.util.Collections.singletonList;
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.getStore;
@@ -76,15 +77,15 @@ import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.st
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.waitForApplicationState;
 import static org.apache.kafka.streams.state.QueryableStoreTypes.keyValueStore;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.Matchers.anyOf;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @Timeout(600)
 @Tag("integration")
@@ -97,7 +98,7 @@ public class StoreQueryIntegrationTest {
     private static final String INPUT_TOPIC_NAME = "input-topic";
     private static final String TABLE_NAME = "source-table";
 
-    public final static EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(NUM_BROKERS);
+    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(NUM_BROKERS);
 
     private String appId;
 
@@ -118,7 +119,7 @@ public class StoreQueryIntegrationTest {
     @AfterEach
     public void after() {
         for (final KafkaStreams kafkaStreams : streamsToCleanup) {
-            kafkaStreams.close();
+            kafkaStreams.close(Duration.ofSeconds(60));
         }
         streamsToCleanup.clear();
     }
@@ -150,7 +151,8 @@ public class StoreQueryIntegrationTest {
         assertThat(semaphore.tryAcquire(batch1NumMessages, 60, TimeUnit.SECONDS), is(equalTo(true)));
         until(() -> {
 
-            final KeyQueryMetadata keyQueryMetadata = kafkaStreams1.queryMetadataForKey(TABLE_NAME, key, (topic, somekey, value, numPartitions) -> 0);
+            final KeyQueryMetadata keyQueryMetadata = kafkaStreams1
+                    .queryMetadataForKey(TABLE_NAME, key, (topic, somekey, value, numPartitions) -> Optional.of(Collections.singleton(0)));
 
             final QueryableStoreType<ReadOnlyKeyValueStore<Integer, Integer>> queryableStoreType = keyValueStore();
             final ReadOnlyKeyValueStore<Integer, Integer> store1 = getStore(TABLE_NAME, kafkaStreams1, queryableStoreType);
@@ -196,7 +198,8 @@ public class StoreQueryIntegrationTest {
         // Assert that all messages in the first batch were processed in a timely manner
         assertThat(semaphore.tryAcquire(batch1NumMessages, 60, TimeUnit.SECONDS), is(equalTo(true)));
         until(() -> {
-            final KeyQueryMetadata keyQueryMetadata = kafkaStreams1.queryMetadataForKey(TABLE_NAME, key, (topic, somekey, value, numPartitions) -> 0);
+            final KeyQueryMetadata keyQueryMetadata = kafkaStreams1
+                    .queryMetadataForKey(TABLE_NAME, key, (topic, somekey, value, numPartitions) -> Optional.of(Collections.singleton(0)));
 
             //key belongs to this partition
             final int keyPartition = keyQueryMetadata.partition();
@@ -312,7 +315,8 @@ public class StoreQueryIntegrationTest {
 
         // Assert that all messages in the first batch were processed in a timely manner
         assertThat(semaphore.tryAcquire(batch1NumMessages, 60, TimeUnit.SECONDS), is(equalTo(true)));
-        final KeyQueryMetadata keyQueryMetadata = kafkaStreams1.queryMetadataForKey(TABLE_NAME, key, (topic, somekey, value, numPartitions) -> 0);
+        final KeyQueryMetadata keyQueryMetadata = kafkaStreams1
+                .queryMetadataForKey(TABLE_NAME, key, (topic, somekey, value, numPartitions) -> Optional.of(Collections.singleton(0)));
 
         //key belongs to this partition
         final int keyPartition = keyQueryMetadata.partition();
@@ -412,6 +416,7 @@ public class StoreQueryIntegrationTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation")
     public void shouldQuerySpecificStalePartitionStoresMultiStreamThreadsNamedTopology() throws Exception {
         final int batch1NumMessages = 100;
         final int key = 1;
@@ -555,12 +560,6 @@ public class StoreQueryIntegrationTest {
 
         class BroadcastingPartitioner implements StreamPartitioner<Integer, String> {
             @Override
-            @Deprecated
-            public Integer partition(final String topic, final Integer key, final String value, final int numPartitions) {
-                return null;
-            }
-
-            @Override
             public Optional<Set<Integer>> partitions(final String topic, final Integer key, final String value, final int numPartitions) {
                 return Optional.of(IntStream.range(0, numPartitions).boxed().collect(Collectors.toSet()));
             }
@@ -637,6 +636,7 @@ public class StoreQueryIntegrationTest {
         return streams;
     }
 
+    @SuppressWarnings("deprecation")
     private KafkaStreamsNamedTopologyWrapper createNamedTopologyKafkaStreams(final Properties config) {
         final KafkaStreamsNamedTopologyWrapper streams = new KafkaStreamsNamedTopologyWrapper(config);
         streamsToCleanup.add(streams);

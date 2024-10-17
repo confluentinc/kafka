@@ -19,7 +19,6 @@ package org.apache.kafka.streams.integration;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.Deserializer;
-import org.apache.kafka.common.serialization.LongDeserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
@@ -37,23 +36,20 @@ import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.state.Stores;
-import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.MockValueJoiner;
 import org.apache.kafka.test.TestUtils;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.rules.TestName;
-import org.junit.rules.Timeout;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collection;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
@@ -71,54 +67,31 @@ import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.sa
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 
-@RunWith(Parameterized.class)
-@Category({IntegrationTest.class})
+@Tag("integration")
+@Timeout(600)
 public class JoinGracePeriodDurabilityIntegrationTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
 
-    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(
-        3,
-        mkProperties(mkMap()),
-        0L
-    );
-
-    @BeforeClass
+    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(3);
+    private static final long NOW = Instant.now().toEpochMilli();
+    @BeforeAll
     public static void startCluster() throws IOException {
         CLUSTER.start();
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeCluster() {
         CLUSTER.stop();
     }
 
-    @Rule
-    public TestName testName = new TestName();
-
     private static final StringDeserializer STRING_DESERIALIZER = new StringDeserializer();
     private static final StringSerializer STRING_SERIALIZER = new StringSerializer();
     private static final Serde<String> STRING_SERDE = Serdes.String();
-    private static final LongDeserializer LONG_DESERIALIZER = new LongDeserializer();
     private static final long COMMIT_INTERVAL = 100L;
 
-    @SuppressWarnings("deprecation")
-    @Parameterized.Parameters(name = "{0}")
-    public static Collection<String[]> data() {
-        return Arrays.asList(new String[][] {
-            {StreamsConfig.AT_LEAST_ONCE},
-            {StreamsConfig.EXACTLY_ONCE},
-            {StreamsConfig.EXACTLY_ONCE_V2}
-        });
-    }
-
-    @Parameterized.Parameter
-    public String processingGuaranteee;
-
-    @Test
-    @SuppressWarnings("deprecation")
-    public void shouldRecoverBufferAfterShutdown() {
-        final String testId = safeUniqueTestName(testName);
+    @ParameterizedTest
+    @ValueSource(strings = {StreamsConfig.AT_LEAST_ONCE, StreamsConfig.EXACTLY_ONCE_V2})
+    public void shouldRecoverBufferAfterShutdown(final String processingGuarantee, final TestInfo testInfo) {
+        final String testId = safeUniqueTestName(testInfo);
         final String appId = "appId_" + testId;
         final String streamInput = "Streaminput" + testId;
         final String tableInput = "Tableinput" + testId;
@@ -147,7 +120,7 @@ public class JoinGracePeriodDurabilityIntegrationTest {
             mkEntry(StreamsConfig.APPLICATION_ID_CONFIG, appId),
             mkEntry(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers()),
             mkEntry(StreamsConfig.POLL_MS_CONFIG, Long.toString(COMMIT_INTERVAL)),
-            mkEntry(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, processingGuaranteee),
+            mkEntry(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, processingGuarantee),
             mkEntry(StreamsConfig.STATE_DIR_CONFIG, TestUtils.tempDirectory().getPath()),
             mkEntry(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.StringSerde.class),
             mkEntry(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.StringSerde.class)
@@ -242,7 +215,7 @@ public class JoinGracePeriodDurabilityIntegrationTest {
      * just to exercise that everything works properly in the presence of commits.
      */
     private long scaledTime(final long unscaledTime) {
-        return COMMIT_INTERVAL * 2 * unscaledTime;
+        return NOW + COMMIT_INTERVAL * 2 * unscaledTime;
     }
 
     private static void produceSynchronouslyToPartitionZero(final String topic, final List<KeyValueTimestamp<String, String>> toProduce) {

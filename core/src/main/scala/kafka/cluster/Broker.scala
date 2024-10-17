@@ -29,8 +29,8 @@ import org.apache.kafka.metadata.{BrokerRegistration, VersionRange}
 import org.apache.kafka.server.authorizer.AuthorizerServerInfo
 
 import scala.collection.Seq
-import scala.compat.java8.OptionConverters._
 import scala.jdk.CollectionConverters._
+import scala.jdk.OptionConverters.RichOptional
 
 object Broker {
   private[kafka] case class ServerInfo(clusterResource: ClusterResource,
@@ -41,6 +41,10 @@ object Broker {
 
   def apply(id: Int, endPoints: Seq[EndPoint], rack: Option[String]): Broker = {
     new Broker(id, endPoints, rack, emptySupportedFeatures)
+  }
+
+  def apply(id: Int, endPoint: EndPoint, rack: Option[String]): Broker = {
+    new Broker(id, Seq(endPoint), rack, emptySupportedFeatures)
   }
 
   private def supportedFeatures(features: java.util.Map[String, VersionRange]): java.util
@@ -54,7 +58,7 @@ object Broker {
     new Broker(
       registration.id(),
       registration.listeners().values().asScala.map(EndPoint.fromJava).toSeq,
-      registration.rack().asScala,
+      registration.rack().toScala,
       Features.supportedFeatures(supportedFeatures(registration.supportedFeatures()))
     )
   }

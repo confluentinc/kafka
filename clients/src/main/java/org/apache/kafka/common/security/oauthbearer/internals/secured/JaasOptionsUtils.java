@@ -17,22 +17,25 @@
 
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
+import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.network.ConnectionMode;
+import org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule;
+import org.apache.kafka.common.security.ssl.DefaultSslEngineFactory;
+import org.apache.kafka.common.security.ssl.SslFactory;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URL;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
 import javax.net.ssl.SSLSocketFactory;
 import javax.security.auth.login.AppConfigurationEntry;
-import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.network.Mode;
-import org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule;
-import org.apache.kafka.common.security.ssl.DefaultSslEngineFactory;
-import org.apache.kafka.common.security.ssl.SslFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * <code>JaasOptionsUtils</code> is a utility class to perform logic for the JAAS options and
@@ -50,13 +53,26 @@ public class JaasOptionsUtils {
     }
 
     public static Map<String, Object> getOptions(String saslMechanism, List<AppConfigurationEntry> jaasConfigEntries) {
-        if (!OAuthBearerLoginModule.OAUTHBEARER_MECHANISM.equals(saslMechanism))
-            throw new IllegalArgumentException(String.format("Unexpected SASL mechanism: %s", saslMechanism));
-
-        if (Objects.requireNonNull(jaasConfigEntries).size() != 1 || jaasConfigEntries.get(0) == null)
-            throw new IllegalArgumentException(String.format("Must supply exactly 1 non-null JAAS mechanism configuration (size was %d)", jaasConfigEntries.size()));
-
+        validateOAuthMechanismAndNonNullJaasConfig(saslMechanism, jaasConfigEntries);
         return Collections.unmodifiableMap(jaasConfigEntries.get(0).getOptions());
+    }
+
+    public static void validateOAuthMechanismAndNonNullJaasConfig(
+            String saslMechanism,
+            List<AppConfigurationEntry> jaasConfigEntries
+    ) {
+        if (!OAuthBearerLoginModule.OAUTHBEARER_MECHANISM.equals(saslMechanism)) {
+            throw new IllegalArgumentException(String.format("Unexpected SASL mechanism: %s", saslMechanism));
+        }
+
+        if (Objects.requireNonNull(jaasConfigEntries).size() != 1 || jaasConfigEntries.get(0) == null) {
+            throw new IllegalArgumentException(
+                    String.format(
+                            "Must supply exactly 1 non-null JAAS mechanism configuration (size was %d)",
+                            jaasConfigEntries.size()
+                    )
+            );
+        }
     }
 
     public boolean shouldCreateSSLSocketFactory(URL url) {
@@ -72,7 +88,7 @@ public class JaasOptionsUtils {
 
     public SSLSocketFactory createSSLSocketFactory() {
         Map<String, ?> sslClientConfig = getSslClientConfig();
-        SslFactory sslFactory = new SslFactory(Mode.CLIENT);
+        SslFactory sslFactory = new SslFactory(ConnectionMode.CLIENT);
         sslFactory.configure(sslClientConfig);
         SSLSocketFactory socketFactory = ((DefaultSslEngineFactory) sslFactory.sslEngineFactory()).sslContext().getSocketFactory();
         log.debug("Created SSLSocketFactory: {}", sslClientConfig);

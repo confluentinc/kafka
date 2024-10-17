@@ -47,10 +47,10 @@ import org.apache.kafka.streams.query.PositionBound;
 import org.apache.kafka.streams.query.Query;
 import org.apache.kafka.streams.query.QueryResult;
 import org.apache.kafka.streams.query.RangeQuery;
-import org.apache.kafka.streams.query.TimestampedKeyQuery;
-import org.apache.kafka.streams.query.TimestampedRangeQuery;
 import org.apache.kafka.streams.query.StateQueryRequest;
 import org.apache.kafka.streams.query.StateQueryResult;
+import org.apache.kafka.streams.query.TimestampedKeyQuery;
+import org.apache.kafka.streams.query.TimestampedRangeQuery;
 import org.apache.kafka.streams.query.WindowKeyQuery;
 import org.apache.kafka.streams.query.WindowRangeQuery;
 import org.apache.kafka.streams.state.KeyValueBytesStoreSupplier;
@@ -67,18 +67,16 @@ import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.apache.kafka.streams.state.WindowBytesStoreSupplier;
 import org.apache.kafka.streams.state.WindowStore;
 import org.apache.kafka.streams.state.WindowStoreIterator;
-import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.rules.Timeout;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,7 +85,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -105,10 +102,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
-import static org.apache.kafka.common.utils.Utils.mkSet;
 import static org.apache.kafka.streams.query.StateQueryRequest.inStore;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.empty;
@@ -116,14 +113,12 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
-import static org.junit.Assert.fail;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
-@Category({IntegrationTest.class})
-@RunWith(value = Parameterized.class)
+@Tag("integration")
+@Timeout(600)
 public class IQv2StoreIntegrationTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
 
     private static final Logger LOG = LoggerFactory.getLogger(IQv2StoreIntegrationTest.class);
 
@@ -146,11 +141,6 @@ public class IQv2StoreIntegrationTest {
         Position.fromMap(mkMap(mkEntry(INPUT_TOPIC_NAME, mkMap(mkEntry(0, 5L)))));
 
     public static class UnknownQuery implements Query<Void> { }
-
-    private final StoresToTest storeToTest;
-    private final String kind;
-    private final boolean cache;
-    private final boolean log;
 
     private KafkaStreams kafkaStreams;
 
@@ -363,15 +353,14 @@ public class IQv2StoreIntegrationTest {
         }
     }
 
-    @Parameterized.Parameters(name = "cache={0}, log={1}, supplier={2}, kind={3}")
-    public static Collection<Object[]> data() {
+    public static Stream<Arguments> data() {
         LOG.info("Generating test cases according to random seed: {}", SEED);
-        final List<Object[]> values = new ArrayList<>();
+        final List<Arguments> values = new ArrayList<>();
         for (final boolean cacheEnabled : Arrays.asList(true, false)) {
             for (final boolean logEnabled : Arrays.asList(true, false)) {
                 for (final StoresToTest toTest : StoresToTest.values()) {
                     for (final String kind : Arrays.asList("DSL", "PAPI")) {
-                        values.add(new Object[]{cacheEnabled, logEnabled, toTest.name(), kind});
+                        values.add(Arguments.of(cacheEnabled, logEnabled, toTest.name(), kind));
                     }
                 }
             }
@@ -381,26 +370,15 @@ public class IQv2StoreIntegrationTest {
         // it for the constant at the top of the file. This will cause exactly the same sequence
         // of pseudorandom values to be generated.
         Collections.shuffle(values, RANDOM);
-        return values;
+        return values.stream();
     }
 
-    public IQv2StoreIntegrationTest(
-        final boolean cache,
-        final boolean log,
-        final String storeToTest,
-        final String kind) {
-        this.cache = cache;
-        this.log = log;
-        this.storeToTest = StoresToTest.valueOf(storeToTest);
-        this.kind = kind;
-    }
-
-    @BeforeClass
+    @BeforeAll
     public static void before()
         throws InterruptedException, IOException, ExecutionException, TimeoutException {
 
         CLUSTER.start();
-        CLUSTER.deleteAllTopicsAndWait(60 * 1000L);
+        CLUSTER.deleteAllTopics();
         final int partitions = 2;
         CLUSTER.createTopic(INPUT_TOPIC_NAME, partitions, 1);
 
@@ -448,8 +426,7 @@ public class IQv2StoreIntegrationTest {
         ));
     }
 
-    @Before
-    public void beforeTest() {
+    public void setup(final boolean cache, final boolean log, final StoresToTest storeToTest, final String kind) {
         final StoreSupplier<?> supplier = storeToTest.supplier();
         final Properties streamsConfig = streamsConfiguration(
             cache,
@@ -460,17 +437,17 @@ public class IQv2StoreIntegrationTest {
 
         final StreamsBuilder builder = new StreamsBuilder();
         if (Objects.equals(kind, "DSL") && supplier instanceof KeyValueBytesStoreSupplier) {
-            setUpKeyValueDSLTopology((KeyValueBytesStoreSupplier) supplier, builder);
+            setUpKeyValueDSLTopology((KeyValueBytesStoreSupplier) supplier, builder, cache, log, storeToTest);
         } else if (Objects.equals(kind, "PAPI") && supplier instanceof KeyValueBytesStoreSupplier) {
-            setUpKeyValuePAPITopology((KeyValueBytesStoreSupplier) supplier, builder);
+            setUpKeyValuePAPITopology((KeyValueBytesStoreSupplier) supplier, builder, cache, log, storeToTest);
         } else if (Objects.equals(kind, "DSL") && supplier instanceof WindowBytesStoreSupplier) {
-            setUpWindowDSLTopology((WindowBytesStoreSupplier) supplier, builder);
+            setUpWindowDSLTopology((WindowBytesStoreSupplier) supplier, builder, cache, log);
         } else if (Objects.equals(kind, "PAPI") && supplier instanceof WindowBytesStoreSupplier) {
-            setUpWindowPAPITopology((WindowBytesStoreSupplier) supplier, builder);
+            setUpWindowPAPITopology((WindowBytesStoreSupplier) supplier, builder, cache, log, storeToTest);
         } else if (Objects.equals(kind, "DSL") && supplier instanceof SessionBytesStoreSupplier) {
-            setUpSessionDSLTopology((SessionBytesStoreSupplier) supplier, builder);
+            setUpSessionDSLTopology((SessionBytesStoreSupplier) supplier, builder, cache, log);
         } else if (Objects.equals(kind, "PAPI") && supplier instanceof SessionBytesStoreSupplier) {
-            setUpSessionPAPITopology((SessionBytesStoreSupplier) supplier, builder);
+            setUpSessionPAPITopology((SessionBytesStoreSupplier) supplier, builder, cache, log, storeToTest);
         } else {
             throw new AssertionError("Store supplier is an unrecognized type.");
         }
@@ -487,7 +464,9 @@ public class IQv2StoreIntegrationTest {
     }
 
     private void setUpSessionDSLTopology(final SessionBytesStoreSupplier supplier,
-                                         final StreamsBuilder builder) {
+                                         final StreamsBuilder builder,
+                                         final boolean cache,
+                                         final boolean log) {
         final Materialized<Integer, Integer, SessionStore<Bytes, byte[]>> materialized =
             Materialized.as(supplier);
 
@@ -516,7 +495,9 @@ public class IQv2StoreIntegrationTest {
     }
 
     private void setUpWindowDSLTopology(final WindowBytesStoreSupplier supplier,
-                                        final StreamsBuilder builder) {
+                                        final StreamsBuilder builder,
+                                        final boolean cache,
+                                        final boolean log) {
         final Materialized<Integer, Integer, WindowStore<Bytes, byte[]>> materialized =
             Materialized.as(supplier);
 
@@ -544,7 +525,10 @@ public class IQv2StoreIntegrationTest {
     }
 
     private void setUpKeyValueDSLTopology(final KeyValueBytesStoreSupplier supplier,
-                                          final StreamsBuilder builder) {
+                                          final StreamsBuilder builder,
+                                          final boolean cache,
+                                          final boolean log,
+                                          final StoresToTest storeToTest) {
         final Materialized<Integer, Integer, KeyValueStore<Bytes, byte[]>> materialized =
             Materialized.as(supplier);
 
@@ -576,7 +560,10 @@ public class IQv2StoreIntegrationTest {
     }
 
     private void setUpKeyValuePAPITopology(final KeyValueBytesStoreSupplier supplier,
-                                           final StreamsBuilder builder) {
+                                           final StreamsBuilder builder,
+                                           final boolean cache,
+                                           final boolean log,
+                                           final StoresToTest storeToTest) {
         final StoreBuilder<?> keyValueStoreStoreBuilder;
         final ProcessorSupplier<Integer, Integer, Void, Void> processorSupplier;
         if (storeToTest.timestamped()) {
@@ -641,7 +628,10 @@ public class IQv2StoreIntegrationTest {
     }
 
     private void setUpWindowPAPITopology(final WindowBytesStoreSupplier supplier,
-                                         final StreamsBuilder builder) {
+                                         final StreamsBuilder builder,
+                                         final boolean cache,
+                                         final boolean log,
+                                         final StoresToTest storeToTest) {
         final StoreBuilder<?> windowStoreStoreBuilder;
         final ProcessorSupplier<Integer, Integer, Void, Void> processorSupplier;
         if (storeToTest.timestamped()) {
@@ -709,7 +699,10 @@ public class IQv2StoreIntegrationTest {
     }
 
     private void setUpSessionPAPITopology(final SessionBytesStoreSupplier supplier,
-                                          final StreamsBuilder builder) {
+                                          final StreamsBuilder builder,
+                                          final boolean cache,
+                                          final boolean log,
+                                          final StoresToTest storeToTest) {
         final StoreBuilder<?> sessionStoreStoreBuilder;
         final ProcessorSupplier<Integer, Integer, Void, Void> processorSupplier;
         sessionStoreStoreBuilder = Stores.sessionStoreBuilder(
@@ -756,23 +749,24 @@ public class IQv2StoreIntegrationTest {
 
     }
 
-
-    @After
+    @AfterEach
     public void afterTest() {
         // only needed because some of the PAPI cases aren't added yet.
         if (kafkaStreams != null) {
-            kafkaStreams.close();
+            kafkaStreams.close(Duration.ofSeconds(60));
             kafkaStreams.cleanUp();
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void after() {
         CLUSTER.stop();
     }
 
-    @Test
-    public void verifyStore() {
+    @ParameterizedTest
+    @MethodSource("data")
+    public void verifyStore(final boolean cache, final boolean log, final StoresToTest storeToTest, final String kind) {
+        setup(cache, log, storeToTest, kind);
         try {
             if (storeToTest.global()) {
                 // See KAFKA-13523
@@ -781,7 +775,6 @@ public class IQv2StoreIntegrationTest {
                 shouldRejectUnknownQuery();
                 shouldCollectExecutionInfo();
                 shouldCollectExecutionInfoUnderFailure();
-                final String kind = this.kind;
                 if (storeToTest.keyValue()) {
                     if (storeToTest.timestamped()) {
                         shouldHandleKeyQuery(2,  5);
@@ -1019,7 +1012,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet(1)
+            Set.of(1)
         );
 
         // miss the window start range
@@ -1028,7 +1021,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START - 1),
             Instant.ofEpochMilli(WINDOW_START - 1),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the window key query at the first window and the key of record which we want to query is 2
@@ -1037,7 +1030,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // miss the key
@@ -1046,7 +1039,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // miss both
@@ -1055,7 +1048,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START - 1),
             Instant.ofEpochMilli(WINDOW_START - 1),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the window key query at the first and the second windows and the key of record which we want to query is 0
@@ -1064,7 +1057,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(5).toMillis()),
             extractor,
-            mkSet(1)
+            Set.of(1)
         );
 
         // do the window key query at the first window and the key of record which we want to query is 1
@@ -1073,7 +1066,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet(2)
+            Set.of(2)
         );
 
         // do the window key query at the second and the third windows and the key of record which we want to query is 2
@@ -1082,7 +1075,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(10).toMillis()),
             extractor,
-            mkSet(4, 5)
+            Set.of(4, 5)
         );
 
         // do the window key query at the second and the third windows and the key of record which we want to query is 3
@@ -1091,7 +1084,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(10).toMillis()),
             extractor,
-            mkSet(13)
+            Set.of(13)
         );
 
         // do the window key query at the fourth and the fifth windows and the key of record which we want to query is 4
@@ -1100,7 +1093,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(15).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(20).toMillis()),
             extractor,
-            mkSet(17)
+            Set.of(17)
         );
 
         // do the window key query at the fifth window and the key of record which we want to query is 4
@@ -1109,7 +1102,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(20).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(24).toMillis()),
             extractor,
-            mkSet()
+            Set.of()
         );
     }
 
@@ -1121,7 +1114,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet(1)
+            Set.of(1)
         );
 
         // miss the window start range
@@ -1130,7 +1123,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START - 1),
             Instant.ofEpochMilli(WINDOW_START - 1),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the window key query at the first window and the key of record which we want to query is 2
@@ -1139,7 +1132,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // miss the key
@@ -1148,7 +1141,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // miss both
@@ -1157,7 +1150,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START - 1),
             Instant.ofEpochMilli(WINDOW_START - 1),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the window key query at the first and the second windows and the key of record which we want to query is 0
@@ -1166,7 +1159,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(5).toMillis()),
             extractor,
-            mkSet(1)
+            Set.of(1)
         );
 
         // do the window key query at the first window and the key of record which we want to query is 1
@@ -1175,7 +1168,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START),
             Instant.ofEpochMilli(WINDOW_START),
             extractor,
-            mkSet(2)
+            Set.of(2)
         );
 
         // do the window key query at the second and the third windows and the key of record which we want to query is 2
@@ -1184,7 +1177,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(10).toMillis()),
             extractor,
-            mkSet(4, 5)
+            Set.of(4, 5)
         );
 
         // do the window key query at the second and the third windows and the key of record which we want to query is 3
@@ -1193,7 +1186,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(10).toMillis()),
             extractor,
-            mkSet(7)
+            Set.of(7)
         );
 
         // do the window key query at the fourth and the fifth windows and the key of record which we want to query is 4
@@ -1202,7 +1195,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(15).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(20).toMillis()),
             extractor,
-            mkSet(9)
+            Set.of(9)
         );
 
         // do the window key query at the fifth window and the key of record which we want to query is 4
@@ -1211,7 +1204,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(20).toMillis()),
             Instant.ofEpochMilli(WINDOW_START + Duration.ofMinutes(24).toMillis()),
             extractor,
-            mkSet()
+            Set.of()
         );
     }
 
@@ -1224,7 +1217,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart - 1),
             Instant.ofEpochMilli(windowStart - 1),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the query at the first window
@@ -1232,7 +1225,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart),
             Instant.ofEpochMilli(windowStart),
             extractor,
-            mkSet(1, 2)
+            Set.of(1, 2)
         );
 
         // do the query at the first and the second windows
@@ -1240,7 +1233,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(5).toMillis()),
             extractor,
-            mkSet(1, 2, 3, 4)
+            Set.of(1, 2, 3, 4)
         );
 
         // do the query at the second and the third windows
@@ -1248,7 +1241,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(10).toMillis()),
             extractor,
-            mkSet(3, 4, 5, 13)
+            Set.of(3, 4, 5, 13)
         );
 
         // do the query at the third and the fourth windows
@@ -1256,7 +1249,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(10).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             extractor,
-            mkSet(17, 5, 13)
+            Set.of(17, 5, 13)
         );
 
         // do the query at the fourth and the fifth windows
@@ -1264,7 +1257,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(20).toMillis()),
             extractor,
-            mkSet(17)
+            Set.of(17)
         );
 
         //do the query at the fifth and the sixth windows
@@ -1272,7 +1265,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(20).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(25).toMillis()),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the query from the second to the fourth windows
@@ -1280,7 +1273,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             extractor,
-            mkSet(17, 3, 4, 5, 13)
+            Set.of(17, 3, 4, 5, 13)
         );
 
         // do the query from the first to the fourth windows
@@ -1288,7 +1281,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             extractor,
-            mkSet(1, 17, 2, 3, 4, 5, 13)
+            Set.of(1, 17, 2, 3, 4, 5, 13)
         );
 
         // Should fail to execute this query on a WindowStore.
@@ -1297,7 +1290,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Windowed<Integer>, T>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<KeyValueIterator<Windowed<Integer>, T>> result =
@@ -1337,7 +1330,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart - 1),
             Instant.ofEpochMilli(windowStart - 1),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the query at the first window
@@ -1345,7 +1338,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart),
             Instant.ofEpochMilli(windowStart),
             extractor,
-            mkSet(1, 2)
+            Set.of(1, 2)
         );
 
         // do the query at the first and the second windows
@@ -1353,7 +1346,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(5).toMillis()),
             extractor,
-            mkSet(1, 2, 3, 4)
+            Set.of(1, 2, 3, 4)
         );
 
         // do the query at the second and the third windows
@@ -1361,7 +1354,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(10).toMillis()),
             extractor,
-            mkSet(3, 4, 5, 7)
+            Set.of(3, 4, 5, 7)
         );
 
         // do the query at the third and the fourth windows
@@ -1369,7 +1362,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(10).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             extractor,
-            mkSet(5, 7, 9)
+            Set.of(5, 7, 9)
         );
 
         // do the query at the fourth and the fifth windows
@@ -1377,7 +1370,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(20).toMillis()),
             extractor,
-            mkSet(9)
+            Set.of(9)
         );
 
         //do the query at the fifth and the sixth windows
@@ -1385,7 +1378,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(20).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(25).toMillis()),
             extractor,
-            mkSet()
+            Set.of()
         );
 
         // do the query from the second to the fourth windows
@@ -1393,7 +1386,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(5).toMillis()),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             extractor,
-            mkSet(3, 4, 5, 7, 9)
+            Set.of(3, 4, 5, 7, 9)
         );
 
         // do the query from the first to the fourth windows
@@ -1401,7 +1394,7 @@ public class IQv2StoreIntegrationTest {
             Instant.ofEpochMilli(windowStart),
             Instant.ofEpochMilli(windowStart + Duration.ofMinutes(15).toMillis()),
             extractor,
-            mkSet(1, 2, 3, 4, 5, 7, 9)
+            Set.of(1, 2, 3, 4, 5, 7, 9)
         );
 
         // Should fail to execute this query on a WindowStore.
@@ -1410,7 +1403,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Windowed<Integer>, T>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<KeyValueIterator<Windowed<Integer>, T>> result =
@@ -1444,33 +1437,33 @@ public class IQv2StoreIntegrationTest {
     private <T> void shouldHandleSessionKeyDSLQueries() {
         shouldHandleSessionRangeQuery(
             0,
-            mkSet(1)
+            Set.of(1)
         );
 
         shouldHandleSessionRangeQuery(
             1,
-            mkSet(5)
+            Set.of(5)
         );
 
         shouldHandleSessionRangeQuery(
             2,
-            mkSet(9)
+            Set.of(9)
         );
 
         shouldHandleSessionRangeQuery(
             3,
-            mkSet(13)
+            Set.of(13)
         );
 
         shouldHandleSessionRangeQuery(
             4,
-            mkSet(17)
+            Set.of(17)
         );
 
         // not preset, so empty result iter
         shouldHandleSessionRangeQuery(
             999,
-            mkSet()
+            Set.of()
         );
 
         // Should fail to execute this query on a SessionStore.
@@ -1483,7 +1476,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Windowed<Integer>, T>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<KeyValueIterator<Windowed<Integer>, T>> result =
@@ -1517,33 +1510,33 @@ public class IQv2StoreIntegrationTest {
     private <T> void shouldHandleSessionKeyPAPIQueries() {
         shouldHandleSessionRangeQuery(
             0,
-            mkSet(0, 1)
+            Set.of(0, 1)
         );
 
         shouldHandleSessionRangeQuery(
             1,
-            mkSet(2, 3)
+            Set.of(2, 3)
         );
 
         shouldHandleSessionRangeQuery(
             2,
-            mkSet(4, 5)
+            Set.of(4, 5)
         );
 
         shouldHandleSessionRangeQuery(
             3,
-            mkSet(6, 7)
+            Set.of(6, 7)
         );
 
         shouldHandleSessionRangeQuery(
             4,
-            mkSet(8, 9)
+            Set.of(8, 9)
         );
 
         // not preset, so empty result iter
         shouldHandleSessionRangeQuery(
             999,
-            mkSet()
+            Set.of()
         );
 
         // Should fail to execute this query on a SessionStore.
@@ -1556,7 +1549,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Windowed<Integer>, T>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<KeyValueIterator<Windowed<Integer>, T>> result =
@@ -1612,7 +1605,7 @@ public class IQv2StoreIntegrationTest {
 
         final UnknownQuery query = new UnknownQuery();
         final StateQueryRequest<Void> request = inStore(STORE_NAME).withQuery(query);
-        final Set<Integer> partitions = mkSet(0, 1);
+        final Set<Integer> partitions = Set.of(0, 1);
 
         final StateQueryResult<Void> result =
             IntegrationTestUtils.iqv2WaitForPartitions(kafkaStreams, request, partitions);
@@ -1651,7 +1644,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<V> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<V> result =
@@ -1685,7 +1678,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<ValueAndTimestamp<V>> request =
                 inStore(STORE_NAME)
                         .withQuery(query)
-                        .withPartitions(mkSet(0, 1))
+                        .withPartitions(Set.of(0, 1))
                         .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<ValueAndTimestamp<V>> result =
@@ -1727,7 +1720,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Integer, V>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
         final StateQueryResult<KeyValueIterator<Integer, V>> result =
             IntegrationTestUtils.iqv2WaitForResult(kafkaStreams, request);
@@ -1782,7 +1775,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Integer, ValueAndTimestamp<V>>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
         final StateQueryResult<KeyValueIterator<Integer, ValueAndTimestamp<V>>> result =
             IntegrationTestUtils.iqv2WaitForResult(kafkaStreams, request);
@@ -1837,7 +1830,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<WindowStoreIterator<V>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<WindowStoreIterator<V>> result =
@@ -1887,7 +1880,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Windowed<Integer>, V>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
 
         final StateQueryResult<KeyValueIterator<Windowed<Integer>, V>> result =
@@ -1935,7 +1928,7 @@ public class IQv2StoreIntegrationTest {
         final StateQueryRequest<KeyValueIterator<Windowed<Integer>, V>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
-                .withPartitions(mkSet(0, 1))
+                .withPartitions(Set.of(0, 1))
                 .withPositionBound(PositionBound.at(INPUT_POSITION));
         final StateQueryResult<KeyValueIterator<Windowed<Integer>, V>> result =
             IntegrationTestUtils.iqv2WaitForResult(kafkaStreams, request);
@@ -1976,7 +1969,7 @@ public class IQv2StoreIntegrationTest {
     public void shouldCollectExecutionInfo() {
 
         final KeyQuery<Integer, ValueAndTimestamp<Integer>> query = KeyQuery.withKey(1);
-        final Set<Integer> partitions = mkSet(0, 1);
+        final Set<Integer> partitions = Set.of(0, 1);
         final StateQueryRequest<ValueAndTimestamp<Integer>> request =
             inStore(STORE_NAME)
                 .withQuery(query)
@@ -2000,7 +1993,7 @@ public class IQv2StoreIntegrationTest {
     public void shouldCollectExecutionInfoUnderFailure() {
 
         final UnknownQuery query = new UnknownQuery();
-        final Set<Integer> partitions = mkSet(0, 1);
+        final Set<Integer> partitions = Set.of(0, 1);
         final StateQueryRequest<Void> request =
             inStore(STORE_NAME)
                 .withQuery(query)

@@ -20,16 +20,18 @@ package kafka.log
 import java.io.File
 import java.nio.channels.ClosedChannelException
 import java.nio.charset.StandardCharsets
+import java.util
 import java.util.regex.Pattern
 import java.util.Collections
 import kafka.server.KafkaConfig
 import kafka.utils.TestUtils
+import org.apache.kafka.common.compress.Compression
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 import org.apache.kafka.common.errors.KafkaStorageException
-import org.apache.kafka.common.record.{CompressionType, MemoryRecords, Record, SimpleRecord}
+import org.apache.kafka.common.record.{MemoryRecords, Record, SimpleRecord}
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.apache.kafka.server.util.{MockTime, Scheduler}
-import org.apache.kafka.storage.internals.log.{FetchDataInfo, LogConfig, LogDirFailureChannel, LogFileUtils, LogOffsetMetadata, LogSegment, LogSegments}
+import org.apache.kafka.storage.internals.log.{FetchDataInfo, LocalLog => JLocalLog, LogConfig, LogDirFailureChannel, LogFileUtils, LogOffsetMetadata, LogSegment, LogSegments}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.function.Executable
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
@@ -58,9 +60,7 @@ class LocalLogTest {
     try {
       log.close()
     } catch {
-      case _: KafkaStorageException => {
-        // ignore
-      }
+      case _: KafkaStorageException => // ignore
     }
     Utils.delete(tmpDir)
   }
@@ -101,7 +101,7 @@ class LocalLogTest {
     log.append(lastOffset = initialOffset + records.size - 1,
       largestTimestamp = records.head.timestamp,
       shallowOffsetOfMaxTimestamp = initialOffset,
-      records = MemoryRecords.withRecords(initialOffset, CompressionType.NONE, 0, records.toList : _*))
+      records = MemoryRecords.withRecords(initialOffset, Compression.NONE, 0, records.toList : _*))
   }
 
   private def readRecords(log: LocalLog = log,
@@ -124,7 +124,7 @@ class LocalLogTest {
     log.roll()
     assertEquals(2, log.segments.numberOfSegments)
     assertFalse(logDir.listFiles.isEmpty)
-    val segmentsBeforeDelete = log.segments.values.asScala.toVector
+    val segmentsBeforeDelete = new util.ArrayList(log.segments.values)
     val deletedSegments = log.deleteAllSegments()
     assertTrue(log.segments.isEmpty)
     assertEquals(segmentsBeforeDelete, deletedSegments)
@@ -139,7 +139,7 @@ class LocalLogTest {
     assertEquals(1, log.segments.numberOfSegments)
     assertNotEquals(oldActiveSegment, log.segments.activeSegment)
     assertFalse(logDir.listFiles.isEmpty)
-    assertTrue(oldActiveSegment.hasSuffix(LocalLog.DeletedFileSuffix))
+    assertTrue(oldActiveSegment.hasSuffix(LogFileUtils.DELETED_FILE_SUFFIX))
   }
 
   @Test
@@ -307,17 +307,17 @@ class LocalLogTest {
 
     assertEquals(10L, log.segments.numberOfSegments)
 
-    val toDelete = log.segments.values.asScala.toVector
-    LocalLog.deleteSegmentFiles(toDelete, asyncDelete = asyncDelete, log.dir, log.topicPartition, log.config, log.scheduler, log.logDirFailureChannel, "")
+    val toDelete = log.segments.values
+    JLocalLog.deleteSegmentFiles(toDelete, asyncDelete, log.dir, log.topicPartition, log.config, log.scheduler, log.logDirFailureChannel, "")
     if (asyncDelete) {
-      toDelete.foreach {
+      toDelete.forEach {
         segment =>
           assertFalse(segment.deleted())
-          assertTrue(segment.hasSuffix(LocalLog.DeletedFileSuffix))
+          assertTrue(segment.hasSuffix(LogFileUtils.DELETED_FILE_SUFFIX))
       }
       mockTime.sleep(log.config.fileDeleteDelayMs + 1)
     }
-    toDelete.foreach(segment => assertTrue(segment.deleted()))
+    toDelete.forEach(segment => assertTrue(segment.deleted()))
   }
 
   @Test
@@ -340,7 +340,7 @@ class LocalLogTest {
     assertEquals(1, log.segments.numberOfSegments)
     assertEquals(newActiveSegment, log.segments.activeSegment)
     assertNotEquals(oldActiveSegment, log.segments.activeSegment)
-    assertTrue(oldActiveSegment.hasSuffix(LocalLog.DeletedFileSuffix))
+    assertTrue(oldActiveSegment.hasSuffix(LogFileUtils.DELETED_FILE_SUFFIX))
     assertEquals(newOffset, log.segments.activeSegment.baseOffset)
     assertEquals(0L, log.recoveryPoint)
     assertEquals(newOffset, log.logEndOffset)
@@ -371,6 +371,43 @@ class LocalLogTest {
     assertEquals(10L, log.logEndOffset)
     val fetchDataInfo = readRecords(startOffset = 10L)
     assertTrue(fetchDataInfo.records.records.asScala.isEmpty)
+  }
+
+  @Test
+  def testWhenFetchOffsetHigherThanMaxOffset(): Unit = {
+    val record = new SimpleRecord(mockTime.milliseconds, "a".getBytes)
+    for (offset <- 0 to 4) {
+      appendRecords(List(record), initialOffset = offset)
+      if (offset % 2 != 0)
+        log.roll()
+    }
+    assertEquals(3, log.segments.numberOfSegments)
+
+    // case-0: valid case, `startOffset` < `maxOffsetMetadata.offset`
+    var fetchDataInfo = readRecords(startOffset = 3L, maxOffsetMetadata = new LogOffsetMetadata(4L, 4L, 0))
+    assertEquals(1, fetchDataInfo.records.records.asScala.size)
+    assertEquals(new LogOffsetMetadata(3, 2L, 69), fetchDataInfo.fetchOffsetMetadata)
+
+    // case-1: `startOffset` == `maxOffsetMetadata.offset`
+    fetchDataInfo = readRecords(startOffset = 4L, maxOffsetMetadata = new LogOffsetMetadata(4L, 4L, 0))
+    assertTrue(fetchDataInfo.records.records.asScala.isEmpty)
+    assertEquals(new LogOffsetMetadata(4L, 4L, 0), fetchDataInfo.fetchOffsetMetadata)
+
+    // case-2: `startOffset` > `maxOffsetMetadata.offset`
+    fetchDataInfo = readRecords(startOffset = 5L, maxOffsetMetadata = new LogOffsetMetadata(4L, 4L, 0))
+    assertTrue(fetchDataInfo.records.records.asScala.isEmpty)
+    assertEquals(new LogOffsetMetadata(5L, 4L, 69), fetchDataInfo.fetchOffsetMetadata)
+
+    // case-3: `startOffset` < `maxMessageOffset.offset` but `maxMessageOffset.messageOnlyOffset` is true
+    fetchDataInfo = readRecords(startOffset = 3L, maxOffsetMetadata = new LogOffsetMetadata(4L, -1L, -1))
+    assertTrue(fetchDataInfo.records.records.asScala.isEmpty)
+    assertEquals(new LogOffsetMetadata(3L, 2L, 69), fetchDataInfo.fetchOffsetMetadata)
+
+    // case-4: `startOffset` < `maxMessageOffset.offset`, `maxMessageOffset.messageOnlyOffset` is false, but
+    // `maxOffsetMetadata.segmentBaseOffset` < `startOffset.segmentBaseOffset`
+    fetchDataInfo = readRecords(startOffset = 3L, maxOffsetMetadata = new LogOffsetMetadata(4L, 0L, 40))
+    assertTrue(fetchDataInfo.records.records.asScala.isEmpty)
+    assertEquals(new LogOffsetMetadata(3L, 2L, 69), fetchDataInfo.fetchOffsetMetadata)
   }
 
   @Test

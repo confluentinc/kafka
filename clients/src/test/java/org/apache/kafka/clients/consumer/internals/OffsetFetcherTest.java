@@ -60,6 +60,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Utils;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,10 +84,10 @@ import static java.util.Collections.singleton;
 import static java.util.Collections.singletonMap;
 import static org.apache.kafka.common.requests.OffsetsForLeaderEpochResponse.UNDEFINED_EPOCH;
 import static org.apache.kafka.common.requests.OffsetsForLeaderEpochResponse.UNDEFINED_EPOCH_OFFSET;
-import static org.apache.kafka.common.utils.Utils.mkSet;
 import static org.apache.kafka.test.TestUtils.assertOptional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -110,6 +111,7 @@ public class OffsetFetcherTest {
     private final int validLeaderEpoch = 0;
     private final MetadataResponse initialUpdateResponse =
         RequestTestUtils.metadataUpdateWithIds(1, singletonMap(topicName, 4), topicIds);
+    private final int requestTimeoutMs = 30000;
 
     private final long retryBackoffMs = 100;
     private MockTime time = new MockTime(1);
@@ -243,6 +245,7 @@ public class OffsetFetcherTest {
 
         client.prepareResponse(body -> {
             ListOffsetsRequest request = (ListOffsetsRequest) body;
+            assertEquals(requestTimeoutMs, request.timeoutMs());
             return request.isolationLevel() == isolationLevel;
         }, listOffsetResponse(Errors.NONE, 1L, 5L));
         offsetFetcher.resetPositionsIfNeeded();
@@ -462,7 +465,7 @@ public class OffsetFetcherTest {
         OffsetResetStrategy strategy,
         AbstractRequest request
     ) {
-        assertTrue(request instanceof ListOffsetsRequest);
+        assertInstanceOf(ListOffsetsRequest.class, request);
 
         ListOffsetsRequest req = (ListOffsetsRequest) request;
         assertEquals(singleton(tp.topic()), req.data().topics().stream()
@@ -743,7 +746,7 @@ public class OffsetFetcherTest {
         for (Errors retriableError : retriableErrors) {
             buildFetcher();
 
-            subscriptions.assignFromUser(mkSet(tp0, tp1));
+            subscriptions.assignFromUser(Set.of(tp0, tp1));
             client.updateMetadata(initialUpdateResponse);
 
             final long fetchTimestamp = 10L;
@@ -893,7 +896,7 @@ public class OffsetFetcherTest {
     public void testGetOffsetsForTimesWhenSomeTopicPartitionLeadersNotKnownInitially() {
         buildFetcher();
 
-        subscriptions.assignFromUser(mkSet(tp0, tp1));
+        subscriptions.assignFromUser(Set.of(tp0, tp1));
         final String anotherTopic = "another-topic";
         final TopicPartition t2p0 = new TopicPartition(anotherTopic, 0);
 
@@ -940,7 +943,7 @@ public class OffsetFetcherTest {
         buildFetcher();
         final String anotherTopic = "another-topic";
         final TopicPartition t2p0 = new TopicPartition(anotherTopic, 0);
-        subscriptions.assignFromUser(mkSet(tp0, t2p0));
+        subscriptions.assignFromUser(Set.of(tp0, t2p0));
 
         client.reset();
 
@@ -1128,7 +1131,7 @@ public class OffsetFetcherTest {
     @Test
     public void testOffsetValidationRequestGrouping() {
         buildFetcher();
-        assignFromUser(mkSet(tp0, tp1, tp2, tp3));
+        assignFromUser(Set.of(tp0, tp1, tp2, tp3));
 
         metadata.updateWithCurrentRequestVersion(RequestTestUtils.metadataUpdateWithIds("dummy", 3,
             Collections.emptyMap(), singletonMap(topicName, 4),
@@ -1152,7 +1155,7 @@ public class OffsetFetcherTest {
                 .collect(Collectors.toSet());
 
             assertTrue(expectedPartitions.stream().noneMatch(allRequestedPartitions::contains));
-            assertTrue(expectedPartitions.size() > 0);
+            assertFalse(expectedPartitions.isEmpty());
             allRequestedPartitions.addAll(expectedPartitions);
 
             OffsetForLeaderEpochResponseData data = new OffsetForLeaderEpochResponseData();
@@ -1639,6 +1642,7 @@ public class OffsetFetcherTest {
             ListOffsetsRequest req = (ListOffsetsRequest) body;
             ListOffsetsTopic topic = req.topics().get(0);
             ListOffsetsPartition partition = topic.partitions().get(0);
+            assertEquals(requestTimeoutMs, req.timeoutMs());
             return tp0.topic().equals(topic.name())
                     && tp0.partition() == partition.partitionIndex()
                     && timestamp == partition.timestamp()
@@ -1710,7 +1714,6 @@ public class OffsetFetcherTest {
                               SubscriptionState subscriptionState,
                               LogContext logContext) {
         buildDependencies(metricConfig, metadataExpireMs, subscriptionState, logContext);
-        long requestTimeoutMs = 30000;
         offsetFetcher = new OffsetFetcher(logContext,
                 consumerClient,
                 metadata,

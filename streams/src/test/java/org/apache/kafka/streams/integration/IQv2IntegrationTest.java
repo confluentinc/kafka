@@ -37,7 +37,6 @@ import org.apache.kafka.streams.integration.utils.EmbeddedKafkaCluster;
 import org.apache.kafka.streams.integration.utils.IntegrationTestUtils;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Materialized;
-import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.processor.StateStoreContext;
 import org.apache.kafka.streams.processor.internals.StreamThread;
@@ -54,6 +53,7 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.apache.kafka.streams.state.internals.StoreQueryUtils;
 import org.apache.kafka.test.TestUtils;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -78,7 +78,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static java.util.Collections.singleton;
-import static org.apache.kafka.common.utils.Utils.mkSet;
 import static org.apache.kafka.streams.query.StateQueryRequest.inStore;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -167,7 +166,7 @@ public class IQv2IntegrationTest {
 
     @AfterEach
     public void afterTest() {
-        kafkaStreams.close();
+        kafkaStreams.close(Duration.ofSeconds(60));
         kafkaStreams.cleanUp();
     }
 
@@ -211,7 +210,7 @@ public class IQv2IntegrationTest {
         final KeyQuery<Integer, ValueAndTimestamp<Integer>> query = KeyQuery.withKey(1);
         final StateQueryRequest<ValueAndTimestamp<Integer>> request =
             inStore(STORE_NAME).withQuery(query).requireActive();
-        final Set<Integer> partitions = mkSet(0, 1);
+        final Set<Integer> partitions = Set.of(0, 1);
 
         kafkaStreams.start();
 
@@ -279,7 +278,7 @@ public class IQv2IntegrationTest {
     @Test
     public void shouldFetchExplicitlyFromAllPartitions() {
         final KeyQuery<Integer, ValueAndTimestamp<Integer>> query = KeyQuery.withKey(1);
-        final Set<Integer> partitions = mkSet(0, 1);
+        final Set<Integer> partitions = Set.of(0, 1);
         final StateQueryRequest<ValueAndTimestamp<Integer>> request =
             inStore(STORE_NAME).withQuery(query).withAllPartitions();
 
@@ -319,39 +318,41 @@ public class IQv2IntegrationTest {
 
                         @Override
                         public void put(final Bytes key, final byte[] value) {
-                            map.put(key, value);
-                            StoreQueryUtils.updatePosition(position,  context);
+                            synchronized (position) {
+                                map.put(key, value);
+                                StoreQueryUtils.updatePosition(position, context);
+                            }
                         }
 
                         @Override
                         public byte[] putIfAbsent(final Bytes key, final byte[] value) {
-                            StoreQueryUtils.updatePosition(position,  context);
-                            return map.putIfAbsent(key, value);
+                            synchronized (position) {
+                                StoreQueryUtils.updatePosition(position, context);
+                                return map.putIfAbsent(key, value);
+                            }
                         }
 
                         @Override
                         public void putAll(final List<KeyValue<Bytes, byte[]>> entries) {
-                            StoreQueryUtils.updatePosition(position,  context);
-                            for (final KeyValue<Bytes, byte[]> entry : entries) {
-                                map.put(entry.key, entry.value);
+                            synchronized (position) {
+                                StoreQueryUtils.updatePosition(position, context);
+                                for (final KeyValue<Bytes, byte[]> entry : entries) {
+                                    map.put(entry.key, entry.value);
+                                }
                             }
                         }
 
                         @Override
                         public byte[] delete(final Bytes key) {
-                            StoreQueryUtils.updatePosition(position,  context);
-                            return map.remove(key);
+                            synchronized (position) {
+                                StoreQueryUtils.updatePosition(position, context);
+                                return map.remove(key);
+                            }
                         }
 
                         @Override
                         public String name() {
                             return STORE_NAME;
-                        }
-
-                        @Deprecated
-                        @Override
-                        public void init(final ProcessorContext context, final StateStore root) {
-                            throw new UnsupportedOperationException();
                         }
 
                         @Override

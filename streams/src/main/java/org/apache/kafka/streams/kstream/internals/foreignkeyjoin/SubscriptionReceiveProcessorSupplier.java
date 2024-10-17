@@ -29,9 +29,9 @@ import org.apache.kafka.streams.processor.api.Record;
 import org.apache.kafka.streams.processor.api.RecordMetadata;
 import org.apache.kafka.streams.processor.internals.InternalProcessorContext;
 import org.apache.kafka.streams.processor.internals.metrics.TaskMetrics;
-import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.TimestampedKeyValueStore;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,14 +39,14 @@ public class SubscriptionReceiveProcessorSupplier<K, KO>
     implements ProcessorSupplier<KO, SubscriptionWrapper<K>, CombinedKey<KO, K>, Change<ValueAndTimestamp<SubscriptionWrapper<K>>>> {
     private static final Logger LOG = LoggerFactory.getLogger(SubscriptionReceiveProcessorSupplier.class);
 
-    private final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> storeBuilder;
+    private final String storeName;
     private final CombinedKeySchema<KO, K> keySchema;
 
     public SubscriptionReceiveProcessorSupplier(
-        final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> storeBuilder,
+        final String storeName,
         final CombinedKeySchema<KO, K> keySchema) {
 
-        this.storeBuilder = storeBuilder;
+        this.storeName = storeName;
         this.keySchema = keySchema;
     }
 
@@ -68,25 +68,25 @@ public class SubscriptionReceiveProcessorSupplier<K, KO>
                     internalProcessorContext.taskId().toString(),
                     internalProcessorContext.metrics()
                 );
-                store = internalProcessorContext.getStateStore(storeBuilder);
+                store = internalProcessorContext.getStateStore(storeName);
 
                 keySchema.init(context);
             }
 
             @Override
             public void process(final Record<KO, SubscriptionWrapper<K>> record) {
-                if (record.key() == null && !SubscriptionWrapper.Instruction.PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE.equals(record.value().getInstruction())) {
+                if (record.key() == null && !SubscriptionWrapper.Instruction.PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE.equals(record.value().instruction())) {
                     dropRecord();
                     return;
                 }
-                if (record.value().getVersion() > SubscriptionWrapper.CURRENT_VERSION) {
+                if (record.value().version() > SubscriptionWrapper.CURRENT_VERSION) {
                     //Guard against modifications to SubscriptionWrapper. Need to ensure that there is compatibility
                     //with previous versions to enable rolling upgrades. Must develop a strategy for upgrading
                     //from older SubscriptionWrapper versions to newer versions.
                     throw new UnsupportedVersionException("SubscriptionWrapper is of an incompatible version.");
                 }
                 context().forward(
-                    record.withKey(new CombinedKey<>(record.key(), record.value().getPrimaryKey()))
+                    record.withKey(new CombinedKey<>(record.key(), record.value().primaryKey()))
                         .withValue(inferChange(record))
                         .withTimestamp(record.timestamp())
                 );
@@ -101,14 +101,14 @@ public class SubscriptionReceiveProcessorSupplier<K, KO>
             }
 
             private Change<ValueAndTimestamp<SubscriptionWrapper<K>>> inferBasedOnState(final Record<KO, SubscriptionWrapper<K>> record) {
-                final Bytes subscriptionKey = keySchema.toBytes(record.key(), record.value().getPrimaryKey());
+                final Bytes subscriptionKey = keySchema.toBytes(record.key(), record.value().primaryKey());
 
                 final ValueAndTimestamp<SubscriptionWrapper<K>> newValue = ValueAndTimestamp.make(record.value(), record.timestamp());
                 final ValueAndTimestamp<SubscriptionWrapper<K>> oldValue = store.get(subscriptionKey);
 
                 //This store is used by the prefix scanner in ForeignTableJoinProcessorSupplier
-                if (record.value().getInstruction().equals(SubscriptionWrapper.Instruction.DELETE_KEY_AND_PROPAGATE) ||
-                    record.value().getInstruction().equals(SubscriptionWrapper.Instruction.DELETE_KEY_NO_PROPAGATE)) {
+                if (record.value().instruction().equals(SubscriptionWrapper.Instruction.DELETE_KEY_AND_PROPAGATE) ||
+                    record.value().instruction().equals(SubscriptionWrapper.Instruction.DELETE_KEY_NO_PROPAGATE)) {
                     store.delete(subscriptionKey);
                 } else {
                     store.put(subscriptionKey, newValue);

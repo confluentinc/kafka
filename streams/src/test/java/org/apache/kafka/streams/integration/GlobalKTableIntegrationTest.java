@@ -43,6 +43,7 @@ import org.apache.kafka.streams.state.Stores;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.apache.kafka.test.MockApiProcessorSupplier;
 import org.apache.kafka.test.TestUtils;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -121,7 +122,7 @@ public class GlobalKTableIntegrationTest {
     @AfterEach
     public void whenShuttingDown() throws Exception {
         if (kafkaStreams != null) {
-            kafkaStreams.close();
+            kafkaStreams.close(Duration.ofSeconds(60));
         }
         IntegrationTestUtils.purgeLocalStreamsState(streamsConfiguration);
     }

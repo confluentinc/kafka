@@ -43,11 +43,19 @@ public class WakeupTrigger {
                 return new WakeupFuture();
             } else if (task instanceof ActiveFuture) {
                 ActiveFuture active = (ActiveFuture) task;
-                active.future().completeExceptionally(new WakeupException());
-                return null;
+                boolean wasTriggered = active.future().completeExceptionally(new WakeupException());
+
+                // If the Future was *already* completed when we invoke completeExceptionally, the WakeupException
+                // will be ignored. If it was already completed, we then need to return a new WakeupFuture so that the
+                // next call to setActiveTask will throw the WakeupException.
+                return wasTriggered ? null : new WakeupFuture();
             } else if (task instanceof FetchAction) {
                 FetchAction fetchAction = (FetchAction) task;
                 fetchAction.fetchBuffer().wakeup();
+                return new WakeupFuture();
+            } else if (task instanceof ShareFetchAction) {
+                ShareFetchAction shareFetchAction = (ShareFetchAction) task;
+                shareFetchAction.fetchBuffer().wakeup();
                 return new WakeupFuture();
             } else {
                 return task;
@@ -56,11 +64,10 @@ public class WakeupTrigger {
     }
 
     /**
-     *     If there is no pending task, set the pending task active.
-     *     If wakeup was called before setting an active task, the current task will complete exceptionally with
-     *     WakeupException right
-     *     away.
-     *     if there is an active task, throw exception.
+     *  If there is no pending task, set the pending task active.
+     *  If wakeup was called before setting an active task, the current task will complete exceptionally with
+     *  WakeupException right away.
+     *  If there is an active task, throw exception.
      * @param currentTask
      * @param <T>
      * @return
@@ -73,6 +80,8 @@ public class WakeupTrigger {
             } else if (task instanceof WakeupFuture) {
                 currentTask.completeExceptionally(new WakeupException());
                 return null;
+            } else if (task instanceof DisabledWakeups) {
+                return task;
             }
             // last active state is still active
             throw new KafkaException("Last active task is still active");
@@ -88,6 +97,8 @@ public class WakeupTrigger {
             } else if (task instanceof WakeupFuture) {
                 throwWakeupException.set(true);
                 return null;
+            } else if (task instanceof DisabledWakeups) {
+                return task;
             }
             // last active state is still active
             throw new IllegalStateException("Last active task is still active");
@@ -97,11 +108,34 @@ public class WakeupTrigger {
         }
     }
 
+    public void setShareFetchAction(final ShareFetchBuffer fetchBuffer) {
+        final AtomicBoolean throwWakeupException = new AtomicBoolean(false);
+        pendingTask.getAndUpdate(task -> {
+            if (task == null) {
+                return new ShareFetchAction(fetchBuffer);
+            } else if (task instanceof WakeupFuture) {
+                throwWakeupException.set(true);
+                return null;
+            } else if (task instanceof DisabledWakeups) {
+                return task;
+            }
+            // last active state is still active
+            throw new IllegalStateException("Last active task is still active");
+        });
+        if (throwWakeupException.get()) {
+            throw new WakeupException();
+        }
+    }
+
+    public void disableWakeups() {
+        pendingTask.set(new DisabledWakeups());
+    }
+
     public void clearTask() {
         pendingTask.getAndUpdate(task -> {
             if (task == null) {
                 return null;
-            } else if (task instanceof ActiveFuture || task instanceof FetchAction) {
+            } else if (task instanceof ActiveFuture || task instanceof FetchAction || task instanceof ShareFetchAction) {
                 return null;
             }
             return task;
@@ -131,6 +165,9 @@ public class WakeupTrigger {
 
     interface Wakeupable { }
 
+    // Set to block wakeups from happening and pending actions to be registered.
+    static class DisabledWakeups implements Wakeupable { }
+
     static class ActiveFuture implements Wakeupable {
         private final CompletableFuture<?> future;
 
@@ -154,6 +191,19 @@ public class WakeupTrigger {
         }
 
         public FetchBuffer fetchBuffer() {
+            return fetchBuffer;
+        }
+    }
+
+    static class ShareFetchAction implements Wakeupable {
+
+        private final ShareFetchBuffer fetchBuffer;
+
+        public ShareFetchAction(ShareFetchBuffer fetchBuffer) {
+            this.fetchBuffer = fetchBuffer;
+        }
+
+        public ShareFetchBuffer fetchBuffer() {
             return fetchBuffer;
         }
     }

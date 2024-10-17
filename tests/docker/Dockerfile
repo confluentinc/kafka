@@ -13,7 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG jdk_version=openjdk:8
+ARG jdk_version=openjdk:11
+FROM $jdk_version AS build-native-image
+
+WORKDIR /build
+
+COPY native/ native
+
+ARG KAFKA_MODE
+ARG GRAALVM_URL="https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.1/graalvm-community-jdk-21.0.1_linux-aarch64_bin.tar.gz"
+
+ENV NATIVE_IMAGE_PATH="/build/graalvm/bin/native-image"
+ENV NATIVE_CONFIGS_DIR="/build/native/native-image-configs"
+ENV KAFKA_LIBS_DIR="/build/kafka/libs"
+ENV KAFKA_BIN_DIR="/build/kafka-binary"
+ENV TARGET_PATH="$KAFKA_BIN_DIR/kafka.Kafka"
+
+RUN mkdir $KAFKA_BIN_DIR
+
+RUN if [ "$KAFKA_MODE" = "native" ]; then \
+      apt update && apt install -y sudo build-essential libz-dev zlib1g-dev curl jq coreutils libffi-dev cmake pkg-config libfuse-dev && apt-get -y clean ; \
+      mkdir graalvm ; \
+      curl -L "$GRAALVM_URL" -o graalvm.tar.gz ; \
+      tar -xzf graalvm.tar.gz -C graalvm --strip-components=1 ; \
+      mkdir kafka ; \
+      tar xfz native/kafka.tgz -C kafka --strip-components 1 ; \
+      rm graalvm.tar.gz kafka.tgz ; \
+      /build/native/native_command.sh $NATIVE_IMAGE_PATH $NATIVE_CONFIGS_DIR $KAFKA_LIBS_DIR $TARGET_PATH ; \
+    fi
+
 FROM $jdk_version
 
 MAINTAINER Apache Kafka dev@kafka.apache.org
@@ -32,11 +60,12 @@ ARG ducker_creator=default
 LABEL ducker.creator=$ducker_creator
 
 # Update Linux and install necessary utilities.
-# we have to install git since it is included in openjdk:8 but not openjdk:11
 RUN apt update && apt install -y sudo git netcat iptables rsync unzip wget curl jq coreutils openssh-server net-tools vim python3-pip python3-dev libffi-dev libssl-dev cmake pkg-config libfuse-dev iperf traceroute iproute2 iputils-ping && apt-get -y clean
 RUN python3 -m pip install -U pip==21.1.1;
-RUN pip3 install --upgrade cffi virtualenv pyasn1 boto3 pycrypto pywinrm ipaddress enum34 debugpy && pip3 install --upgrade "ducktape>0.8"
+# NOTE: ducktape 0.12.0 supports py 3.9, 3.10, 3.11 and 3.12
+RUN pip3 install --upgrade cffi virtualenv pyasn1 boto3 pycrypto pywinrm ipaddress enum34 debugpy psutil && pip3 install --upgrade "ducktape==0.12.0"
 
+COPY --from=build-native-image /build/kafka-binary/ /opt/kafka-binary/
 # Set up ssh
 COPY ./ssh-config /root/.ssh/config
 # NOTE: The paramiko library supports the PEM-format private key, but does not support the RFC4716 format.
@@ -69,7 +98,9 @@ RUN mkdir -p "/opt/kafka-3.2.3" && chmod a+rw /opt/kafka-3.2.3 && curl -s "$KAFK
 RUN mkdir -p "/opt/kafka-3.3.2" && chmod a+rw /opt/kafka-3.3.2 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.3.2.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.3.2"
 RUN mkdir -p "/opt/kafka-3.4.1" && chmod a+rw /opt/kafka-3.4.1 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.4.1.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.4.1"
 RUN mkdir -p "/opt/kafka-3.5.2" && chmod a+rw /opt/kafka-3.5.2 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.5.2.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.5.2"
-RUN mkdir -p "/opt/kafka-3.6.1" && chmod a+rw /opt/kafka-3.6.1 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.6.1.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.6.1"
+RUN mkdir -p "/opt/kafka-3.6.2" && chmod a+rw /opt/kafka-3.6.2 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.6.2.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.6.2"
+RUN mkdir -p "/opt/kafka-3.7.1" && chmod a+rw /opt/kafka-3.7.1 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.7.1.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.7.1"
+RUN mkdir -p "/opt/kafka-3.8.0" && chmod a+rw /opt/kafka-3.8.0 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.8.0.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.8.0"
 
 
 # Streams test dependencies
@@ -94,7 +125,9 @@ RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.2.3-test.jar" -o /opt/kafka-3.2.3/lib
 RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.3.2-test.jar" -o /opt/kafka-3.3.2/libs/kafka-streams-3.3.2-test.jar
 RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.4.1-test.jar" -o /opt/kafka-3.4.1/libs/kafka-streams-3.4.1-test.jar
 RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.5.2-test.jar" -o /opt/kafka-3.5.2/libs/kafka-streams-3.5.2-test.jar
-RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.6.1-test.jar" -o /opt/kafka-3.6.1/libs/kafka-streams-3.6.1-test.jar
+RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.6.2-test.jar" -o /opt/kafka-3.6.2/libs/kafka-streams-3.6.2-test.jar
+RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.7.1-test.jar" -o /opt/kafka-3.7.1/libs/kafka-streams-3.7.1-test.jar
+RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.8.0-test.jar" -o /opt/kafka-3.8.0/libs/kafka-streams-3.8.0-test.jar
 
 # The version of Kibosh to use for testing.
 # If you update this, also update vagrant/base.sh
@@ -105,7 +138,7 @@ ARG KIBOSH_VERSION="8841dd392e6fbf02986e2fb1f1ebf04df344b65a"
 ARG UID="1000"
 
 # Install Kibosh
-RUN apt-get install fuse
+RUN apt-get install fuse -y
 RUN cd /opt && git clone -q  https://github.com/confluentinc/kibosh.git && cd "/opt/kibosh" && git reset --hard $KIBOSH_VERSION && mkdir "/opt/kibosh/build" && cd "/opt/kibosh/build" && ../configure && make -j 2
 
 # Set up the ducker user.

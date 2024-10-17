@@ -20,7 +20,6 @@ import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.kstream.internals.Change;
-import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.processor.StateStoreContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -34,6 +33,7 @@ import org.apache.kafka.streams.query.QueryConfig;
 import org.apache.kafka.streams.query.QueryResult;
 import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,23 +94,17 @@ public class CachingKeyValueStore
         this.timestampedSchema = timestampedSchema;
     }
 
-    @SuppressWarnings("deprecation") // This can be removed when it's removed from the interface.
-    @Deprecated
     @Override
-    public void init(final ProcessorContext context,
+    public void init(final StateStoreContext stateStoreContext,
                      final StateStore root) {
-        initInternal(asInternalProcessorContext(context));
-        super.init(context, root);
-        // save the stream thread as we only ever want to trigger a flush
-        // when the stream thread is the current thread.
-        streamThread = Thread.currentThread();
-    }
-
-    @Override
-    public void init(final StateStoreContext context,
-                     final StateStore root) {
-        initInternal(asInternalProcessorContext(context));
-        super.init(context, root);
+        this.context = asInternalProcessorContext(stateStoreContext);
+        this.cacheName = ThreadCache.nameSpaceFromTaskIdAndStore(context.taskId().toString(), name());
+        this.context.registerCacheFlushListener(cacheName, entries -> {
+            for (final ThreadCache.DirtyEntry entry : entries) {
+                putAndMaybeForward(entry, context);
+            }
+        });
+        super.init(stateStoreContext, root);
         // save the stream thread as we only ever want to trigger a flush
         // when the stream thread is the current thread.
         streamThread = Thread.currentThread();
@@ -120,8 +114,13 @@ public class CachingKeyValueStore
     public Position getPosition() {
         // We return the merged position since the query uses the merged position as well
         final Position mergedPosition = Position.emptyPosition();
-        mergedPosition.merge(position);
-        mergedPosition.merge(wrapped().getPosition());
+        final Position wrappedPosition = wrapped().getPosition();
+        synchronized (position) {
+            synchronized (wrappedPosition) {
+                mergedPosition.merge(position);
+                mergedPosition.merge(wrappedPosition);
+            }
+        }
         return mergedPosition;
     }
 
@@ -183,36 +182,28 @@ public class CachingKeyValueStore
 
         final Bytes key = keyQuery.getKey();
 
-        if (context.cache() != null) {
-            final LRUCacheEntry lruCacheEntry = context.cache().get(cacheName, key);
-            if (lruCacheEntry != null) {
-                final byte[] rawValue;
-                if (timestampedSchema && !WrappedStateStore.isTimestamped(wrapped()) && !StoreQueryUtils.isAdapter(wrapped())) {
-                    rawValue = ValueAndTimestampDeserializer.rawValue(lruCacheEntry.value());
-                } else {
-                    rawValue = lruCacheEntry.value();
+        synchronized (mergedPosition) {
+            if (context.cache() != null) {
+                final LRUCacheEntry lruCacheEntry = context.cache().get(cacheName, key);
+                if (lruCacheEntry != null) {
+                    final byte[] rawValue;
+                    if (timestampedSchema && !WrappedStateStore.isTimestamped(wrapped()) && !StoreQueryUtils.isAdapter(wrapped())) {
+                        rawValue = ValueAndTimestampDeserializer.rawValue(lruCacheEntry.value());
+                    } else {
+                        rawValue = lruCacheEntry.value();
+                    }
+                    result = (QueryResult<R>) QueryResult.forResult(rawValue);
                 }
-                result = (QueryResult<R>) QueryResult.forResult(rawValue);
             }
-        }
 
-        // We don't need to check the position at the state store since we already performed the check on
-        // the merged position above
-        if (result == null) {
-            result = wrapped().query(query, PositionBound.unbounded(), config);
+            // We don't need to check the position at the state store since we already performed the check on
+            // the merged position above
+            if (result == null) {
+                result = wrapped().query(query, PositionBound.unbounded(), config);
+            }
+            result.setPosition(mergedPosition.copy());
         }
-        result.setPosition(mergedPosition);
         return result;
-    }
-
-    private void initInternal(final InternalProcessorContext<?, ?> context) {
-        this.context = context;
-        this.cacheName = ThreadCache.nameSpaceFromTaskIdAndStore(context.taskId().toString(), name());
-        this.context.registerCacheFlushListener(cacheName, entries -> {
-            for (final ThreadCache.DirtyEntry entry : entries) {
-                putAndMaybeForward(entry, context);
-            }
-        });
     }
 
     private void putAndMaybeForward(final ThreadCache.DirtyEntry entry,
@@ -276,19 +267,21 @@ public class CachingKeyValueStore
 
     private void putInternal(final Bytes key,
                              final byte[] value) {
-        context.cache().put(
-            cacheName,
-            key,
-            new LRUCacheEntry(
-                value,
-                context.headers(),
-                true,
-                context.offset(),
-                context.timestamp(),
-                context.partition(),
-                context.topic()));
+        synchronized (position) {
+            context.cache().put(
+                cacheName,
+                key,
+                new LRUCacheEntry(
+                    value,
+                    context.headers(),
+                    true,
+                    context.offset(),
+                    context.timestamp(),
+                    context.partition(),
+                    context.topic()));
 
-        StoreQueryUtils.updatePosition(position, context);
+            StoreQueryUtils.updatePosition(position, context);
+        }
     }
 
     @Override
@@ -420,8 +413,7 @@ public class CachingKeyValueStore
     @Override
     public KeyValueIterator<Bytes, byte[]> all() {
         validateStoreOpen();
-        final KeyValueIterator<Bytes, byte[]> storeIterator =
-            new DelegatingPeekingKeyValueIterator<>(this.name(), wrapped().all());
+        final KeyValueIterator<Bytes, byte[]> storeIterator = wrapped().all();
         final ThreadCache.MemoryLRUCacheBytesIterator cacheIterator = context.cache().all(cacheName);
         return new MergedSortedCacheKeyValueBytesStoreIterator(cacheIterator, storeIterator, true);
     }
@@ -439,8 +431,7 @@ public class CachingKeyValueStore
     @Override
     public KeyValueIterator<Bytes, byte[]> reverseAll() {
         validateStoreOpen();
-        final KeyValueIterator<Bytes, byte[]> storeIterator =
-            new DelegatingPeekingKeyValueIterator<>(this.name(), wrapped().reverseAll());
+        final KeyValueIterator<Bytes, byte[]> storeIterator = wrapped().reverseAll();
         final ThreadCache.MemoryLRUCacheBytesIterator cacheIterator = context.cache().reverseAll(cacheName);
         return new MergedSortedCacheKeyValueBytesStoreIterator(cacheIterator, storeIterator, false);
     }

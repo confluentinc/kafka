@@ -46,16 +46,18 @@ import org.apache.kafka.test.MockKeyValueStoreBuilder;
 import org.apache.kafka.test.StreamsTestUtils;
 import org.apache.kafka.test.TestCondition;
 import org.apache.kafka.test.TestUtils;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.Tag;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -148,7 +150,7 @@ public class RegexSourceIntegrationTest {
     @AfterEach
     public void tearDown() throws IOException {
         if (streams != null) {
-            streams.close();
+            streams.close(Duration.ofSeconds(60));
         }
         // Remove any state from previous test runs
         IntegrationTestUtils.purgeLocalStreamsState(streamsConfiguration);
@@ -195,7 +197,7 @@ public class RegexSourceIntegrationTest {
 
             streams.close();
         } finally {
-            CLUSTER.deleteTopicsAndWait("TEST-TOPIC-1", "TEST-TOPIC-2");
+            CLUSTER.deleteTopics("TEST-TOPIC-1", "TEST-TOPIC-2");
         }
     }
 
@@ -247,7 +249,7 @@ public class RegexSourceIntegrationTest {
 
             streams.close();
         } finally {
-            CLUSTER.deleteTopicsAndWait(topic1, topic2);
+            CLUSTER.deleteTopics(topic1, topic2);
         }
     }
 
@@ -289,7 +291,7 @@ public class RegexSourceIntegrationTest {
             streams.start();
             TestUtils.waitForCondition(() -> assignedTopics.equals(expectedFirstAssignment), STREAM_TASKS_NOT_UPDATED);
         } finally {
-            CLUSTER.deleteTopicAndWait("TEST-TOPIC-A");
+            CLUSTER.deleteTopic("TEST-TOPIC-A");
         }
 
         TestUtils.waitForCondition(() -> assignedTopics.equals(expectedSecondAssignment), STREAM_TASKS_NOT_UPDATED);

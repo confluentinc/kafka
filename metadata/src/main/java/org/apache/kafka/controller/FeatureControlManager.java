@@ -17,17 +17,6 @@
 
 package org.apache.kafka.controller;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map.Entry;
-import java.util.Map;
-import java.util.Optional;
-import java.util.TreeMap;
-import java.util.function.Consumer;
-
 import org.apache.kafka.clients.admin.FeatureUpdate;
 import org.apache.kafka.common.metadata.FeatureLevelRecord;
 import org.apache.kafka.common.metadata.ZkMigrationStateRecord;
@@ -38,12 +27,24 @@ import org.apache.kafka.metadata.FinalizedControllerFeatures;
 import org.apache.kafka.metadata.VersionRange;
 import org.apache.kafka.metadata.migration.ZkMigrationState;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
+import org.apache.kafka.server.common.Features;
 import org.apache.kafka.server.common.MetadataVersion;
 import org.apache.kafka.server.mutable.BoundedList;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
 import org.apache.kafka.timeline.TimelineObject;
+
 import org.slf4j.Logger;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.function.Consumer;
 
 import static org.apache.kafka.common.metadata.MetadataRecordType.FEATURE_LEVEL_RECORD;
 import static org.apache.kafka.controller.QuorumController.MAX_RECORDS_PER_USER_OP;
@@ -59,12 +60,12 @@ public class FeatureControlManager {
         private ClusterFeatureSupportDescriber clusterSupportDescriber = new ClusterFeatureSupportDescriber() {
             @Override
             public Iterator<Entry<Integer, Map<String, VersionRange>>> brokerSupported() {
-                return Collections.<Integer, Map<String, VersionRange>>emptyMap().entrySet().iterator();
+                return Collections.emptyIterator();
             }
 
             @Override
             public Iterator<Entry<Integer, Map<String, VersionRange>>> controllerSupported() {
-                return Collections.<Integer, Map<String, VersionRange>>emptyMap().entrySet().iterator();
+                return Collections.emptyIterator();
             }
         };
 
@@ -168,23 +169,31 @@ public class FeatureControlManager {
         this.clusterSupportDescriber = clusterSupportDescriber;
     }
 
-    ControllerResult<Map<String, ApiError>> updateFeatures(
+    ControllerResult<ApiError> updateFeatures(
         Map<String, Short> updates,
         Map<String, FeatureUpdate.UpgradeType> upgradeTypes,
         boolean validateOnly
     ) {
-        TreeMap<String, ApiError> results = new TreeMap<>();
         List<ApiMessageAndVersion> records =
                 BoundedList.newArrayBacked(MAX_RECORDS_PER_USER_OP);
+
+        Map<String, Short> proposedUpdatedVersions = new HashMap<>();
+        finalizedVersions.forEach(proposedUpdatedVersions::put);
+        proposedUpdatedVersions.put(MetadataVersion.FEATURE_NAME, metadataVersion.get().featureLevel());
+        updates.forEach(proposedUpdatedVersions::put);
+
         for (Entry<String, Short> entry : updates.entrySet()) {
-            results.put(entry.getKey(), updateFeature(entry.getKey(), entry.getValue(),
-                upgradeTypes.getOrDefault(entry.getKey(), FeatureUpdate.UpgradeType.UPGRADE), records));
+            ApiError error = updateFeature(entry.getKey(), entry.getValue(),
+                upgradeTypes.getOrDefault(entry.getKey(), FeatureUpdate.UpgradeType.UPGRADE), records, proposedUpdatedVersions);
+            if (!error.error().equals(Errors.NONE)) {
+                return ControllerResult.of(Collections.emptyList(), error);
+            }
         }
 
         if (validateOnly) {
-            return ControllerResult.of(Collections.emptyList(), results);
+            return ControllerResult.of(Collections.emptyList(), ApiError.NONE);
         } else {
-            return ControllerResult.atomicOf(records, results);
+            return ControllerResult.atomicOf(records, ApiError.NONE);
         }
     }
 
@@ -200,7 +209,8 @@ public class FeatureControlManager {
         String featureName,
         short newVersion,
         FeatureUpdate.UpgradeType upgradeType,
-        List<ApiMessageAndVersion> records
+        List<ApiMessageAndVersion> records,
+        Map<String, Short> proposedUpdatedVersions
     ) {
         if (upgradeType.equals(FeatureUpdate.UpgradeType.UNKNOWN)) {
             return invalidUpdateVersion(featureName, newVersion,
@@ -240,6 +250,15 @@ public class FeatureControlManager {
             // Perform additional checks if we're updating metadata.version
             return updateMetadataVersion(newVersion, upgradeType.equals(FeatureUpdate.UpgradeType.UNSAFE_DOWNGRADE), records::add);
         } else {
+            // Validate dependencies for features that are not metadata.version
+            try {
+                Features.validateVersion(
+                    // Allow unstable feature versions is true because the version range is already checked above.
+                    Features.featureFromName(featureName).fromFeatureLevel(newVersion, true),
+                    proposedUpdatedVersions);
+            } catch (IllegalArgumentException e) {
+                return invalidUpdateVersion(featureName, newVersion, e.getMessage());
+            }
             records.add(new ApiMessageAndVersion(new FeatureLevelRecord().
                 setName(featureName).
                 setFeatureLevel(newVersion), (short) 0));
@@ -378,16 +397,6 @@ public class FeatureControlManager {
         return new FinalizedControllerFeatures(features, epoch);
     }
 
-    /**
-     * Tests if the controller should be preventing metadata updates due to being in the PRE_MIGRATION
-     * state. If the controller does not yet support migrations (before 3.4-IV0), then the migration state
-     * will be NONE and this will return false. Once the controller has been upgraded to a version that supports
-     * migrations, then this method checks if the migration state is equal to PRE_MIGRATION.
-     */
-    boolean inPreMigrationMode() {
-        return migrationControlState.get().equals(ZkMigrationState.PRE_MIGRATION);
-    }
-
     public void replay(FeatureLevelRecord record) {
         VersionRange range = quorumFeatures.localSupportedFeature(record.name());
         if (!range.contains(record.featureLevel())) {
@@ -397,7 +406,7 @@ public class FeatureControlManager {
         if (record.name().equals(MetadataVersion.FEATURE_NAME)) {
             MetadataVersion mv = MetadataVersion.fromFeatureLevel(record.featureLevel());
             metadataVersion.set(mv);
-            log.info("Replayed a FeatureLevelRecord setting metadata version to {}", mv);
+            log.info("Replayed a FeatureLevelRecord setting metadata.version to {}", mv);
         } else {
             if (record.featureLevel() == 0) {
                 finalizedVersions.remove(record.name());

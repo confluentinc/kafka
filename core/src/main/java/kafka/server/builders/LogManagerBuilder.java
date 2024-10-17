@@ -18,20 +18,23 @@
 package kafka.server.builders;
 
 import kafka.log.LogManager;
-import kafka.server.BrokerTopicStats;
 import kafka.server.metadata.ConfigRepository;
+
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.common.MetadataVersion;
+import org.apache.kafka.server.config.ServerLogConfigs;
+import org.apache.kafka.server.util.Scheduler;
 import org.apache.kafka.storage.internals.log.CleanerConfig;
 import org.apache.kafka.storage.internals.log.LogConfig;
 import org.apache.kafka.storage.internals.log.LogDirFailureChannel;
-import org.apache.kafka.server.util.Scheduler;
 import org.apache.kafka.storage.internals.log.ProducerStateManagerConfig;
-import scala.collection.JavaConverters;
+import org.apache.kafka.storage.log.metrics.BrokerTopicStats;
 
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
+
+import scala.jdk.javaapi.CollectionConverters;
 
 
 public class LogManagerBuilder {
@@ -55,6 +58,7 @@ public class LogManagerBuilder {
     private Time time = Time.SYSTEM;
     private boolean keepPartitionMetadataFile = true;
     private boolean remoteStorageSystemEnable = false;
+    private long initialTaskDelayMs = ServerLogConfigs.LOG_INITIAL_TASK_DELAY_MS_DEFAULT;
 
     public LogManagerBuilder setLogDirs(List<File> logDirs) {
         this.logDirs = logDirs;
@@ -151,6 +155,11 @@ public class LogManagerBuilder {
         return this;
     }
 
+    public LogManagerBuilder setInitialTaskDelayMs(long initialTaskDelayMs) {
+        this.initialTaskDelayMs = initialTaskDelayMs;
+        return this;
+    }
+
     public LogManager build() {
         if (logDirs == null) throw new RuntimeException("you must set logDirs");
         if (configRepository == null) throw new RuntimeException("you must set configRepository");
@@ -159,9 +168,8 @@ public class LogManagerBuilder {
         if (scheduler == null) throw new RuntimeException("you must set scheduler");
         if (brokerTopicStats == null) throw new RuntimeException("you must set brokerTopicStats");
         if (logDirFailureChannel == null) throw new RuntimeException("you must set logDirFailureChannel");
-
-        return new LogManager(JavaConverters.asScalaIteratorConverter(logDirs.iterator()).asScala().toSeq(),
-                              JavaConverters.asScalaIteratorConverter(initialOfflineDirs.iterator()).asScala().toSeq(),
+        return new LogManager(CollectionConverters.asScala(logDirs).toSeq(),
+                              CollectionConverters.asScala(initialOfflineDirs).toSeq(),
                               configRepository,
                               initialDefaultConfig,
                               cleanerConfig,
@@ -179,6 +187,7 @@ public class LogManagerBuilder {
                               logDirFailureChannel,
                               time,
                               keepPartitionMetadataFile,
-                              remoteStorageSystemEnable);
+                              remoteStorageSystemEnable,
+                              initialTaskDelayMs);
     }
 }

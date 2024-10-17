@@ -25,7 +25,7 @@ import kafka.utils._
 import org.apache.kafka.clients.admin.{AlterConfigOp, ConfigEntry}
 import org.apache.kafka.clients.admin.AlterConfigOp.OpType
 import org.apache.kafka.common.config.ConfigDef.ConfigKey
-import org.apache.kafka.common.config.ConfigResource.Type.{BROKER, BROKER_LOGGER, CLIENT_METRICS, TOPIC}
+import org.apache.kafka.common.config.ConfigResource.Type.{BROKER, BROKER_LOGGER, CLIENT_METRICS, GROUP, TOPIC}
 import org.apache.kafka.common.config.{ConfigDef, ConfigResource}
 import org.apache.kafka.common.errors.{ApiException, InvalidConfigurationException, InvalidRequestException}
 import org.apache.kafka.common.message.{AlterConfigsRequestData, AlterConfigsResponseData, IncrementalAlterConfigsRequestData, IncrementalAlterConfigsResponseData}
@@ -144,11 +144,11 @@ class ConfigAdminManager(nodeId: Int,
             case BROKER =>
               // The resource name must be either blank (if setting a cluster config) or
               // the ID of this specific broker.
-              if (!configResource.name().isEmpty) {
+              if (configResource.name().nonEmpty) {
                 validateResourceNameIsCurrentNodeId(resource.resourceName())
               }
               validateBrokerConfigChange(resource, configResource)
-            case TOPIC | CLIENT_METRICS =>
+            case TOPIC | CLIENT_METRICS | GROUP =>
             // Nothing to do.
             case _ =>
               throw new InvalidRequestException(s"Unknown resource type ${resource.resourceType().toInt}")
@@ -168,7 +168,7 @@ class ConfigAdminManager(nodeId: Int,
     resource: IAlterConfigsResource,
     configResource: ConfigResource
   ): Unit = {
-    val perBrokerConfig = !configResource.name().isEmpty
+    val perBrokerConfig = configResource.name().nonEmpty
     val persistentProps = configRepository.config(configResource)
     val configProps = conf.dynamicConfig.fromPersistentProps(persistentProps, perBrokerConfig)
     val alterConfigOps = resource.configs().asScala.map {
@@ -193,7 +193,7 @@ class ConfigAdminManager(nodeId: Int,
     configResource: ConfigResource
   ): Unit = {
     try {
-      conf.dynamicConfig.validate(props, !configResource.name().isEmpty)
+      conf.dynamicConfig.validate(props, configResource.name().nonEmpty)
     } catch {
       case e: ApiException => throw e
       //KAFKA-13609: InvalidRequestException is not really the right exception here if the
@@ -243,11 +243,11 @@ class ConfigAdminManager(nodeId: Int,
           }
           resourceType match {
             case BROKER =>
-              if (!configResource.name().isEmpty) {
+              if (configResource.name().nonEmpty) {
                 validateResourceNameIsCurrentNodeId(resource.resourceName())
               }
               validateBrokerConfigChange(resource, configResource)
-            case TOPIC | CLIENT_METRICS =>
+            case TOPIC | CLIENT_METRICS | GROUP =>
             // Nothing to do.
             case _ =>
               // Since legacy AlterConfigs does not support BROKER_LOGGER, any attempt to use it

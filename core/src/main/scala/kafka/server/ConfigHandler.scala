@@ -19,23 +19,21 @@ package kafka.server
 
 import java.net.{InetAddress, UnknownHostException}
 import java.util.{Collections, Properties}
-import DynamicConfig.Broker._
 import kafka.controller.KafkaController
 import kafka.log.UnifiedLog
 import kafka.network.ConnectionQuotas
-import kafka.security.CredentialProvider
 import kafka.server.Constants._
 import kafka.server.QuotaFactory.QuotaManagers
-import kafka.utils.Implicits._
 import kafka.utils.Logging
+import org.apache.kafka.server.config.{QuotaConfigs, ReplicationConfigs, ZooKeeperInternals}
 import org.apache.kafka.common.config.TopicConfig
-import org.apache.kafka.common.config.internals.QuotaConfigs
 import org.apache.kafka.common.metrics.Quota
 import org.apache.kafka.common.metrics.Quota._
 import org.apache.kafka.common.utils.Sanitizer
+import org.apache.kafka.coordinator.group.GroupCoordinator
+import org.apache.kafka.security.CredentialProvider
 import org.apache.kafka.server.ClientMetricsManager
-import org.apache.kafka.server.config.ConfigEntityName
-import org.apache.kafka.storage.internals.log.{LogConfig, ThrottledReplicaListValidator}
+import org.apache.kafka.storage.internals.log.{LogStartOffsetIncrementReason, ThrottledReplicaListValidator}
 import org.apache.kafka.storage.internals.log.LogConfig.MessageFormatVersion
 
 import scala.annotation.nowarn
@@ -65,30 +63,66 @@ class TopicConfigHandler(private val replicaManager: ReplicaManager,
     // Validate the configurations.
     val configNamesToExclude = excludedConfigs(topic, topicConfig)
     val props = new Properties()
-    topicConfig.asScala.forKeyValue { (key, value) =>
+    topicConfig.asScala.foreachEntry { (key, value) =>
       if (!configNamesToExclude.contains(key)) props.put(key, value)
     }
 
     val logs = logManager.logsByTopic(topic)
-    val wasRemoteLogEnabledBeforeUpdate = logs.exists(_.remoteLogEnabled())
+    val wasRemoteLogEnabled = logs.exists(_.remoteLogEnabled())
+    val wasCopyDisabled = logs.exists(_.config.remoteLogCopyDisable())
 
-    logManager.updateTopicConfig(topic, props, kafkaConfig.isRemoteLogStorageSystemEnabled)
-    maybeBootstrapRemoteLogComponents(topic, logs, wasRemoteLogEnabledBeforeUpdate)
+    // kafkaController is only defined in Zookeeper's mode
+    logManager.updateTopicConfig(topic, props, kafkaConfig.remoteLogManagerConfig.isRemoteStorageSystemEnabled(),
+      wasRemoteLogEnabled, kafkaController.isDefined)
+    maybeUpdateRemoteLogComponents(topic, logs, wasRemoteLogEnabled, wasCopyDisabled)
   }
 
-  private[server] def maybeBootstrapRemoteLogComponents(topic: String,
-                                                        logs: Seq[UnifiedLog],
-                                                        wasRemoteLogEnabledBeforeUpdate: Boolean): Unit = {
+  private[server] def maybeUpdateRemoteLogComponents(topic: String,
+                                                     logs: Seq[UnifiedLog],
+                                                     wasRemoteLogEnabled: Boolean,
+                                                     wasCopyDisabled: Boolean): Unit = {
     val isRemoteLogEnabled = logs.exists(_.remoteLogEnabled())
+    val isCopyDisabled = logs.exists(_.config.remoteLogCopyDisable())
+    val isDeleteOnDisable = logs.exists(_.config.remoteLogDeleteOnDisable())
+
+    val (leaderPartitions, followerPartitions) =
+      logs.flatMap(log => replicaManager.onlinePartition(log.topicPartition)).partition(_.isLeader)
+
     // Topic configs gets updated incrementally. This check is added to prevent redundant updates.
-    if (!wasRemoteLogEnabledBeforeUpdate && isRemoteLogEnabled) {
-      val (leaderPartitions, followerPartitions) =
-        logs.flatMap(log => replicaManager.onlinePartition(log.topicPartition)).partition(_.isLeader)
+    // When remote log is enabled, or remote copy is enabled, we should create RLM tasks accordingly via `onLeadershipChange`.
+    if (isRemoteLogEnabled && (!wasRemoteLogEnabled || (wasCopyDisabled && !isCopyDisabled))) {
       val topicIds = Collections.singletonMap(topic, replicaManager.metadataCache.getTopicId(topic))
       replicaManager.remoteLogManager.foreach(rlm =>
         rlm.onLeadershipChange(leaderPartitions.toSet.asJava, followerPartitions.toSet.asJava, topicIds))
-    } else if (wasRemoteLogEnabledBeforeUpdate && !isRemoteLogEnabled) {
-      warn(s"Disabling remote log on the topic: $topic is not supported.")
+    }
+
+    // When copy disabled, we should stop leaderCopyRLMTask, but keep expirationTask
+    if (isRemoteLogEnabled && !wasCopyDisabled && isCopyDisabled) {
+      replicaManager.remoteLogManager.foreach(rlm => {
+        rlm.stopLeaderCopyRLMTasks(leaderPartitions.toSet.asJava);
+      })
+    }
+
+    // Disabling remote log storage on this topic
+    if (wasRemoteLogEnabled && !isRemoteLogEnabled && isDeleteOnDisable) {
+      val stopPartitions: java.util.HashSet[StopPartition] = new java.util.HashSet[StopPartition]()
+      leaderPartitions.foreach(partition => {
+        // delete remote logs and stop RemoteLogMetadataManager
+        stopPartitions.add(StopPartition(partition.topicPartition, deleteLocalLog = false,
+          deleteRemoteLog = true, stopRemoteLogMetadataManager = true))
+      })
+
+      followerPartitions.foreach(partition => {
+        // we need to cancel follower tasks and stop RemoteLogMetadataManager
+        stopPartitions.add(StopPartition(partition.topicPartition, deleteLocalLog = false,
+          deleteRemoteLog = false, stopRemoteLogMetadataManager = true))
+      })
+
+      // update the log start offset to local log start offset for the leader replicas
+      logs.filter(log => leaderPartitions.exists(p => p.topicPartition.equals(log.topicPartition)))
+        .foreach(log => log.maybeIncrementLogStartOffset(log.localLogStartOffset(), LogStartOffsetIncrementReason.SegmentDeletion))
+
+      replicaManager.remoteLogManager.foreach(rlm => rlm.stopPartitions(stopPartitions, (_, _) => {}))
     }
   }
 
@@ -105,10 +139,10 @@ class TopicConfigHandler(private val replicaManager: ReplicaManager,
         debug(s"Removing $prop from broker ${kafkaConfig.brokerId} for topic $topic")
       }
     }
-    updateThrottledList(LogConfig.LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG, quotas.leader)
-    updateThrottledList(LogConfig.FOLLOWER_REPLICATION_THROTTLED_REPLICAS_CONFIG, quotas.follower)
+    updateThrottledList(QuotaConfigs.LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG, quotas.leader)
+    updateThrottledList(QuotaConfigs.FOLLOWER_REPLICATION_THROTTLED_REPLICAS_CONFIG, quotas.follower)
 
-    if (Try(topicConfig.getProperty(KafkaConfig.UncleanLeaderElectionEnableProp).toBoolean).getOrElse(false)) {
+    if (Try(topicConfig.getProperty(ReplicationConfigs.UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG).toBoolean).getOrElse(false)) {
       kafkaController.foreach(_.enableTopicUncleanLeaderElection(topic))
     }
   }
@@ -208,7 +242,7 @@ class UserConfigHandler(private val quotaManagers: QuotaManagers, val credential
     val sanitizedUser = entities(0)
     val sanitizedClientId = if (entities.length == 3) Some(entities(2)) else None
     updateQuotaConfig(Some(sanitizedUser), sanitizedClientId, config)
-    if (sanitizedClientId.isEmpty && sanitizedUser != ConfigEntityName.DEFAULT)
+    if (sanitizedClientId.isEmpty && sanitizedUser != ZooKeeperInternals.DEFAULT_STRING)
       credentialProvider.updateCredentials(Sanitizer.desanitize(sanitizedUser), config)
   }
 }
@@ -218,7 +252,7 @@ class IpConfigHandler(private val connectionQuotas: ConnectionQuotas) extends Co
   def processConfigChanges(ip: String, config: Properties): Unit = {
     val ipConnectionRateQuota = Option(config.getProperty(QuotaConfigs.IP_CONNECTION_RATE_OVERRIDE_CONFIG)).map(_.toInt)
     val updatedIp = {
-      if (ip != ConfigEntityName.DEFAULT) {
+      if (ip != ZooKeeperInternals.DEFAULT_STRING) {
         try {
           Some(InetAddress.getByName(ip))
         } catch {
@@ -238,22 +272,25 @@ class IpConfigHandler(private val connectionQuotas: ConnectionQuotas) extends Co
   */
 class BrokerConfigHandler(private val brokerConfig: KafkaConfig,
                           private val quotaManagers: QuotaManagers) extends ConfigHandler with Logging {
-
   def processConfigChanges(brokerId: String, properties: Properties): Unit = {
-    def getOrDefault(prop: String): Long = {
-      if (properties.containsKey(prop))
-        properties.getProperty(prop).toLong
-      else
-        DefaultReplicationThrottledRate
-    }
-    if (brokerId == ConfigEntityName.DEFAULT)
+    if (brokerId == ZooKeeperInternals.DEFAULT_STRING)
       brokerConfig.dynamicConfig.updateDefaultConfig(properties)
     else if (brokerConfig.brokerId == brokerId.trim.toInt) {
       brokerConfig.dynamicConfig.updateBrokerConfig(brokerConfig.brokerId, properties)
-      quotaManagers.leader.updateQuota(upperBound(getOrDefault(LeaderReplicationThrottledRateProp).toDouble))
-      quotaManagers.follower.updateQuota(upperBound(getOrDefault(FollowerReplicationThrottledRateProp).toDouble))
-      quotaManagers.alterLogDirs.updateQuota(upperBound(getOrDefault(ReplicaAlterLogDirsIoMaxBytesPerSecondProp).toDouble))
     }
+    val updatedDynamicBrokerConfigs = brokerConfig.dynamicConfig.currentDynamicBrokerConfigs
+    val updatedDynamicDefaultConfigs = brokerConfig.dynamicConfig.currentDynamicDefaultConfigs
+
+    def getOrDefault(prop: String): Long = updatedDynamicBrokerConfigs get prop match {
+      case Some(value) => value.toLong
+      case None => updatedDynamicDefaultConfigs get prop match {
+        case Some(defaultValue) => defaultValue.toLong
+        case None => QuotaConfigs.QUOTA_BYTES_PER_SECOND_DEFAULT
+      }
+    }
+    quotaManagers.leader.updateQuota(upperBound(getOrDefault(QuotaConfigs.LEADER_REPLICATION_THROTTLED_RATE_CONFIG).toDouble))
+    quotaManagers.follower.updateQuota(upperBound(getOrDefault(QuotaConfigs.FOLLOWER_REPLICATION_THROTTLED_RATE_CONFIG).toDouble))
+    quotaManagers.alterLogDirs.updateQuota(upperBound(getOrDefault(QuotaConfigs.REPLICA_ALTER_LOG_DIRS_IO_MAX_BYTES_PER_SECOND_CONFIG).toDouble))
   }
 }
 
@@ -263,5 +300,14 @@ class BrokerConfigHandler(private val brokerConfig: KafkaConfig,
 class ClientMetricsConfigHandler(private val clientMetricsManager: ClientMetricsManager) extends ConfigHandler with Logging {
   def processConfigChanges(subscriptionGroupId: String, properties: Properties): Unit = {
     clientMetricsManager.updateSubscription(subscriptionGroupId, properties)
+  }
+}
+
+/**
+ * The GroupConfigHandler will process individual group config changes.
+ */
+class GroupConfigHandler(private val groupCoordinator: GroupCoordinator) extends ConfigHandler with Logging {
+  override def processConfigChanges(groupId: String, properties: Properties): Unit = {
+    groupCoordinator.updateGroupConfig(groupId, properties)
   }
 }

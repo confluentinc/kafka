@@ -20,7 +20,6 @@ import org.apache.kafka.common.serialization.LongSerializer;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
-import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.Topology.AutoOffsetReset;
 import org.apache.kafka.streams.errors.TopologyException;
 import org.apache.kafka.streams.kstream.Branched;
@@ -62,10 +61,10 @@ import org.apache.kafka.test.MockValueJoiner;
 import org.apache.kafka.test.NoopValueTransformer;
 import org.apache.kafka.test.NoopValueTransformerWithKey;
 import org.apache.kafka.test.StreamsTestUtils;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.Timeout;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -75,24 +74,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Pattern;
 
+import static java.util.Arrays.asList;
 import static org.apache.kafka.streams.processor.internals.assignment.AssignmentTestUtils.SUBTOPOLOGY_0;
 import static org.apache.kafka.streams.processor.internals.assignment.AssignmentTestUtils.SUBTOPOLOGY_1;
-
-import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
+@Timeout(600)
 public class StreamsBuilderTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
 
     private static final String STREAM_TOPIC = "stream-topic";
 
@@ -106,7 +104,7 @@ public class StreamsBuilderTest {
 
     private Properties props = StreamsTestUtils.getStreamsConfig(Serdes.String(), Serdes.String());
 
-    @Before
+    @BeforeEach
     public void before() {
         props = StreamsTestUtils.getStreamsConfig(Serdes.String(), Serdes.String());
     }
@@ -265,7 +263,7 @@ public class StreamsBuilderTest {
             equalTo(2));
         assertThat(
             topology.processorConnectedStateStores("KSTREAM-JOIN-0000000010"),
-            equalTo(Utils.mkSet(topology.stateStores().get(0).name(), topology.stateStores().get(1).name())));
+            equalTo(Set.of(topology.stateStores().get(0).name(), topology.stateStores().get(1).name())));
         assertTrue(
             topology.processorConnectedStateStores("KTABLE-MERGE-0000000007").isEmpty());
     }
@@ -332,28 +330,6 @@ public class StreamsBuilderTest {
         // no exception was thrown
         assertEquals(Collections.singletonList(new KeyValueTimestamp<>("A", "aa", 0)),
                      processorSupplier.theCapturedProcessor().processed());
-    }
-
-    @Deprecated
-    @Test
-    public void shouldProcessViaThroughTopic() {
-        final KStream<String, String> source = builder.stream("topic-source");
-        final KStream<String, String> through = source.through("topic-sink");
-
-        final MockApiProcessorSupplier<String, String, Void, Void> sourceProcessorSupplier = new MockApiProcessorSupplier<>();
-        source.process(sourceProcessorSupplier);
-
-        final MockApiProcessorSupplier<String, String, Void, Void> throughProcessorSupplier = new MockApiProcessorSupplier<>();
-        through.process(throughProcessorSupplier);
-
-        try (final TopologyTestDriver driver = new TopologyTestDriver(builder.build(), props)) {
-            final TestInputTopic<String, String> inputTopic =
-                driver.createInputTopic("topic-source", new StringSerializer(), new StringSerializer(), Instant.ofEpochMilli(0L), Duration.ZERO);
-            inputTopic.pipeInput("A", "aa");
-        }
-
-        assertEquals(Collections.singletonList(new KeyValueTimestamp<>("A", "aa", 0)), sourceProcessorSupplier.theCapturedProcessor().processed());
-        assertEquals(Collections.singletonList(new KeyValueTimestamp<>("A", "aa", 0)), throughProcessorSupplier.theCapturedProcessor().processed());
     }
 
     @Test
@@ -894,21 +870,6 @@ public class StreamsBuilderTest {
         builder.build();
         final ProcessorTopology topology = builder.internalTopologyBuilder.rewriteTopology(new StreamsConfig(props)).buildTopology();
         assertNamesForOperation(topology, "KSTREAM-SOURCE-0000000000", STREAM_OPERATION_NAME);
-    }
-
-    @Test
-    @SuppressWarnings({"unchecked", "deprecation"})
-    public void shouldUseSpecifiedNameForBranchOperation() {
-        builder.stream(STREAM_TOPIC)
-               .branch(Named.as("branch-processor"), (k, v) -> true, (k, v) -> false);
-
-        builder.build();
-        final ProcessorTopology topology = builder.internalTopologyBuilder.rewriteTopology(new StreamsConfig(props)).buildTopology();
-        assertNamesForOperation(topology,
-                                "KSTREAM-SOURCE-0000000000",
-                                "branch-processor",
-                                "branch-processor-predicate-0",
-                                "branch-processor-predicate-1");
     }
 
     @Test
@@ -1558,21 +1519,21 @@ public class StreamsBuilderTest {
 
     private static void assertNamesForOperation(final ProcessorTopology topology, final String... expected) {
         final List<ProcessorNode<?, ?, ?, ?>> processors = topology.processors();
-        assertEquals("Invalid number of expected processors", expected.length, processors.size());
+        assertEquals(expected.length, processors.size(), "Invalid number of expected processors");
         for (int i = 0; i < expected.length; i++) {
             assertEquals(expected[i], processors.get(i).name());
         }
     }
 
     private static void assertNamesForStateStore(final List<StateStore> stores, final String... expected) {
-        assertEquals("Invalid number of expected state stores", expected.length, stores.size());
+        assertEquals(expected.length, stores.size(), "Invalid number of expected state stores");
         for (int i = 0; i < expected.length; i++) {
             assertEquals(expected[i], stores.get(i).name());
         }
     }
 
     private static void assertTypesForStateStore(final List<StateStore> stores, final Class<?>... expected) {
-        assertEquals("Invalid number of expected state stores", expected.length, stores.size());
+        assertEquals(expected.length, stores.size(), "Invalid number of expected state stores");
         for (int i = 0; i < expected.length; i++) {
             StateStore store = stores.get(i);
             while (store instanceof WrappedStateStore && !(expected[i].isInstance(store))) {

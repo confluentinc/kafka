@@ -27,7 +27,6 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.KeyValueTimestamp;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
@@ -38,32 +37,28 @@ import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
-import org.apache.kafka.streams.kstream.Transformer;
-import org.apache.kafka.streams.kstream.TransformerSupplier;
-import org.apache.kafka.streams.processor.ProcessorContext;
+import org.apache.kafka.streams.processor.api.Processor;
+import org.apache.kafka.streams.processor.api.ProcessorContext;
+import org.apache.kafka.streams.processor.api.ProcessorSupplier;
+import org.apache.kafka.streams.processor.api.Record;
 import org.apache.kafka.streams.state.KeyValueStore;
-import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.rules.TestName;
-import org.junit.rules.Timeout;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -83,30 +78,23 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
-@RunWith(Parameterized.class)
-@Category({IntegrationTest.class})
+@Tag("integration")
+@Timeout(600)
 public class SuppressionDurabilityIntegrationTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
+    private static final long NOW = Instant.now().toEpochMilli();
+    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(3);
 
-    public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(
-        3,
-        mkProperties(mkMap()),
-        0L
-    );
-
-    @BeforeClass
+    @BeforeAll
     public static void startCluster() throws IOException {
         CLUSTER.start();
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeCluster() {
         CLUSTER.stop();
     }
 
-    @Rule
-    public TestName testName = new TestName();
+    public TestInfo testInfo;
 
     private static final StringDeserializer STRING_DESERIALIZER = new StringDeserializer();
     private static final StringSerializer STRING_SERIALIZER = new StringSerializer();
@@ -114,23 +102,10 @@ public class SuppressionDurabilityIntegrationTest {
     private static final LongDeserializer LONG_DESERIALIZER = new LongDeserializer();
     private static final long COMMIT_INTERVAL = 100L;
 
-    @SuppressWarnings("deprecation")
-    @Parameterized.Parameters(name = "{0}")
-    public static Collection<String[]> data() {
-        return Arrays.asList(new String[][] {
-            {StreamsConfig.AT_LEAST_ONCE},
-            {StreamsConfig.EXACTLY_ONCE},
-            {StreamsConfig.EXACTLY_ONCE_V2}
-        });
-    }
-
-    @Parameterized.Parameter
-    public String processingGuaranteee;
-
-    @Test
-    @SuppressWarnings("deprecation")
-    public void shouldRecoverBufferAfterShutdown() {
-        final String testId = safeUniqueTestName(testName);
+    @ParameterizedTest
+    @ValueSource(strings = {StreamsConfig.AT_LEAST_ONCE, StreamsConfig.EXACTLY_ONCE_V2})
+    public void shouldRecoverBufferAfterShutdown(final String processingGuarantee, final TestInfo testInfo) {
+        final String testId = safeUniqueTestName(testInfo);
         final String appId = "appId_" + testId;
         final String input = "input" + testId;
         final String storeName = "counts";
@@ -160,19 +135,19 @@ public class SuppressionDurabilityIntegrationTest {
         final MetadataValidator metadataValidator = new MetadataValidator(input);
 
         suppressedCounts
-            .transform(metadataValidator)
+            .process(metadataValidator)
             .to(outputSuppressed, Produced.with(STRING_SERDE, Serdes.Long()));
 
         valueCounts
             .toStream()
-            .transform(metadataValidator)
+            .process(metadataValidator)
             .to(outputRaw, Produced.with(STRING_SERDE, Serdes.Long()));
 
         final Properties streamsConfig = mkProperties(mkMap(
             mkEntry(StreamsConfig.APPLICATION_ID_CONFIG, appId),
             mkEntry(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers()),
             mkEntry(StreamsConfig.POLL_MS_CONFIG, Long.toString(COMMIT_INTERVAL)),
-            mkEntry(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, processingGuaranteee),
+            mkEntry(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, processingGuarantee),
             mkEntry(StreamsConfig.STATE_DIR_CONFIG, TestUtils.tempDirectory().getPath())
         ));
 
@@ -193,11 +168,11 @@ public class SuppressionDurabilityIntegrationTest {
             );
             verifyOutput(
                 outputRaw,
-                new HashSet<>(asList(
+                asList(
                     new KeyValueTimestamp<>("k1", 1L, scaledTime(1L)),
                     new KeyValueTimestamp<>("k2", 1L, scaledTime(2L)),
                     new KeyValueTimestamp<>("k3", 1L, scaledTime(3L))
-                ))
+                )
             );
             assertThat(eventCount.get(), is(0));
 
@@ -211,10 +186,10 @@ public class SuppressionDurabilityIntegrationTest {
             );
             verifyOutput(
                 outputRaw,
-                new HashSet<>(asList(
+                asList(
                     new KeyValueTimestamp<>("k4", 1L, scaledTime(4L)),
                     new KeyValueTimestamp<>("k5", 1L, scaledTime(5L))
-                ))
+                )
             );
             assertThat(eventCount.get(), is(2));
             verifyOutput(
@@ -245,11 +220,11 @@ public class SuppressionDurabilityIntegrationTest {
             );
             verifyOutput(
                 outputRaw,
-                new HashSet<>(asList(
+                asList(
                     new KeyValueTimestamp<>("k6", 1L, scaledTime(6L)),
                     new KeyValueTimestamp<>("k7", 1L, scaledTime(7L)),
                     new KeyValueTimestamp<>("k8", 1L, scaledTime(8L))
-                ))
+                )
             );
             assertThat("suppress has apparently produced some duplicates. There should only be 5 output events.",
                        eventCount.get(), is(5));
@@ -271,7 +246,7 @@ public class SuppressionDurabilityIntegrationTest {
         }
     }
 
-    private static final class MetadataValidator implements TransformerSupplier<String, Long, KeyValue<String, Long>> {
+    private static final class MetadataValidator implements ProcessorSupplier<String, Long, String, Long> {
         private static final Logger LOG = LoggerFactory.getLogger(MetadataValidator.class);
         private final AtomicReference<Throwable> firstException = new AtomicReference<>();
         private final String topic;
@@ -281,29 +256,24 @@ public class SuppressionDurabilityIntegrationTest {
         }
 
         @Override
-        public Transformer<String, Long, KeyValue<String, Long>> get() {
-            return new Transformer<String, Long, KeyValue<String, Long>>() {
-                private ProcessorContext context;
+        public Processor<String, Long, String, Long> get() {
+            return new Processor<String, Long, String, Long>() {
+                private ProcessorContext<String, Long> context;
 
                 @Override
-                public void init(final ProcessorContext context) {
+                public void init(final ProcessorContext<String, Long> context) {
                     this.context = context;
                 }
 
                 @Override
-                public KeyValue<String, Long> transform(final String key, final Long value) {
+                public void process(final Record<String, Long> record) {
                     try {
-                        assertThat(context.topic(), equalTo(topic));
+                        assertThat(context.recordMetadata().get().topic(), equalTo(topic));
                     } catch (final Throwable e) {
                         firstException.compareAndSet(null, e);
                         LOG.error("Validation Failed", e);
                     }
-                    return new KeyValue<>(key, value);
-                }
-
-                @Override
-                public void close() {
-
+                    context.forward(record);
                 }
             };
         }
@@ -328,24 +298,12 @@ public class SuppressionDurabilityIntegrationTest {
         IntegrationTestUtils.verifyKeyValueTimestamps(properties, topic, keyValueTimestamps);
     }
 
-    private void verifyOutput(final String topic, final Set<KeyValueTimestamp<String, Long>> keyValueTimestamps) {
-        final Properties properties = mkProperties(
-            mkMap(
-                mkEntry(ConsumerConfig.GROUP_ID_CONFIG, "test-group"),
-                mkEntry(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers()),
-                mkEntry(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ((Deserializer<String>) STRING_DESERIALIZER).getClass().getName()),
-                mkEntry(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ((Deserializer<Long>) LONG_DESERIALIZER).getClass().getName())
-            )
-        );
-        IntegrationTestUtils.verifyKeyValueTimestamps(properties, topic, keyValueTimestamps);
-    }
-
     /**
      * scaling to ensure that there are commits in between the various test events,
      * just to exercise that everything works properly in the presence of commits.
      */
     private long scaledTime(final long unscaledTime) {
-        return COMMIT_INTERVAL * 2 * unscaledTime;
+        return NOW + COMMIT_INTERVAL * 2 * unscaledTime;
     }
 
     private static void produceSynchronouslyToPartitionZero(final String topic, final List<KeyValueTimestamp<String, String>> toProduce) {

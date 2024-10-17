@@ -16,9 +16,6 @@
  */
 package org.apache.kafka.streams.integration;
 
-import java.io.File;
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
@@ -41,41 +38,39 @@ import org.apache.kafka.streams.kstream.KeyValueMapper;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.processor.StateRestoreListener;
+import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.apache.kafka.streams.state.internals.OffsetCheckpoint;
-import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.rules.TestName;
-import org.junit.rules.Timeout;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
+
+import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Arrays;
-import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.safeUniqueTestName;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@RunWith(Parameterized.class)
-@Category({IntegrationTest.class})
+@Tag("integration")
+@Timeout(600)
 public class GlobalKTableEOSIntegrationTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
 
     private static final int NUM_BROKERS = 1;
     private static final Properties BROKER_CONFIG;
@@ -88,27 +83,15 @@ public class GlobalKTableEOSIntegrationTest {
     public static final EmbeddedKafkaCluster CLUSTER =
             new EmbeddedKafkaCluster(NUM_BROKERS, BROKER_CONFIG);
 
-    @BeforeClass
+    @BeforeAll
     public static void startCluster() throws IOException {
         CLUSTER.start();
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeCluster() {
         CLUSTER.stop();
     }
-
-    @SuppressWarnings("deprecation")
-    @Parameterized.Parameters(name = "{0}")
-    public static Collection<String[]> data() {
-        return Arrays.asList(new String[][] {
-            {StreamsConfig.EXACTLY_ONCE},
-            {StreamsConfig.EXACTLY_ONCE_V2}
-        });
-    }
-
-    @Parameterized.Parameter
-    public String eosConfig;
 
     private final MockTime mockTime = CLUSTER.time;
     private final KeyValueMapper<String, Long, Long> keyMapper = (key, value) -> value;
@@ -124,13 +107,10 @@ public class GlobalKTableEOSIntegrationTest {
     private KStream<String, Long> stream;
     private ForeachAction<String, String> foreachAction;
 
-    @Rule
-    public TestName testName = new TestName();
-
-    @Before
-    public void before() throws Exception {
+    @BeforeEach
+    public void before(final TestInfo testInfo) throws Exception {
         builder = new StreamsBuilder();
-        final String safeTestName = safeUniqueTestName(testName);
+        final String safeTestName = safeUniqueTestName(testInfo);
         createTopics(safeTestName);
         streamsConfiguration = new Properties();
         streamsConfiguration.put(StreamsConfig.APPLICATION_ID_CONFIG, "app-" + safeTestName);
@@ -138,7 +118,6 @@ public class GlobalKTableEOSIntegrationTest {
         streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, TestUtils.tempDirectory().getPath());
         streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0L);
         streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100L);
-        streamsConfiguration.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, eosConfig);
         streamsConfiguration.put(StreamsConfig.TASK_TIMEOUT_MS_CONFIG, 1L);
         streamsConfiguration.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         streamsConfiguration.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 1000);
@@ -155,10 +134,10 @@ public class GlobalKTableEOSIntegrationTest {
         foreachAction = results::put;
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         if (kafkaStreams != null) {
-            kafkaStreams.close();
+            kafkaStreams.close(Duration.ofSeconds(60));
         }
         IntegrationTestUtils.purgeLocalStreamsState(streamsConfiguration);
     }
@@ -205,7 +184,9 @@ public class GlobalKTableEOSIntegrationTest {
         TestUtils.waitForCondition(
             () -> {
                 globalState.clear();
-                replicatedStore.all().forEachRemaining(pair -> globalState.put(pair.key, pair.value));
+                try (final KeyValueIterator<Long, String> it = replicatedStore.all()) {
+                    it.forEachRemaining(pair -> globalState.put(pair.key, pair.value));
+                }
                 return globalState.equals(expectedState);
             },
             30_000L,
@@ -273,7 +254,9 @@ public class GlobalKTableEOSIntegrationTest {
         TestUtils.waitForCondition(
             () -> {
                 globalState.clear();
-                replicatedStore.all().forEachRemaining(pair -> globalState.put(pair.key, pair.value));
+                try (final KeyValueIterator<Long, String> it = replicatedStore.all()) {
+                    it.forEachRemaining(pair -> globalState.put(pair.key, pair.value));
+                }
                 return globalState.equals(expectedState);
             },
             30_000L,
@@ -320,10 +303,8 @@ public class GlobalKTableEOSIntegrationTest {
         TestUtils.waitForCondition(
             () -> {
                 result.clear();
-                final Iterator<KeyValue<Long, String>> it = store.all();
-                while (it.hasNext()) {
-                    final KeyValue<Long, String> kv = it.next();
-                    result.put(kv.key, kv.value);
+                try (final KeyValueIterator<Long, String> it = store.all()) {
+                    it.forEachRemaining(kv -> result.put(kv.key, kv.value));
                 }
                 return result.equals(expected);
             },
@@ -348,7 +329,6 @@ public class GlobalKTableEOSIntegrationTest {
         // records with key 1L, 2L, and 4L are written into partition-0
         // record with key 3L is written into partition-1
         produceInitialGlobalTableValues();
-
         final String stateDir = streamsConfiguration.getProperty(StreamsConfig.STATE_DIR_CONFIG);
         final File globalStateDir = new File(
             stateDir
@@ -418,10 +398,8 @@ public class GlobalKTableEOSIntegrationTest {
         TestUtils.waitForCondition(
             () -> {
                 storeContent.clear();
-                final Iterator<KeyValue<Long, String>> it = store.all();
-                while (it.hasNext()) {
-                    final KeyValue<Long, String> kv = it.next();
-                    storeContent.put(kv.key, kv.value);
+                try (final KeyValueIterator<Long, String> it = store.all()) {
+                    it.forEachRemaining(kv -> storeContent.put(kv.key, kv.value));
                 }
                 return storeContent.equals(expected);
             },
@@ -454,7 +432,9 @@ public class GlobalKTableEOSIntegrationTest {
         TestUtils.waitForCondition(
             () -> {
                 storeContent.clear();
-                store.all().forEachRemaining(pair -> storeContent.put(pair.key, pair.value));
+                try (final KeyValueIterator<Long, String> it = store.all()) {
+                    it.forEachRemaining(pair -> storeContent.put(pair.key, pair.value));
+                }
                 return storeContent.equals(expected);
             },
             30_000L,
@@ -476,6 +456,7 @@ public class GlobalKTableEOSIntegrationTest {
     }
 
     private void startStreams(final StateRestoreListener stateRestoreListener) {
+        streamsConfiguration.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE_V2);
         kafkaStreams = new KafkaStreams(builder.build(), streamsConfiguration);
         kafkaStreams.setGlobalStateRestoreListener(stateRestoreListener);
         kafkaStreams.start();

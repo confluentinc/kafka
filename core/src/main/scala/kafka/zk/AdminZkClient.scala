@@ -22,13 +22,12 @@ import kafka.common.TopicAlreadyMarkedForDeletionException
 import kafka.controller.ReplicaAssignment
 import kafka.server.{DynamicConfig, KafkaConfig}
 import kafka.utils._
-import kafka.utils.Implicits._
 import org.apache.kafka.admin.{AdminUtils, BrokerMetadata}
 import org.apache.kafka.common.{TopicPartition, Uuid}
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.server.common.AdminOperationException
-import org.apache.kafka.server.config.{ConfigEntityName, ConfigType}
+import org.apache.kafka.server.config.{ConfigType, ZooKeeperInternals}
 import org.apache.kafka.storage.internals.log.LogConfig
 import org.apache.zookeeper.KeeperException.NodeExistsException
 
@@ -161,9 +160,10 @@ class AdminZkClient(zkClient: KafkaZkClient,
         partitionReplicaAssignment.keys.filter(_ >= 0).sum != sequenceSum)
         throw new InvalidReplicaAssignmentException("partitions should be a consecutive 0-based integer sequence")
 
-    LogConfig.validate(config,
+    LogConfig.validate(Collections.emptyMap(), config,
       kafkaConfig.map(_.extractLogConfigMap).getOrElse(Collections.emptyMap()),
-      kafkaConfig.exists(_.isRemoteLogStorageSystemEnabled))
+      kafkaConfig.exists(_.remoteLogManagerConfig.isRemoteStorageSystemEnabled()),
+      true)
   }
 
   private def writeTopicPartitionAssignment(topic: String, replicaAssignment: Map[Int, ReplicaAssignment],
@@ -310,7 +310,7 @@ class AdminZkClient(zkClient: KafkaZkClient,
                                         expectedReplicationFactor: Int,
                                         availableBrokerIds: Set[Int]): Unit = {
 
-    replicaAssignment.forKeyValue { (partitionId, replicas) =>
+    replicaAssignment.foreachEntry { (partitionId, replicas) =>
       if (replicas.isEmpty)
         throw new InvalidReplicaAssignmentException(
           s"Cannot have replication factor of 0 for partition id $partitionId.")
@@ -345,7 +345,7 @@ class AdminZkClient(zkClient: KafkaZkClient,
    */
   def parseBroker(broker: String): Option[Int] = {
     broker match {
-      case ConfigEntityName.DEFAULT => None
+      case ZooKeeperInternals.DEFAULT_STRING => None
       case _ =>
         try Some(broker.toInt)
         catch {
@@ -440,7 +440,7 @@ class AdminZkClient(zkClient: KafkaZkClient,
    *
    */
   def changeUserOrUserClientIdConfig(sanitizedEntityName: String, configs: Properties, isUserClientId: Boolean = false): Unit = {
-    if (sanitizedEntityName == ConfigEntityName.DEFAULT || sanitizedEntityName.contains("/clients"))
+    if (sanitizedEntityName == ZooKeeperInternals.DEFAULT_STRING || sanitizedEntityName.contains("/clients"))
       DynamicConfig.Client.validate(configs)
     else
       DynamicConfig.User.validate(configs)
@@ -452,7 +452,7 @@ class AdminZkClient(zkClient: KafkaZkClient,
    * @param ip ip for which configs are being validated
    * @param configs properties to validate for the IP
    */
-  def validateIpConfig(ip: String, configs: Properties): Unit = {
+  private def validateIpConfig(ip: String, configs: Properties): Unit = {
     if (!DynamicConfig.Ip.isValidIpEntity(ip))
       throw new AdminOperationException(s"$ip is not a valid IP or resolvable host.")
     DynamicConfig.Ip.validate(configs)
@@ -479,9 +479,9 @@ class AdminZkClient(zkClient: KafkaZkClient,
     if (!zkClient.topicExists(topic))
       throw new UnknownTopicOrPartitionException(s"Topic '$topic' does not exist.")
     // remove the topic overrides
-    LogConfig.validate(configs,
+    LogConfig.validate(Collections.emptyMap(), configs,
       kafkaConfig.map(_.extractLogConfigMap).getOrElse(Collections.emptyMap()),
-      kafkaConfig.exists(_.isRemoteLogStorageSystemEnabled))
+      kafkaConfig.exists(_.remoteLogManagerConfig.isRemoteStorageSystemEnabled()), true)
   }
 
   /**
@@ -520,7 +520,7 @@ class AdminZkClient(zkClient: KafkaZkClient,
     */
   def changeBrokerConfig(broker: Option[Int], configs: Properties): Unit = {
     validateBrokerConfig(configs)
-    changeEntityConfig(ConfigType.BROKER, broker.map(_.toString).getOrElse(ConfigEntityName.DEFAULT), configs)
+    changeEntityConfig(ConfigType.BROKER, broker.map(_.toString).getOrElse(ZooKeeperInternals.DEFAULT_STRING), configs)
   }
 
   /**
@@ -528,7 +528,7 @@ class AdminZkClient(zkClient: KafkaZkClient,
     * only verifies that the provided config does not contain any static configs.
     * @param configs configs to validate
     */
-  def validateBrokerConfig(configs: Properties): Unit = {
+  private def validateBrokerConfig(configs: Properties): Unit = {
     DynamicConfig.Broker.validate(configs)
   }
 
@@ -560,13 +560,6 @@ class AdminZkClient(zkClient: KafkaZkClient,
   def fetchEntityConfig(rootEntityType: String, sanitizedEntityName: String): Properties = {
     zkClient.getEntityConfigs(rootEntityType, sanitizedEntityName)
   }
-
-  /**
-   * Gets all topic configs
-   * @return The successfully gathered configs of all topics
-   */
-  def getAllTopicConfigs(): Map[String, Properties] =
-    zkClient.getAllTopicsInCluster().map(topic => (topic, fetchEntityConfig(ConfigType.TOPIC, topic))).toMap
 
   /**
    * Gets all the entity configs for a given entityType
