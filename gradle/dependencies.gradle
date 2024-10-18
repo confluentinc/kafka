@@ -61,6 +61,7 @@ versions += [
   bcpkix: "1.66",
   checkstyle: "8.36.2",
   commonsCli: "1.4",
+  commonsIo: "2.16.0", // ZooKeeper dependency. Do not use, this is going away.
   dropwizardMetrics: "4.1.12.1",
   gradle: "7.0.2",
   grgit: "4.1.1",
