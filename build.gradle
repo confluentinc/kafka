@@ -339,13 +339,6 @@ subprojects {
     addParametersForTests(name, options)
   }
 
-  java {
-    // We should only set this if Java version is < 9 (--release is recommended for >= 9), but the Scala plugin for IntelliJ sets
-    // `-target` incorrectly if this is unset
-    sourceCompatibility = minJavaVersion
-    targetCompatibility = minJavaVersion
-  }
-
   if (shouldPublish) {
 
     publishing {
@@ -795,7 +788,8 @@ subprojects {
     // Scala 2.13.2 introduces compiler warnings suppression, which is a pre-requisite for -Xfatal-warnings
     scalaCompileOptions.additionalParameters += ["-Xfatal-warnings"]
 
-    scalaCompileOptions.additionalParameters += ["-release", String.valueOf(minJavaVersion)]
+    sourceCompatibility = minJavaVersion
+    targetCompatibility = minJavaVersion
 
     addParametersForTests(name, options)
 
