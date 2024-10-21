@@ -170,6 +170,7 @@ libs += [
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
   commonsValidator: "commons-validator:commons-validator:$versions.commonsValidator",
   commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
+  commonsIo: "commons-io:commons-io:$versions.commonsIo",
   easymock: "org.easymock:easymock:$easymockVersion",
   jacksonAnnotations: "com.fasterxml.jackson.core:jackson-annotations:$versions.jackson",
   jacksonDatabind: "com.fasterxml.jackson.core:jackson-databind:$versions.jacksonDatabind",
