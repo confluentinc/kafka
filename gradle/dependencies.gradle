@@ -132,6 +132,7 @@ libs += [
   argparse4j: "net.sourceforge.argparse4j:argparse4j:$versions.argparse4j",
   bcpkix: "org.bouncycastle:bcpkix-jdk15on:$versions.bcpkix",
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
+  commonsIo: "commons-io:commons-io:$versions.commonsIo",
   commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
   dropwizardMetrics: "io.dropwizard.metrics:metrics-core:$versions.dropwizardMetrics",
   easymock: "org.easymock:easymock:$versions.easymock",
