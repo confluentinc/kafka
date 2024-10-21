@@ -139,6 +139,7 @@ libs += [
   bcpkix: "org.bouncycastle:bcpkix-jdk15on:$versions.bcpkix",
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
   commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
+  commonsIo: "commons-io:commons-io:$versions.commonsIo",
   easymock: "org.easymock:easymock:$versions.easymock",
   jacksonAnnotations: "com.fasterxml.jackson.core:jackson-annotations:$versions.jackson",
   jacksonDatabind: "com.fasterxml.jackson.core:jackson-databind:$versions.jacksonDatabind",
