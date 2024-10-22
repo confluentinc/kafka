@@ -722,6 +722,7 @@ subprojects {
     // Scalac 2.12 `-release` requires Java 9 or higher, but Scala 2.13 doesn't have that restriction
     if (versions.baseScala == "2.13" || JavaVersion.current().isJava9Compatible())
       scalaCompileOptions.additionalParameters += ["-release", String.valueOf(minJavaVersion)]
+    options.compilerArgs += ["--release", String.valueOf(minJavaVersion)]
 
     addParametersForTests(name, options)
 
