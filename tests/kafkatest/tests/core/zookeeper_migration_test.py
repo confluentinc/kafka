@@ -20,7 +20,7 @@ from ducktape.utils.util import wait_until
 
 from kafkatest.services.console_consumer import ConsoleConsumer
 from kafkatest.services.kafka import KafkaService
-from kafkatest.services.kafka.config_property import CLUSTER_ID
+from kafkatest.services.kafka.config_property import CLUSTER_ID, LOG_DIRS
 from kafkatest.services.kafka.quorum import remote_kraft, ServiceQuorumInfo, zk
 from kafkatest.services.verifiable_producer import VerifiableProducer
 from kafkatest.services.zookeeper import ZookeeperService
@@ -55,7 +55,8 @@ class TestMigration(ProduceConsumeValidateTest):
                                   allow_zk_with_kraft=True,
                                   remote_kafka=self.kafka,
                                   server_prop_overrides=[["zookeeper.connect", self.zk.connect_setting()],
-                                                         ["zookeeper.metadata.migration.enable", "true"]],
+                                                         ["zookeeper.metadata.migration.enable", "true"],
+                                                         [LOG_DIRS, KafkaService.DATA_LOG_DIR_1]],
                                   quorum_info_provider=remote_quorum)
         controller.start()
 
@@ -85,7 +86,10 @@ class TestMigration(ProduceConsumeValidateTest):
                                   version=DEV_BRANCH,
                                   quorum_info_provider=zk_quorum,
                                   allow_zk_with_kraft=True,
-                                  server_prop_overrides=[["zookeeper.metadata.migration.enable", "false"]])
+                                  server_prop_overrides=[
+                                      ["zookeeper.metadata.migration.enable", "false"],
+                                      [LOG_DIRS, KafkaService.DATA_LOG_DIR_1]
+                                  ])
         self.kafka.security_protocol = "PLAINTEXT"
         self.kafka.interbroker_security_protocol = "PLAINTEXT"
         self.zk.start()
