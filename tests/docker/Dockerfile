@@ -65,7 +65,8 @@ LABEL ducker.creator=$ducker_creator
 RUN apt update && apt install -y sudo git netcat iptables rsync unzip wget curl jq coreutils openssh-server net-tools vim python3-pip python3-dev libffi-dev libssl-dev cmake pkg-config libfuse-dev iperf traceroute iproute2 iputils-ping && apt-get -y clean
 RUN python3 -m pip install -U pip==21.1.1;
 # NOTE: ducktape 0.12.0 supports py 3.9, 3.10, 3.11 and 3.12
-RUN pip3 install --upgrade cffi virtualenv pyasn1 boto3 pycrypto pywinrm ipaddress enum34 debugpy psutil && pip3 install --upgrade "ducktape==0.12.0"
+COPY requirements.txt requirements.txt
+RUN pip3 install --upgrade -r requirements.txt
 
 COPY --from=build-native-image /build/kafka-binary/ /opt/kafka-binary/
 # Set up ssh
@@ -94,6 +95,7 @@ RUN mkdir -p "/opt/kafka-3.5.2" && chmod a+rw /opt/kafka-3.5.2 && curl -s "$KAFK
 RUN mkdir -p "/opt/kafka-3.6.2" && chmod a+rw /opt/kafka-3.6.2 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.6.2.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.6.2"
 RUN mkdir -p "/opt/kafka-3.7.1" && chmod a+rw /opt/kafka-3.7.1 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.7.1.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.7.1"
 RUN mkdir -p "/opt/kafka-3.8.1" && chmod a+rw /opt/kafka-3.8.1 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.8.1.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.8.1"
+RUN mkdir -p "/opt/kafka-3.9.0" && chmod a+rw /opt/kafka-3.9.0 && curl -s "$KAFKA_MIRROR/kafka_2.12-3.9.0.tgz" | tar xz --strip-components=1 -C "/opt/kafka-3.9.0"
 
 
 # Streams test dependencies
@@ -114,7 +116,20 @@ RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.5.2-test.jar" -o /opt/kafka-3.5.2/lib
 RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.6.2-test.jar" -o /opt/kafka-3.6.2/libs/kafka-streams-3.6.2-test.jar
 RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.7.1-test.jar" -o /opt/kafka-3.7.1/libs/kafka-streams-3.7.1-test.jar
 RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.8.1-test.jar" -o /opt/kafka-3.8.1/libs/kafka-streams-3.8.1-test.jar
+RUN curl -s "$KAFKA_MIRROR/kafka-streams-3.9.0-test.jar" -o /opt/kafka-3.9.0/libs/kafka-streams-3.9.0-test.jar
 
+# To ensure the Kafka cluster starts successfully under JDK 17, we need to update the Zookeeper 
+# client from version 3.4.x to 3.5.7 in Kafka versions 2.1.1, 2.2.2, and 2.3.1, as the older Zookeeper 
+# client is incompatible with JDK 17. See KAFKA-17888 for more details.
+RUN curl -s "https://repo1.maven.org/maven2/org/apache/zookeeper/zookeeper/3.5.7/zookeeper-3.5.7.jar" -o /opt/zookeeper-3.5.7.jar
+RUN curl -s "https://repo1.maven.org/maven2/org/apache/zookeeper/zookeeper-jute/3.5.7/zookeeper-jute-3.5.7.jar" -o /opt/zookeeper-jute-3.5.7.jar
+RUN rm -f /opt/kafka-2.1.1/libs/zookeeper-* && rm -f /opt/kafka-2.2.2/libs/zookeeper-* && rm -f /opt/kafka-2.3.1/libs/zookeeper-*
+RUN cp /opt/zookeeper-3.5.7.jar /opt/kafka-2.1.1/libs/zookeeper-3.5.7.jar && chmod a+rw /opt/kafka-2.1.1/libs/zookeeper-3.5.7.jar
+RUN cp /opt/zookeeper-3.5.7.jar /opt/kafka-2.2.2/libs/zookeeper-3.5.7.jar && chmod a+rw /opt/kafka-2.2.2/libs/zookeeper-3.5.7.jar
+RUN cp /opt/zookeeper-3.5.7.jar /opt/kafka-2.3.1/libs/zookeeper-3.5.7.jar && chmod a+rw /opt/kafka-2.3.1/libs/zookeeper-3.5.7.jar
+RUN cp /opt/zookeeper-jute-3.5.7.jar /opt/kafka-2.1.1/libs/zookeeper-jute-3.5.7.jar && chmod a+rw /opt/kafka-2.1.1/libs/zookeeper-jute-3.5.7.jar
+RUN cp /opt/zookeeper-jute-3.5.7.jar /opt/kafka-2.2.2/libs/zookeeper-jute-3.5.7.jar && chmod a+rw /opt/kafka-2.2.2/libs/zookeeper-jute-3.5.7.jar
+RUN cp /opt/zookeeper-jute-3.5.7.jar /opt/kafka-2.3.1/libs/zookeeper-jute-3.5.7.jar && chmod a+rw /opt/kafka-2.3.1/libs/zookeeper-jute-3.5.7.jar
 # The version of Kibosh to use for testing.
 # If you update this, also update vagrant/base.sh
 ARG KIBOSH_VERSION="8841dd392e6fbf02986e2fb1f1ebf04df344b65a"
