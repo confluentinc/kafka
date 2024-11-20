@@ -731,7 +731,7 @@ public class GroupMetadataManager {
                 ClassicGroup group = classicGroup(groupId, committedOffset);
 
                 if (group.isInState(STABLE)) {
-                    if (!group.protocolName().isPresent()) {
+                    if (group.protocolName().isEmpty()) {
                         throw new IllegalStateException("Invalid null group protocol for stable group");
                     }
 
@@ -751,7 +751,7 @@ public class GroupMetadataManager {
                         .setGroupState(group.stateAsString())
                         .setProtocolType(group.protocolType().orElse(""))
                         .setMembers(group.allMembers().stream()
-                            .map(member -> member.describeNoMetadata())
+                            .map(ClassicGroupMember::describeNoMetadata)
                             .collect(Collectors.toList())
                         )
                     );
@@ -2606,8 +2606,8 @@ public class GroupMetadataManager {
             updatedMember
         ).orElse(defaultConsumerGroupAssignor.name());
         try {
-            TargetAssignmentBuilder<ConsumerGroupMember> assignmentResultBuilder =
-                new TargetAssignmentBuilder<ConsumerGroupMember>(group.groupId(), groupEpoch, consumerGroupAssignors.get(preferredServerAssignor))
+            TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder assignmentResultBuilder =
+                new TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder(group.groupId(), groupEpoch, consumerGroupAssignors.get(preferredServerAssignor))
                     .withMembers(group.members())
                     .withStaticMembers(group.staticMembers())
                     .withSubscriptionMetadata(subscriptionMetadata)
@@ -2615,6 +2615,7 @@ public class GroupMetadataManager {
                     .withTargetAssignment(group.targetAssignment())
                     .withInvertedTargetAssignment(group.invertedTargetAssignment())
                     .withTopicsImage(metadataImage.topics())
+                    .withResolvedRegularExpressions(group.resolvedRegularExpressions())
                     .addOrUpdateMember(updatedMember.memberId(), updatedMember);
 
             // If the instance id was associated to a different member, it means that the
@@ -2673,16 +2674,14 @@ public class GroupMetadataManager {
         List<CoordinatorRecord> records
     ) {
         try {
-            TargetAssignmentBuilder<ShareGroupMember> assignmentResultBuilder =
-                new TargetAssignmentBuilder<ShareGroupMember>(group.groupId(), groupEpoch, shareGroupAssignor)
+            TargetAssignmentBuilder.ShareTargetAssignmentBuilder assignmentResultBuilder =
+                new TargetAssignmentBuilder.ShareTargetAssignmentBuilder(group.groupId(), groupEpoch, shareGroupAssignor)
                     .withMembers(group.members())
                     .withSubscriptionMetadata(subscriptionMetadata)
                     .withSubscriptionType(subscriptionType)
                     .withTargetAssignment(group.targetAssignment())
                     .withInvertedTargetAssignment(group.invertedTargetAssignment())
                     .withTopicsImage(metadataImage.topics())
-                    .withTargetAssignmentRecordBuilder(GroupCoordinatorRecordHelpers::newShareGroupTargetAssignmentRecord)
-                    .withTargetAssignmentEpochRecordBuilder(GroupCoordinatorRecordHelpers::newShareGroupTargetAssignmentEpochRecord)
                     .addOrUpdateMember(updatedMember.memberId(), updatedMember);
 
             long startTimeMs = time.milliseconds();
@@ -3738,9 +3737,9 @@ public class GroupMetadataManager {
 
         if (value != null) {
             Map<String, TopicMetadata> subscriptionMetadata = new HashMap<>();
-            value.topics().forEach(topicMetadata -> {
-                subscriptionMetadata.put(topicMetadata.topicName(), TopicMetadata.fromRecord(topicMetadata));
-            });
+            value.topics().forEach(topicMetadata ->
+                subscriptionMetadata.put(topicMetadata.topicName(), TopicMetadata.fromRecord(topicMetadata))
+            );
             group.setSubscriptionMetadata(subscriptionMetadata);
         } else {
             group.setSubscriptionMetadata(Collections.emptyMap());
@@ -3948,19 +3947,19 @@ public class GroupMetadataManager {
                         case DEAD:
                             break;
                         case PREPARING_REBALANCE:
-                            classicGroup.allMembers().forEach(member -> {
+                            classicGroup.allMembers().forEach(member ->
                                 classicGroup.completeJoinFuture(member, new JoinGroupResponseData()
                                     .setMemberId(member.memberId())
-                                    .setErrorCode(NOT_COORDINATOR.code()));
-                            });
+                                    .setErrorCode(NOT_COORDINATOR.code()))
+                            );
 
                             break;
                         case COMPLETING_REBALANCE:
                         case STABLE:
-                            classicGroup.allMembers().forEach(member -> {
+                            classicGroup.allMembers().forEach(member ->
                                 classicGroup.completeSyncFuture(member, new SyncGroupResponseData()
-                                    .setErrorCode(NOT_COORDINATOR.code()));
-                            });
+                                    .setErrorCode(NOT_COORDINATOR.code()))
+                            );
                     }
                     break;
                 case SHARE:
@@ -6087,7 +6086,7 @@ public class GroupMetadataManager {
         if (isEmptyClassicGroup(group)) {
             // Delete the classic group by adding tombstones.
             // There's no need to remove the group as the replay of tombstones removes it.
-            if (group != null) createGroupTombstoneRecords(group, records);
+            createGroupTombstoneRecords(group, records);
             return true;
         }
         return false;
