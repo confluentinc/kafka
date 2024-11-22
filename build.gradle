@@ -147,7 +147,8 @@ ext {
       options.compilerArgs << "-Xlint:-rawtypes"
       options.compilerArgs << "-Xlint:-serial"
       options.compilerArgs << "-Xlint:-try"
-      options.compilerArgs << "-Werror"
+      if (name == "compileJava")
+        options.compilerArgs << "-Werror"
       options.compilerArgs += ["--release", String.valueOf(minJavaVersion)]
     }
   }
