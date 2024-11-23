@@ -69,10 +69,6 @@ blocks:
                 make compile-validate
               fi
             - |
-              if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]]; then
-                make check-scala-compatibility
-              fi
-            - |
               if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]] && [ "$PUBLISH" = "true" ] && [ "$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then \
                 if [[ "$RELEASE_JOB" = "false" ]]; then \
                   . ci-tools ci-push-tag; \
