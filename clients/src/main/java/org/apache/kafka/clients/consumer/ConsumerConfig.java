@@ -35,7 +35,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.utils.Utils;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -61,8 +61,12 @@ public class ConsumerConfig extends AbstractConfig {
 
     // a list contains all the assignor names that only assign subscribed topics to consumer. Should be updated when new assignor added.
     // This is to help optimize ConsumerCoordinator#performAssignment method
-    public static final List<String> ASSIGN_FROM_SUBSCRIBED_ASSIGNORS =
-        List.of(RANGE_ASSIGNOR_NAME, ROUNDROBIN_ASSIGNOR_NAME, STICKY_ASSIGNOR_NAME, COOPERATIVE_STICKY_ASSIGNOR_NAME);
+    public static final List<String> ASSIGN_FROM_SUBSCRIBED_ASSIGNORS = List.of(
+            RANGE_ASSIGNOR_NAME, 
+            ROUNDROBIN_ASSIGNOR_NAME, 
+            STICKY_ASSIGNOR_NAME, 
+            COOPERATIVE_STICKY_ASSIGNOR_NAME
+    );
 
     /*
      * NOTE: DO NOT CHANGE EITHER CONFIG STRINGS OR THEIR JAVA VARIABLE NAMES AS
@@ -169,6 +173,8 @@ public class ConsumerConfig extends AbstractConfig {
             "(e.g. because that data has been deleted): " +
             "<ul><li>earliest: automatically reset the offset to the earliest offset" +
             "<li>latest: automatically reset the offset to the latest offset</li>" +
+            "<li>by_duration:<duration>: automatically reset the offset to a configured <duration> from the current timestamp. <duration> must be specified in ISO8601 format (PnDTnHnMn.nS). " +
+            "Negative duration is not allowed.</li>" +
             "<li>none: throw exception to the consumer if no previous offset is found for the consumer's group</li>" +
             "<li>anything else: throw exception to the consumer.</li></ul>" +
             "<p>Note that altering partition numbers while setting this config to latest may cause message delivery loss since " +
@@ -376,6 +382,22 @@ public class ConsumerConfig extends AbstractConfig {
 
     private static final AtomicInteger CONSUMER_CLIENT_ID_SEQUENCE = new AtomicInteger(1);
 
+    /**
+     * A list of configuration keys not supported for CLASSIC protocol.
+     */
+    private static final List<String> CLASSIC_PROTOCOL_UNSUPPORTED_CONFIGS = Collections.singletonList(
+            GROUP_REMOTE_ASSIGNOR_CONFIG
+    );
+
+    /**
+     * A list of configuration keys not supported for CONSUMER protocol.
+     */
+    private static final List<String> CONSUMER_PROTOCOL_UNSUPPORTED_CONFIGS = List.of(
+            PARTITION_ASSIGNMENT_STRATEGY_CONFIG, 
+            HEARTBEAT_INTERVAL_MS_CONFIG, 
+            SESSION_TIMEOUT_MS_CONFIG
+    );
+    
     static {
         CONFIG = new ConfigDef().define(BOOTSTRAP_SERVERS_CONFIG,
                                         Type.LIST,
@@ -409,7 +431,7 @@ public class ConsumerConfig extends AbstractConfig {
                                         HEARTBEAT_INTERVAL_MS_DOC)
                                 .define(PARTITION_ASSIGNMENT_STRATEGY_CONFIG,
                                         Type.LIST,
-                                        Arrays.asList(RangeAssignor.class, CooperativeStickyAssignor.class),
+                                        List.of(RangeAssignor.class, CooperativeStickyAssignor.class),
                                         new ConfigDef.NonNullValidator(),
                                         Importance.MEDIUM,
                                         PARTITION_ASSIGNMENT_STRATEGY_DOC)
@@ -667,7 +689,7 @@ public class ConsumerConfig extends AbstractConfig {
         Map<String, Object> refinedConfigs = CommonClientConfigs.postProcessReconnectBackoffConfigs(this, parsedValues);
         maybeOverrideClientId(refinedConfigs);
         maybeOverrideEnableAutoCommit(refinedConfigs);
-        checkGroupRemoteAssignor();
+        checkUnsupportedConfigs();
         return refinedConfigs;
     }
 
@@ -714,9 +736,28 @@ public class ConsumerConfig extends AbstractConfig {
         }
     }
 
-    private void checkGroupRemoteAssignor() {
-        if (getString(GROUP_PROTOCOL_CONFIG).equalsIgnoreCase(GroupProtocol.CLASSIC.name()) && getString(GROUP_REMOTE_ASSIGNOR_CONFIG) != null && !getString(GROUP_REMOTE_ASSIGNOR_CONFIG).isEmpty()) {
-            throw new ConfigException(GROUP_REMOTE_ASSIGNOR_CONFIG + " cannot be set when " + GROUP_PROTOCOL_CONFIG + "=" + GroupProtocol.CLASSIC.name());
+    private void checkUnsupportedConfigs() {
+        String groupProtocol = getString(GROUP_PROTOCOL_CONFIG);
+        if (GroupProtocol.CLASSIC.name().equalsIgnoreCase(groupProtocol)) {
+            checkUnsupportedConfigs(GroupProtocol.CLASSIC, CLASSIC_PROTOCOL_UNSUPPORTED_CONFIGS);
+        } else if (GroupProtocol.CONSUMER.name().equalsIgnoreCase(groupProtocol)) {
+            checkUnsupportedConfigs(GroupProtocol.CONSUMER, CONSUMER_PROTOCOL_UNSUPPORTED_CONFIGS);
+        }
+    }
+
+    private void checkUnsupportedConfigs(GroupProtocol groupProtocol, List<String> unsupportedConfigs) {
+        if (getString(GROUP_PROTOCOL_CONFIG).equalsIgnoreCase(groupProtocol.name())) {
+            List<String> invalidConfigs = new ArrayList<>();
+            unsupportedConfigs.forEach(configName -> {
+                Object config = originals().get(configName);
+                if (config != null && !Utils.isBlank(config.toString())) {
+                    invalidConfigs.add(configName);
+                }
+            });
+            if (!invalidConfigs.isEmpty()) {
+                throw new ConfigException(String.join(", ", invalidConfigs) +
+                        " cannot be set when " + GROUP_PROTOCOL_CONFIG + "=" + groupProtocol.name());
+            }
         }
     }
 

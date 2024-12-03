@@ -4,10 +4,8 @@ See our [web site](https://kafka.apache.org) for details on the project.
 
 You need to have [Java](http://www.oracle.com/technetwork/java/javase/downloads/index.html) installed.
 
-We build and test Apache Kafka with 11, 17 and 21. We set the `release` parameter in javac and scalac
-to `11` to ensure the generated binaries are compatible with Java 11 or higher (independently of the Java version
-used for compilation). Java 11 support for the broker and tools has been deprecated since Apache Kafka 3.7 and removal 
-of both is planned for Apache Kafka 4.0.([KIP-1013](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=284789510) for more details).
+We build and test Apache Kafka with 17 and 23. The `release` parameter in javac and scalac is set to `11` for the clients 
+and streams modules, and `17` for the broker and tools, ensuring compatibility with their respective minimum Java versions. 
 
 Scala 2.13 is the only supported version in Apache Kafka.
 
@@ -179,6 +177,7 @@ You can run checkstyle using:
 
 The checkstyle warnings will be found in `reports/checkstyle/reports/main.html` and `reports/checkstyle/reports/test.html` files in the
 subproject build directories. They are also printed to the console. The build will fail if Checkstyle fails.
+For experiments (or regression testing purposes) add `-PcheckstyleVersion=X.y.z` switch (to override project-defined checkstyle version).
 
 #### Spotless ####
 The import order is a part of static check. please call `spotlessApply` to optimize the imports of Java codes before filing pull request.

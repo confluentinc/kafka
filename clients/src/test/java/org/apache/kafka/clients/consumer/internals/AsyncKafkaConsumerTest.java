@@ -1536,18 +1536,6 @@ public class AsyncKafkaConsumerTest {
     }
 
     @Test
-    public void testPartitionAssignmentStrategyUnusedInAsyncConsumer() {
-        final Properties props = requiredConsumerConfig();
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "consumerGroup1");
-        props.put(ConsumerConfig.GROUP_PROTOCOL_CONFIG, GroupProtocol.CONSUMER.name().toLowerCase(Locale.ROOT));
-        props.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "CooperativeStickyAssignor");
-        final ConsumerConfig config = new ConsumerConfig(props);
-        consumer = newConsumer(config);
-
-        assertTrue(config.unused().contains(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG));
-    }
-
-    @Test
     public void testGroupIdNull() {
         final Properties props = requiredConsumerConfig();
         props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 10000);
@@ -1864,6 +1852,9 @@ public class AsyncKafkaConsumerTest {
         assertEquals("Topic pattern to subscribe to cannot be empty", t.getMessage());
 
         assertDoesNotThrow(() -> consumer.subscribe(new SubscriptionPattern("t*")));
+
+        assertThrows(IllegalArgumentException.class, () -> consumer.subscribe(new SubscriptionPattern("t*"), null));
+        assertDoesNotThrow(() -> consumer.subscribe(new SubscriptionPattern("t*"), mock(ConsumerRebalanceListener.class)));
     }
 
     @Test

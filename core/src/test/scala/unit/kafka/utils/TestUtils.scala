@@ -106,6 +106,10 @@ object TestUtils extends Logging {
   val MockZkPort = 1
   /** ZooKeeper connection string to use for unit tests that mock/don't require a real ZK server. */
   val MockZkConnect = "127.0.0.1:" + MockZkPort
+
+  val MockKraftPort = 1
+
+  val MockKraftConnect = "127.0.0.1:" + MockKraftPort
   // CN in SSL certificates - this is used for endpoint validation when enabled
   val SslCertificateCn = "localhost"
 
@@ -1028,8 +1032,8 @@ object TestUtils extends Logging {
     TestUtils.waitUntilTrue(
       () => {
         brokers.forall { broker =>
-          val metadataOffset = broker.asInstanceOf[BrokerServer].sharedServer.loader.lastAppliedOffset()
-          metadataOffset >= controllerOffset
+          val loader = broker.asInstanceOf[BrokerServer].sharedServer.loader
+          loader == null || loader.lastAppliedOffset() >= controllerOffset
         }
       }, msg)
   }
