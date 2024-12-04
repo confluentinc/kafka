@@ -38,6 +38,12 @@
                         <li>The <code>bufferpool-wait-time-total</code>, <code>io-waittime-total</code>, and <code>iotime-total</code> metrics were removed.
                             Please use <code>bufferpool-wait-time-ns-total</code>, <code>io-wait-time-ns-total</code>, and <code>io-time-ns-total</code> metrics as replacements, respectively.
                         </li>
+                        <li>The <code>kafka.common.requests.DescribeLogDirsResponse.LogDirInfo</code> class was removed. Please use the <code>kafka.clients.admin.DescribeLogDirsResult.descriptions()</code> class
+                            and <code>kafka.clients.admin.DescribeLogDirsResult.allDescriptions()</code>instead.
+                        </li>
+                        <li>The <code>kafka.common.requests.DescribeLogDirsResponse.ReplicaInfo</code> class was removed. Please use the <code>kafka.clients.admin.DescribeLogDirsResult.descriptions()</code> class
+                            and <code>kafka.clients.admin.DescribeLogDirsResult.allDescriptions()</code>instead.
+                        </li>
                     </ul>
                 </li>
                 <li><b>Broker</b>
@@ -48,6 +54,10 @@
                         <li>
                             The <code>offsets.commit.required.acks</code> configuration was removed.
                             See <a href="https://cwiki.apache.org/confluence/x/9YobEg">KIP-1041</a> for details.
+                        </li>
+                        <li>The <code>log.message.timestamp.difference.max.ms</code> configuration was removed.
+                            Please use <code>log.message.timestamp.before.max.ms</code> and <code>log.message.timestamp.after.max.ms</code> instead.
+                            See <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-937%3A+Improve+Message+Timestamp+Validation">KIP-937</a> for details.
                         </li>
                     </ul>
                 </li>
@@ -116,6 +126,10 @@
                         <li>The <code>--broker-list</code> option was removed from the <code>kafka-verifiable-consumer</code> command line tool.
                             Please use <code>--bootstrap-server</code> instead.
                         </li>
+                        <li>kafka-configs.sh now uses incrementalAlterConfigs API to alter broker configurations instead of the deprecated alterConfigs API,
+                            and it will fall directly if the broker doesn't support incrementalAlterConfigs API, which means the broker version is prior to 2.3.x.
+                            See <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-1011%3A+Use+incrementalAlterConfigs+when+updating+broker+configs+by+kafka-configs.sh">KIP-1011</a> for more details.
+                        </li>
                     </ul>
                 </li>
                 <li><b>Connect</b>
@@ -141,6 +155,14 @@
                         <li>The <code>enable.idempotence</code> configuration will no longer automatically fall back when the <code>max.in.flight.requests.per.connection</code> value exceeds 5.
                         </li>
                         <li>The deprecated <code>sendOffsetsToTransaction(Map&lt;TopicPartition, OffsetAndMetadata&gt;, String)</code> method has been removed from the Producer API.
+                        </li>
+                    </ul>
+                </li>
+                <li><b>Admin</b>
+                    <ul>
+                        <li>
+                            The <code>alterConfigs</code> method was removed from the <code>org.apache.kafka.clients.admin.Admin</code>
+                            Please use <code>incrementalAlterConfigs</code> instead.
                         </li>
                     </ul>
                 </li>
