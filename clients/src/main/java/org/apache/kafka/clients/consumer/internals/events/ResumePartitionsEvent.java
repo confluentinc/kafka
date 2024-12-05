@@ -15,22 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.kafka.trogdor.workload;
+package org.apache.kafka.clients.consumer.internals.events;
 
-import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.common.TopicPartition;
 
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Collection;
+import java.util.Collections;
 
-/**
- * RecordProcessor allows for acting on data polled from ConsumeBench workloads.
- */
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
-@JsonSubTypes(value = {
-    @JsonSubTypes.Type(value = TimestampRecordProcessor.class, name = "timestamp"),
-})
-public interface RecordProcessor {
-    void processRecords(ConsumerRecords<byte[], byte[]> consumerRecords);
-    JsonNode processorStatus();
+public class ResumePartitionsEvent extends CompletableApplicationEvent<Void> {
+
+    private final Collection<TopicPartition> partitions;
+
+    public ResumePartitionsEvent(final Collection<TopicPartition> partitions, final long deadlineMs) {
+        super(Type.RESUME_PARTITIONS, deadlineMs);
+        this.partitions = Collections.unmodifiableCollection(partitions);
+    }
+
+    public Collection<TopicPartition> partitions() {
+        return partitions;
+    }
+
+    @Override
+    public String toStringBase() {
+        return super.toStringBase() + ", partitions=" + partitions;
+    }
 }
