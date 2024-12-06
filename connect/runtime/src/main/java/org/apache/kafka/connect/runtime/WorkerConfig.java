@@ -219,6 +219,12 @@ public class WorkerConfig extends AbstractConfig {
         + "and `Principal`. ";
     public static final String CONNECTOR_CLIENT_POLICY_CLASS_DEFAULT = "None";
 
+    public static final String PARALLEL_TRANSFORMATION_ENABLED_CONFIG = "enable.parallel.transformation";
+    private static final String PARALLEL_TRANSFORMATION_ENABLED_DOC
+            = "Enable parallel processing of transformation chain(s) for optimising."
+            + "Caution: Enable only if your transformation chain(s) are thread safe.";
+    public static final boolean PARALLEL_TRANSFORMATION_ENABLED_DEFAULT = false;
+
 
     public static final String METRICS_SAMPLE_WINDOW_MS_CONFIG = CommonClientConfigs.METRICS_SAMPLE_WINDOW_MS_CONFIG;
     public static final String METRICS_NUM_SAMPLES_CONFIG = CommonClientConfigs.METRICS_NUM_SAMPLES_CONFIG;
@@ -299,7 +305,9 @@ public class WorkerConfig extends AbstractConfig {
                 .define(REST_EXTENSION_CLASSES_CONFIG, Type.LIST, "",
                         Importance.LOW, REST_EXTENSION_CLASSES_DOC)
                 .define(CONNECTOR_CLIENT_POLICY_CLASS_CONFIG, Type.STRING, CONNECTOR_CLIENT_POLICY_CLASS_DEFAULT,
-                        Importance.MEDIUM, CONNECTOR_CLIENT_POLICY_CLASS_DOC);
+                        Importance.MEDIUM, CONNECTOR_CLIENT_POLICY_CLASS_DOC)
+                .define(PARALLEL_TRANSFORMATION_ENABLED_CONFIG, Type.BOOLEAN, PARALLEL_TRANSFORMATION_ENABLED_DEFAULT,
+                        Importance.LOW, PARALLEL_TRANSFORMATION_ENABLED_DOC);
     }
 
     private void logInternalConverterDeprecationWarnings(Map<String, String> props) {
