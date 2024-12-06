@@ -296,7 +296,7 @@ class WorkerSourceTask extends WorkerTask {
             toSend.parallelStream().forEach(record -> {
                 SourceRecord transformedRecord = transformationChain.apply(record);
                 if (transformedRecord != null) {
-                    transformedRecordMap.put(record, transformationChain.apply(record));
+                    transformedRecordMap.put(record, transformedRecord);
                 }
             });
         }
