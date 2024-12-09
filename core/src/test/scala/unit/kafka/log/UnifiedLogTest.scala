@@ -17,7 +17,6 @@
 
 package kafka.log
 
-import kafka.common.{OffsetsOutOfOrderException, UnexpectedAppendOffsetException}
 import kafka.log.remote.RemoteLogManager
 import kafka.server.{DelayedRemoteListOffsets, KafkaConfig}
 import kafka.utils.TestUtils
@@ -38,11 +37,11 @@ import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMe
 import org.apache.kafka.server.log.remote.storage.{NoOpRemoteLogMetadataManager, NoOpRemoteStorageManager, RemoteLogManagerConfig}
 import org.apache.kafka.server.metrics.KafkaYammerMetrics
 import org.apache.kafka.server.purgatory.DelayedOperationPurgatory
-import org.apache.kafka.server.storage.log.FetchIsolation
+import org.apache.kafka.server.storage.log.{FetchIsolation, UnexpectedAppendOffsetException}
 import org.apache.kafka.server.util.{KafkaScheduler, MockTime, Scheduler}
 import org.apache.kafka.storage.internals.checkpoint.{LeaderEpochCheckpointFile, PartitionMetadataFile}
 import org.apache.kafka.storage.internals.epoch.LeaderEpochFileCache
-import org.apache.kafka.storage.internals.log.{AbortedTxn, AppendOrigin, EpochEntry, LogConfig, LogFileUtils, LogOffsetMetadata, LogOffsetSnapshot, LogOffsetsListener, LogSegment, LogSegments, LogStartOffsetIncrementReason, ProducerStateManager, ProducerStateManagerConfig, RecordValidationException, VerificationGuard}
+import org.apache.kafka.storage.internals.log.{AbortedTxn, AppendOrigin, EpochEntry, LogConfig, LogFileUtils, LogOffsetMetadata, LogOffsetSnapshot, LogOffsetsListener, LogSegment, LogSegments, LogStartOffsetIncrementReason, OffsetsOutOfOrderException, ProducerStateManager, ProducerStateManagerConfig, RecordValidationException, VerificationGuard}
 import org.apache.kafka.storage.internals.utils.Throttler
 import org.apache.kafka.storage.log.metrics.{BrokerTopicMetrics, BrokerTopicStats}
 import org.junit.jupiter.api.Assertions._
@@ -3899,7 +3898,7 @@ class UnifiedLogTest {
     var sequence = if (appendOrigin == AppendOrigin.CLIENT) 3 else 0
     val logConfig = LogTestUtils.createLogConfig(segmentBytes = 2048 * 5)
     val log = createLog(logDir, logConfig, producerStateManagerConfig = producerStateManagerConfig)
-    assertFalse(log.hasOngoingTransaction(producerId))
+    assertFalse(log.hasOngoingTransaction(producerId, producerEpoch))
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
     assertFalse(log.verificationGuard(producerId).verify(VerificationGuard.SENTINEL))
 
@@ -3929,7 +3928,7 @@ class UnifiedLogTest {
     assertNotEquals(VerificationGuard.SENTINEL, verificationGuard)
 
     log.appendAsLeader(idempotentRecords, origin = appendOrigin, leaderEpoch = 0)
-    assertFalse(log.hasOngoingTransaction(producerId))
+    assertFalse(log.hasOngoingTransaction(producerId, producerEpoch))
 
     // Since we wrote idempotent records, we keep VerificationGuard.
     assertEquals(verificationGuard, log.verificationGuard(producerId))
@@ -3937,7 +3936,7 @@ class UnifiedLogTest {
     // Now write the transactional records
     assertTrue(log.verificationGuard(producerId).verify(verificationGuard))
     log.appendAsLeader(transactionalRecords, origin = appendOrigin, leaderEpoch = 0, verificationGuard = verificationGuard)
-    assertTrue(log.hasOngoingTransaction(producerId))
+    assertTrue(log.hasOngoingTransaction(producerId, producerEpoch))
     // VerificationGuard should be cleared now.
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
 
@@ -3951,7 +3950,7 @@ class UnifiedLogTest {
     )
 
     log.appendAsLeader(endTransactionMarkerRecord, origin = AppendOrigin.COORDINATOR, leaderEpoch = 0)
-    assertFalse(log.hasOngoingTransaction(producerId))
+    assertFalse(log.hasOngoingTransaction(producerId, producerEpoch))
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
 
     if (appendOrigin == AppendOrigin.CLIENT)
@@ -3983,7 +3982,7 @@ class UnifiedLogTest {
     )
 
     log.appendAsLeader(endTransactionMarkerRecord, origin = AppendOrigin.COORDINATOR, leaderEpoch = 0)
-    assertFalse(log.hasOngoingTransaction(producerId))
+    assertFalse(log.hasOngoingTransaction(producerId, producerEpoch))
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
   }
 
@@ -4011,7 +4010,7 @@ class UnifiedLogTest {
     )
     log.appendAsLeader(transactionalRecords, leaderEpoch = 0)
 
-    assertTrue(log.hasOngoingTransaction(producerId))
+    assertTrue(log.hasOngoingTransaction(producerId, producerEpoch))
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
   }
 
@@ -4036,14 +4035,14 @@ class UnifiedLogTest {
       new SimpleRecord("2".getBytes)
     )
     assertThrows(classOf[InvalidTxnStateException], () => log.appendAsLeader(transactionalRecords, leaderEpoch = 0))
-    assertFalse(log.hasOngoingTransaction(producerId))
+    assertFalse(log.hasOngoingTransaction(producerId, producerEpoch))
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
 
     val verificationGuard = log.maybeStartTransactionVerification(producerId, sequence, producerEpoch)
     assertNotEquals(VerificationGuard.SENTINEL, verificationGuard)
 
     log.appendAsLeader(transactionalRecords, leaderEpoch = 0, verificationGuard = verificationGuard)
-    assertTrue(log.hasOngoingTransaction(producerId))
+    assertTrue(log.hasOngoingTransaction(producerId, producerEpoch))
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
   }
 
@@ -4056,7 +4055,7 @@ class UnifiedLogTest {
     val sequence = 3
     val logConfig = LogTestUtils.createLogConfig(segmentBytes = 2048 * 5)
     val log = createLog(logDir, logConfig, producerStateManagerConfig = producerStateManagerConfig)
-    assertFalse(log.hasOngoingTransaction(producerId))
+    assertFalse(log.hasOngoingTransaction(producerId, producerEpoch))
     assertEquals(VerificationGuard.SENTINEL, log.verificationGuard(producerId))
 
     val transactionalRecords = MemoryRecords.withTransactionalRecords(
