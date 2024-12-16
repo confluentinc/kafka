@@ -1,4 +1,3 @@
-##
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -13,16 +12,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-##
-log4j.rootLogger=INFO, stdout
 
-log4j.appender.stdout=org.apache.log4j.ConsoleAppender
-log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
-#
-# The `%X{connector.context}` parameter in the layout includes connector-specific and task-specific information
-# in the log message, where appropriate. This makes it easier to identify those log messages that apply to a
-# specific connector. Simply add this parameter to the log layout configuration below to include the contextual information.
-#
-log4j.appender.stdout.layout.ConversionPattern=[%d] %p %X{connector.context}%m (%c:%L)%n
+name: Flaky Test Report
+on:
+  workflow_dispatch:      # Let us run manually
 
-log4j.logger.kafka=WARN
+  schedule:
+    - cron: '0 6 * * *'   # Run daily at 6am UTC
+
+
+jobs:
+  flaky-test-report:
+    name: Flaky Test Report
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Env
+        run: printenv
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+      - name: Run Report
+        env:
+          GE_ACCESS_TOKEN: ${{ secrets.GE_ACCESS_TOKEN }}
+        run: |
+          python ./.github/scripts/develocity_reports.py >> $GITHUB_STEP_SUMMARY
