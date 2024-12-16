@@ -21,16 +21,20 @@ then
 fi
 base_dir=$(dirname $0)
 
-if [ "x$KAFKA_LOG4J_OPTS" = "x" ]; then
-  LOG4J_CONFIG_NORMAL_INSTALL="/etc/kafka/log4j.properties"
-  LOG4J_CONFIG_ZIP_INSTALL="$base_dir/../etc/kafka/log4j.properties"
+if [ -z "$KAFKA_LOG4J_OPTS" ]; then
+  LOG4J_CONFIG_NORMAL_INSTALL="/etc/kafka/log4j2.yaml"
+  LOG4J_CONFIG_ZIP_INSTALL="$base_dir/../etc/kafka/log4j2.yaml"
   if [ -e "$LOG4J_CONFIG_NORMAL_INSTALL" ]; then # Normal install layout
-    KAFKA_LOG4J_OPTS="-Dlog4j.configuration=file:${LOG4J_CONFIG_NORMAL_INSTALL}"
+    KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=${LOG4J_CONFIG_NORMAL_INSTALL}"
   elif [ -e "${LOG4J_CONFIG_ZIP_INSTALL}" ]; then # Simple zip file layout
-    KAFKA_LOG4J_OPTS="-Dlog4j.configuration=file:${LOG4J_CONFIG_ZIP_INSTALL}"
+    KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=${LOG4J_CONFIG_ZIP_INSTALL}"
   else # Fallback to normal default
-    KAFKA_LOG4J_OPTS="-Dlog4j.configuration=file:$base_dir/../config/log4j.properties"
+    KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=$base_dir/../config/log4j2.yaml"
   fi
+elif echo "$KAFKA_LOG4J_OPTS" | grep -qE "log4j\.[^[:space:]]+$"; then
+    echo DEPRECATED: A Log4j 1.x configuration file has been detected, which is no longer recommended. >&2
+    echo To use a Log4j 2.x configuration, please see https://logging.apache.org/log4j/2.x/migrate-from-log4j1.html#Log4j2ConfigurationFormat for details about Log4j configuration file migration. >&2
+    echo You can also use the \$KAFKA_HOME/config/log4j2.yaml file as a starting point. Make sure to remove the Log4j 1.x configuration after completing the migration. >&2
 fi
 export KAFKA_LOG4J_OPTS
 
