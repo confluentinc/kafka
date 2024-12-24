@@ -184,7 +184,7 @@ public class ConsumerGroupDescription {
      */
     @Deprecated
     public ConsumerGroupState state() {
-        return ConsumerGroupState.parse(groupState.name());
+        return ConsumerGroupState.parse(groupState.toString());
     }
 
     /**
