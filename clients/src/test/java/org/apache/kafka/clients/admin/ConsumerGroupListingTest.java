@@ -20,21 +20,20 @@ import org.apache.kafka.common.ConsumerGroupState;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class ConsumerGroupDescriptionTest {
+public class ConsumerGroupListingTest {
     @Test
     public void testState() {
         for (ConsumerGroupState consumerGroupState : ConsumerGroupState.values()) {
-            ConsumerGroupDescription description = new ConsumerGroupDescription(
+            ConsumerGroupListing listing = new ConsumerGroupListing(
                 "groupId",
                 false,
-                null,
-                "assignor",
-                consumerGroupState,
-                null
+                Optional.of(consumerGroupState)
             );
-            assertEquals(consumerGroupState, description.state());
+            assertEquals(consumerGroupState, listing.state().get());
         }
     }
 }
