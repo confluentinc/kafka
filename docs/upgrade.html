@@ -19,6 +19,16 @@
 
 <script id="upgrade-template" type="text/x-handlebars-template">
 
+<h4><a id="upgrade_3_7_2" href="#upgrade_3_7_2">Upgrading to 3.7.3 from any version 0.8.x through 3.6.x</a></h4>
+
+    <h5><a id="upgrade_373_notable" href="#upgrade_373_notable">Notable changes in 3.7.3</a></h5>
+    <ul>
+        <li>Request logging for deprecated protocol api versions was changed from <code>DEBUG</code> to <code>INFO</code> level. This makes it possible to enable request
+            logging for deprecated requests without enabling it for regular requests (which are still logged at <code>DEBUG</code> level). The relevant logger is
+            <code>log4j.logger.kafka.request.logger</code> and it can be adjusted statically via the <code>log4j.properties</code> file or dynamically via <code>kafka-configs.sh</code>.
+        </li>
+    </ul>
+
 <h4><a id="upgrade_3_7_2" href="#upgrade_3_7_2">Upgrading to 3.7.2 from any version 0.8.x through 3.6.x</a></h4>
 
     <h5><a id="upgrade_372_notable" href="#upgrade_372_notable">Notable changes in 3.7.2</a></h5>
