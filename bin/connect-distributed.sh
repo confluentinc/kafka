@@ -22,13 +22,37 @@ fi
 
 base_dir=$(dirname $0)
 
+###
+### Classpath additions for Confluent Platform releases (LSB-style layout)
+###
+#cd -P deals with symlink from /bin to /usr/bin
+java_base_dir=$( cd -P "$base_dir/../share/java" && pwd )
+
+# confluent-common: required by kafka-serde-tools
+# kafka-serde-tools (e.g. Avro serializer): bundled with confluent-schema-registry package
+for library in "kafka" "confluent-common" "kafka-serde-tools" "monitoring-interceptors"; do
+  dir="$java_base_dir/$library"
+  if [ -d "$dir" ]; then
+    classpath_prefix="$CLASSPATH:"
+    if [ "x$CLASSPATH" = "x" ]; then
+      classpath_prefix=""
+    fi
+    CLASSPATH="$classpath_prefix$dir/*"
+  fi
+done
+
 if [ -z "$KAFKA_LOG4J_OPTS" ]; then
-    export KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=$base_dir/../config/connect-log4j2.yaml"
-elif echo "$KAFKA_LOG4J_OPTS" | grep -qE "log4j\.[^[:space:]]+$"; then
-    echo DEPRECATED: A Log4j 1.x configuration file has been detected, which is no longer recommended. >&2
-    echo To use a Log4j 2.x configuration, please see https://logging.apache.org/log4j/2.x/migrate-from-log4j1.html#Log4j2ConfigurationFormat for details about Log4j configuration file migration. >&2
-    echo You can also use the \$KAFKA_HOME/config/connect-log4j2.yaml file as a starting point. Make sure to remove the Log4j 1.x configuration after completing the migration. >&2
+  LOG4J_CONFIG_NORMAL_INSTALL="/etc/kafka/connect-log4j2.yaml"
+  LOG4J_CONFIG_ZIP_INSTALL="$base_dir/../etc/kafka/connect-log4j2.yaml"
+  if [ -e "$LOG4J_CONFIG_NORMAL_INSTALL" ]; then # Normal install layout
+    KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=${LOG4J_CONFIG_NORMAL_INSTALL}"
+  elif [ -e "${LOG4J_CONFIG_ZIP_INSTALL}" ]; then # Simple zip file layout
+    KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=${LOG4J_CONFIG_ZIP_INSTALL}"
+  else # Fallback to normal default
+    KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=$base_dir/../config/connect-log4j2.yaml"
+  fi
 fi
+export KAFKA_LOG4J_OPTS
 
 if [ "x$KAFKA_HEAP_OPTS" = "x" ]; then
   export KAFKA_HEAP_OPTS="-Xms256M -Xmx2G"
@@ -46,4 +70,5 @@ case $COMMAND in
     ;;
 esac
 
+export CLASSPATH
 exec $(dirname $0)/kafka-run-class.sh $EXTRA_ARGS org.apache.kafka.connect.cli.ConnectDistributed "$@"
