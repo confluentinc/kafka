@@ -117,9 +117,9 @@ IF ["%LOG_DIR%"] EQU [""] (
 rem Log4j settings
 IF ["%KAFKA_LOG4J_OPTS%"] EQU [""] (
 	if exist %~dp0../../etc/kafka/tools-log4j.properties (
-		set KAFKA_LOG4J_OPTS=-Dlog4j.configuration=file:%~dp0../../etc/kafka/tools-log4j.properties
+		set KAFKA_LOG4J_OPTS=-Dlog4j2.configuration=file:%~dp0../../etc/kafka/tools-log4j2.yaml
 	) else (
-		set KAFKA_LOG4J_OPTS=-Dlog4j.configuration=file:%BASE_DIR%/config/tools-log4j.properties
+		set KAFKA_LOG4J_OPTS=-Dlog4j2.configuration=file:%BASE_DIR%/config/tools-log4j2.yaml
 	)
 ) ELSE (
     rem Check if Log4j 1.x configuration options are present in KAFKA_LOG4J_OPTS

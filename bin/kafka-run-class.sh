@@ -23,7 +23,7 @@ fi
 # WINDOWS_OS_FORMAT == 1 if Cygwin or MinGW is detected, else 0.
 if [[ $(uname -a) =~ "CYGWIN" || $(uname -a) =~ "MINGW" || $(uname -a) =~ "MSYS" ]]; then
   WINDOWS_OS_FORMAT=1
-  export MSYS2_ARG_CONV_EXCL="-Xlog:gc*:file=;-Dlog4j.configuration=;$MSYS2_ARG_CONV_EXCL"
+  export MSYS2_ARG_CONV_EXCL="-Xlog:gc*:file=;-Dlog4j2.configurationFile=;$MSYS2_ARG_CONV_EXCL"
 else
   WINDOWS_OS_FORMAT=0
 fi
@@ -226,18 +226,18 @@ fi
 # Log4j settings
 if [ -z "$KAFKA_LOG4J_OPTS" ]; then
   # Log to console. This is a tool.
-  LOG4J_CONFIG_NORMAL_INSTALL="/etc/kafka/tools-log4j.properties"
-  LOG4J_CONFIG_ZIP_INSTALL="$base_dir/etc/kafka/tools-log4j.properties"
+  LOG4J_CONFIG_NORMAL_INSTALL="/etc/kafka/tools-log4j2.yaml"
+  LOG4J_CONFIG_ZIP_INSTALL="$base_dir/etc/kafka/tools-log4j2.yaml"
   if [ -e "$LOG4J_CONFIG_NORMAL_INSTALL" ]; then # Normal install layout
     LOG4J_DIR="${LOG4J_CONFIG_NORMAL_INSTALL}"
   elif [ -e "${LOG4J_CONFIG_ZIP_INSTALL}" ]; then # Simple zip file layout
     LOG4J_DIR="${LOG4J_CONFIG_ZIP_INSTALL}"
   else # Fallback to normal default
-    LOG4J_DIR="$base_dir/config/tools-log4j.properties"
+    LOG4J_DIR="$base_dir/config/tools-log4j2.yaml"
   fi
   # If Cygwin is detected, LOG4J_DIR is converted to Windows format.
   (( WINDOWS_OS_FORMAT )) && LOG4J_DIR=$(cygpath --path --mixed "${LOG4J_DIR}")
-  KAFKA_LOG4J_OPTS="-Dlog4j.configuration=file:${LOG4J_DIR}"
+  KAFKA_LOG4J_OPTS="-Dlog4j2.configurationFile=${LOG4J_DIR}"
 else
   if echo "$KAFKA_LOG4J_OPTS" | grep -E "log4j\.[^[:space:]]+(\.properties|\.xml)$"; then
       # Enable Log4j 1.x configuration compatibility mode for Log4j 2
