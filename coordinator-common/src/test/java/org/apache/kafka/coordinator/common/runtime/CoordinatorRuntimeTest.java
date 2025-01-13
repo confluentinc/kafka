@@ -3209,8 +3209,8 @@ public class CoordinatorRuntimeTest {
         // Commit the first and second record.
         writer.commit(TP, 2);
 
-        // Write #1's completion throws an exception. The coordinator should fail write #2 and the
-        // current batch.
+        // Write #1's completion throws an exception after completing its future.
+        // The coordinator should fail write #2 and the current batch.
         assertTrue(write1.isDone());
         assertTrue(write2.isDone());
         assertTrue(write3.isDone());
