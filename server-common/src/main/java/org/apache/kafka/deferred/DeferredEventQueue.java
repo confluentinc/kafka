@@ -74,6 +74,9 @@ public class DeferredEventQueue {
     /**
      * Fail all deferred events with the provided exception.
      *
+     * When this method returns, the queue is guaranteed to be empty. Any exceptions thrown by
+     * deferred events are caught and not propagated.
+     *
      * @param exception     The exception to fail the entries with.
      */
     public void failAll(Exception exception) {
@@ -82,7 +85,11 @@ public class DeferredEventQueue {
             Entry<Long, List<DeferredEvent>> entry = iter.next();
             for (DeferredEvent event : entry.getValue()) {
                 log.info("failAll({}): failing {}.", exception.getClass().getSimpleName(), event);
-                event.complete(exception);
+                try {
+                    event.complete(exception);
+                } catch (Throwable e) {
+                    log.error("failAll({}): {} threw an exception.", exception.getClass().getSimpleName(), event, e);
+                }
             }
             iter.remove();
         }

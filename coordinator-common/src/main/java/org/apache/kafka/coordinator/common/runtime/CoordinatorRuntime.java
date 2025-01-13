@@ -848,7 +848,11 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
             if (currentBatch != null) {
                 coordinator.revertLastWrittenOffset(currentBatch.baseOffset);
                 for (DeferredEvent event : currentBatch.deferredEvents) {
-                    event.complete(t);
+                    try {
+                        event.complete(t);
+                    } catch (Throwable e) {
+                        log.error("Event {} for {} failed to complete.", event, tp, e);
+                    }
                 }
                 freeCurrentBatch();
             }
@@ -1845,7 +1849,14 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                                 // exists and is in the active state.
                                 log.debug("Updating high watermark of {} to {}.", tp, newHighWatermark);
                                 context.coordinator.updateLastCommittedOffset(newHighWatermark);
-                                context.deferredEventQueue.completeUpTo(newHighWatermark);
+                                try {
+                                    context.deferredEventQueue.completeUpTo(newHighWatermark);
+                                } catch (Throwable e) {
+                                    log.error("Failed to complete deferred events for {} up to {}, flushing deferred event queue.",
+                                        tp, newHighWatermark, e);
+                                    context.deferredEventQueue.failAll(Errors.NOT_COORDINATOR.exception());
+                                    context.failCurrentBatch(Errors.NOT_COORDINATOR.exception());
+                                }
                                 coordinatorMetrics.onUpdateLastCommittedOffset(tp, newHighWatermark);
                             } else {
                                 log.debug("Ignored high watermark updated for {} to {} because the coordinator is not active.",

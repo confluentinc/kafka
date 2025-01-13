@@ -17,6 +17,7 @@
 
 package org.apache.kafka.deferred;
 
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.utils.LogContext;
 
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,13 @@ public class DeferredEventQueueTest {
             } else {
                 future.complete(null);
             }
+        }
+    }
+
+    static class ThrowingDeferredEvent implements DeferredEvent {
+        @Override
+        public void complete(Throwable exception) {
+            throw new KafkaException("error");
         }
     }
 
@@ -83,9 +91,15 @@ public class DeferredEventQueueTest {
         SampleDeferredEvent event1 = new SampleDeferredEvent();
         SampleDeferredEvent event2 = new SampleDeferredEvent();
         SampleDeferredEvent event3 = new SampleDeferredEvent();
+        ThrowingDeferredEvent event4 = new ThrowingDeferredEvent();
+        SampleDeferredEvent event5 = new SampleDeferredEvent();
+        SampleDeferredEvent event6 = new SampleDeferredEvent();
         deferredEventQueue.add(1, event1);
         deferredEventQueue.add(3, event2);
         deferredEventQueue.add(3, event3);
+        deferredEventQueue.add(3, event4);
+        deferredEventQueue.add(3, event5);
+        deferredEventQueue.add(4, event6);
         deferredEventQueue.completeUpTo(2);
         assertTrue(event1.future.isDone());
         assertFalse(event2.future.isDone());
@@ -93,9 +107,15 @@ public class DeferredEventQueueTest {
         deferredEventQueue.failAll(new RuntimeException("failed"));
         assertTrue(event2.future.isDone());
         assertTrue(event3.future.isDone());
+        assertTrue(event5.future.isDone());
+        assertTrue(event6.future.isDone());
         assertEquals(RuntimeException.class, assertThrows(ExecutionException.class,
             () -> event2.future.get()).getCause().getClass());
         assertEquals(RuntimeException.class, assertThrows(ExecutionException.class,
             () -> event3.future.get()).getCause().getClass());
+        assertEquals(RuntimeException.class, assertThrows(ExecutionException.class,
+            () -> event5.future.get()).getCause().getClass());
+        assertEquals(RuntimeException.class, assertThrows(ExecutionException.class,
+            () -> event6.future.get()).getCause().getClass());
     }
 }
