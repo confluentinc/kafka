@@ -662,6 +662,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                             .build(),
                         tp
                     );
+                    runtimeMetrics.recordPartitionStateChange(oldState, state);
                     load();
                     break;
 
@@ -670,15 +671,23 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                     highWatermarklistener = new HighWatermarkListener();
                     partitionWriter.registerListener(tp, highWatermarklistener);
                     coordinator.onLoaded(metadataImage);
+                    // Update partition metrics only after the coordinator context is fully loaded.
+                    runtimeMetrics.recordPartitionStateChange(oldState, state);
                     break;
 
                 case FAILED:
                     state = CoordinatorState.FAILED;
+                    // Update partition metrics before unload, since the coordinator context is no
+                    // longer usable.
+                    runtimeMetrics.recordPartitionStateChange(oldState, state);
                     unload();
                     break;
 
                 case CLOSED:
                     state = CoordinatorState.CLOSED;
+                    // Update partition metrics before unload, since the coordinator context is no
+                    // longer usable.
+                    runtimeMetrics.recordPartitionStateChange(oldState, state);
                     unload();
                     break;
 
@@ -686,7 +695,6 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                     throw new IllegalArgumentException("Transitioning to " + newState + " is not supported.");
             }
 
-            runtimeMetrics.recordPartitionStateChange(oldState, state);
         }
 
         /**

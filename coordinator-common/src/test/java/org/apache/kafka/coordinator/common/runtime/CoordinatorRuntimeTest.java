@@ -1165,6 +1165,9 @@ public class CoordinatorRuntimeTest {
         // Verify that onUnloaded is called.
         verify(coordinator, times(1)).onUnloaded();
 
+        // Verify that partition metrics are updated.
+        verify(metrics, times(1)).recordPartitionStateChange(ACTIVE, CLOSED);
+
         // Getting the coordinator context fails because it no longer exists.
         assertThrows(NotCoordinatorException.class, () -> runtime.contextOrThrow(TP));
     }
