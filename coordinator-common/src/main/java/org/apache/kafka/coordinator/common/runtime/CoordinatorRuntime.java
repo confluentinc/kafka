@@ -2387,9 +2387,17 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                 try {
                     if (partitionEpoch.isEmpty() || context.epoch < partitionEpoch.getAsInt()) {
                         log.info("Started unloading metadata for {} with epoch {}.", tp, partitionEpoch);
-                        context.transitionTo(CoordinatorState.CLOSED);
-                        coordinators.remove(tp, context);
-                        log.info("Finished unloading metadata for {} with epoch {}.", tp, partitionEpoch);
+                        try {
+                            context.transitionTo(CoordinatorState.CLOSED);
+                            log.info("Finished unloading metadata for {} with epoch {}.", tp, partitionEpoch);
+                        } catch (Throwable ex) {
+                            log.error("Failed to unload metadata from {} with epoch {} due to {}.",
+                                tp, partitionEpoch, ex.toString());
+                        } finally {
+                            // Always remove the coordinator context, otherwise the coordinator
+                            // shard could be permanently stuck.
+                            coordinators.remove(tp, context);
+                        }
                     } else {
                         log.info("Ignored unloading metadata for {} in epoch {} since current epoch is {}.",
                             tp, partitionEpoch, context.epoch);
