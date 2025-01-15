@@ -3039,6 +3039,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         groupId,
         shareFetchRequest.data.memberId,
         params,
+        shareFetchRequest.data.batchSize,
         interestedWithMaxBytes
       ).thenApply{ result =>
         val combinedResult = mutable.Map.empty[TopicIdPartition, ShareFetchResponseData.PartitionData]
