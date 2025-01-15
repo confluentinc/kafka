@@ -216,8 +216,7 @@ class BrokerServer(
         kafkaScheduler,
         time,
         brokerTopicStats,
-        logDirFailureChannel,
-        keepPartitionMetadataFile = true)
+        logDirFailureChannel)
 
       remoteLogManagerOpt = createRemoteLogManager()
 
