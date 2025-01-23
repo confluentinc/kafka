@@ -54,9 +54,9 @@ Follow instructions in https://kafka.apache.org/quickstart
     ./gradlew clients:test --tests org.apache.kafka.clients.MetadataTest.testTimeToNextUpdate
 
 ### Running a particular unit/integration test with log4j output ###
-By default, there will be only small number of logs output while testing. You can adjust it by changing the `log4j2.yml` file in the module's `src/test/resources` directory.
+By default, there will be only small number of logs output while testing. You can adjust it by changing the `log4j2.yaml` file in the module's `src/test/resources` directory.
 
-For example, if you want to see more logs for clients project tests, you can modify [the line](https://github.com/apache/kafka/blob/trunk/clients/src/test/resources/log4j2.yml#L35) in `clients/src/test/resources/log4j2.yml` 
+For example, if you want to see more logs for clients project tests, you can modify [the line](https://github.com/apache/kafka/blob/trunk/clients/src/test/resources/log4j2.yaml#L35) in `clients/src/test/resources/log4j2.yaml` 
 to `level: INFO` and then run:
     
     ./gradlew cleanTest clients:test --tests NetworkClientTest   
@@ -101,8 +101,8 @@ fail due to code changes. You can just run:
 Using compiled files:
 
     KAFKA_CLUSTER_ID="$(./bin/kafka-storage.sh random-uuid)"
-    ./bin/kafka-storage.sh format --standalone -t $KAFKA_CLUSTER_ID -c config/kraft/reconfig-server.properties
-    ./bin/kafka-server-start.sh config/kraft/reconfig-server.properties
+    ./bin/kafka-storage.sh format --standalone -t $KAFKA_CLUSTER_ID -c config/server.properties
+    ./bin/kafka-server-start.sh config/server.properties
 
 Using docker image:
 

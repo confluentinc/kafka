@@ -94,7 +94,6 @@ import org.apache.kafka.coordinator.group.modern.share.ShareGroup;
 import org.apache.kafka.coordinator.group.modern.share.ShareGroupBuilder;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
-import org.apache.kafka.server.common.MetadataVersion;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
 import java.net.InetAddress;
@@ -226,8 +225,7 @@ public class GroupMetadataManagerTestContext {
 
     public static CoordinatorRecord newGroupMetadataRecord(
         String groupId,
-        GroupMetadataValue value,
-        MetadataVersion metadataVersion
+        GroupMetadataValue value
     ) {
         return new CoordinatorRecord(
             new ApiMessageAndVersion(
@@ -237,7 +235,7 @@ public class GroupMetadataManagerTestContext {
             ),
             new ApiMessageAndVersion(
                 value,
-                metadataVersion.groupMetadataValueVersion()
+                (short) 3
             )
         );
     }
@@ -849,7 +847,7 @@ public class GroupMetadataManagerTestContext {
             .build());
 
         assertEquals(
-            List.of(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, group.groupAssignment(), MetadataVersion.latestTesting())),
+            List.of(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, group.groupAssignment())),
             syncResult.records
         );
         // Simulate a successful write to the log.
@@ -1057,7 +1055,7 @@ public class GroupMetadataManagerTestContext {
         ));
         assertEquals(
             List.of(
-                GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, groupAssignment, MetadataVersion.latestTesting())),
+                GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, groupAssignment)),
             leaderSyncResult.records
         );
 
@@ -1117,7 +1115,7 @@ public class GroupMetadataManagerTestContext {
 
         // Now the group is stable, with the one member that joined above
         assertEquals(
-            List.of(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, group.groupAssignment(), MetadataVersion.latestTesting())),
+            List.of(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, group.groupAssignment())),
             syncResult.records
         );
         // Simulate a successful write to log.
@@ -1155,7 +1153,7 @@ public class GroupMetadataManagerTestContext {
         syncResult = sendClassicGroupSync(syncRequest.setGenerationId(nextGenerationId));
 
         assertEquals(
-            List.of(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, group.groupAssignment(), MetadataVersion.latestTesting())),
+            List.of(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(group, group.groupAssignment())),
             syncResult.records
         );
         // Simulate a successful write to log.
@@ -1218,8 +1216,7 @@ public class GroupMetadataManagerTestContext {
                 .setLeader(null)
                 .setProtocolType("consumer")
                 .setProtocol(null)
-                .setCurrentStateTimestamp(time.milliseconds()),
-            MetadataVersion.latestTesting()
+                .setCurrentStateTimestamp(time.milliseconds())
         ));
 
 
