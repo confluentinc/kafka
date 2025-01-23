@@ -441,7 +441,7 @@ public class LogSegmentTest {
             }
             File indexFile = seg.offsetIndexFile();
             writeNonsenseToFile(indexFile, 5, (int) indexFile.length());
-            seg.recover(newProducerStateManager(), Optional.empty());
+            seg.recover(newProducerStateManager(), mock(LeaderEpochFileCache.class));
             for (int i = 0; i < 100; i++) {
                 Iterable<Record> records = seg.read(i, 1, Optional.of((long) seg.size()), true).records.records();
                 assertEquals(i, records.iterator().next().offset());
@@ -483,7 +483,7 @@ public class LogSegmentTest {
                 107L, endTxnRecords(ControlRecordType.COMMIT, pid1, producerEpoch, 107L));
 
             ProducerStateManager stateManager = newProducerStateManager();
-            segment.recover(stateManager, Optional.empty());
+            segment.recover(stateManager, mock(LeaderEpochFileCache.class));
             assertEquals(108L, stateManager.mapEndOffset());
 
             List<AbortedTxn> abortedTxns = segment.txnIndex().allAbortedTxns();
@@ -499,7 +499,7 @@ public class LogSegmentTest {
             stateManager.loadProducerEntry(new ProducerStateEntry(pid2, producerEpoch, 0,
                 RecordBatch.NO_TIMESTAMP, OptionalLong.of(75L),
                 Optional.of(new BatchMetadata(10, 10L, 5, RecordBatch.NO_TIMESTAMP))));
-            segment.recover(stateManager, Optional.empty());
+            segment.recover(stateManager, mock(LeaderEpochFileCache.class));
             assertEquals(108L, stateManager.mapEndOffset());
 
             abortedTxns = segment.txnIndex().allAbortedTxns();
@@ -534,7 +534,7 @@ public class LogSegmentTest {
             seg.append(111L, RecordBatch.NO_TIMESTAMP, 110L, MemoryRecords.withRecords(110L, Compression.NONE, 2,
                 new SimpleRecord("a".getBytes()), new SimpleRecord("b".getBytes())));
 
-            seg.recover(newProducerStateManager(), Optional.of(cache));
+            seg.recover(newProducerStateManager(), cache);
             assertEquals(Arrays.asList(
                 new EpochEntry(0, 104L),
                 new EpochEntry(1, 106L),
@@ -571,7 +571,7 @@ public class LogSegmentTest {
             }
             File timeIndexFile = seg.timeIndexFile();
             writeNonsenseToFile(timeIndexFile, 5, (int) timeIndexFile.length());
-            seg.recover(newProducerStateManager(), Optional.empty());
+            seg.recover(newProducerStateManager(), mock(LeaderEpochFileCache.class));
             for (int i = 0; i < 100; i++) {
                 assertEquals(i, seg.findOffsetByTimestamp(i * 10, 0L).get().offset);
                 if (i < 99) {
@@ -598,7 +598,7 @@ public class LogSegmentTest {
                 FileRecords.LogOffsetPosition recordPosition = seg.log().searchForOffsetWithSize(offsetToBeginCorruption, 0);
                 int position = recordPosition.position + TestUtils.RANDOM.nextInt(15);
                 writeNonsenseToFile(seg.log().file(), position, (int) (seg.log().file().length() - position));
-                seg.recover(newProducerStateManager(), Optional.empty());
+                seg.recover(newProducerStateManager(), mock(LeaderEpochFileCache.class));
 
                 List<Long> expectList = new ArrayList<>();
                 for (long j = 0; j < offsetToBeginCorruption; j++) {

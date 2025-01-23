@@ -194,7 +194,7 @@ public enum ApiKeys {
     private static boolean shouldRetainsBufferReference(Schema[] requestSchemas) {
         boolean requestRetainsBufferReference = false;
         for (Schema requestVersionSchema : requestSchemas) {
-            if (retainsBufferReference(requestVersionSchema)) {
+            if (requestVersionSchema != null && retainsBufferReference(requestVersionSchema)) {
                 requestRetainsBufferReference = true;
                 break;
             }
@@ -249,6 +249,15 @@ public enum ApiKeys {
 
     public boolean isVersionDeprecated(short apiVersion) {
         return apiVersion >= messageType.lowestDeprecatedVersion() && apiVersion <= messageType.highestDeprecatedVersion();
+    }
+
+    /**
+     * Returns `true` if there is at least one valid version, `false` otherwise. When `false` is returned, it typically
+     * means that the protocol api is no longer supported, but the api key remains assigned to the removed api so we
+     * do not accidentally reuse it for a different api.
+     */
+    public boolean hasValidVersion() {
+        return oldestVersion() <= latestVersion();
     }
 
     public Optional<ApiVersionsResponseData.ApiVersion> toApiVersion(boolean enableUnstableLastVersion) {

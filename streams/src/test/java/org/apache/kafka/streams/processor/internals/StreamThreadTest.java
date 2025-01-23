@@ -1150,7 +1150,6 @@ public class StreamThreadTest {
             new StreamsMetricsImpl(metrics, CLIENT_ID, PROCESS_ID.toString(), mockTime);
         final TopologyMetadata topologyMetadata = new TopologyMetadata(internalTopologyBuilder, config);
         topologyMetadata.buildAndRewriteTopology();
-        stateDirectory = new StateDirectory(config, mockTime, true, false);
 
         final TaskManager taskManager = new TaskManager(
             new MockTime(),
@@ -1162,7 +1161,7 @@ public class StreamThreadTest {
             new Tasks(new LogContext()),
             topologyMetadata,
             null,
-            stateDirectory,
+            null,
             stateUpdater,
             schedulingTaskManager
         ) {
@@ -1441,6 +1440,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             new TopologyMetadata(internalTopologyBuilder, config),
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -2667,6 +2667,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -2725,6 +2726,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -2792,6 +2794,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -2855,6 +2858,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -2915,6 +2919,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -3148,6 +3153,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -3204,6 +3210,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
@@ -3583,6 +3590,7 @@ public class StreamThreadTest {
             null,
             new StreamsMetricsImpl(metrics, CLIENT_ID, PROCESS_ID.toString(), mockTime),
             topologyMetadata,
+            PROCESS_ID,
             "thread-id",
             new LogContext(),
             null,
@@ -3704,6 +3712,7 @@ public class StreamThreadTest {
             null,
             streamsMetrics,
             topologyMetadata,
+            PROCESS_ID,
             CLIENT_ID,
             new LogContext(""),
             new AtomicInteger(),
