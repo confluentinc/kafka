@@ -29,7 +29,7 @@ import org.apache.kafka.common.requests.OffsetsForLeaderEpochResponse.UNDEFINED_
 import org.apache.kafka.common.requests.ProduceResponse.RecordError
 import org.apache.kafka.common.utils.{PrimitiveRef, Time, Utils}
 import org.apache.kafka.common.{InvalidRecordException, KafkaException, TopicPartition, Uuid}
-import org.apache.kafka.server.common.{MetadataVersion, OffsetAndEpoch, RequestLocal}
+import org.apache.kafka.server.common.{OffsetAndEpoch, RequestLocal}
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.metrics.KafkaMetricsGroup
 import org.apache.kafka.server.record.BrokerCompressionType
@@ -85,13 +85,6 @@ import scala.jdk.OptionConverters.{RichOption, RichOptional, RichOptionalInt}
  * @param _topicId optional Uuid to specify the topic ID for the topic if it exists. Should only be specified when
  *                first creating the log through Partition.makeLeader or Partition.makeFollower. When reloading a log,
  *                this field will be populated by reading the topic ID value from partition.metadata if it exists.
- * @param keepPartitionMetadataFile boolean flag to indicate whether the partition.metadata file should be kept in the
- *                                  log directory. A partition.metadata file is only created when the raft controller is used
- *                                  or the ZK controller and this broker's inter-broker protocol version is at least 2.8.
- *                                  This file will persist the topic ID on the broker. If inter-broker protocol for a ZK controller
- *                                  is downgraded below 2.8, a topic ID may be lost and a new ID generated upon re-upgrade.
- *                                  If the inter-broker protocol version on a ZK cluster is below 2.8, partition.metadata
- *                                  will be deleted to avoid ID conflicts upon re-upgrade.
  * @param remoteStorageSystemEnable flag to indicate whether the system level remote log storage is enabled or not.
  */
 @threadsafe
@@ -102,7 +95,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
                  @volatile var leaderEpochCache: LeaderEpochFileCache,
                  val producerStateManager: ProducerStateManager,
                  @volatile private var _topicId: Option[Uuid],
-                 val keepPartitionMetadataFile: Boolean,
                  val remoteStorageSystemEnable: Boolean = false,
                  @volatile private var logOffsetsListener: LogOffsetsListener = LogOffsetsListener.NO_OP_OFFSETS_LISTENER) extends Logging with AutoCloseable {
 
@@ -190,40 +182,26 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   /**
    * Initialize topic ID information for the log by maintaining the partition metadata file and setting the in-memory _topicId.
-   * Delete partition metadata file if the version does not support topic IDs.
    * Set _topicId based on a few scenarios:
-   *   - Recover topic ID if present and topic IDs are supported. Ensure we do not try to assign a provided topicId that is inconsistent
+   *   - Recover topic ID if present. Ensure we do not try to assign a provided topicId that is inconsistent
    *     with the ID on file.
-   *   - If we were provided a topic ID when creating the log, partition metadata files are supported, and one does not yet exist
+   *   - If we were provided a topic ID when creating the log and one does not yet exist
    *     set _topicId and write to the partition metadata file.
-   *   - Otherwise set _topicId to None
    */
   private def initializeTopicId(): Unit =  {
     val partMetadataFile = partitionMetadataFile.getOrElse(
       throw new KafkaException("The partitionMetadataFile should have been initialized"))
 
     if (partMetadataFile.exists()) {
-      if (keepPartitionMetadataFile) {
-        val fileTopicId = partMetadataFile.read().topicId
-        if (_topicId.isDefined && !_topicId.contains(fileTopicId))
-          throw new InconsistentTopicIdException(s"Tried to assign topic ID $topicId to log for topic partition $topicPartition," +
-            s"but log already contained topic ID $fileTopicId")
+      val fileTopicId = partMetadataFile.read().topicId
+      if (_topicId.isDefined && !_topicId.contains(fileTopicId))
+        throw new InconsistentTopicIdException(s"Tried to assign topic ID $topicId to log for topic partition $topicPartition," +
+          s"but log already contained topic ID $fileTopicId")
 
-        _topicId = Some(fileTopicId)
-
-      } else {
-        try partMetadataFile.delete()
-        catch {
-          case e: IOException =>
-            error(s"Error while trying to delete partition metadata file $partMetadataFile", e)
-        }
-      }
-    } else if (keepPartitionMetadataFile) {
+      _topicId = Some(fileTopicId)
+    } else {
       _topicId.foreach(partMetadataFile.record)
       scheduler.scheduleOnce("flush-metadata-file", () => maybeFlushMetadataFile())
-    } else {
-      // We want to keep the file and the in-memory topic ID in sync.
-      _topicId = None
     }
   }
 
@@ -493,17 +471,15 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         }
 
       case None =>
-        if (keepPartitionMetadataFile) {
-          _topicId = Some(topicId)
-          partitionMetadataFile match {
-            case Some(partMetadataFile) =>
-              if (!partMetadataFile.exists()) {
-                partMetadataFile.record(topicId)
-                scheduler.scheduleOnce("flush-metadata-file", () => maybeFlushMetadataFile())
-              }
-            case _ => warn(s"The topic id $topicId will not be persisted to the partition metadata file " +
-              "since the partition is deleted")
-          }
+        _topicId = Some(topicId)
+        partitionMetadataFile match {
+          case Some(partMetadataFile) =>
+            if (!partMetadataFile.exists()) {
+              partMetadataFile.record(topicId)
+              scheduler.scheduleOnce("flush-metadata-file", () => maybeFlushMetadataFile())
+            }
+          case _ => warn(s"The topic id $topicId will not be persisted to the partition metadata file " +
+            "since the partition is deleted")
         }
     }
   }
@@ -624,6 +600,11 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    */
   def hasOngoingTransaction(producerId: Long, producerEpoch: Short): Boolean = lock synchronized {
     val entry = producerStateManager.activeProducers.get(producerId)
+    // With transactions V2, if we see a future epoch, we are likely in the process of completing the previous transaction.
+    // Return early with ConcurrentTransactionsException until the transaction completes.
+    if (entry != null && entry.currentTxnFirstOffset.isPresent && entry.producerEpoch() < producerEpoch)
+      throw new ConcurrentTransactionsException("The producer attempted to update a transaction " +
+        "while another concurrent operation on the same transaction was ongoing.")
     entry != null && entry.currentTxnFirstOffset.isPresent && entry.producerEpoch() == producerEpoch
   }
 
@@ -698,7 +679,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    *
    * @param records The records to append
    * @param origin Declares the origin of the append which affects required validations
-   * @param interBrokerProtocolVersion Inter-broker message protocol version
    * @param requestLocal request local instance
    * @throws KafkaStorageException If the append fails due to an I/O error.
    * @return Information about the appended messages including the first and last offset.
@@ -706,11 +686,10 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   def appendAsLeader(records: MemoryRecords,
                      leaderEpoch: Int,
                      origin: AppendOrigin = AppendOrigin.CLIENT,
-                     interBrokerProtocolVersion: MetadataVersion = MetadataVersion.latestProduction,
                      requestLocal: RequestLocal = RequestLocal.noCaching,
                      verificationGuard: VerificationGuard = VerificationGuard.SENTINEL): LogAppendInfo = {
     val validateAndAssignOffsets = origin != AppendOrigin.RAFT_LEADER
-    append(records, origin, interBrokerProtocolVersion, validateAndAssignOffsets, leaderEpoch, Some(requestLocal), verificationGuard, ignoreRecordSize = false)
+    append(records, origin, validateAndAssignOffsets, leaderEpoch, Some(requestLocal), verificationGuard, ignoreRecordSize = false)
   }
 
   /**
@@ -721,7 +700,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * Also see #appendAsLeader.
    */
   private[log] def appendAsLeaderWithRecordVersion(records: MemoryRecords, leaderEpoch: Int, recordVersion: RecordVersion): LogAppendInfo = {
-    append(records, AppendOrigin.CLIENT, MetadataVersion.latestProduction, true, leaderEpoch, Some(RequestLocal.noCaching),
+    append(records, AppendOrigin.CLIENT, true, leaderEpoch, Some(RequestLocal.noCaching),
       VerificationGuard.SENTINEL, ignoreRecordSize = false, recordVersion.value)
   }
 
@@ -735,7 +714,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   def appendAsFollower(records: MemoryRecords): LogAppendInfo = {
     append(records,
       origin = AppendOrigin.REPLICATION,
-      interBrokerProtocolVersion = MetadataVersion.latestProduction,
       validateAndAssignOffsets = false,
       leaderEpoch = -1,
       requestLocal = None,
@@ -752,7 +730,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    *
    * @param records The log records to append
    * @param origin Declares the origin of the append which affects required validations
-   * @param interBrokerProtocolVersion Inter-broker message protocol version
    * @param validateAndAssignOffsets Should the log assign offsets to this message set or blindly apply what it is given
    * @param leaderEpoch The partition's leader epoch which will be applied to messages when offsets are assigned on the leader
    * @param requestLocal The request local instance if validateAndAssignOffsets is true
@@ -764,7 +741,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    */
   private def append(records: MemoryRecords,
                      origin: AppendOrigin,
-                     interBrokerProtocolVersion: MetadataVersion,
                      validateAndAssignOffsets: Boolean,
                      leaderEpoch: Int,
                      requestLocal: Option[RequestLocal],
@@ -805,8 +781,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
                 config.messageTimestampBeforeMaxMs,
                 config.messageTimestampAfterMaxMs,
                 leaderEpoch,
-                origin,
-                interBrokerProtocolVersion
+                origin
               )
               validator.validateMessagesAndAssignOffsets(offset,
                 validatorMetricsRecorder,
@@ -821,7 +796,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
             validRecords = validateAndOffsetAssignResult.validatedRecords
             appendInfo.setMaxTimestamp(validateAndOffsetAssignResult.maxTimestampMs)
-            appendInfo.setShallowOffsetOfMaxTimestamp(validateAndOffsetAssignResult.shallowOffsetOfMaxTimestamp)
             appendInfo.setLastOffset(offset.value - 1)
             appendInfo.setRecordValidationStats(validateAndOffsetAssignResult.recordValidationStats)
             if (config.messageTimestampType == TimestampType.LOG_APPEND_TIME)
@@ -907,7 +881,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
               // will be cleaned up after the log directory is recovered. Note that the end offset of the
               // ProducerStateManager will not be updated and the last stable offset will not advance
               // if the append to the transaction index fails.
-              localLog.append(appendInfo.lastOffset, appendInfo.maxTimestamp, appendInfo.shallowOffsetOfMaxTimestamp, validRecords)
+              localLog.append(appendInfo.lastOffset, validRecords)
               updateHighWatermarkWithLogEndOffset()
 
               // update the producer state
@@ -1061,7 +1035,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
           // transaction is completed or aborted. We can guarantee the transaction coordinator knows about the transaction given step 1 and that the transaction is still
           // ongoing. If the transaction is expected to be ongoing, we will not set a VerificationGuard. If the transaction is aborted, hasOngoingTransaction is false and
           // requestVerificationGuard is the sentinel, so we will throw an error. A subsequent produce request (retry) should create verification state and return to phase 1.
-          if (batch.isTransactional && !hasOngoingTransaction(batch.producerId, batch.producerEpoch()) && batchMissingRequiredVerification(batch, requestVerificationGuard))
+          if (batch.isTransactional && !batch.isControlBatch && !hasOngoingTransaction(batch.producerId, batch.producerEpoch()) && batchMissingRequiredVerification(batch, requestVerificationGuard))
             throw new InvalidTxnStateException("Record was not part of an ongoing transaction")
         }
 
@@ -1082,7 +1056,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   }
 
   private def batchMissingRequiredVerification(batch: MutableRecordBatch, requestVerificationGuard: VerificationGuard): Boolean = {
-    producerStateManager.producerStateManagerConfig().transactionVerificationEnabled() && !batch.isControlBatch &&
+    producerStateManager.producerStateManagerConfig().transactionVerificationEnabled() &&
       !verificationGuard(batch.producerId).verify(requestVerificationGuard)
   }
 
@@ -1188,7 +1162,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     else
       OptionalInt.empty()
 
-    new LogAppendInfo(firstOffset, lastOffset, lastLeaderEpochOpt, maxTimestamp, shallowOffsetOfMaxTimestamp,
+    new LogAppendInfo(firstOffset, lastOffset, lastLeaderEpochOpt, maxTimestamp,
       RecordBatch.NO_TIMESTAMP, logStartOffset, RecordValidationStats.EMPTY, sourceCompression,
       validBytesCount, lastOffsetOfFirstBatch, Collections.emptyList[RecordError], LeaderHwChange.NONE)
   }
@@ -1355,51 +1329,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     val segmentsCopy = logSegments.asScala.toBuffer
     val targetSeg = segmentsCopy.find(_.largestTimestamp >= targetTimestamp)
     targetSeg.flatMap(_.findOffsetByTimestamp(targetTimestamp, startOffset).toScala)
-  }
-
-  def legacyFetchOffsetsBefore(timestamp: Long, maxNumOffsets: Int): Seq[Long] = {
-    // Cache to avoid race conditions. `toBuffer` is faster than most alternatives and provides
-    // constant time access while being safe to use with concurrent collections unlike `toArray`.
-    val allSegments = logSegments.asScala.toBuffer
-    val lastSegmentHasSize = allSegments.last.size > 0
-
-    val offsetTimeArray =
-      if (lastSegmentHasSize)
-        new Array[(Long, Long)](allSegments.length + 1)
-      else
-        new Array[(Long, Long)](allSegments.length)
-
-    for (i <- allSegments.indices)
-      offsetTimeArray(i) = (math.max(allSegments(i).baseOffset, logStartOffset), allSegments(i).lastModified)
-    if (lastSegmentHasSize)
-      offsetTimeArray(allSegments.length) = (logEndOffset, time.milliseconds)
-
-    var startIndex = -1
-    timestamp match {
-      case ListOffsetsRequest.LATEST_TIMESTAMP =>
-        startIndex = offsetTimeArray.length - 1
-      case ListOffsetsRequest.EARLIEST_TIMESTAMP =>
-        startIndex = 0
-      case _ =>
-        var isFound = false
-        debug("Offset time array = " + offsetTimeArray.foreach(o => "%d, %d".format(o._1, o._2)))
-        startIndex = offsetTimeArray.length - 1
-        while (startIndex >= 0 && !isFound) {
-          if (offsetTimeArray(startIndex)._2 <= timestamp)
-            isFound = true
-          else
-            startIndex -= 1
-        }
-    }
-
-    val retSize = maxNumOffsets.min(startIndex + 1)
-    val ret = new Array[Long](retSize)
-    for (j <- 0 until retSize) {
-      ret(j) = offsetTimeArray(startIndex)._1
-      startIndex -= 1
-    }
-    // ensure that the returned seq is in descending order of offsets
-    ret.toSeq.sortBy(-_)
   }
 
   /**
@@ -1995,7 +1924,6 @@ object UnifiedLog extends Logging {
             logDirFailureChannel: LogDirFailureChannel,
             lastShutdownClean: Boolean = true,
             topicId: Option[Uuid],
-            keepPartitionMetadataFile: Boolean,
             numRemainingSegments: ConcurrentMap[String, Integer] = new ConcurrentHashMap[String, Integer],
             remoteStorageSystemEnable: Boolean = false,
             logOffsetsListener: LogOffsetsListener = LogOffsetsListener.NO_OP_OFFSETS_LISTENER): UnifiedLog = {
@@ -2040,7 +1968,6 @@ object UnifiedLog extends Logging {
       leaderEpochCache,
       producerStateManager,
       topicId,
-      keepPartitionMetadataFile,
       remoteStorageSystemEnable,
       logOffsetsListener)
   }
