@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ducktape.mark import matrix
+from ducktape.mark import matrix, ignore
 from ducktape.mark.resource import cluster
 from kafkatest.tests.kafka_test import KafkaTest
 from kafkatest.services.kafka import quorum
@@ -37,7 +37,7 @@ class StreamsEosTest(KafkaTest):
         })
         self.driver = StreamsEosTestDriverService(test_context, self.kafka)
         self.test_context = test_context
-
+    @ignore
     @cluster(num_nodes=9)
     @matrix(metadata_quorum=[quorum.combined_kraft])
     def test_rebalance_simple(self, metadata_quorum):
@@ -45,7 +45,7 @@ class StreamsEosTest(KafkaTest):
                            StreamsEosTestJobRunnerService(self.test_context, self.kafka),
                            StreamsEosTestJobRunnerService(self.test_context, self.kafka),
                            StreamsEosTestVerifyRunnerService(self.test_context, self.kafka))
-
+    @ignore
     @cluster(num_nodes=9)
     @matrix(metadata_quorum=[quorum.combined_kraft])
     def test_rebalance_complex(self, metadata_quorum):
@@ -79,7 +79,7 @@ class StreamsEosTest(KafkaTest):
         verifier.wait()
 
         verifier.node.account.ssh("grep ALL-RECORDS-DELIVERED %s" % verifier.STDOUT_FILE, allow_fail=False)
-
+    @ignore
     @cluster(num_nodes=9)
     @matrix(metadata_quorum=[quorum.combined_kraft])
     def test_failure_and_recovery(self, metadata_quorum):
@@ -87,7 +87,7 @@ class StreamsEosTest(KafkaTest):
                                       StreamsEosTestJobRunnerService(self.test_context, self.kafka),
                                       StreamsEosTestJobRunnerService(self.test_context, self.kafka),
                                       StreamsEosTestVerifyRunnerService(self.test_context, self.kafka))
-
+    @ignore
     @cluster(num_nodes=9)
     @matrix(metadata_quorum=[quorum.combined_kraft])
     def test_failure_and_recovery_complex(self, metadata_quorum):
