@@ -27,15 +27,14 @@ import kafka.server.metadata.MockConfigRepository
 import kafka.utils._
 import org.apache.kafka.common.TopicIdPartition
 import org.apache.kafka.common.config.TopicConfig
-import org.apache.kafka.common.message.LeaderAndIsrRequestData.LeaderAndIsrPartitionState
 import org.apache.kafka.common.protocol.ApiKeys
 import org.apache.kafka.common.record.{MemoryRecords, SimpleRecord}
-import org.apache.kafka.common.requests.FetchRequest
+import org.apache.kafka.common.requests.{FetchRequest, LeaderAndIsrRequest}
 import org.apache.kafka.common.utils.Utils
 import org.apache.kafka.common.{TopicPartition, Uuid}
 import org.apache.kafka.coordinator.transaction.TransactionLogConfig
 import org.apache.kafka.metadata.LeaderAndIsr
-import org.apache.kafka.server.common.{MetadataVersion, RequestLocal}
+import org.apache.kafka.server.common.RequestLocal
 import org.apache.kafka.server.config.ReplicationConfigs
 import org.apache.kafka.server.storage.log.{FetchIsolation, FetchParams}
 import org.apache.kafka.server.util.MockTime
@@ -144,7 +143,7 @@ class PartitionLockTest extends Logging {
     val replicaToCheck = 3
     val firstReplicaSet = Seq[Integer](3, 4, 5).asJava
     val secondReplicaSet = Seq[Integer](1, 2, 3).asJava
-    def partitionState(replicas: java.util.List[Integer]) = new LeaderAndIsrPartitionState()
+    def partitionState(replicas: java.util.List[Integer]) = new LeaderAndIsrRequest.PartitionState()
       .setControllerEpoch(1)
       .setLeader(replicas.get(0))
       .setLeaderEpoch(1)
@@ -275,7 +274,6 @@ class PartitionLockTest extends Logging {
     logManager.startup(Set.empty)
     val partition = new Partition(topicPartition,
       replicaLagTimeMaxMs = ReplicationConfigs.REPLICA_LAG_TIME_MAX_MS_DEFAULT,
-      interBrokerProtocolVersion = MetadataVersion.latestTesting,
       localBrokerId = brokerId,
       () => 1L,
       mockTime,
@@ -342,8 +340,7 @@ class PartitionLockTest extends Logging {
     )).thenReturn(Optional.empty[JLong])
     when(alterIsrManager.submit(
       ArgumentMatchers.eq(topicIdPartition),
-      ArgumentMatchers.any[LeaderAndIsr],
-      ArgumentMatchers.anyInt()
+      ArgumentMatchers.any[LeaderAndIsr]
     )).thenReturn(new CompletableFuture[LeaderAndIsr]())
 
     partition.createLogIfNotExists(isNew = false, isFutureReplica = false, offsetCheckpoints, None)
@@ -351,8 +348,9 @@ class PartitionLockTest extends Logging {
     val controllerEpoch = 0
     val replicas = (0 to numReplicaFetchers).map(i => Integer.valueOf(brokerId + i)).toList.asJava
     val isr = replicas
+    replicas.forEach(replicaId => when(metadataCache.getAliveBrokerEpoch(replicaId)).thenReturn(Some(1L)))
 
-    assertTrue(partition.makeLeader(new LeaderAndIsrPartitionState()
+    assertTrue(partition.makeLeader(new LeaderAndIsrRequest.PartitionState()
       .setControllerEpoch(controllerEpoch)
       .setLeader(brokerId)
       .setLeaderEpoch(leaderEpoch)
@@ -453,12 +451,11 @@ class PartitionLockTest extends Logging {
     log.producerIdExpirationCheckIntervalMs,
     leaderEpochCache,
     producerStateManager,
-    _topicId = None,
-    keepPartitionMetadataFile = true) {
+    _topicId = None) {
 
     override def appendAsLeader(records: MemoryRecords, leaderEpoch: Int, origin: AppendOrigin,
-                                interBrokerProtocolVersion: MetadataVersion, requestLocal: RequestLocal, verificationGuard: VerificationGuard): LogAppendInfo = {
-      val appendInfo = super.appendAsLeader(records, leaderEpoch, origin, interBrokerProtocolVersion, requestLocal, verificationGuard)
+                                requestLocal: RequestLocal, verificationGuard: VerificationGuard): LogAppendInfo = {
+      val appendInfo = super.appendAsLeader(records, leaderEpoch, origin, requestLocal, verificationGuard)
       appendSemaphore.acquire()
       appendInfo
     }
