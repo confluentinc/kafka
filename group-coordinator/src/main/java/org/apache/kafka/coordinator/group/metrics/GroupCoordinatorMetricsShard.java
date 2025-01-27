@@ -71,7 +71,7 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     /**
      * Consumer group size gauge counters keyed by the metric name.
      */
-    private final Map<ConsumerGroupState, TimelineGaugeCounter> consumerGroupGauges;
+    private volatile Map<ConsumerGroupState, Long> consumerGroupGauges;
 
     /**
      * Share group size gauge counters keyed by the metric name.
@@ -108,19 +108,7 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
         numClassicGroupsTimelineCounter = new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0));
 
         this.classicGroupGauges = Collections.emptyMap();
-
-        this.consumerGroupGauges = Utils.mkMap(
-            Utils.mkEntry(ConsumerGroupState.EMPTY,
-                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
-            Utils.mkEntry(ConsumerGroupState.ASSIGNING,
-                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
-            Utils.mkEntry(ConsumerGroupState.RECONCILING,
-                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
-            Utils.mkEntry(ConsumerGroupState.STABLE,
-                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0))),
-            Utils.mkEntry(ConsumerGroupState.DEAD,
-                new TimelineGaugeCounter(new TimelineLong(snapshotRegistry), new AtomicLong(0)))
-        );
+        this.consumerGroupGauges = Collections.emptyMap();
 
         this.shareGroupGauges = Utils.mkMap(
             Utils.mkEntry(ShareGroup.ShareGroupState.EMPTY,
@@ -147,17 +135,10 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     /**
      * Set the number of consumer groups.
      *
-     * @param counter the map counting the number of consumer groups in each state.
+     * @param consumerGroupGauges The map counting the number of consumer groups in each state.
      */
-    public void setConsumerGroupGauges(Map<ConsumerGroupState, Long> counter) {
-        consumerGroupGauges.forEach((state, gaugeCounter) -> {
-            Long value = counter.get(state);
-            if (value != null) {
-                synchronized (gaugeCounter.timelineLong) {
-                    gaugeCounter.timelineLong.set(value);
-                }
-            }
-        });
+    public void setConsumerGroupGauges(Map<ConsumerGroupState, Long> consumerGroupGauges) {
+        this.consumerGroupGauges = consumerGroupGauges;
     }
 
     /**
@@ -207,9 +188,9 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
      * @return   The number of consumer groups in `state`.
      */
     public long numConsumerGroups(ConsumerGroupState state) {
-        TimelineGaugeCounter gaugeCounter = consumerGroupGauges.get(state);
-        if (gaugeCounter != null) {
-            return gaugeCounter.atomicLong.get();
+        Long counter = consumerGroupGauges.get(state);
+        if (counter != null) {
+            return counter;
         }
         return 0L;
     }
@@ -219,7 +200,7 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
      */
     public long numConsumerGroups() {
         return consumerGroupGauges.values().stream()
-            .mapToLong(timelineGaugeCounter -> timelineGaugeCounter.atomicLong.get()).sum();
+            .mapToLong(Long::longValue).sum();
     }
 
     @Override
@@ -245,14 +226,6 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
 
     @Override
     public void commitUpTo(long offset) {
-        this.consumerGroupGauges.forEach((__, gaugeCounter) -> {
-            long value;
-            synchronized (gaugeCounter.timelineLong) {
-                value = gaugeCounter.timelineLong.get(offset);
-            }
-            gaugeCounter.atomicLong.set(value);
-        });
-
         synchronized (numClassicGroupsTimelineCounter.timelineLong) {
             long value = numClassicGroupsTimelineCounter.timelineLong.get(offset);
             numClassicGroupsTimelineCounter.atomicLong.set(value);

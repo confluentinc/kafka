@@ -20,14 +20,11 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.internals.Topic;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.utils.LogContext;
-import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroup;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
 import com.yammer.metrics.core.MetricsRegistry;
 
 import org.junit.jupiter.api.Test;
-
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -43,50 +40,18 @@ public class GroupCoordinatorMetricsShardTest {
         GroupCoordinatorMetricsShard shard = coordinatorMetrics.newMetricsShard(snapshotRegistry, tp);
 
         shard.incrementNumOffsets();
-        shard.setConsumerGroupGauges(Map.of(
-            ConsumerGroup.ConsumerGroupState.EMPTY, 1L,
-            ConsumerGroup.ConsumerGroupState.ASSIGNING, 1L,
-            ConsumerGroup.ConsumerGroupState.RECONCILING, 1L,
-            ConsumerGroup.ConsumerGroupState.STABLE, 1L,
-            ConsumerGroup.ConsumerGroupState.DEAD, 1L
-        ));
 
         snapshotRegistry.idempotentCreateSnapshot(1000);
         // The value should not be updated until the offset has been committed.
         assertEquals(0, shard.numOffsets());
-        assertEquals(0, shard.numConsumerGroups());
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.EMPTY));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.ASSIGNING));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.RECONCILING));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.STABLE));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.DEAD));
 
         shard.commitUpTo(1000);
         assertEquals(1, shard.numOffsets());
-        assertEquals(5, shard.numConsumerGroups());
-        assertEquals(1, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.EMPTY));
-        assertEquals(1, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.ASSIGNING));
-        assertEquals(1, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.RECONCILING));
-        assertEquals(1, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.STABLE));
-        assertEquals(1, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.DEAD));
 
         shard.decrementNumOffsets();
-        shard.setConsumerGroupGauges(Map.of(
-            ConsumerGroup.ConsumerGroupState.EMPTY, 0L,
-            ConsumerGroup.ConsumerGroupState.ASSIGNING, 0L,
-            ConsumerGroup.ConsumerGroupState.RECONCILING, 0L,
-            ConsumerGroup.ConsumerGroupState.STABLE, 0L,
-            ConsumerGroup.ConsumerGroupState.DEAD, 0L
-        ));
 
         snapshotRegistry.idempotentCreateSnapshot(2000);
         shard.commitUpTo(2000);
         assertEquals(0, shard.numOffsets());
-        assertEquals(0, shard.numConsumerGroups());
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.EMPTY));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.ASSIGNING));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.RECONCILING));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.STABLE));
-        assertEquals(0, shard.numConsumerGroups(ConsumerGroup.ConsumerGroupState.DEAD));
     }
 }
