@@ -4130,6 +4130,8 @@ public class GroupMetadataManager {
                 case CONSUMER:
                     consumerGroupSizeCounter.compute(((ConsumerGroup) group).state(), Utils::incValue);
                     break;
+                default:
+                    break;
             }
         });
         metrics.setClassicGroupGauges(classicGroupSizeCounter);
