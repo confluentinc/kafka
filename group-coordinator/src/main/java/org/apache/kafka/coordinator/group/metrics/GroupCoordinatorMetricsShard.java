@@ -145,17 +145,19 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     }
 
     /**
-     * Increment the number of consumer groups.
+     * Set the number of consumer groups.
      *
-     * @param state the consumer group state.
+     * @param counter the map counting the number of consumer groups in each state.
      */
-    public void incrementNumConsumerGroups(ConsumerGroupState state) {
-        TimelineGaugeCounter gaugeCounter = consumerGroupGauges.get(state);
-        if (gaugeCounter != null) {
-            synchronized (gaugeCounter.timelineLong) {
-                gaugeCounter.timelineLong.increment();
+    public void setConsumerGroupGauges(Map<ConsumerGroupState, Long> counter) {
+        consumerGroupGauges.forEach((state, gaugeCounter) -> {
+            Long value = counter.get(state);
+            if (value != null) {
+                synchronized (gaugeCounter.timelineLong) {
+                    gaugeCounter.timelineLong.set(value);
+                }
             }
-        }
+        });
     }
 
     /**
@@ -164,20 +166,6 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     public void decrementNumOffsets() {
         synchronized (numOffsetsTimelineGaugeCounter.timelineLong) {
             numOffsetsTimelineGaugeCounter.timelineLong.decrement();
-        }
-    }
-
-    /**
-     * Decrement the number of consumer groups.
-     *
-     * @param state the consumer group state.
-     */
-    public void decrementNumConsumerGroups(ConsumerGroupState state) {
-        TimelineGaugeCounter gaugeCounter = consumerGroupGauges.get(state);
-        if (gaugeCounter != null) {
-            synchronized (gaugeCounter.timelineLong) {
-                gaugeCounter.timelineLong.decrement();
-            }
         }
     }
 
@@ -293,56 +281,6 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
         Map<ClassicGroupState, Long> classicGroupGauges
     ) {
         this.classicGroupGauges = classicGroupGauges;
-    }
-
-    /**
-     * Called when a consumer group's state has changed. Increment/decrement
-     * the counter accordingly.
-     *
-     * @param oldState The previous state. null value means that it's a new group.
-     * @param newState The next state. null value means that the group has been removed.
-     */
-    public void onConsumerGroupStateTransition(
-        ConsumerGroupState oldState,
-        ConsumerGroupState newState
-    ) {
-        if (newState != null) {
-            switch (newState) {
-                case EMPTY:
-                    incrementNumConsumerGroups(ConsumerGroupState.EMPTY);
-                    break;
-                case ASSIGNING:
-                    incrementNumConsumerGroups(ConsumerGroupState.ASSIGNING);
-                    break;
-                case RECONCILING:
-                    incrementNumConsumerGroups(ConsumerGroupState.RECONCILING);
-                    break;
-                case STABLE:
-                    incrementNumConsumerGroups(ConsumerGroupState.STABLE);
-                    break;
-                case DEAD:
-                    incrementNumConsumerGroups(ConsumerGroupState.DEAD);
-            }
-        }
-
-        if (oldState != null) {
-            switch (oldState) {
-                case EMPTY:
-                    decrementNumConsumerGroups(ConsumerGroupState.EMPTY);
-                    break;
-                case ASSIGNING:
-                    decrementNumConsumerGroups(ConsumerGroupState.ASSIGNING);
-                    break;
-                case RECONCILING:
-                    decrementNumConsumerGroups(ConsumerGroupState.RECONCILING);
-                    break;
-                case STABLE:
-                    decrementNumConsumerGroups(ConsumerGroupState.STABLE);
-                    break;
-                case DEAD:
-                    decrementNumConsumerGroups(ConsumerGroupState.DEAD);
-            }
-        }
     }
 
     public void incrementNumShareGroups(ShareGroup.ShareGroupState state) {

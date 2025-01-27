@@ -901,7 +901,6 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         }
 
         state.set(newState);
-        metrics.onConsumerGroupStateTransition(previousState, newState);
     }
 
     /**
