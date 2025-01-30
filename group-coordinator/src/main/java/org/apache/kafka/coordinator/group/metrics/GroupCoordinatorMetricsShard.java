@@ -23,6 +23,7 @@ import org.apache.kafka.coordinator.common.runtime.CoordinatorMetricsShard;
 import org.apache.kafka.coordinator.group.classic.ClassicGroupState;
 import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroup.ConsumerGroupState;
 import org.apache.kafka.coordinator.group.modern.share.ShareGroup;
+import org.apache.kafka.server.common.StopPartition;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineLong;
 
@@ -133,7 +134,9 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     }
 
     /**
-     * Set the number of consumer groups.
+     * Set the number of consumer groups. The method is the only way to update
+     * the map and is called by the scheduled task that updates the metrics
+     * in {@link org.apache.kafka.coordinator.group.GroupCoordinatorShard}.
      *
      * @param consumerGroupGauges The map counting the number of consumer groups in each state.
      */
@@ -246,7 +249,9 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     }
 
     /**
-     * Sets the classicGroupGauges.
+     * Sets the classicGroupGauges. The method is the only way to update
+     * the map and is called by the scheduled task that updates the metrics
+     * in {@link org.apache.kafka.coordinator.group.GroupCoordinatorShard}.
      *
      * @param classicGroupGauges The new classicGroupGauges.
      */

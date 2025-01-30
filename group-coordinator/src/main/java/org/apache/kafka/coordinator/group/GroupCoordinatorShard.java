@@ -716,9 +716,9 @@ public class GroupCoordinatorShard implements CoordinatorShard<CoordinatorRecord
     }
 
     /**
-     * Cancels the group size counter for the classic groups.
+     * Cancels the group size counter for the classic/consumer groups.
      */
-    private void cancelClassicGroupSizeCounter() {
+    private void cancelGroupSizeCounter() {
         timer.cancel(GROUP_SIZE_COUNTER_KEY);
     }
 
@@ -744,7 +744,7 @@ public class GroupCoordinatorShard implements CoordinatorShard<CoordinatorRecord
         timer.cancel(GROUP_EXPIRATION_KEY);
         coordinatorMetrics.deactivateMetricsShard(metricsShard);
         groupMetadataManager.onUnloaded();
-        cancelClassicGroupSizeCounter();
+        cancelGroupSizeCounter();
     }
 
     /**
