@@ -133,9 +133,10 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     }
 
     /**
-     * Set the number of consumer groups. The method is the only way to update
-     * the map and is called by the scheduled task that updates the metrics
-     * in {@link org.apache.kafka.coordinator.group.GroupCoordinatorShard}.
+     * Set the number of consumer groups.
+     * This method should be the only way to update the map and is called by the scheduled task
+     * that updates the metrics in {@link org.apache.kafka.coordinator.group.GroupCoordinatorShard}.
+     * Breaking this will result in inconsistent behavior.
      *
      * @param consumerGroupGauges The map counting the number of consumer groups in each state.
      */
@@ -248,11 +249,12 @@ public class GroupCoordinatorMetricsShard implements CoordinatorMetricsShard {
     }
 
     /**
-     * Sets the classicGroupGauges. The method is the only way to update
-     * the map and is called by the scheduled task that updates the metrics
-     * in {@link org.apache.kafka.coordinator.group.GroupCoordinatorShard}.
+     * Sets the classicGroupGauges.
+     * This method should be the only way to update the map and is called by the scheduled task
+     * that updates the metrics in {@link org.apache.kafka.coordinator.group.GroupCoordinatorShard}.
+     * Breaking this will result in inconsistent behavior.
      *
-     * @param classicGroupGauges The new classicGroupGauges.
+     * @param classicGroupGauges The map counting the number of classic groups in each state.
      */
     public void setClassicGroupGauges(
         Map<ClassicGroupState, Long> classicGroupGauges
