@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.raft;
 
-import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
@@ -48,19 +47,18 @@ public class FollowerStateTest {
             InetSocketAddress.createUnresolved("mock-host-3", 1234)
         )
     );
-    private final ReplicaKey votedKey = ReplicaKey.of(2, Uuid.randomUuid());
 
     private FollowerState newFollowerState(
-        Set<Integer> voters
+        Set<Integer> voters,
+        Optional<LogOffsetMetadata> highWatermark
     ) {
         return new FollowerState(
             time,
             epoch,
             leaderId,
             leaderEndpoints,
-            Optional.of(votedKey),
             voters,
-            Optional.empty(),
+            highWatermark,
             fetchTimeoutMs,
             logContext
         );
@@ -68,7 +66,7 @@ public class FollowerStateTest {
 
     @Test
     public void testFetchTimeoutExpiration() {
-        FollowerState state = newFollowerState(Set.of(1, 2, 3));
+        FollowerState state = newFollowerState(Set.of(1, 2, 3), Optional.empty());
 
         assertFalse(state.hasFetchTimeoutExpired(time.milliseconds()));
         assertEquals(fetchTimeoutMs, state.remainingFetchTimeMs(time.milliseconds()));
@@ -84,7 +82,7 @@ public class FollowerStateTest {
 
     @Test
     public void testMonotonicHighWatermark() {
-        FollowerState state = newFollowerState(Set.of(1, 2, 3));
+        FollowerState state = newFollowerState(Set.of(1, 2, 3), Optional.empty());
 
         OptionalLong highWatermark = OptionalLong.of(15L);
         state.updateHighWatermark(highWatermark);
@@ -97,45 +95,37 @@ public class FollowerStateTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testPreVoteIfHasNotFetchedFromLeaderYet(boolean isLogUpToDate) {
-        FollowerState state = newFollowerState(Set.of(1, 2, 3));
+        FollowerState state = newFollowerState(
+            Set.of(1, 2, 3),
+            Optional.empty()
+        );
 
         assertEquals(isLogUpToDate, state.canGrantVote(ReplicaKey.of(1, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
         assertEquals(isLogUpToDate, state.canGrantVote(ReplicaKey.of(2, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
         assertEquals(isLogUpToDate, state.canGrantVote(ReplicaKey.of(3, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
-        assertEquals(isLogUpToDate, state.canGrantVote(ReplicaKey.of(10, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testPreVoteAfterSuccessfulFetchFromLeader(boolean isLogUpToDate) {
-        FollowerState state = newFollowerState(Set.of(1, 2, 3));
+    public void testGrantVote(boolean isLogUpToDate) {
+        FollowerState state = newFollowerState(
+            Set.of(1, 2, 3),
+            Optional.empty()
+        );
         state.resetFetchTimeoutForSuccessfulFetch(time.milliseconds());
 
         assertFalse(state.canGrantVote(ReplicaKey.of(1, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
         assertFalse(state.canGrantVote(ReplicaKey.of(2, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
         assertFalse(state.canGrantVote(ReplicaKey.of(3, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
-        assertFalse(state.canGrantVote(ReplicaKey.of(10, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, true));
 
         assertFalse(state.canGrantVote(ReplicaKey.of(1, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
         assertFalse(state.canGrantVote(ReplicaKey.of(2, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
         assertFalse(state.canGrantVote(ReplicaKey.of(3, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
-        assertFalse(state.canGrantVote(ReplicaKey.of(10, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    public void testGrantStandardVote(boolean isLogUpToDate) {
-        FollowerState state = newFollowerState(Set.of(1, 2, 3));
-
-        assertFalse(state.canGrantVote(ReplicaKey.of(1, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
-        assertFalse(state.canGrantVote(ReplicaKey.of(2, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
-        assertFalse(state.canGrantVote(ReplicaKey.of(3, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
-        assertFalse(state.canGrantVote(ReplicaKey.of(10, ReplicaKey.NO_DIRECTORY_ID), isLogUpToDate, false));
     }
 
     @Test
     public void testLeaderIdAndEndpoint() {
-        FollowerState state = newFollowerState(Set.of(0, 1, 2));
+        FollowerState state = newFollowerState(Set.of(0, 1, 2), Optional.empty());
 
         assertEquals(leaderId, state.leaderId());
         assertEquals(leaderEndpoints, state.leaderEndpoints());

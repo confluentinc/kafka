@@ -1390,11 +1390,6 @@ public class MockAdminClient extends AdminClient {
     }
 
     @Override
-    public synchronized ListShareGroupOffsetsResult listShareGroupOffsets(Map<String, ListShareGroupOffsetsSpec> groupSpecs, ListShareGroupOffsetsOptions options) {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
     public synchronized DescribeClassicGroupsResult describeClassicGroups(Collection<String> groupIds, DescribeClassicGroupsOptions options) {
         throw new UnsupportedOperationException("Not implemented yet");
     }

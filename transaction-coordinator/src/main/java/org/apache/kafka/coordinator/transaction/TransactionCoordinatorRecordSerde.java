@@ -16,29 +16,32 @@
  */
 package org.apache.kafka.coordinator.transaction;
 
-import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorLoader;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecordSerde;
-import org.apache.kafka.coordinator.transaction.generated.CoordinatorRecordType;
+import org.apache.kafka.coordinator.transaction.generated.TransactionLogKey;
+import org.apache.kafka.coordinator.transaction.generated.TransactionLogValue;
 
 public class TransactionCoordinatorRecordSerde extends CoordinatorRecordSerde {
 
     @Override
     protected ApiMessage apiMessageKeyFor(short recordType) {
-        try {
-            return CoordinatorRecordType.fromId(recordType).newRecordKey();
-        } catch (UnsupportedVersionException ex) {
-            throw new CoordinatorLoader.UnknownRecordTypeException(recordType);
+        switch (recordType) {
+            case 0:
+                return new TransactionLogKey();
+            default:
+                throw new CoordinatorLoader.UnknownRecordTypeException(recordType);
         }
     }
 
     @Override
-    protected ApiMessage apiMessageValueFor(short recordType) {
-        try {
-            return CoordinatorRecordType.fromId(recordType).newRecordValue();
-        } catch (UnsupportedVersionException ex) {
-            throw new CoordinatorLoader.UnknownRecordTypeException(recordType);
+    protected ApiMessage apiMessageValueFor(short recordVersion) {
+        switch (recordVersion) {
+            case 0:
+            case 1:
+                return new TransactionLogValue();
+            default:
+                throw new CoordinatorLoader.UnknownRecordTypeException(recordVersion);
         }
     }
 }

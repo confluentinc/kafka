@@ -193,7 +193,7 @@ class BrokerServer(
       info("Starting broker")
 
       val clientMetricsReceiverPlugin = new ClientMetricsReceiverPlugin()
-      config.dynamicConfig.initialize(Some(clientMetricsReceiverPlugin))
+      config.dynamicConfig.initialize(zkClientOpt = None, Some(clientMetricsReceiverPlugin))
 
       /* start scheduler */
       kafkaScheduler = new KafkaScheduler(config.backgroundThreads)
@@ -216,13 +216,15 @@ class BrokerServer(
         kafkaScheduler,
         time,
         brokerTopicStats,
-        logDirFailureChannel)
+        logDirFailureChannel,
+        keepPartitionMetadataFile = true)
 
       remoteLogManagerOpt = createRemoteLogManager()
 
       lifecycleManager = new BrokerLifecycleManager(config,
         time,
         s"broker-${config.nodeId}-",
+        isZkBroker = false,
         logDirs = logManager.directoryIdsSet,
         () => new Thread(() => shutdown(), "kafka-shutdown-thread").start())
 
@@ -253,7 +255,7 @@ class BrokerServer(
       val apiVersionManager = ApiVersionManager(
         ListenerType.BROKER,
         config,
-        forwardingManager,
+        Some(forwardingManager),
         brokerFeatures,
         metadataCache,
         Some(clientMetricsManager)
@@ -345,6 +347,7 @@ class BrokerServer(
         alterPartitionManager = alterPartitionManager,
         brokerTopicStats = brokerTopicStats,
         isShuttingDown = isShuttingDown,
+        zkClient = None,
         threadNamePrefix = None, // The ReplicaManager only runs on the broker, and already includes the ID in thread names.
         delayedRemoteFetchPurgatoryParam = None,
         brokerEpochSupplier = () => lifecycleManager.brokerEpoch,
@@ -355,6 +358,7 @@ class BrokerServer(
 
       /* start token manager */
       tokenManager = new DelegationTokenManager(config, tokenCache, time)
+      tokenManager.startup()
 
       /* initializing the groupConfigManager */
       groupConfigManager = new GroupConfigManager(config.groupCoordinatorConfig.extractGroupConfigMap(config.shareGroupConfig))
@@ -385,7 +389,7 @@ class BrokerServer(
         transactionCoordinator, shareCoordinator)
 
       dynamicConfigHandlers = Map[String, ConfigHandler](
-        ConfigType.TOPIC -> new TopicConfigHandler(replicaManager, config, quotaManagers),
+        ConfigType.TOPIC -> new TopicConfigHandler(replicaManager, config, quotaManagers, None),
         ConfigType.BROKER -> new BrokerConfigHandler(config, quotaManagers),
         ConfigType.CLIENT_METRICS -> new ClientMetricsConfigHandler(clientMetricsManager),
         ConfigType.GROUP -> new GroupConfigHandler(groupCoordinator))
@@ -440,13 +444,14 @@ class BrokerServer(
         config.shareGroupConfig.shareFetchMaxFetchRecords,
         persister,
         groupConfigManager,
-        metrics,
-        brokerTopicStats
+        metrics
       )
 
+      // Create the request processor objects.
+      val raftSupport = RaftSupport(forwardingManager, metadataCache)
       dataPlaneRequestProcessor = new KafkaApis(
         requestChannel = socketServer.dataPlaneRequestChannel,
-        forwardingManager = forwardingManager,
+        metadataSupport = raftSupport,
         replicaManager = replicaManager,
         groupCoordinator = groupCoordinator,
         txnCoordinator = transactionCoordinator,
@@ -460,13 +465,13 @@ class BrokerServer(
         authorizer = authorizer,
         quotas = quotaManagers,
         fetchManager = fetchManager,
-        sharePartitionManager = sharePartitionManager,
+        sharePartitionManager = Some(sharePartitionManager),
         brokerTopicStats = brokerTopicStats,
         clusterId = clusterId,
         time = time,
         tokenManager = tokenManager,
         apiVersionManager = apiVersionManager,
-        clientMetricsManager = clientMetricsManager)
+        clientMetricsManager = Some(clientMetricsManager))
 
       dataPlaneRequestHandlerPool = new KafkaRequestHandlerPool(config.nodeId,
         socketServer.dataPlaneRequestChannel, dataPlaneRequestProcessor, time,
@@ -534,7 +539,7 @@ class BrokerServer(
       })
       metadataPublishers.add(brokerMetadataPublisher)
       brokerRegistrationTracker = new BrokerRegistrationTracker(config.brokerId,
-        () => lifecycleManager.resendBrokerRegistration())
+        () => lifecycleManager.resendBrokerRegistrationUnlessZkMode())
       metadataPublishers.add(brokerRegistrationTracker)
 
 
@@ -786,6 +791,9 @@ class BrokerServer(
         CoreUtils.swallow(groupCoordinator.shutdown(), this)
       if (shareCoordinator.isDefined)
         CoreUtils.swallow(shareCoordinator.get.shutdown(), this)
+
+      if (tokenManager != null)
+        CoreUtils.swallow(tokenManager.shutdown(), this)
 
       if (assignmentsManager != null)
         CoreUtils.swallow(assignmentsManager.close(), this)

@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ducktape.mark import matrix
+
 from ducktape.mark.resource import cluster
 from ducktape.utils.util import wait_until
 
 from kafkatest.tests.verifiable_consumer_test import VerifiableConsumerTest
-from kafkatest.services.kafka import TopicPartition, quorum
+from kafkatest.services.kafka import TopicPartition
 from kafkatest.services.verifiable_consumer import VerifiableConsumer
 
 
@@ -51,8 +51,7 @@ class TruncationTest(VerifiableConsumerTest):
         return consumer
 
     @cluster(num_nodes=7)
-    @matrix(metadata_quorum=quorum.all_non_upgrade, use_new_coordinator=[True])
-    def test_offset_truncate(self, metadata_quorum, use_new_coordinator):
+    def test_offset_truncate(self):
         """
         Verify correct consumer behavior when the brokers are consecutively restarted.
 

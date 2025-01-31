@@ -17,6 +17,7 @@
 package org.apache.kafka.coordinator.group.streams.topics;
 
 import org.apache.kafka.common.errors.StreamsInvalidTopologyException;
+import org.apache.kafka.common.requests.StreamsGroupHeartbeatResponse.Status;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.coordinator.group.generated.StreamsGroupTopologyValue.Subtopology;
 import org.apache.kafka.coordinator.group.generated.StreamsGroupTopologyValue.TopicInfo;
@@ -71,7 +72,7 @@ public class RepartitionTopicsTest {
     }
 
     @Test
-    public void shouldThrowIllegalStateExceptionIfMissingSourceTopics() {
+    public void shouldThrowStreamsMissingSourceTopicsExceptionIfMissingSourceTopics() {
         final Subtopology subtopology1 = new Subtopology()
             .setSubtopologyId("subtopology1")
             .setSourceTopics(List.of(SOURCE_TOPIC_NAME1, SOURCE_TOPIC_NAME2))
@@ -87,9 +88,10 @@ public class RepartitionTopicsTest {
             topicPartitionCountProvider
         );
 
-        final IllegalStateException exception = assertThrows(IllegalStateException.class,
+        final TopicConfigurationException exception = assertThrows(TopicConfigurationException.class,
             repartitionTopics::setup);
 
+        assertEquals(Status.MISSING_SOURCE_TOPICS, exception.status());
         assertEquals("Missing source topics: source1", exception.getMessage());
     }
 

@@ -14,7 +14,7 @@
 // limitations under the License.
 
 plugins {
-    id 'com.gradle.develocity' version '3.19'
+    id 'com.gradle.develocity' version '3.17.6'
     id 'com.gradle.common-custom-user-data-gradle-plugin' version '2.0.2'
 }
 
@@ -97,8 +97,8 @@ include 'clients',
     'tools:tools-api',
     'transaction-coordinator',
     'trogdor',
-    'test-common:test-common-internal-api',
-    'test-common:test-common-util',
+    'test-common',
+    'test-common:test-common-api',
     'test-common:test-common-runtime'
 
 project(":storage:api").name = "storage-api"

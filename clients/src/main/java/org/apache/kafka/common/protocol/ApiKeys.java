@@ -132,8 +132,7 @@ public enum ApiKeys {
     DELETE_SHARE_GROUP_STATE(ApiMessageType.DELETE_SHARE_GROUP_STATE, true),
     READ_SHARE_GROUP_STATE_SUMMARY(ApiMessageType.READ_SHARE_GROUP_STATE_SUMMARY, true),
     STREAMS_GROUP_HEARTBEAT(ApiMessageType.STREAMS_GROUP_HEARTBEAT),
-    STREAMS_GROUP_DESCRIBE(ApiMessageType.STREAMS_GROUP_DESCRIBE),
-    DESCRIBE_SHARE_GROUP_OFFSETS(ApiMessageType.DESCRIBE_SHARE_GROUP_OFFSETS);
+    STREAMS_GROUP_DESCRIBE(ApiMessageType.STREAMS_GROUP_DESCRIBE);
     
 
     private static final Map<ApiMessageType.ListenerType, EnumSet<ApiKeys>> APIS_BY_LISTENER =
@@ -255,15 +254,6 @@ public enum ApiKeys {
         return apiVersion >= messageType.lowestDeprecatedVersion() && apiVersion <= messageType.highestDeprecatedVersion();
     }
 
-    /**
-     * Returns `true` if there is at least one valid version, `false` otherwise. When `false` is returned, it typically
-     * means that the protocol api is no longer supported, but the api key remains assigned to the removed api so we
-     * do not accidentally reuse it for a different api.
-     */
-    public boolean hasValidVersion() {
-        return oldestVersion() <= latestVersion();
-    }
-
     public Optional<ApiVersionsResponseData.ApiVersion> toApiVersion(boolean enableUnstableLastVersion) {
         short oldestVersion = oldestVersion();
         short latestVersion = latestVersion(enableUnstableLastVersion);
@@ -332,7 +322,11 @@ public enum ApiKeys {
         return hasBuffer.get();
     }
 
-    public static EnumSet<ApiKeys> brokerApis() {
+    public static EnumSet<ApiKeys> zkBrokerApis() {
+        return apisForListener(ApiMessageType.ListenerType.ZK_BROKER);
+    }
+
+    public static EnumSet<ApiKeys> kraftBrokerApis() {
         return apisForListener(ApiMessageType.ListenerType.BROKER);
     }
 
@@ -342,7 +336,7 @@ public enum ApiKeys {
 
     public static EnumSet<ApiKeys> clientApis() {
         List<ApiKeys> apis = Arrays.stream(ApiKeys.values())
-            .filter(apiKey -> apiKey.inScope(ApiMessageType.ListenerType.BROKER))
+            .filter(apiKey -> apiKey.inScope(ApiMessageType.ListenerType.ZK_BROKER) || apiKey.inScope(ApiMessageType.ListenerType.BROKER))
             .collect(Collectors.toList());
         return EnumSet.copyOf(apis);
     }

@@ -161,6 +161,7 @@ import org.apache.kafka.common.quota.ClientQuotaAlteration;
 import org.apache.kafka.common.quota.ClientQuotaEntity;
 import org.apache.kafka.common.quota.ClientQuotaFilter;
 import org.apache.kafka.common.quota.ClientQuotaFilterComponent;
+import org.apache.kafka.common.record.RecordVersion;
 import org.apache.kafka.common.requests.AddRaftVoterRequest;
 import org.apache.kafka.common.requests.AddRaftVoterResponse;
 import org.apache.kafka.common.requests.AlterClientQuotasResponse;
@@ -238,7 +239,6 @@ import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter;
 import org.apache.kafka.common.telemetry.internals.ClientTelemetrySender;
-import org.apache.kafka.common.test.api.Flaky;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
@@ -777,7 +777,7 @@ public class KafkaAdminClientTest {
         if (error == Errors.NONE) {
             return new ApiVersionsResponse.Builder().
                 setApiVersions(ApiVersionsResponse.filterApis(
-                    ApiMessageType.ListenerType.BROKER, false, false)).
+                    RecordVersion.current(), ApiMessageType.ListenerType.ZK_BROKER, false, false)).
                 setSupportedFeatures(
                     convertSupportedFeaturesMap(defaultFeatureMetadata().supportedFeatures())).
                 setFinalizedFeatures(
@@ -1783,7 +1783,6 @@ public class KafkaAdminClientTest {
         }
     }
 
-    @Flaky("KAFKA-18441")
     @Test
     public void testAdminClientApisAuthenticationFailure() {
         Cluster cluster = mockBootstrapCluster();

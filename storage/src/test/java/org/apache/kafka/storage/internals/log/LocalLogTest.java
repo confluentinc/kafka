@@ -114,6 +114,8 @@ class LocalLogTest {
 
     private void appendRecords(List<SimpleRecord> records, long initialOffset) throws IOException {
         log.append(initialOffset + records.size() - 1,
+                records.get(0).timestamp(),
+                initialOffset,
                 MemoryRecords.withRecords(initialOffset, Compression.NONE, 0, records.toArray(new SimpleRecord[0])));
     }
 

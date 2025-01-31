@@ -27,7 +27,6 @@ import kafka.cluster.Partition
 import kafka.server.metadata.MockConfigRepository
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.SimpleRecord
-import org.apache.kafka.server.common.KRaftVersion
 import org.apache.kafka.server.util.{KafkaScheduler, MockTime}
 import org.apache.kafka.storage.internals.log.{CleanerConfig, LogDirFailureChannel}
 
@@ -70,7 +69,7 @@ class HighwatermarkPersistenceTest {
       scheduler = scheduler,
       logManager = logManagers.head,
       quotaManagers = quotaManager,
-      metadataCache = MetadataCache.kRaftMetadataCache(configs.head.brokerId, () => KRaftVersion.KRAFT_VERSION_0),
+      metadataCache = MetadataCache.zkMetadataCache(configs.head.brokerId, configs.head.interBrokerProtocolVersion),
       logDirFailureChannel = logDirFailureChannels.head,
       alterPartitionManager = alterIsrManager)
     replicaManager.startup()
@@ -128,7 +127,7 @@ class HighwatermarkPersistenceTest {
       scheduler = scheduler,
       logManager = logManagers.head,
       quotaManagers = quotaManager,
-      metadataCache = MetadataCache.kRaftMetadataCache(configs.head.brokerId, () => KRaftVersion.KRAFT_VERSION_0),
+      metadataCache = MetadataCache.zkMetadataCache(configs.head.brokerId, configs.head.interBrokerProtocolVersion),
       logDirFailureChannel = logDirFailureChannels.head,
       alterPartitionManager = alterIsrManager)
     replicaManager.startup()

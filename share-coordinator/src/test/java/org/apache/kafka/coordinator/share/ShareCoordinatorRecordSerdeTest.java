@@ -51,7 +51,7 @@ public class ShareCoordinatorRecordSerdeTest {
         CoordinatorRecord record = getShareSnapshotRecord("groupId", Uuid.randomUuid(), 1);
 
         assertArrayEquals(
-            MessageUtil.toVersionPrefixedBytes(record.key().apiKey(), record.key()),
+            MessageUtil.toVersionPrefixedBytes(record.key().version(), record.key().message()),
             serde.serializeKey(record)
         );
     }
@@ -68,11 +68,15 @@ public class ShareCoordinatorRecordSerdeTest {
 
     @Test
     public void testSerializeNullValue() {
-        CoordinatorRecord record = CoordinatorRecord.tombstone(
-            new ShareSnapshotKey()
-                .setGroupId("group")
-                .setTopicId(Uuid.randomUuid())
-                .setPartition(1)
+        CoordinatorRecord record = new CoordinatorRecord(
+            new ApiMessageAndVersion(
+                new ShareSnapshotKey()
+                    .setGroupId("group")
+                    .setTopicId(Uuid.randomUuid())
+                    .setPartition(1),
+                CoordinatorRecordType.SHARE_SNAPSHOT.id()
+            ),
+            null
         );
 
         assertNull(serde.serializeValue(record));
@@ -81,8 +85,8 @@ public class ShareCoordinatorRecordSerdeTest {
     @Test
     public void testDeserialize() {
         CoordinatorRecord record = getShareSnapshotRecord("groupId", Uuid.randomUuid(), 1);
-        ApiMessage key = record.key();
-        ByteBuffer keyBuffer = MessageUtil.toCoordinatorTypePrefixedByteBuffer(key);
+        ApiMessageAndVersion key = record.key();
+        ByteBuffer keyBuffer = MessageUtil.toVersionPrefixedByteBuffer(key.version(), key.message());
 
         ApiMessageAndVersion value = record.value();
         ByteBuffer valueBuffer = MessageUtil.toVersionPrefixedByteBuffer(value.version(), value.message());
@@ -94,11 +98,14 @@ public class ShareCoordinatorRecordSerdeTest {
 
     @Test
     public void testDeserializeWithTombstoneForValue() {
-        ApiMessage key = new ShareSnapshotKey()
-            .setGroupId("groupId")
-            .setTopicId(Uuid.randomUuid())
-            .setPartition(1);
-        ByteBuffer keyBuffer = MessageUtil.toCoordinatorTypePrefixedByteBuffer(key);
+        ApiMessageAndVersion key = new ApiMessageAndVersion(
+            new ShareSnapshotKey()
+                .setGroupId("groupId")
+                .setTopicId(Uuid.randomUuid())
+                .setPartition(1),
+            CoordinatorRecordType.SHARE_SNAPSHOT.id()
+        );
+        ByteBuffer keyBuffer = MessageUtil.toVersionPrefixedByteBuffer(key.version(), key.message());
 
         CoordinatorRecord record = serde.deserialize(keyBuffer, null);
         assertEquals(key, record.key());
@@ -132,11 +139,14 @@ public class ShareCoordinatorRecordSerdeTest {
 
     @Test
     public void testDeserializeWithValueEmptyBuffer() {
-        ApiMessage key = new ShareSnapshotKey()
-            .setGroupId("foo")
-            .setTopicId(Uuid.randomUuid())
-            .setPartition(1);
-        ByteBuffer keyBuffer = MessageUtil.toCoordinatorTypePrefixedByteBuffer(key);
+        ApiMessageAndVersion key = new ApiMessageAndVersion(
+            new ShareSnapshotKey()
+                .setGroupId("foo")
+                .setTopicId(Uuid.randomUuid())
+                .setPartition(1),
+            CoordinatorRecordType.SHARE_SNAPSHOT.id()
+        );
+        ByteBuffer keyBuffer = MessageUtil.toVersionPrefixedByteBuffer(key.version(), key.message());
 
         ByteBuffer valueBuffer = ByteBuffer.allocate(0);
 
@@ -188,33 +198,38 @@ public class ShareCoordinatorRecordSerdeTest {
     @Test
     public void testDeserializeAllRecordTypes() {
         for (CoordinatorRecordType record : CoordinatorRecordType.values()) {
-            roundTrip(record.newRecordKey(), record.newRecordValue());
+            roundTrip(record.id(), record.newRecordKey(), record.newRecordValue());
         }
     }
 
     private void roundTrip(
+        short recordType,
         ApiMessage key,
         ApiMessage val
     ) {
         for (short version = val.lowestSupportedVersion(); version < val.highestSupportedVersion(); version++) {
+            ApiMessageAndVersion keyMessageAndVersion = new ApiMessageAndVersion(key, recordType);
             ApiMessageAndVersion valMessageAndVersion = new ApiMessageAndVersion(val, version);
 
             CoordinatorRecord record = serde.deserialize(
-                MessageUtil.toCoordinatorTypePrefixedByteBuffer(key),
+                MessageUtil.toVersionPrefixedByteBuffer(recordType, key),
                 MessageUtil.toVersionPrefixedByteBuffer(version, val)
             );
 
-            assertEquals(key, record.key());
+            assertEquals(keyMessageAndVersion, record.key());
             assertEquals(valMessageAndVersion, record.value());
         }
     }
 
     private static CoordinatorRecord getShareSnapshotRecord(String groupId, Uuid topicId, int partitionId) {
-        return CoordinatorRecord.record(
-            new ShareSnapshotKey()
-                .setGroupId(groupId)
-                .setTopicId(topicId)
-                .setPartition(partitionId),
+        return new CoordinatorRecord(
+            new ApiMessageAndVersion(
+                new ShareSnapshotKey()
+                    .setGroupId(groupId)
+                    .setTopicId(topicId)
+                    .setPartition(partitionId),
+                CoordinatorRecordType.SHARE_SNAPSHOT.id()
+            ),
             new ApiMessageAndVersion(
                 new ShareSnapshotValue()
                     .setStartOffset(1L)

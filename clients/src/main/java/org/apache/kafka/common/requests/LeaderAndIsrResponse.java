@@ -18,15 +18,19 @@ package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.message.LeaderAndIsrResponseData;
+import org.apache.kafka.common.message.LeaderAndIsrResponseData.LeaderAndIsrTopicError;
+import org.apache.kafka.common.message.LeaderAndIsrResponseData.LeaderAndIsrTopicErrorCollection;
+import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
 
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-public class LeaderAndIsrResponse {
+public class LeaderAndIsrResponse extends AbstractResponse {
 
     /**
      * Possible error code:
@@ -34,62 +38,84 @@ public class LeaderAndIsrResponse {
      * STALE_CONTROLLER_EPOCH (11)
      * STALE_BROKER_EPOCH (77)
      */
-    private final Errors error;
-    private final LinkedHashMap<Uuid, List<PartitionError>> topicErrors;
+    private final LeaderAndIsrResponseData data;
+    private final short version;
 
-    public LeaderAndIsrResponse(Errors error, LinkedHashMap<Uuid, List<PartitionError>> topicErrors) {
-        this.error = error;
-        this.topicErrors = topicErrors;
+    public LeaderAndIsrResponse(LeaderAndIsrResponseData data, short version) {
+        super(ApiKeys.LEADER_AND_ISR);
+        this.data = data;
+        this.version = version;
     }
 
-    public LinkedHashMap<Uuid, List<PartitionError>> topics() {
-        return topicErrors;
+    public LeaderAndIsrTopicErrorCollection topics() {
+        return this.data.topics();
     }
 
     public Errors error() {
-        return error;
+        return Errors.forCode(data.errorCode());
     }
 
+    @Override
     public Map<Errors, Integer> errorCounts() {
         Errors error = error();
         if (error != Errors.NONE) {
             // Minor optimization since the top-level error applies to all partitions
-            return Collections.singletonMap(error, topics().values().stream().mapToInt(partitionErrors ->
-                    partitionErrors.size()).sum() + 1);
+            if (version < 5) 
+                return Collections.singletonMap(error, data.partitionErrors().size() + 1);
+            return Collections.singletonMap(error, 
+                    data.topics().stream().mapToInt(t -> t.partitionErrors().size()).sum() + 1);
         }
-        Map<Errors, Integer> errors = AbstractResponse.errorCounts(topics().values().stream().flatMap(partitionErrors ->
-                partitionErrors.stream()).map(p -> Errors.forCode(p.errorCode)));
-        AbstractResponse.updateErrorCounts(errors, Errors.NONE);
+        Map<Errors, Integer> errors;
+        if (version < 5)
+            errors = errorCounts(data.partitionErrors().stream().map(l -> Errors.forCode(l.errorCode())));
+        else
+            errors = errorCounts(data.topics().stream().flatMap(t -> t.partitionErrors().stream()).map(l ->
+                Errors.forCode(l.errorCode())));
+        updateErrorCounts(errors, Errors.NONE);
         return errors;
     }
 
     public Map<TopicPartition, Errors> partitionErrors(Map<Uuid, String> topicNames) {
         Map<TopicPartition, Errors> errors = new HashMap<>();
-        topics().forEach((topicId, partitionErrors) -> {
-            String topicName = topicNames.get(topicId);
-            if (topicName != null) {
-                partitionErrors.forEach(partition ->
-                    errors.put(new TopicPartition(topicName, partition.partitionIndex), Errors.forCode(partition.errorCode)));
+        if (version < 5) {
+            data.partitionErrors().forEach(partition ->
+                    errors.put(new TopicPartition(partition.topicName(), partition.partitionIndex()),
+                            Errors.forCode(partition.errorCode())));
+        } else {
+            for (LeaderAndIsrTopicError topic : data.topics()) {
+                String topicName = topicNames.get(topic.topicId());
+                if (topicName != null) {
+                    topic.partitionErrors().forEach(partition ->
+                            errors.put(new TopicPartition(topicName, partition.partitionIndex()),
+                                    Errors.forCode(partition.errorCode())));
+                }
             }
-        });
+        }
         return errors;
     }
 
     @Override
+    public int throttleTimeMs() {
+        return DEFAULT_THROTTLE_TIME;
+    }
+
+    @Override
+    public void maybeSetThrottleTimeMs(int throttleTimeMs) {
+        // Not supported by the response schema
+    }
+
+    public static LeaderAndIsrResponse parse(ByteBuffer buffer, short version) {
+        return new LeaderAndIsrResponse(new LeaderAndIsrResponseData(new ByteBufferAccessor(buffer), version), version);
+    }
+
+    @Override
+    public LeaderAndIsrResponseData data() {
+        return data;
+    }
+
+    @Override
     public String toString() {
-        return "LeaderAndIsrResponse{" +
-                "error=" + error +
-                ", topicErrors=" + topicErrors +
-                '}';
+        return data.toString();
     }
 
-    public static class PartitionError {
-        public final int partitionIndex;
-        public final short errorCode;
-
-        public PartitionError(int partitionIndex, short errorCode) {
-            this.partitionIndex = partitionIndex;
-            this.errorCode = errorCode;
-        }
-    }
 }

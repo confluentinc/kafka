@@ -255,7 +255,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         :param jmx_attributes:
         :param int zk_connect_timeout:
         :param int zk_session_timeout:
-        :param list[list] server_prop_overrides: overrides for kafka.properties file, if the second value is None or "", it will be filtered
+        :param list[list] server_prop_overrides: overrides for kafka.properties file
             e.g: [["config1", "true"], ["config2", "1000"]]
         :param str zk_chroot:
         :param bool zk_client_secure: connect to Zookeeper over secure client port (TLS) when True
@@ -781,8 +781,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         #update template configs with test override configs
         configs.update(override_configs)
 
-        filtered_configs = {k: v for k, v in configs.items() if v not in [None, ""]}
-        prop_file = self.render_configs(filtered_configs)
+        prop_file = self.render_configs(configs)
         return prop_file
 
     def render_configs(self, configs):

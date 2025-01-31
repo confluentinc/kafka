@@ -169,6 +169,8 @@ class ReplicaAlterLogDirsThread(name: String,
     }
   }
 
+  override protected val isOffsetForLeaderEpochSupported: Boolean = true
+
   /**
    * Truncate the log for each partition based on current replica's returned epoch and offset.
    *

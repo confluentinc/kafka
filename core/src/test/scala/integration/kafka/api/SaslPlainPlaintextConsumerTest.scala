@@ -34,7 +34,7 @@ class SaslPlainPlaintextConsumerTest extends BaseConsumerTest with SaslSetup {
 
   @BeforeEach
   override def setUp(testInfo: TestInfo): Unit = {
-    startSasl(jaasSections(kafkaServerSaslMechanisms, Some(kafkaClientSaslMechanism), kafkaServerJaasEntryName))
+    startSasl(jaasSections(kafkaServerSaslMechanisms, Some(kafkaClientSaslMechanism), Both, kafkaServerJaasEntryName))
     super.setUp(testInfo)
   }
 

@@ -74,6 +74,9 @@ class TransactionCoordinatorConcurrencyTest extends AbstractCoordinatorConcurren
   override def setUp(): Unit = {
     super.setUp()
 
+    when(zkClient.getTopicPartitionCount(TRANSACTION_STATE_TOPIC_NAME))
+      .thenReturn(Some(numPartitions))
+
     val brokerNode = new Node(0, "host", 10)
     val metadataCache: MetadataCache = mock(classOf[MetadataCache])
     when(metadataCache.getPartitionLeaderEndpoint(
@@ -85,7 +88,9 @@ class TransactionCoordinatorConcurrencyTest extends AbstractCoordinatorConcurren
       new FinalizedFeatures(
         MetadataVersion.latestTesting(),
         Collections.singletonMap(TransactionVersion.FEATURE_NAME, TransactionVersion.TV_2.featureLevel()),
-        0)
+        0,
+        true
+      )
     }
 
     when(metadataCache.metadataVersion())
@@ -93,7 +98,8 @@ class TransactionCoordinatorConcurrencyTest extends AbstractCoordinatorConcurren
     
     txnStateManager = new TransactionStateManager(0, scheduler, replicaManager, metadataCache, txnConfig, time,
       new Metrics())
-    txnStateManager.startup(() => numPartitions, enableTransactionalIdExpiration = true)
+    txnStateManager.startup(() => zkClient.getTopicPartitionCount(TRANSACTION_STATE_TOPIC_NAME).get,
+      enableTransactionalIdExpiration = true)
     for (i <- 0 until numPartitions)
       txnStateManager.addLoadedTransactionsToCache(i, coordinatorEpoch, new Pool[String, TransactionMetadata]())
 

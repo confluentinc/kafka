@@ -110,12 +110,10 @@ public class SessionWindowedKStreamImpl<K, V> extends AbstractStream<K, V> imple
 
         final String aggregateName = new NamedInternal(named).orElseGenerateWithPrefix(builder, AGGREGATE_NAME);
         final StoreFactory storeFactory = new SessionStoreMaterializer<>(materializedInternal, windows, emitStrategy);
-        final long gracePeriod = windows.gracePeriodMs() + windows.inactivityGap();
 
-        return aggregateBuilder.buildWindowed(
+        return aggregateBuilder.build(
             new NamedInternal(aggregateName),
-            storeFactory.storeName(),
-            gracePeriod,
+            storeFactory,
             new KStreamSessionWindowAggregate<>(
                 windows,
                 storeFactory,
@@ -164,12 +162,10 @@ public class SessionWindowedKStreamImpl<K, V> extends AbstractStream<K, V> imple
 
         final String reduceName = new NamedInternal(named).orElseGenerateWithPrefix(builder, REDUCE_NAME);
         final StoreFactory storeFactory = new SessionStoreMaterializer<>(materializedInternal, windows, emitStrategy);
-        final long gracePeriod = windows.gracePeriodMs() + windows.inactivityGap();
 
-        return aggregateBuilder.buildWindowed(
+        return aggregateBuilder.build(
             new NamedInternal(reduceName),
-            storeFactory.storeName(),
-            gracePeriod,
+            storeFactory,
             new KStreamSessionWindowAggregate<>(
                 windows,
                 storeFactory,
@@ -226,12 +222,10 @@ public class SessionWindowedKStreamImpl<K, V> extends AbstractStream<K, V> imple
 
         final String aggregateName = new NamedInternal(named).orElseGenerateWithPrefix(builder, AGGREGATE_NAME);
         final StoreFactory storeFactory = new SessionStoreMaterializer<>(materializedInternal, windows, emitStrategy);
-        final long gracePeriod = windows.gracePeriodMs() + windows.inactivityGap();
 
-        return aggregateBuilder.buildWindowed(
+        return aggregateBuilder.build(
             new NamedInternal(aggregateName),
-            storeFactory.storeName(),
-            gracePeriod,
+            storeFactory,
             new KStreamSessionWindowAggregate<>(
                 windows,
                 storeFactory,

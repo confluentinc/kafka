@@ -94,6 +94,8 @@ abstract class AbstractFetcherThread(name: String,
 
   protected def endOffsetForEpoch(topicPartition: TopicPartition, epoch: Int): Option[OffsetAndEpoch]
 
+  protected val isOffsetForLeaderEpochSupported: Boolean
+
   override def shutdown(): Unit = {
     initiateShutdown()
     inLock(partitionMapLock) {
@@ -149,7 +151,7 @@ abstract class AbstractFetcherThread(name: String,
     partitionStates.partitionStateMap.forEach { (tp, state) =>
       if (state.isTruncating) {
         latestEpoch(tp) match {
-          case Some(epoch) =>
+          case Some(epoch) if isOffsetForLeaderEpochSupported =>
             partitionsWithEpochs += tp -> new EpochData()
               .setPartition(tp.partition)
               .setCurrentLeaderEpoch(state.currentLeaderEpoch)

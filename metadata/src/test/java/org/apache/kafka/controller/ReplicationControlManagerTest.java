@@ -103,7 +103,6 @@ import org.apache.kafka.timeline.SnapshotRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
@@ -189,7 +188,7 @@ public class ReplicationControlManagerTest {
                 return this;
             }
 
-            Builder setIsElrEnabled(boolean isElrEnabled) {
+            Builder setIsElrEnabled(Boolean isElrEnabled) {
                 this.isElrEnabled = isElrEnabled;
                 return this;
             }
@@ -1887,7 +1886,7 @@ public class ReplicationControlManagerTest {
                         setNewIsrWithEpochs(isrWithDefaultEpoch(3, 0, 2, 1))))));
         ControllerResult<AlterPartitionResponseData> alterPartitionResult = replication.alterPartition(
             requestContext,
-            new AlterPartitionRequest.Builder(alterPartitionRequestData).build(version).data());
+            new AlterPartitionRequest.Builder(alterPartitionRequestData, version > 1).build(version).data());
         Errors expectedError = version > 1 ? NEW_LEADER_ELECTED : FENCED_LEADER_EPOCH;
         assertEquals(new AlterPartitionResponseData().setTopics(singletonList(
             new AlterPartitionResponseData.TopicData().
@@ -1951,7 +1950,7 @@ public class ReplicationControlManagerTest {
             anonymousContextFor(ApiKeys.ALTER_PARTITION, version);
 
         ControllerResult<AlterPartitionResponseData> alterPartitionResult =
-            replication.alterPartition(requestContext, new AlterPartitionRequest.Builder(alterIsrRequest).build(version).data());
+            replication.alterPartition(requestContext, new AlterPartitionRequest.Builder(alterIsrRequest, version > 1).build(version).data());
 
         Errors expectedError = version <= 1 ? OPERATION_NOT_ATTEMPTED : INELIGIBLE_REPLICA;
         assertEquals(
@@ -2036,7 +2035,7 @@ public class ReplicationControlManagerTest {
             anonymousContextFor(ApiKeys.ALTER_PARTITION, version);
 
         ControllerResult<AlterPartitionResponseData> alterPartitionResult =
-            replication.alterPartition(requestContext, new AlterPartitionRequest.Builder(alterIsrRequest).build(version).data());
+            replication.alterPartition(requestContext, new AlterPartitionRequest.Builder(alterIsrRequest, version > 1).build(version).data());
 
         // The late arrived AlterPartition request should be rejected when version >= 3.
         if (version >= 3) {
@@ -2101,7 +2100,7 @@ public class ReplicationControlManagerTest {
             anonymousContextFor(ApiKeys.ALTER_PARTITION, version);
 
         ControllerResult<AlterPartitionResponseData> alterPartitionResult =
-            replication.alterPartition(requestContext, new AlterPartitionRequest.Builder(alterIsrRequest).build(version).data());
+            replication.alterPartition(requestContext, new AlterPartitionRequest.Builder(alterIsrRequest, version > 1).build(version).data());
 
         Errors expectedError = version <= 1 ? OPERATION_NOT_ATTEMPTED : INELIGIBLE_REPLICA;
         assertEquals(
@@ -2956,7 +2955,7 @@ public class ReplicationControlManagerTest {
                     setNewIsrWithEpochs(isrWithDefaultEpoch(0, 1, 2))))));
         ControllerResult<AlterPartitionResponseData> alterPartitionResult = replication.alterPartition(
             anonymousContextFor(ApiKeys.ALTER_PARTITION),
-            new AlterPartitionRequest.Builder(alterPartitionRequestData).build().data());
+            new AlterPartitionRequest.Builder(alterPartitionRequestData, true).build().data());
         assertEquals(new AlterPartitionResponseData().setTopics(singletonList(
             new AlterPartitionResponseData.TopicData().
                 setTopicId(topicId).
@@ -3031,7 +3030,7 @@ public class ReplicationControlManagerTest {
                     setNewIsrWithEpochs(isrWithDefaultEpoch(0, 1, 2, 3, 4, 5))))));
         ControllerResult<AlterPartitionResponseData> alterPartitionResultTwo = replication.alterPartition(
             anonymousContextFor(ApiKeys.ALTER_PARTITION),
-            new AlterPartitionRequest.Builder(alterPartitionRequestDataTwo).build().data());
+            new AlterPartitionRequest.Builder(alterPartitionRequestDataTwo, true).build().data());
         assertEquals(new AlterPartitionResponseData().setTopics(singletonList(
                 new AlterPartitionResponseData.TopicData().
                     setTopicId(topicId).
@@ -3243,48 +3242,5 @@ public class ReplicationControlManagerTest {
 
     private static List<ApiMessageAndVersion> filter(List<ApiMessageAndVersion> records, Class<? extends ApiMessage> clazz) {
         return records.stream().filter(r -> clazz.equals(r.message().getClass())).collect(Collectors.toList());
-    }
-
-    @ParameterizedTest
-    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
-    void testElrsRemovedOnMinIsrUpdate(boolean clusterLevel, boolean useLegacyAlterConfigs) {
-        ReplicationControlTestContext ctx = new ReplicationControlTestContext.Builder().
-            setIsElrEnabled(true).
-            setStaticConfig(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "2").
-            build();
-        ctx.registerBrokers(1, 2, 3, 4);
-        ctx.unfenceBrokers(1, 2, 3, 4);
-        Uuid fooId = ctx.createTestTopic("foo", new int[][]{
-            new int[]{1, 2, 4}, new int[]{1, 3, 4}}).topicId();
-        Uuid barId = ctx.createTestTopic("bar", new int[][]{
-            new int[]{1, 2, 4}, new int[]{1, 3, 4}}).topicId();
-        ctx.fenceBrokers(4);
-        ctx.fenceBrokers(1);
-        assertArrayEquals(new int[]{1}, ctx.replicationControl.getPartition(fooId, 0).elr);
-        assertArrayEquals(new int[]{1}, ctx.replicationControl.getPartition(barId, 0).elr);
-        ConfigResource configResource;
-        if (clusterLevel) {
-            configResource = new ConfigResource(ConfigResource.Type.BROKER, "");
-        } else {
-            configResource = new ConfigResource(ConfigResource.Type.TOPIC, "foo");
-        }
-        if (useLegacyAlterConfigs) {
-            ctx.replay(ctx.configurationControl.legacyAlterConfigs(
-                Collections.singletonMap(configResource,
-                    Collections.singletonMap(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "1")),
-                false).records());
-        } else {
-            ctx.replay(ctx.configurationControl.incrementalAlterConfigs(
-                Collections.singletonMap(configResource,
-                    Collections.singletonMap(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG,
-                        new AbstractMap.SimpleImmutableEntry<>(AlterConfigOp.OpType.SET, "1"))),
-                false).records());
-        }
-        assertArrayEquals(new int[]{}, ctx.replicationControl.getPartition(fooId, 0).elr);
-        if (clusterLevel) {
-            assertArrayEquals(new int[]{}, ctx.replicationControl.getPartition(barId, 0).elr);
-        } else {
-            assertArrayEquals(new int[]{1}, ctx.replicationControl.getPartition(barId, 0).elr);
-        }
     }
 }

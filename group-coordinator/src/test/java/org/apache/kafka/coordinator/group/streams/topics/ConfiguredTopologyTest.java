@@ -53,7 +53,7 @@ public class ConfiguredTopologyTest {
         assertThrows(NullPointerException.class,
             () -> new ConfiguredTopology(
                 0,
-                Optional.of(Map.of()),
+                Collections.emptyMap(),
                 null,
                 Optional.empty()
             )
@@ -65,7 +65,7 @@ public class ConfiguredTopologyTest {
         assertThrows(NullPointerException.class,
             () -> new ConfiguredTopology(
                 0,
-                Optional.empty(),
+                Collections.emptyMap(),
                 Collections.emptyMap(),
                 null
             )
@@ -77,34 +77,21 @@ public class ConfiguredTopologyTest {
         assertThrows(IllegalArgumentException.class,
             () -> new ConfiguredTopology(
                 -1,
-                Optional.of(Map.of()),
+                Collections.emptyMap(),
                 Collections.emptyMap(),
                 Optional.empty()
             )
         );
-    }
-
-    @Test
-    public void testNoExceptionButNoSubtopologies() {
-        final IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-            () -> new ConfiguredTopology(
-                1,
-                Optional.empty(),
-                Collections.emptyMap(),
-                Optional.empty()
-            )
-        );
-        assertEquals(ex.getMessage(), "Subtopologies must be present if topicConfigurationException is empty.");
     }
 
     @Test
     public void testIsReady() {
         ConfiguredTopology readyTopology = new ConfiguredTopology(
-            1, Optional.of(Map.of()), new HashMap<>(), Optional.empty());
+            1, new HashMap<>(), new HashMap<>(), Optional.empty());
         assertTrue(readyTopology.isReady());
 
         ConfiguredTopology notReadyTopology = new ConfiguredTopology(
-            1, Optional.empty(), new HashMap<>(), Optional.of(TopicConfigurationException.missingSourceTopics("missing")));
+            1, new HashMap<>(), new HashMap<>(), Optional.of(TopicConfigurationException.missingSourceTopics("missing")));
         assertFalse(notReadyTopology.isReady());
     }
 
@@ -119,7 +106,7 @@ public class ConfiguredTopologyTest {
         Map<String, CreatableTopic> internalTopicsToBeCreated = new HashMap<>();
         Optional<TopicConfigurationException> topicConfigurationException = Optional.empty();
         ConfiguredTopology configuredTopology = new ConfiguredTopology(
-            topologyEpoch, Optional.of(subtopologies), internalTopicsToBeCreated, topicConfigurationException);
+            topologyEpoch, subtopologies, internalTopicsToBeCreated, topicConfigurationException);
 
         StreamsGroupDescribeResponseData.Topology topology = configuredTopology.asStreamsGroupDescribeTopology();
 

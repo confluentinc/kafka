@@ -44,7 +44,8 @@ import org.apache.kafka.common.requests.ProduceResponse.PartitionResponse
 import org.apache.kafka.common.utils.Utils
 import org.apache.kafka.coordinator.group.{GroupCoordinatorConfig, OffsetAndMetadata, OffsetConfig}
 import org.apache.kafka.coordinator.group.generated.{CoordinatorRecordType, GroupMetadataValue, OffsetCommitKey, OffsetCommitValue, GroupMetadataKey => GroupMetadataKeyData}
-import org.apache.kafka.server.common.RequestLocal
+import org.apache.kafka.server.common.{MetadataVersion, RequestLocal}
+import org.apache.kafka.server.common.MetadataVersion._
 import org.apache.kafka.server.metrics.KafkaYammerMetrics
 import org.apache.kafka.server.storage.log.FetchIsolation
 import org.apache.kafka.server.util.{KafkaScheduler, MockTime}
@@ -99,7 +100,8 @@ class GroupMetadataManagerTest {
     metrics = new kMetrics()
     time = new MockTime
     replicaManager = mock(classOf[ReplicaManager])
-    groupMetadataManager = new GroupMetadataManager(0, offsetConfig, replicaManager, time, metrics)
+    groupMetadataManager = new GroupMetadataManager(0, MetadataVersion.latestTesting, offsetConfig, replicaManager,
+      time, metrics)
     groupMetadataManager.startup(() => numOffsetsPartitions, enableMetadataExpiration = false)
     partition = mock(classOf[Partition])
   }
@@ -113,7 +115,7 @@ class GroupMetadataManagerTest {
   def testLogInfoFromCleanupGroupMetadata(): Unit = {
     var expiredOffsets: Int = 0
     var infoCount = 0
-    val gmm = new GroupMetadataManager(0, offsetConfig, replicaManager, time, metrics) {
+    val gmm = new GroupMetadataManager(0, MetadataVersion.latestTesting, offsetConfig, replicaManager, time, metrics) {
       override def cleanupGroupMetadata(groups: Iterable[GroupMetadata], requestLocal: RequestLocal,
                                         selector: GroupMetadata => Map[TopicPartition, OffsetAndMetadata]): Int = expiredOffsets
 
@@ -1057,20 +1059,22 @@ class GroupMetadataManagerTest {
   }
 
   @Test
-  def testCurrentStateTimestampForAllVersions(): Unit = {
+  def testCurrentStateTimestampForAllGroupMetadataVersions(): Unit = {
     val generation = 1
     val protocol = "range"
     val memberId = "memberId"
 
-    for (version <- 0 to 3) {
-      val groupMetadataRecord = buildStableGroupRecordWithMember(generation, protocolType, protocol, memberId,
-        groupMetadataValueVersion = version.toShort)
-      val deserializedGroupMetadata = GroupMetadataManager.readGroupMessageValue(groupId, groupMetadataRecord.value(), time)
+    for (metadataVersion <- MetadataVersion.VERSIONS) {
+      val groupMetadataRecord = buildStableGroupRecordWithMember(generation, protocolType, protocol, memberId, metadataVersion = metadataVersion)
 
-      if (version >= 2)
-        assertEquals(Some(time.milliseconds()), deserializedGroupMetadata.currentStateTimestamp)
+      val deserializedGroupMetadata = GroupMetadataManager.readGroupMessageValue(groupId, groupMetadataRecord.value(), time)
+      // GROUP_METADATA_VALUE_SCHEMA_V2 or higher should correctly set the currentStateTimestamp
+      if (metadataVersion.isAtLeast(IBP_2_1_IV0))
+        assertEquals(Some(time.milliseconds()), deserializedGroupMetadata.currentStateTimestamp,
+          s"the metadataVersion $metadataVersion doesn't set the currentStateTimestamp correctly.")
       else
-        assertTrue(deserializedGroupMetadata.currentStateTimestamp.isEmpty)
+        assertTrue(deserializedGroupMetadata.currentStateTimestamp.isEmpty,
+          s"the metadataVersion $metadataVersion should not set the currentStateTimestamp.")
     }
   }
 
@@ -1079,10 +1083,10 @@ class GroupMetadataManagerTest {
     val generation = 1
     val protocol = "range"
     val memberId = "memberId"
+    val oldMetadataVersions = Array(IBP_0_9_0, IBP_0_10_1_IV0, IBP_2_1_IV0)
 
-    for (version <- 0 to 2) {
-      val groupMetadataRecord = buildStableGroupRecordWithMember(generation, protocolType, protocol, memberId,
-        groupMetadataValueVersion = version.toShort)
+    for (metadataVersion <- oldMetadataVersions) {
+      val groupMetadataRecord = buildStableGroupRecordWithMember(generation, protocolType, protocol, memberId, metadataVersion = metadataVersion)
 
       val deserializedGroupMetadata = GroupMetadataManager.readGroupMessageValue(groupId, groupMetadataRecord.value(), time)
       assertEquals(groupId, deserializedGroupMetadata.groupId)
@@ -2473,11 +2477,10 @@ class GroupMetadataManagerTest {
       new TopicPartition("bar", 0) -> 8992L
     )
 
-    val offsetCommitValueVersion = 1.toShort
-    val groupMetadataValueVersion = 1.toShort
-    val offsetCommitRecords = createCommittedOffsetRecords(committedOffsets, offsetCommitValueVersion = offsetCommitValueVersion, retentionTimeOpt = Some(100))
+    val metadataVersion = IBP_1_1_IV0
+    val offsetCommitRecords = createCommittedOffsetRecords(committedOffsets, metadataVersion = metadataVersion, retentionTimeOpt = Some(100))
     val memberId = "98098230493"
-    val groupMetadataRecord = buildStableGroupRecordWithMember(generation, protocolType, protocol, memberId, groupMetadataValueVersion = groupMetadataValueVersion)
+    val groupMetadataRecord = buildStableGroupRecordWithMember(generation, protocolType, protocol, memberId, metadataVersion = metadataVersion)
     val records = MemoryRecords.withRecords(startOffset, Compression.NONE,
       (offsetCommitRecords ++ Seq(groupMetadataRecord)).toArray: _*)
 
@@ -2548,17 +2551,34 @@ class GroupMetadataManagerTest {
       time.milliseconds(),
       noExpiration)
 
-    val bytes = GroupMetadataManager.offsetCommitValue(offsetAndMetadata)
-    val buffer = ByteBuffer.wrap(bytes)
-    val expectedOffsetCommitValueVersion = 3
-    assertEquals(expectedOffsetCommitValueVersion, buffer.getShort(0).toInt)
-    val deserializedOffsetAndMetadata = GroupMetadataManager.readOffsetMessageValue(buffer)
-    assertEquals(offsetAndMetadata.committedOffset, deserializedOffsetAndMetadata.committedOffset)
-    assertEquals(offsetAndMetadata.metadata, deserializedOffsetAndMetadata.metadata)
-    assertEquals(offsetAndMetadata.commitTimestampMs, deserializedOffsetAndMetadata.commitTimestampMs)
-    val expectedLeaderEpoch = offsetAndMetadata.leaderEpoch
-    assertEquals(expectedLeaderEpoch, deserializedOffsetAndMetadata.leaderEpoch)
-    assertEquals(offsetAndMetadata, deserializedOffsetAndMetadata)
+    def verifySerde(metadataVersion: MetadataVersion, expectedOffsetCommitValueVersion: Int): Unit = {
+      val bytes = GroupMetadataManager.offsetCommitValue(offsetAndMetadata, metadataVersion)
+      val buffer = ByteBuffer.wrap(bytes)
+
+      assertEquals(expectedOffsetCommitValueVersion, buffer.getShort(0).toInt)
+
+      val deserializedOffsetAndMetadata = GroupMetadataManager.readOffsetMessageValue(buffer)
+      assertEquals(offsetAndMetadata.committedOffset, deserializedOffsetAndMetadata.committedOffset)
+      assertEquals(offsetAndMetadata.metadata, deserializedOffsetAndMetadata.metadata)
+      assertEquals(offsetAndMetadata.commitTimestampMs, deserializedOffsetAndMetadata.commitTimestampMs)
+
+      // Serialization drops the leader epoch silently if an older inter-broker protocol is in use
+      val expectedLeaderEpoch = if (expectedOffsetCommitValueVersion >= 3)
+        offsetAndMetadata.leaderEpoch
+      else
+        noLeader
+
+      assertEquals(expectedLeaderEpoch, deserializedOffsetAndMetadata.leaderEpoch)
+    }
+
+    for (version <- MetadataVersion.VERSIONS) {
+      val expectedSchemaVersion = version match {
+        case v if v.isLessThan(IBP_2_1_IV0) => 1
+        case v if v.isLessThan(IBP_2_1_IV1) => 2
+        case _ => 3
+      }
+      verifySerde(version, expectedSchemaVersion)
+    }
   }
 
   @Test
@@ -2573,12 +2593,45 @@ class GroupMetadataManagerTest {
       time.milliseconds(),
       OptionalLong.of(time.milliseconds() + 1000))
 
-    val bytes = GroupMetadataManager.offsetCommitValue(offsetAndMetadata)
-    val buffer = ByteBuffer.wrap(bytes)
-    assertEquals(1, buffer.getShort(0).toInt)
+    def verifySerde(metadataVersion: MetadataVersion): Unit = {
+      val bytes = GroupMetadataManager.offsetCommitValue(offsetAndMetadata, metadataVersion)
+      val buffer = ByteBuffer.wrap(bytes)
+      assertEquals(1, buffer.getShort(0).toInt)
 
-    val deserializedOffsetAndMetadata = GroupMetadataManager.readOffsetMessageValue(buffer)
-    assertEquals(offsetAndMetadata, deserializedOffsetAndMetadata)
+      val deserializedOffsetAndMetadata = GroupMetadataManager.readOffsetMessageValue(buffer)
+      assertEquals(offsetAndMetadata, deserializedOffsetAndMetadata)
+    }
+
+    for (version <- MetadataVersion.VERSIONS)
+      verifySerde(version)
+  }
+
+  @Test
+  def testSerdeOffsetCommitValueWithNoneExpireTimestamp(): Unit = {
+    val offsetAndMetadata = new OffsetAndMetadata(
+      537L,
+      noLeader,
+      "metadata",
+      time.milliseconds(),
+      noExpiration)
+
+    def verifySerde(metadataVersion: MetadataVersion): Unit = {
+      val bytes = GroupMetadataManager.offsetCommitValue(offsetAndMetadata, metadataVersion)
+      val buffer = ByteBuffer.wrap(bytes)
+      val version = buffer.getShort(0).toInt
+      if (metadataVersion.isLessThan(IBP_2_1_IV0))
+        assertEquals(1, version)
+      else if (metadataVersion.isLessThan(IBP_2_1_IV1))
+        assertEquals(2, version)
+      else
+        assertEquals(3, version)
+
+      val deserializedOffsetAndMetadata = GroupMetadataManager.readOffsetMessageValue(buffer)
+      assertEquals(offsetAndMetadata, deserializedOffsetAndMetadata)
+    }
+
+    for (version <- MetadataVersion.VERSIONS)
+      verifySerde(version)
   }
 
   @Test
@@ -2889,20 +2942,20 @@ class GroupMetadataManagerTest {
                                                protocol: String,
                                                memberId: String,
                                                assignmentBytes: Array[Byte] = Array.emptyByteArray,
-                                               groupMetadataValueVersion: Short = 3): SimpleRecord = {
+                                               metadataVersion: MetadataVersion = MetadataVersion.latestTesting): SimpleRecord = {
     val memberProtocols = List((protocol, Array.emptyByteArray))
     val member = new MemberMetadata(memberId, Some(groupInstanceId), "clientId", "clientHost", 30000, 10000, protocolType, memberProtocols)
     val group = GroupMetadata.loadGroup(groupId, Stable, generation, protocolType, protocol, memberId,
-      if (groupMetadataValueVersion >= 2.toShort) Some(time.milliseconds()) else None, Seq(member), time)
+      if (metadataVersion.isAtLeast(IBP_2_1_IV0)) Some(time.milliseconds()) else None, Seq(member), time)
     val groupMetadataKey = GroupMetadataManager.groupMetadataKey(groupId)
-    val groupMetadataValue = GroupMetadataManager.groupMetadataValue(group, Map(memberId -> assignmentBytes), groupMetadataValueVersion)
+    val groupMetadataValue = GroupMetadataManager.groupMetadataValue(group, Map(memberId -> assignmentBytes), metadataVersion)
     new SimpleRecord(groupMetadataKey, groupMetadataValue)
   }
 
   private def buildEmptyGroupRecord(generation: Int, protocolType: String): SimpleRecord = {
     val group = GroupMetadata.loadGroup(groupId, Empty, generation, protocolType, null, null, None, Seq.empty, time)
     val groupMetadataKey = GroupMetadataManager.groupMetadataKey(groupId)
-    val groupMetadataValue = GroupMetadataManager.groupMetadataValue(group, Map.empty)
+    val groupMetadataValue = GroupMetadataManager.groupMetadataValue(group, Map.empty, MetadataVersion.latestTesting)
     new SimpleRecord(groupMetadataKey, groupMetadataValue)
   }
 
@@ -2946,7 +2999,7 @@ class GroupMetadataManagerTest {
 
   private def createCommittedOffsetRecords(committedOffsets: Map[TopicPartition, Long],
                                            groupId: String = groupId,
-                                           offsetCommitValueVersion: Short = 3,
+                                           metadataVersion: MetadataVersion = MetadataVersion.latestTesting,
                                            retentionTimeOpt: Option[Long] = None): Seq[SimpleRecord] = {
     committedOffsets.map { case (topicPartition, offset) =>
       val commitTimestamp = time.milliseconds()
@@ -2958,7 +3011,7 @@ class GroupMetadataManagerTest {
           new OffsetAndMetadata(offset, noLeader, "", commitTimestamp, noExpiration)
       }
       val offsetCommitKey = GroupMetadataManager.offsetCommitKey(groupId, topicPartition)
-      val offsetCommitValue = GroupMetadataManager.offsetCommitValue(offsetAndMetadata, offsetCommitValueVersion)
+      val offsetCommitValue = GroupMetadataManager.offsetCommitValue(offsetAndMetadata, metadataVersion)
       new SimpleRecord(offsetCommitKey, offsetCommitValue)
     }.toSeq
   }

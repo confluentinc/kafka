@@ -75,7 +75,7 @@ class PlaintextEndToEndAuthorizationTest extends EndToEndAuthorizationTest {
 
   @BeforeEach
   override def setUp(testInfo: TestInfo): Unit = {
-    startSasl(jaasSections(List.empty, None))
+    startSasl(jaasSections(List.empty, None, KafkaSasl))
     super.setUp(testInfo)
   }
 

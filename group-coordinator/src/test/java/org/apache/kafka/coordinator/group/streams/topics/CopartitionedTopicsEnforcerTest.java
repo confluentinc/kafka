@@ -48,18 +48,19 @@ public class CopartitionedTopicsEnforcerTest {
     }
 
     @Test
-    public void shouldThrowIllegalStateExceptionIfNoPartitionsFoundForCoPartitionedTopic() {
+    public void shouldThrowTopicConfigurationExceptionIfNoPartitionsFoundForCoPartitionedTopic() {
         final Map<String, Integer> topicPartitionCounts = Collections.emptyMap();
         final CopartitionedTopicsEnforcer enforcer =
             new CopartitionedTopicsEnforcer(LOG_CONTEXT, topicPartitionProvider(topicPartitionCounts));
 
-        final IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+        final TopicConfigurationException ex = assertThrows(TopicConfigurationException.class, () ->
             enforcer.enforce(
                 Set.of(SOURCE_TOPIC_1),
                 Set.of(),
                 Set.of()
             ));
-        assertEquals(String.format("Number of partitions is not set for topic: %s", SOURCE_TOPIC_1), ex.getMessage());
+        assertEquals(Status.MISSING_SOURCE_TOPICS, ex.status());
+        assertEquals(String.format("Following topics are missing: [%s]", SOURCE_TOPIC_1), ex.getMessage());
     }
 
     @Test

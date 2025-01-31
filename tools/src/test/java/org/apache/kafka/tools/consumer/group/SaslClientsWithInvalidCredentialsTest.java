@@ -17,6 +17,7 @@
 package org.apache.kafka.tools.consumer.group;
 
 import kafka.api.AbstractSaslTest;
+import kafka.api.Both$;
 import kafka.security.JaasTestUtils;
 
 import org.apache.kafka.clients.admin.Admin;
@@ -112,8 +113,7 @@ public class SaslClientsWithInvalidCredentialsTest extends AbstractSaslTest {
     @BeforeEach
     @Override
     public void setUp(TestInfo testInfo) {
-        startSasl(jaasSections(KAFKA_SERVER_SASL_MECHANISMS,
-            Some$.MODULE$.apply(KAFKA_CLIENT_SASL_MECHANISM),
+        startSasl(jaasSections(KAFKA_SERVER_SASL_MECHANISMS, Some$.MODULE$.apply(KAFKA_CLIENT_SASL_MECHANISM), Both$.MODULE$,
             JaasTestUtils.KAFKA_SERVER_CONTEXT_NAME));
         String superuserLoginContext = jaasAdminLoginModule(KAFKA_CLIENT_SASL_MECHANISM, Option.empty());
         this.superuserClientConfig().put(SaslConfigs.SASL_JAAS_CONFIG, superuserLoginContext);

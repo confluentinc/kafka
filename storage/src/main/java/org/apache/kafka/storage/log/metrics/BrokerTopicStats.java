@@ -263,9 +263,4 @@ public class BrokerTopicStats implements AutoCloseable {
     public BrokerTopicMetrics allTopicsStats() {
         return allTopicsStats;
     }
-
-    // Visible for testing, should only be required for testing.
-    public int numTopics() {
-        return stats.size();
-    }
 }

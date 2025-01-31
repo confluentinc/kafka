@@ -56,6 +56,8 @@ public class ChannelBuilders {
      * @param listenerName the listenerName if contextType is SERVER or null otherwise
      * @param clientSaslMechanism SASL mechanism if mode is CLIENT, ignored otherwise
      * @param time the time instance
+     * @param saslHandshakeRequestEnable flag to enable Sasl handshake requests; disabled only for SASL
+     *             inter-broker connections with inter-broker protocol version < 0.10
      * @param logContext the log context instance
      *
      * @return the configured `ChannelBuilder`
@@ -68,6 +70,7 @@ public class ChannelBuilders {
             ListenerName listenerName,
             String clientSaslMechanism,
             Time time,
+            boolean saslHandshakeRequestEnable,
             LogContext logContext) {
 
         if (securityProtocol == SecurityProtocol.SASL_PLAINTEXT || securityProtocol == SecurityProtocol.SASL_SSL) {
@@ -77,7 +80,7 @@ public class ChannelBuilders {
                 throw new IllegalArgumentException("`clientSaslMechanism` must be non-null in client mode if `securityProtocol` is `" + securityProtocol + "`");
         }
         return create(securityProtocol, ConnectionMode.CLIENT, contextType, config, listenerName, false, clientSaslMechanism,
-            null, null, time, logContext, null);
+                saslHandshakeRequestEnable, null, null, time, logContext, null);
     }
 
     /**
@@ -103,8 +106,8 @@ public class ChannelBuilders {
                                                       LogContext logContext,
                                                       Function<Short, ApiVersionsResponse> apiVersionSupplier) {
         return create(securityProtocol, ConnectionMode.SERVER, JaasContext.Type.SERVER, config, listenerName,
-                isInterBrokerListener, null, credentialCache, tokenCache, time, logContext,
-                apiVersionSupplier);
+                isInterBrokerListener, null, true, credentialCache,
+                tokenCache, time, logContext, apiVersionSupplier);
     }
 
     private static ChannelBuilder create(SecurityProtocol securityProtocol,
@@ -114,6 +117,7 @@ public class ChannelBuilders {
                                          ListenerName listenerName,
                                          boolean isInterBrokerListener,
                                          String clientSaslMechanism,
+                                         boolean saslHandshakeRequestEnable,
                                          CredentialCache credentialCache,
                                          DelegationTokenCache tokenCache,
                                          Time time,
@@ -171,6 +175,7 @@ public class ChannelBuilders {
                         listenerName,
                         isInterBrokerListener,
                         clientSaslMechanism,
+                        saslHandshakeRequestEnable,
                         credentialCache,
                         tokenCache,
                         sslClientAuthOverride,

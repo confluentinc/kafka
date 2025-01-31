@@ -125,16 +125,10 @@ public abstract class AbstractJoinIntegrationTest {
     final ValueJoiner<String, String, String> valueJoiner = (value1, value2) -> value1 + "-" + value2;
 
     Properties setupConfigsAndUtils(final boolean cacheEnabled) {
-        return setupConfigsAndUtils(cacheEnabled, true);
-    }
-
-    Properties setupConfigsAndUtils(final boolean cacheEnabled, final boolean setSerdes) {
         final Properties streamsConfig = new Properties();
         streamsConfig.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        if (setSerdes) {
-            streamsConfig.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.LongSerde.class);
-            streamsConfig.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.StringSerde.class);
-        }
+        streamsConfig.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.Long().getClass());
+        streamsConfig.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
         streamsConfig.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, COMMIT_INTERVAL);
         if (!cacheEnabled) {
             streamsConfig.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0);
@@ -266,13 +260,16 @@ public abstract class AbstractJoinIntegrationTest {
     private void checkQueryableStore(final String queryableName, final TestRecord<Long, String> expectedFinalResult, final TopologyTestDriver driver) {
         final ReadOnlyKeyValueStore<Long, ValueAndTimestamp<String>> store = driver.getTimestampedKeyValueStore(queryableName);
 
-        try (final KeyValueIterator<Long, ValueAndTimestamp<String>> all = store.all()) {
-            final KeyValue<Long, ValueAndTimestamp<String>> onlyEntry = all.next();
+        final KeyValueIterator<Long, ValueAndTimestamp<String>> all = store.all();
+        final KeyValue<Long, ValueAndTimestamp<String>> onlyEntry = all.next();
 
+        try {
             assertThat(onlyEntry.key, is(expectedFinalResult.key()));
             assertThat(onlyEntry.value.value(), is(expectedFinalResult.value()));
             assertThat(onlyEntry.value.timestamp(), is(expectedFinalResult.timestamp()));
             assertThat(all.hasNext(), is(false));
+        } finally {
+            all.close();
         }
     }
 

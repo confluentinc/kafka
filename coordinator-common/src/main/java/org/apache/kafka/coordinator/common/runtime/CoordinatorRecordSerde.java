@@ -44,7 +44,8 @@ public abstract class CoordinatorRecordSerde implements Serializer<CoordinatorRe
     public byte[] serializeKey(CoordinatorRecord record) {
         // Record does not accept a null key.
         return MessageUtil.toCoordinatorTypePrefixedBytes(
-            record.key()
+            record.key().version(),
+            record.key().message()
         );
     }
 
@@ -71,15 +72,15 @@ public abstract class CoordinatorRecordSerde implements Serializer<CoordinatorRe
         readMessage(keyMessage, keyBuffer, recordType, "key");
 
         if (valueBuffer == null) {
-            return CoordinatorRecord.tombstone(keyMessage);
+            return new CoordinatorRecord(new ApiMessageAndVersion(keyMessage, recordType), null);
         }
 
         final ApiMessage valueMessage = apiMessageValueFor(recordType);
         final short valueVersion = readVersion(valueBuffer, "value");
         readMessage(valueMessage, valueBuffer, valueVersion, "value");
 
-        return CoordinatorRecord.record(
-            keyMessage,
+        return new CoordinatorRecord(
+            new ApiMessageAndVersion(keyMessage, recordType),
             new ApiMessageAndVersion(valueMessage, valueVersion)
         );
     }
@@ -114,8 +115,8 @@ public abstract class CoordinatorRecordSerde implements Serializer<CoordinatorRe
      * Concrete child class must provide implementation which returns appropriate
      * type of {@link ApiMessage} objects representing the value.
      *
-     * @param recordType - short representing type
+     * @param recordVersion - short representing version
      * @return ApiMessage object
      */
-    protected abstract ApiMessage apiMessageValueFor(short recordType);
+    protected abstract ApiMessage apiMessageValueFor(short recordVersion);
 }

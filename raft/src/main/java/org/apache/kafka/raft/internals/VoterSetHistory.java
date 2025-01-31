@@ -16,10 +16,7 @@
  */
 package org.apache.kafka.raft.internals;
 
-import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.raft.VoterSet;
-
-import org.slf4j.Logger;
 
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -34,11 +31,9 @@ import java.util.OptionalLong;
 public final class VoterSetHistory {
     private final VoterSet staticVoterSet;
     private final LogHistory<VoterSet> votersHistory = new TreeMapLogHistory<>();
-    private final Logger logger;
 
-    VoterSetHistory(VoterSet staticVoterSet, LogContext logContext) {
+    VoterSetHistory(VoterSet staticVoterSet) {
         this.staticVoterSet = staticVoterSet;
-        this.logger = logContext.logger(getClass());
     }
 
     /**
@@ -60,10 +55,12 @@ public final class VoterSetHistory {
             // all replicas.
             VoterSet lastVoterSet = lastEntry.get().value();
             if (!lastVoterSet.hasOverlappingMajority(voters)) {
-                logger.info(
-                    "Last voter set ({}) doesn't have an overlapping majority with the new voter set ({})",
-                    lastVoterSet,
-                    voters
+                throw new IllegalArgumentException(
+                    String.format(
+                        "Last voter set %s doesn't have an overlapping majority with the new voter set %s",
+                        lastVoterSet,
+                        voters
+                    )
                 );
             }
         }

@@ -23,7 +23,7 @@ import kafka.utils.TestUtils
 import kafka.utils.TestUtils.MockAlterPartitionManager
 import org.apache.kafka.common.{TopicPartition, Uuid}
 import org.apache.kafka.common.config.TopicConfig
-import org.apache.kafka.common.requests.LeaderAndIsrRequest
+import org.apache.kafka.common.message.LeaderAndIsrRequestData.LeaderAndIsrPartitionState
 import org.apache.kafka.common.utils.Utils
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.config.ReplicationConfigs
@@ -84,6 +84,7 @@ class AbstractPartitionTest {
     alterPartitionListener = createIsrChangeListener()
     partition = new Partition(topicPartition,
       replicaLagTimeMaxMs = ReplicationConfigs.REPLICA_LAG_TIME_MAX_MS_DEFAULT,
+      interBrokerProtocolVersion = interBrokerProtocolVersion,
       localBrokerId = brokerId,
       () => defaultBrokerEpoch(brokerId),
       time,
@@ -126,7 +127,7 @@ class AbstractPartitionTest {
     val isr = replicas
 
     if (isLeader) {
-      assertTrue(partition.makeLeader(new LeaderAndIsrRequest.PartitionState()
+      assertTrue(partition.makeLeader(new LeaderAndIsrPartitionState()
         .setControllerEpoch(controllerEpoch)
         .setLeader(brokerId)
         .setLeaderEpoch(leaderEpoch)
@@ -136,7 +137,7 @@ class AbstractPartitionTest {
         .setIsNew(true), offsetCheckpoints, None), "Expected become leader transition to succeed")
       assertEquals(leaderEpoch, partition.getLeaderEpoch)
     } else {
-      assertTrue(partition.makeFollower(new LeaderAndIsrRequest.PartitionState()
+      assertTrue(partition.makeFollower(new LeaderAndIsrPartitionState()
         .setControllerEpoch(controllerEpoch)
         .setLeader(remoteReplicaId)
         .setLeaderEpoch(leaderEpoch)

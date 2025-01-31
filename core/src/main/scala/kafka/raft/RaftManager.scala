@@ -243,6 +243,7 @@ class KafkaRaftManager[T](
       controllerListenerName,
       config.saslMechanismControllerProtocol,
       time,
+      config.saslInterBrokerHandshakeRequestEnable,
       logContext
     )
 

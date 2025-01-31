@@ -21,12 +21,15 @@ import kafka.security.JaasTestUtils
 import kafka.security.JaasTestUtils.JaasSection
 import kafka.security.minikdc.MiniKdc
 import kafka.utils.TestUtils
+import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.admin.{Admin, AdminClientConfig, ScramCredentialInfo, UserScramCredentialUpsertion, ScramMechanism => PublicScramMechanism}
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs
 import org.apache.kafka.common.security.JaasUtils
 import org.apache.kafka.common.security.auth.SecurityProtocol
 import org.apache.kafka.common.security.authenticator.LoginManager
+import org.apache.kafka.common.security.scram.internals.{ScramCredentialUtils, ScramFormatter, ScramMechanism}
+import org.apache.kafka.server.config.ConfigType
 
 import java.io.File
 import java.util
@@ -36,6 +39,16 @@ import scala.collection.Seq
 import scala.jdk.CollectionConverters._
 import scala.jdk.OptionConverters._
 import scala.jdk.javaapi.OptionConverters
+import scala.util.Using
+
+/*
+ * Implements an enumeration for the modes enabled here:
+ * zk only, kafka only, both, custom KafkaServer.
+ */
+sealed trait SaslSetupMode
+case object ZkSasl extends SaslSetupMode
+case object KafkaSasl extends SaslSetupMode
+case object Both extends SaslSetupMode
 
 /*
  * Trait used in SaslTestHarness and EndToEndAuthorizationTest to setup keytab and jaas files.
@@ -58,6 +71,11 @@ trait SaslSetup {
     }
 
     writeJaasConfigurationToFile(jaasSections)
+
+    val hasZk = jaasSections.exists(_.getModules.asScala.exists(_.name() == "org.apache.zookeeper.server.auth.DigestLoginModule"))
+
+    if (hasZk)
+      System.setProperty("zookeeper.authProvider.1", "org.apache.zookeeper.server.auth.SASLAuthenticationProvider")
   }
 
   protected def initializeKerberos(): Unit = {
@@ -79,13 +97,21 @@ trait SaslSetup {
   }
 
   def jaasSections(kafkaServerSaslMechanisms: Seq[String],
-                   kafkaClientSaslMechanism: Option[String],
-                   kafkaServerEntryName: String = JaasTestUtils.KAFKA_SERVER_CONTEXT_NAME): Seq[JaasSection] = {
-    val hasKerberos = kafkaServerSaslMechanisms.contains("GSSAPI") || kafkaClientSaslMechanism.contains("GSSAPI")
+                             kafkaClientSaslMechanism: Option[String],
+                             mode: SaslSetupMode = Both,
+                             kafkaServerEntryName: String = JaasTestUtils.KAFKA_SERVER_CONTEXT_NAME): Seq[JaasSection] = {
+    val hasKerberos = mode != ZkSasl &&
+      (kafkaServerSaslMechanisms.contains("GSSAPI") || kafkaClientSaslMechanism.contains("GSSAPI"))
     if (hasKerberos)
       maybeCreateEmptyKeytabFiles()
-    Seq(JaasTestUtils.kafkaServerSection(kafkaServerEntryName, kafkaServerSaslMechanisms.asJava, serverKeytabFile.toJava),
-      JaasTestUtils.kafkaClientSection(kafkaClientSaslMechanism.toJava, clientKeytabFile.toJava))
+    mode match {
+      case ZkSasl => JaasTestUtils.zkSections.asScala
+      case KafkaSasl =>
+        Seq(JaasTestUtils.kafkaServerSection(kafkaServerEntryName, kafkaServerSaslMechanisms.asJava, serverKeytabFile.toJava),
+          JaasTestUtils.kafkaClientSection(kafkaClientSaslMechanism.toJava, clientKeytabFile.toJava))
+      case Both => Seq(JaasTestUtils.kafkaServerSection(kafkaServerEntryName, kafkaServerSaslMechanisms.asJava, serverKeytabFile.toJava),
+        JaasTestUtils.kafkaClientSection(kafkaClientSaslMechanism.toJava, clientKeytabFile.toJava)) ++ JaasTestUtils.zkSections.asScala
+    }
   }
 
   private def writeJaasConfigurationToFile(jaasSections: Seq[JaasSection]): Unit = {
@@ -101,6 +127,7 @@ trait SaslSetup {
     // Important if tests leak consumers, producers or brokers
     LoginManager.closeAll()
     System.clearProperty(JaasUtils.JAVA_LOGIN_CONFIG_PARAM)
+    System.clearProperty("zookeeper.authProvider.1")
     Configuration.setConfiguration(null)
   }
 
@@ -171,4 +198,23 @@ trait SaslSetup {
       results.all.get
     })
   }
+
+  def createScramCredentials(zkConnect: String, userName: String, password: String): Unit = {
+    Using.resource(new KafkaZkClient()) { zkClient =>
+      val adminZkClient = new AdminZkClient(zkClient)
+
+      val entityType = ConfigType.USER
+      val entityName = userName
+      val configs = adminZkClient.fetchEntityConfig(entityType, entityName)
+
+      ScramMechanism.values().foreach(mechanism => {
+        val credential = new ScramFormatter(mechanism).generateCredential(password, 4096)
+        val credentialString = ScramCredentialUtils.credentialToString(credential)
+        configs.setProperty(mechanism.mechanismName, credentialString)
+      })
+
+      adminZkClient.changeConfigs(entityType, entityName, configs)
+    }
+  }
+
 }

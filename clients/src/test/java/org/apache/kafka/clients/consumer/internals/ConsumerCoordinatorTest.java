@@ -76,7 +76,6 @@ import org.apache.kafka.common.requests.OffsetFetchResponse.PartitionData;
 import org.apache.kafka.common.requests.RequestTestUtils;
 import org.apache.kafka.common.requests.SyncGroupRequest;
 import org.apache.kafka.common.requests.SyncGroupResponse;
-import org.apache.kafka.common.test.api.Flaky;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
@@ -1010,8 +1009,6 @@ public abstract class ConsumerCoordinatorTest {
         assertEquals(getAdded(owned, assigned), rebalanceListener.assigned);
     }
 
-
-    @Flaky("KAFKA-15900")
     @Test
     public void testOutdatedCoordinatorAssignment() {
         final String consumerId = "outdated_assignment";

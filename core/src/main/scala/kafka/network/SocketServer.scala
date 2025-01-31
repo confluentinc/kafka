@@ -803,9 +803,9 @@ private[kafka] object Processor {
     if (apiVersionManager.isApiEnabled(header.apiKey, header.apiVersion)) {
       header
     } else if (header.isApiVersionSupported()) {
-      throw new InvalidRequestException(s"Received request for disabled api with key ${header.apiKey.id} (${header.apiKey().name}) and version ${header.apiVersion}")
+      throw new InvalidRequestException(s"Received request api key ${header.apiKey} with version ${header.apiVersion} which is not enabled")
     } else {
-      throw new UnsupportedVersionException(s"Received request for api with key ${header.apiKey.id} (${header.apiKey().name}) and unsupported version ${header.apiVersion}")
+      throw new UnsupportedVersionException(s"Received request api key ${header.apiKey} with version ${header.apiVersion} which is not supported")
     }
   }
 }

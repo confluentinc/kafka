@@ -1281,35 +1281,7 @@ public class StreamsMetricsImplTest {
         final MetricName name = metrics.metricName(
             "foobar",
             THREAD_LEVEL_GROUP,
-            mkMap(
-                mkEntry("thread-id", "t1")
-            )
-        );
-        assertThat(metrics.metric(name), notNullValue());
-        assertThat(metrics.metric(name).metricValue(), equalTo(measuredValue));
-    }
-
-    @Test
-    public void shouldAddThreadLevelMutableMetricWithAdditionalTags() {
-        final int measuredValue = 123;
-        final StreamsMetricsImpl streamsMetrics
-            = new StreamsMetricsImpl(metrics, THREAD_ID1, PROCESS_ID, time);
-
-        streamsMetrics.addThreadLevelMutableMetric(
-            "foobar",
-            "test metric",
-            "t1",
-            Collections.singletonMap("additional-tag", "additional-value"),
-            (c, t) -> measuredValue
-        );
-
-        final MetricName name = metrics.metricName(
-            "foobar",
-            THREAD_LEVEL_GROUP,
-            mkMap(
-                mkEntry("thread-id", "t1"),
-                mkEntry("additional-tag", "additional-value")
-            )
+            Collections.singletonMap("thread-id", "t1")
         );
         assertThat(metrics.metric(name), notNullValue());
         assertThat(metrics.metric(name).metricValue(), equalTo(measuredValue));
@@ -1353,9 +1325,7 @@ public class StreamsMetricsImplTest {
         final MetricName name = metrics.metricName(
             "foobar",
             THREAD_LEVEL_GROUP,
-            mkMap(
-                mkEntry("thread-id", "t1")
-            )
+            Collections.singletonMap("thread-id", "t1")
         );
         assertThat(metrics.metric(name), notNullValue());
         assertThat(metrics.metric(name).metricValue(), equalTo(measuredValue));

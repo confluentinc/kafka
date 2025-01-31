@@ -85,8 +85,7 @@ public class TestPlugins {
         SAMPLING_CONVERTER("sampling-converter"),
         SAMPLING_HEADER_CONVERTER("sampling-header-converter"),
         SERVICE_LOADER("service-loader"),
-        SUBCLASS_OF_CLASSPATH("subclass-of-classpath"),
-        CLASSPATH_CONVERTER("classpath-converter");
+        SUBCLASS_OF_CLASSPATH("subclass-of-classpath");
 
         private final String resourceDir;
         private final Predicate<String> removeRuntimeClasses;
@@ -252,11 +251,7 @@ public class TestPlugins {
         /**
          * A ServiceLoader discovered plugin which subclasses another plugin which is present on the classpath
          */
-        SUBCLASS_OF_CLASSPATH_OVERRIDE_POLICY(TestPackage.SUBCLASS_OF_CLASSPATH, "test.plugins.SubclassOfClasspathOverridePolicy"),
-        /**
-         * A plugin which is part of the classpath by default. This packages it as a separate jar which is used to test plugin isolation from the classpath plugin.
-         */
-        CLASSPATH_CONVERTER(TestPackage.CLASSPATH_CONVERTER, "org.apache.kafka.connect.converters.ByteArrayConverter", false);
+        SUBCLASS_OF_CLASSPATH_OVERRIDE_POLICY(TestPackage.SUBCLASS_OF_CLASSPATH, "test.plugins.SubclassOfClasspathOverridePolicy");
 
         private final TestPackage testPackage;
         private final String className;

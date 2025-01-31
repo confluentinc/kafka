@@ -578,7 +578,6 @@ public final class OffsetsRequestManager implements RequestManager, ClusterResou
                     listOffsetsRequestState.globalResult.complete(listOffsetResult);
                 } else {
                     requestsToRetry.add(listOffsetsRequestState);
-                    metadata.requestUpdate(false);
                 }
             } else {
                 log.debug("ListOffsets request failed with error", error);

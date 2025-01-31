@@ -497,7 +497,6 @@ public class StreamThread extends Thread implements ProcessingThread {
             stateUpdater,
             streamsMetrics,
             topologyMetadata,
-            processId,
             threadId,
             logContext,
             referenceContainer.assignmentErrorCode,
@@ -575,7 +574,6 @@ public class StreamThread extends Thread implements ProcessingThread {
                         final StateUpdater stateUpdater,
                         final StreamsMetricsImpl streamsMetrics,
                         final TopologyMetadata topologyMetadata,
-                        final UUID processId,
                         final String threadId,
                         final LogContext logContext,
                         final AtomicInteger assignmentErrorCode,
@@ -620,7 +618,6 @@ public class StreamThread extends Thread implements ProcessingThread {
             time.milliseconds()
         );
         ThreadMetrics.addThreadStateTelemetryMetric(
-            processId.toString(),
             threadId,
             streamsMetrics,
             (metricConfig, now) -> this.state().ordinal());

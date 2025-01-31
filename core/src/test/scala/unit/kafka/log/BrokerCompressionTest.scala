@@ -69,7 +69,8 @@ class BrokerCompressionTest {
       producerStateManagerConfig = new ProducerStateManagerConfig(TransactionLogConfig.PRODUCER_ID_EXPIRATION_MS_DEFAULT, false),
       producerIdExpirationCheckIntervalMs = TransactionLogConfig.PRODUCER_ID_EXPIRATION_CHECK_INTERVAL_MS_DEFAULT,
       logDirFailureChannel = new LogDirFailureChannel(10),
-      topicId = None
+      topicId = None,
+      keepPartitionMetadataFile = true
     )
 
     /* append two messages */

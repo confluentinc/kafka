@@ -32,6 +32,7 @@ import org.apache.kafka.common.utils.Exit;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.coordinator.transaction.TransactionLogConfig;
+import org.apache.kafka.server.common.MetadataVersion;
 import org.apache.kafka.server.common.RequestLocal;
 import org.apache.kafka.server.util.CommandLineUtils;
 import org.apache.kafka.server.util.KafkaScheduler;
@@ -314,6 +315,7 @@ public class TestLinearWriteSpeed {
                 new LogDirFailureChannel(10),
                 true,
                 Option.empty(),
+                true,
                 new CopyOnWriteMap<>(),
                 false,
                 LogOffsetsListener.NO_OP_OFFSETS_LISTENER
@@ -325,6 +327,7 @@ public class TestLinearWriteSpeed {
                 messages,
                 0,
                 AppendOrigin.CLIENT,
+                MetadataVersion.latestProduction(),
                 RequestLocal.noCaching(),
                 VerificationGuard.SENTINEL
             );

@@ -164,7 +164,7 @@ class SchedulerTest {
       localLog = localLog,
       brokerTopicStats, producerIdExpirationCheckIntervalMs,
       leaderEpochCache, producerStateManager,
-      _topicId = None)
+      _topicId = None, keepPartitionMetadataFile = true)
     assertTrue(scheduler.taskRunning(log.producerExpireCheck))
     log.close()
     assertFalse(scheduler.taskRunning(log.producerExpireCheck))

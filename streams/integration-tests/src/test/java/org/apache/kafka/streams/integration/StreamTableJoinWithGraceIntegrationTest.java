@@ -19,12 +19,10 @@ package org.apache.kafka.streams.integration;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Joined;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
-import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.state.Stores;
 import org.apache.kafka.streams.test.TestRecord;
 
@@ -54,13 +52,13 @@ public class StreamTableJoinWithGraceIntegrationTest extends AbstractJoinIntegra
     @ValueSource(booleans = {true, false})
     public void testInnerWithVersionedStore(final boolean cacheEnabled) {
         final StreamsBuilder builder = new StreamsBuilder();
-        final KStream<Long, String> leftStream = builder.stream(INPUT_TOPIC_LEFT, Consumed.with(Serdes.Long(), Serdes.String()));
-        final KTable<Long, String> rightTable = builder.table(INPUT_TOPIC_RIGHT, Consumed.with(Serdes.Long(), Serdes.String()), Materialized.as(
+        final KStream<Long, String> leftStream = builder.stream(INPUT_TOPIC_LEFT);
+        final KTable<Long, String> rightTable = builder.table(INPUT_TOPIC_RIGHT, Materialized.as(
                 Stores.persistentVersionedKeyValueStore(STORE_NAME, Duration.ofMinutes(5))));
-        final Properties streamsConfig = setupConfigsAndUtils(cacheEnabled, false);
+        final Properties streamsConfig = setupConfigsAndUtils(cacheEnabled);
         streamsConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID + "-inner");
 
-        leftStream.join(rightTable, valueJoiner, JOINED).to(OUTPUT_TOPIC, Produced.with(Serdes.Long(), Serdes.String()));
+        leftStream.join(rightTable, valueJoiner, JOINED).to(OUTPUT_TOPIC);
 
         final List<List<TestRecord<Long, String>>> expectedResult = Arrays.asList(
             null,
@@ -98,7 +96,7 @@ public class StreamTableJoinWithGraceIntegrationTest extends AbstractJoinIntegra
         final KStream<Long, String> leftStream = builder.stream(INPUT_TOPIC_LEFT);
         final KTable<Long, String> rightTable = builder.table(INPUT_TOPIC_RIGHT, Materialized.as(
                 Stores.persistentVersionedKeyValueStore(STORE_NAME, Duration.ofMinutes(5))));
-        final Properties streamsConfig = setupConfigsAndUtils(cacheEnabled, true);
+        final Properties streamsConfig = setupConfigsAndUtils(cacheEnabled);
         streamsConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID + "-left");
         leftStream.leftJoin(rightTable, valueJoiner, JOINED).to(OUTPUT_TOPIC);
 

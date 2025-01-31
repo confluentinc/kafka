@@ -401,7 +401,7 @@ public class SaslServerAuthenticatorTest {
         Map<String, AuthenticateCallbackHandler> callbackHandlers = Collections.singletonMap(
                 mechanism, new SaslServerCallbackHandler());
         ApiVersionsResponse apiVersionsResponse = TestUtils.defaultApiVersionsResponse(
-                ApiMessageType.ListenerType.BROKER);
+                ApiMessageType.ListenerType.ZK_BROKER);
         Map<String, Long> connectionsMaxReauthMsByMechanism = maxReauth != null ?
                 Collections.singletonMap(mechanism, maxReauth) : Collections.emptyMap();
 

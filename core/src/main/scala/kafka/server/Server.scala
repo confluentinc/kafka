@@ -33,6 +33,7 @@ trait Server {
 object Server {
   val MetricsPrefix: String = "kafka.server"
   val ClusterIdLabel: String = "kafka.cluster.id"
+  val BrokerIdLabel: String = "kafka.broker.id"
   val NodeIdLabel: String = "kafka.node.id"
 
   def initializeMetrics(
@@ -68,7 +69,13 @@ object Server {
   ): KafkaMetricsContext = {
     val contextLabels = new java.util.HashMap[String, Object]
     contextLabels.put(ClusterIdLabel, clusterId)
-    contextLabels.put(NodeIdLabel, config.nodeId.toString)
+
+    if (config.usesSelfManagedQuorum) {
+      contextLabels.put(NodeIdLabel, config.nodeId.toString)
+    } else {
+      contextLabels.put(BrokerIdLabel, config.brokerId.toString)
+    }
+
     contextLabels.putAll(config.originalsWithPrefix(CommonClientConfigs.METRICS_CONTEXT_PREFIX))
     new KafkaMetricsContext(MetricsPrefix, contextLabels)
   }

@@ -16,10 +16,11 @@
  */
 package org.apache.kafka.server.config;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
- * Represents all the entities that can be configured.
+ * Represents all the entities that can be configured via ZK
  */
 public class ConfigType {
     public static final String TOPIC = "topics";
@@ -30,5 +31,6 @@ public class ConfigType {
     public static final String CLIENT_METRICS = "client-metrics";
     public static final String GROUP = "groups";
 
-    public static final List<String> ALL = List.of(TOPIC, CLIENT, USER, BROKER, IP, CLIENT_METRICS, GROUP);
+    // Do not include ClientMetrics and Groups in `all` as they are not supported on ZK.
+    public static final List<String> ALL = Arrays.asList(TOPIC, CLIENT, USER, BROKER, IP);
 }

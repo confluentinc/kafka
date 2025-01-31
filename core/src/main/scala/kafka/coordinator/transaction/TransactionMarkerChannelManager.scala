@@ -62,6 +62,7 @@ object TransactionMarkerChannelManager {
       config.interBrokerListenerName,
       config.saslMechanismInterBrokerProtocol,
       time,
+      config.saslInterBrokerHandshakeRequestEnable,
       logContext
     )
     channelBuilder match {
@@ -255,7 +256,9 @@ class TransactionMarkerChannelManager(
     }.filter { case (_, entries) => !entries.isEmpty }.map { case (node, entries) =>
       val markersToSend = entries.asScala.map(_.txnMarkerEntry).asJava
       val requestCompletionHandler = new TransactionMarkerRequestCompletionHandler(node.id, txnStateManager, this, entries)
-      val request = new WriteTxnMarkersRequest.Builder(markersToSend)
+      val request = new WriteTxnMarkersRequest.Builder(
+        metadataCache.metadataVersion().writeTxnMarkersRequestVersion(), markersToSend
+      )
 
       new RequestAndCompletionHandler(
         currentTimeMs,

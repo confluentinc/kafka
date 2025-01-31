@@ -24,11 +24,14 @@ import org.apache.kafka.common.message.ApiMessageType;
 import org.apache.kafka.common.message.ApiVersionsResponseData.ApiVersion;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.requests.ApiVersionsResponse;
-import org.apache.kafka.common.test.ClusterInstance;
 import org.apache.kafka.common.test.api.ClusterConfigProperty;
+import org.apache.kafka.common.test.api.ClusterInstance;
 import org.apache.kafka.common.test.api.ClusterTest;
 import org.apache.kafka.common.test.api.ClusterTestDefaults;
+import org.apache.kafka.common.test.api.ClusterTestExtensions;
 import org.apache.kafka.server.config.ServerConfigs;
+
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -40,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@ExtendWith(ClusterTestExtensions.class)
 @ClusterTestDefaults(serverProperties = {
     @ClusterConfigProperty(key = ServerConfigs.UNSTABLE_API_VERSIONS_ENABLE_CONFIG, value = "true"),
 })
@@ -56,7 +60,8 @@ public class BrokerApiVersionsCommandTest {
 
         NodeApiVersions nodeApiVersions = new NodeApiVersions(
                 ApiVersionsResponse.collectApis(ApiKeys.clientApis(), true),
-                Collections.emptyList());
+                Collections.emptyList(),
+                false);
         Iterator<ApiKeys> apiKeysIter = ApiKeys.clientApis().iterator();
         while (apiKeysIter.hasNext()) {
             ApiKeys apiKey = apiKeysIter.next();

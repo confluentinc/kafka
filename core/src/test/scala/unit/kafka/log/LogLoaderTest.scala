@@ -24,9 +24,10 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.compress.Compression
 import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.errors.KafkaStorageException
-import org.apache.kafka.common.record.{ControlRecordType, DefaultRecordBatch, MemoryRecords, RecordBatch, SimpleRecord, TimestampType}
+import org.apache.kafka.common.record.{ControlRecordType, DefaultRecordBatch, MemoryRecords, RecordBatch, RecordVersion, SimpleRecord, TimestampType}
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.apache.kafka.coordinator.transaction.TransactionLogConfig
+import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.util.{MockTime, Scheduler}
 import org.apache.kafka.storage.internals.epoch.LeaderEpochFileCache
 import org.apache.kafka.storage.internals.log.{AbortedTxn, CleanerConfig, EpochEntry, LocalLog, LogConfig, LogDirFailureChannel, LogFileUtils, LogLoader, LogOffsetMetadata, LogSegment, LogSegments, LogStartOffsetIncrementReason, OffsetIndex, ProducerStateManager, ProducerStateManagerConfig, SnapshotFile}
@@ -127,6 +128,7 @@ class LogLoaderTest {
         brokerTopicStats = new BrokerTopicStats(),
         logDirFailureChannel = logDirFailureChannel,
         time = time,
+        keepPartitionMetadataFile = config.usesTopicId,
         remoteStorageSystemEnable = config.remoteLogManagerConfig.isRemoteStorageSystemEnabled(),
         initialTaskDelayMs = config.logInitialTaskDelayMs) {
 
@@ -244,7 +246,70 @@ class LogLoaderTest {
   }
 
   @Test
-  def testProducerSnapshotsRecoveryAfterUncleanShutdown(): Unit = {
+  def testProducerSnapshotsRecoveryAfterUncleanShutdownV1(): Unit = {
+    testProducerSnapshotsRecoveryAfterUncleanShutdown(MetadataVersion.minSupportedFor(RecordVersion.V1).version)
+  }
+
+  @Test
+  def testProducerSnapshotsRecoveryAfterUncleanShutdownCurrentMessageFormat(): Unit = {
+    testProducerSnapshotsRecoveryAfterUncleanShutdown(MetadataVersion.latestTesting.version)
+  }
+
+  private def createLog(dir: File,
+                        config: LogConfig,
+                        brokerTopicStats: BrokerTopicStats = brokerTopicStats,
+                        logStartOffset: Long = 0L,
+                        recoveryPoint: Long = 0L,
+                        scheduler: Scheduler = mockTime.scheduler,
+                        time: Time = mockTime,
+                        maxTransactionTimeoutMs: Int = maxTransactionTimeoutMs,
+                        maxProducerIdExpirationMs: Int = producerStateManagerConfig.producerIdExpirationMs,
+                        producerIdExpirationCheckIntervalMs: Int = producerIdExpirationCheckIntervalMs,
+                        lastShutdownClean: Boolean = true): UnifiedLog = {
+    val log = LogTestUtils.createLog(dir, config, brokerTopicStats, scheduler, time, logStartOffset, recoveryPoint,
+      maxTransactionTimeoutMs, new ProducerStateManagerConfig(maxProducerIdExpirationMs, false), producerIdExpirationCheckIntervalMs, lastShutdownClean)
+    logsToClose = logsToClose :+ log
+    log
+  }
+
+  private def createLogWithOffsetOverflow(logConfig: LogConfig): (UnifiedLog, LogSegment) = {
+    LogTestUtils.initializeLogDirWithOverflowedSegment(logDir)
+
+    val log = createLog(logDir, logConfig, recoveryPoint = Long.MaxValue)
+    val segmentWithOverflow = LogTestUtils.firstOverflowSegment(log).getOrElse {
+      throw new AssertionError("Failed to create log with a segment which has overflowed offsets")
+    }
+
+    (log, segmentWithOverflow)
+  }
+
+  private def recoverAndCheck(config: LogConfig, expectedKeys: Iterable[Long]): UnifiedLog = {
+    // method is called only in case of recovery from hard reset
+    val recoveredLog = LogTestUtils.recoverAndCheck(logDir, config, expectedKeys, brokerTopicStats, mockTime, mockTime.scheduler)
+    logsToClose = logsToClose :+ recoveredLog
+    recoveredLog
+  }
+
+  /**
+   * Wrap a single record log buffer with leader epoch.
+   */
+  private def singletonRecordsWithLeaderEpoch(value: Array[Byte],
+                                              key: Array[Byte] = null,
+                                              leaderEpoch: Int,
+                                              offset: Long,
+                                              codec: Compression = Compression.NONE,
+                                              timestamp: Long = RecordBatch.NO_TIMESTAMP,
+                                              magicValue: Byte = RecordBatch.CURRENT_MAGIC_VALUE): MemoryRecords = {
+    val records = Seq(new SimpleRecord(timestamp, key, value))
+
+    val buf = ByteBuffer.allocate(DefaultRecordBatch.sizeInBytes(records.asJava))
+    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, offset,
+      mockTime.milliseconds, leaderEpoch)
+    records.foreach(builder.append)
+    builder.build()
+  }
+
+  private def testProducerSnapshotsRecoveryAfterUncleanShutdown(messageFormatVersion: String): Unit = {
     val logProps = new Properties()
     logProps.put(TopicConfig.SEGMENT_BYTES_CONFIG, "640")
     val logConfig = new LogConfig(logProps)
@@ -323,7 +388,7 @@ class LogLoaderTest {
         logDirFailureChannel)
       new UnifiedLog(offsets.logStartOffset, localLog, brokerTopicStats,
         producerIdExpirationCheckIntervalMs, leaderEpochCache, producerStateManager,
-        None)
+        None, keepPartitionMetadataFile = true)
     }
 
     // Retain snapshots for the last 2 segments
@@ -346,60 +411,6 @@ class LogLoaderTest {
     assertEquals(expectedSnapshotOffsets, LogTestUtils.listProducerSnapshotOffsets(logDir).toSet)
 
     log.close()
-  }
-
-  private def createLog(dir: File,
-                        config: LogConfig,
-                        brokerTopicStats: BrokerTopicStats = brokerTopicStats,
-                        logStartOffset: Long = 0L,
-                        recoveryPoint: Long = 0L,
-                        scheduler: Scheduler = mockTime.scheduler,
-                        time: Time = mockTime,
-                        maxTransactionTimeoutMs: Int = maxTransactionTimeoutMs,
-                        maxProducerIdExpirationMs: Int = producerStateManagerConfig.producerIdExpirationMs,
-                        producerIdExpirationCheckIntervalMs: Int = producerIdExpirationCheckIntervalMs,
-                        lastShutdownClean: Boolean = true): UnifiedLog = {
-    val log = LogTestUtils.createLog(dir, config, brokerTopicStats, scheduler, time, logStartOffset, recoveryPoint,
-      maxTransactionTimeoutMs, new ProducerStateManagerConfig(maxProducerIdExpirationMs, false), producerIdExpirationCheckIntervalMs, lastShutdownClean)
-    logsToClose = logsToClose :+ log
-    log
-  }
-
-  private def createLogWithOffsetOverflow(logConfig: LogConfig): (UnifiedLog, LogSegment) = {
-    LogTestUtils.initializeLogDirWithOverflowedSegment(logDir)
-
-    val log = createLog(logDir, logConfig, recoveryPoint = Long.MaxValue)
-    val segmentWithOverflow = LogTestUtils.firstOverflowSegment(log).getOrElse {
-      throw new AssertionError("Failed to create log with a segment which has overflowed offsets")
-    }
-
-    (log, segmentWithOverflow)
-  }
-
-  private def recoverAndCheck(config: LogConfig, expectedKeys: Iterable[Long]): UnifiedLog = {
-    // method is called only in case of recovery from hard reset
-    val recoveredLog = LogTestUtils.recoverAndCheck(logDir, config, expectedKeys, brokerTopicStats, mockTime, mockTime.scheduler)
-    logsToClose = logsToClose :+ recoveredLog
-    recoveredLog
-  }
-
-  /**
-   * Wrap a single record log buffer with leader epoch.
-   */
-  private def singletonRecordsWithLeaderEpoch(value: Array[Byte],
-                                              key: Array[Byte] = null,
-                                              leaderEpoch: Int,
-                                              offset: Long,
-                                              codec: Compression = Compression.NONE,
-                                              timestamp: Long = RecordBatch.NO_TIMESTAMP,
-                                              magicValue: Byte = RecordBatch.CURRENT_MAGIC_VALUE): MemoryRecords = {
-    val records = Seq(new SimpleRecord(timestamp, key, value))
-
-    val buf = ByteBuffer.allocate(DefaultRecordBatch.sizeInBytes(records.asJava))
-    val builder = MemoryRecords.builder(buf, magicValue, codec, TimestampType.CREATE_TIME, offset,
-      mockTime.milliseconds, leaderEpoch)
-    records.foreach(builder.append)
-    builder.build()
   }
 
   @Test
@@ -446,7 +457,8 @@ class LogLoaderTest {
       producerIdExpirationCheckIntervalMs = 30000,
       leaderEpochCache = leaderEpochCache,
       producerStateManager = stateManager,
-      _topicId = None)
+      _topicId = None,
+      keepPartitionMetadataFile = true)
 
     verify(stateManager).updateMapEndOffset(0L)
     verify(stateManager).removeStraySnapshots(any())
@@ -555,7 +567,8 @@ class LogLoaderTest {
       producerIdExpirationCheckIntervalMs = 30000,
       leaderEpochCache = leaderEpochCache,
       producerStateManager = stateManager,
-      _topicId = None)
+      _topicId = None,
+      keepPartitionMetadataFile = true)
 
     verify(stateManager).removeStraySnapshots(any[java.util.List[java.lang.Long]])
     verify(stateManager, times(2)).updateMapEndOffset(0L)

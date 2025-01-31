@@ -41,6 +41,7 @@ import org.apache.kafka.coordinator.group.OffsetExpirationConditionImpl;
 import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroup;
 import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupMember;
 import org.apache.kafka.image.MetadataImage;
+import org.apache.kafka.server.common.MetadataVersion;
 
 import org.slf4j.Logger;
 
@@ -1335,11 +1336,12 @@ public class ClassicGroup implements Group {
 
     /**
      * Convert the given ConsumerGroup to a corresponding ClassicGroup.
+     * The member with leavingMemberId will not be converted to the new ClassicGroup as it's the last
+     * member using new consumer protocol that left and triggered the downgrade.
      *
      * @param consumerGroup                 The converted ConsumerGroup.
-     * @param leavingMembers                The members that will not be converted in the ClassicGroup.
+     * @param leavingMemberId               The member that will not be converted in the ClassicGroup.
      * @param joiningMember                 The member that needs to be converted and added to the ClassicGroup.
-     *                                      When not null, must have an instanceId that matches an existing member.
      * @param logContext                    The logContext to create the ClassicGroup.
      * @param time                          The time to create the ClassicGroup.
      * @param metadataImage                 The MetadataImage.
@@ -1347,7 +1349,7 @@ public class ClassicGroup implements Group {
      */
     public static ClassicGroup fromConsumerGroup(
         ConsumerGroup consumerGroup,
-        Set<ConsumerGroupMember> leavingMembers,
+        String leavingMemberId,
         ConsumerGroupMember joiningMember,
         LogContext logContext,
         Time time,
@@ -1366,8 +1368,7 @@ public class ClassicGroup implements Group {
         );
 
         consumerGroup.members().forEach((memberId, member) -> {
-            if (!leavingMembers.contains(member) &&
-                (joiningMember == null || joiningMember.instanceId() == null || !joiningMember.instanceId().equals(member.instanceId()))) {
+            if (!memberId.equals(leavingMemberId)) {
                 classicGroup.add(
                     new ClassicGroupMember(
                         memberId,
@@ -1411,11 +1412,7 @@ public class ClassicGroup implements Group {
                 // If the downgraded is triggered by the joining static member replacing
                 // the leaving static member, the joining member should take the assignment
                 // of the leaving one.
-                ConsumerGroupMember replacedMember = consumerGroup.staticMember(joiningMember.instanceId());
-                if (replacedMember == null) {
-                    throw new IllegalArgumentException("joiningMember must be a static member when not null.");
-                }
-                memberId = replacedMember.memberId();
+                memberId = leavingMemberId;
             }
             byte[] assignment = Utils.toArray(ConsumerProtocol.serializeAssignment(
                 toConsumerProtocolAssignment(
@@ -1436,9 +1433,11 @@ public class ClassicGroup implements Group {
     /**
      * Populate the record list with the records needed to create the given classic group.
      *
+     * @param metadataVersion   The MetadataVersion.
      * @param records           The list to which the new records are added.
      */
     public void createClassicGroupRecords(
+        MetadataVersion metadataVersion,
         List<CoordinatorRecord> records
     ) {
         Map<String, byte[]> assignments = new HashMap<>();
@@ -1446,7 +1445,7 @@ public class ClassicGroup implements Group {
             assignments.put(classicGroupMember.memberId(), classicGroupMember.assignment())
         );
 
-        records.add(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(this, assignments));
+        records.add(GroupCoordinatorRecordHelpers.newGroupMetadataRecord(this, assignments, metadataVersion));
     }
 
     /**

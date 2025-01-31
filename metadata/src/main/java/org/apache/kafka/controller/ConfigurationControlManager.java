@@ -25,7 +25,6 @@ import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.ConfigResource.Type;
 import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.config.types.Password;
-import org.apache.kafka.common.metadata.ClearElrRecord;
 import org.apache.kafka.common.metadata.ConfigRecord;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.ApiError;
@@ -55,6 +54,8 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 import static org.apache.kafka.clients.admin.AlterConfigOp.OpType.APPEND;
+import static org.apache.kafka.clients.admin.AlterConfigOp.OpType.DELETE;
+import static org.apache.kafka.clients.admin.AlterConfigOp.OpType.SET;
 import static org.apache.kafka.common.config.ConfigResource.Type.BROKER;
 import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG;
@@ -164,8 +165,7 @@ public class ConfigurationControlManager {
             ConfigurationValidator validator,
             Map<String, Object> staticConfig,
             int nodeId,
-            FeatureControlManager featureControl
-    ) {
+            FeatureControlManager featureControl) {
         this.log = logContext.logger(ConfigurationControlManager.class);
         this.snapshotRegistry = snapshotRegistry;
         this.configSchema = configSchema;
@@ -211,30 +211,7 @@ public class ConfigurationControlManager {
                 outputRecords);
             outputResults.put(resourceEntry.getKey(), apiError);
         }
-        outputRecords.addAll(createClearElrRecordsAsNeeded(outputRecords));
         return ControllerResult.atomicOf(outputRecords, outputResults);
-    }
-
-    List<ApiMessageAndVersion> createClearElrRecordsAsNeeded(List<ApiMessageAndVersion> input) {
-        if (!featureControl.isElrFeatureEnabled()) {
-            return Collections.emptyList();
-        }
-        List<ApiMessageAndVersion> output = new ArrayList<>();
-        for (ApiMessageAndVersion messageAndVersion : input) {
-            if (messageAndVersion.message().apiKey() == CONFIG_RECORD.id()) {
-                ConfigRecord record = (ConfigRecord) messageAndVersion.message();
-                if (record.name().equals(MIN_IN_SYNC_REPLICAS_CONFIG)) {
-                    if (Type.forId(record.resourceType()) == Type.TOPIC) {
-                        output.add(new ApiMessageAndVersion(
-                            new ClearElrRecord().
-                                setTopicName(record.resourceName()), (short) 0));
-                    } else {
-                        output.add(new ApiMessageAndVersion(new ClearElrRecord(), (short) 0));
-                    }
-                }
-            }
-        }
-        return output;
     }
 
     ControllerResult<ApiError> incrementalAlterConfig(
@@ -248,8 +225,6 @@ public class ConfigurationControlManager {
             keyToOps,
             newlyCreatedResource,
             outputRecords);
-
-        outputRecords.addAll(createClearElrRecordsAsNeeded(outputRecords));
         return ControllerResult.atomicOf(outputRecords, apiError);
     }
 
@@ -382,8 +357,8 @@ public class ConfigurationControlManager {
             " cannot be altered while ELR is enabled.");
 
     private static final ApiError DISALLOWED_CLUSTER_MIN_ISR_REMOVAL_ERROR =
-        new ApiError(INVALID_CONFIG, "Cluster-level " + MIN_IN_SYNC_REPLICAS_CONFIG +
-            " cannot be removed while ELR is enabled.");
+            new ApiError(INVALID_CONFIG, "Cluster-level " + MIN_IN_SYNC_REPLICAS_CONFIG +
+                    " cannot be removed while ELR is enabled.");
 
     boolean isDisallowedBrokerMinIsrTransition(ConfigRecord configRecord) {
         if (configRecord.name().equals(MIN_IN_SYNC_REPLICAS_CONFIG) &&
@@ -432,7 +407,6 @@ public class ConfigurationControlManager {
                 outputRecords,
                 outputResults);
         }
-        outputRecords.addAll(createClearElrRecordsAsNeeded(outputRecords));
         return ControllerResult.atomicOf(outputRecords, outputResults);
     }
 

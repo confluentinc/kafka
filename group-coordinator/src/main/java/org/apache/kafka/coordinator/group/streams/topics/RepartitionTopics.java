@@ -48,7 +48,7 @@ public class RepartitionTopics {
      * @param logContext                   The context for emitting log messages.
      * @param subtopologies                The subtopologies for the requested topology.
      * @param topicPartitionCountProvider  Returns the number of partitions for a given topic, representing the current state of the
-     *                                     broker. This class requires the number of partition for all source topics to be defined.
+     *                                     broker.
      */
     public RepartitionTopics(final LogContext logContext,
                              final Collection<Subtopology> subtopologies,
@@ -63,7 +63,8 @@ public class RepartitionTopics {
      *
      * @return the map of repartition topics for the requested topology to their required number of partitions.
      *
-     * @throws IllegalStateException if the number of partitions for a source topic is not defined by topicPartitionCountProvider.
+     * @throws TopicConfigurationException if no valid configuration can be found given the broker state, for example, if a source topic
+     *         is missing.
      * @throws StreamsInvalidTopologyException if the number of partitions for all repartition topics cannot be determined, e.g.
      *         because of loops, or if a repartition source topic is not a sink topic of any subtopology.
      */
@@ -76,7 +77,7 @@ public class RepartitionTopics {
         }
 
         if (!missingSourceTopicsForTopology.isEmpty()) {
-            throw new IllegalStateException(String.format("Missing source topics: %s",
+            throw TopicConfigurationException.missingSourceTopics(String.format("Missing source topics: %s",
                 String.join(", ", missingSourceTopicsForTopology)));
         }
 

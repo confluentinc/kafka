@@ -38,25 +38,25 @@ public abstract class AccessTokenValidatorTest extends OAuthBearerTest {
     @Test
     public void testNull() throws Exception {
         AccessTokenValidator validator = createAccessTokenValidator();
-        assertThrowsWithMessage(ValidateException.class, () -> validator.validate(null), "Malformed JWT provided; expected three sections (header, payload, and signature)");
+        assertThrowsWithMessage(ValidateException.class, () -> validator.validate(null), "Empty JWT provided");
     }
 
     @Test
     public void testEmptyString() throws Exception {
         AccessTokenValidator validator = createAccessTokenValidator();
-        assertThrowsWithMessage(ValidateException.class, () -> validator.validate(""), "Malformed JWT provided; expected three sections (header, payload, and signature)");
+        assertThrowsWithMessage(ValidateException.class, () -> validator.validate(""), "Empty JWT provided");
     }
 
     @Test
     public void testWhitespace() throws Exception {
         AccessTokenValidator validator = createAccessTokenValidator();
-        assertThrowsWithMessage(ValidateException.class, () -> validator.validate("    "), "Malformed JWT provided; expected three sections (header, payload, and signature)");
+        assertThrowsWithMessage(ValidateException.class, () -> validator.validate("    "), "Empty JWT provided");
     }
 
     @Test
     public void testEmptySections() throws Exception {
         AccessTokenValidator validator = createAccessTokenValidator();
-        assertThrowsWithMessage(ValidateException.class, () -> validator.validate(".."), "Malformed JWT provided; expected three sections (header, payload, and signature)");
+        assertThrowsWithMessage(ValidateException.class, () -> validator.validate(".."), "Malformed JWT provided");
     }
 
     @Test

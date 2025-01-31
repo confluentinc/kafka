@@ -249,7 +249,7 @@ public class BrokerApiVersionsCommand {
                 if (error.exception() != null) {
                     future.completeExceptionally(error.exception());
                 } else {
-                    future.complete(new NodeApiVersions(response.data().apiKeys(), response.data().supportedFeatures()));
+                    future.complete(new NodeApiVersions(response.data().apiKeys(), response.data().supportedFeatures(), response.data().zkMigrationReady()));
                 }
             } catch (Exception e) {
                 future.completeExceptionally(e);

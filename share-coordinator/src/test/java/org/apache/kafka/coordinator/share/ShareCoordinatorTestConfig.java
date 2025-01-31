@@ -21,6 +21,7 @@ import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.server.config.ShareCoordinatorConfig;
 
 import java.util.Collections;
 import java.util.HashMap;

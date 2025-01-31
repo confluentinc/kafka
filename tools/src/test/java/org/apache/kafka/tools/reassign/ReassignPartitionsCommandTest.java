@@ -40,10 +40,11 @@ import org.apache.kafka.common.TopicPartitionReplica;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
-import org.apache.kafka.common.test.ClusterInstance;
 import org.apache.kafka.common.test.api.ClusterConfigProperty;
+import org.apache.kafka.common.test.api.ClusterInstance;
 import org.apache.kafka.common.test.api.ClusterTest;
 import org.apache.kafka.common.test.api.ClusterTestDefaults;
+import org.apache.kafka.common.test.api.ClusterTestExtensions;
 import org.apache.kafka.common.test.api.ClusterTests;
 import org.apache.kafka.common.test.api.Type;
 import org.apache.kafka.common.utils.Time;
@@ -54,6 +55,7 @@ import org.apache.kafka.tools.TerseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
 import java.util.AbstractMap;
@@ -110,6 +112,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
     @ClusterConfigProperty(id = 3, key = "broker.rack", value = "rack1"),
     @ClusterConfigProperty(id = 4, key = "broker.rack", value = "rack1"),
 })
+@ExtendWith(ClusterTestExtensions.class)
 public class ReassignPartitionsCommandTest {
     private final ClusterInstance clusterInstance;
     private final Map<Integer, Map<String, Long>> unthrottledBrokerConfigs = IntStream

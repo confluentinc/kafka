@@ -45,6 +45,7 @@ object KafkaMetricsReporterTest {
 
       MockMetricsReporter.JMXPREFIX.set(contextLabelOrNull("_namespace", metricsContext))
       MockMetricsReporter.CLUSTERID.set(contextLabelOrNull("kafka.cluster.id", metricsContext))
+      MockMetricsReporter.BROKERID.set(contextLabelOrNull("kafka.broker.id", metricsContext))
       MockMetricsReporter.NODEID.set(contextLabelOrNull("kafka.node.id", metricsContext))
     }
 
@@ -57,6 +58,7 @@ object KafkaMetricsReporterTest {
 
   object MockMetricsReporter {
     val JMXPREFIX: AtomicReference[String] = new AtomicReference[String]
+    val BROKERID : AtomicReference[String] = new AtomicReference[String]
     val NODEID : AtomicReference[String] = new AtomicReference[String]
     val CLUSTERID : AtomicReference[String] = new AtomicReference[String]
   }
@@ -82,6 +84,7 @@ class KafkaMetricsReporterTest extends QuorumTestHarness {
   @ValueSource(strings = Array("kraft"))
   def testMetricsContextNamespacePresent(quorum: String): Unit = {
     assertNotNull(KafkaMetricsReporterTest.MockMetricsReporter.CLUSTERID.get())
+    assertNull(KafkaMetricsReporterTest.MockMetricsReporter.BROKERID.get())
     assertNotNull(KafkaMetricsReporterTest.MockMetricsReporter.NODEID.get())
     assertNotNull(KafkaMetricsReporterTest.MockMetricsReporter.JMXPREFIX.get())
 

@@ -16,7 +16,7 @@
 {
   "apiKey": 8,
   "type": "request",
-  "listeners": ["broker"],
+  "listeners": ["zkBroker", "broker"],
   "name": "OffsetCommitRequest",
   // Versions 0-1 were removed in Apache Kafka 4.0, Version 2 is the new baseline.
   //

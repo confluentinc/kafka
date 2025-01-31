@@ -31,6 +31,7 @@ import org.apache.kafka.common.message.ApiVersionsResponseData.SupportedFeatureK
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.record.RecordVersion;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
@@ -171,6 +172,7 @@ public class ApiVersionsResponse extends AbstractResponse {
     }
 
     public static ApiVersionCollection controllerApiVersions(
+        RecordVersion minRecordVersion,
         NodeApiVersions controllerApiVersions,
         ListenerType listenerType,
         boolean enableUnstableLastVersion,
@@ -178,23 +180,27 @@ public class ApiVersionsResponse extends AbstractResponse {
     ) {
         return intersectForwardableApis(
             listenerType,
+            minRecordVersion,
             controllerApiVersions.allSupportedApiVersions(),
             enableUnstableLastVersion,
             clientTelemetryEnabled);
     }
 
     public static ApiVersionCollection brokerApiVersions(
+        RecordVersion minRecordVersion,
         ListenerType listenerType,
         boolean enableUnstableLastVersion,
         boolean clientTelemetryEnabled
     ) {
         return filterApis(
+            minRecordVersion,
             listenerType,
             enableUnstableLastVersion,
             clientTelemetryEnabled);
     }
 
     public static ApiVersionCollection filterApis(
+        RecordVersion minRecordVersion,
         ApiMessageType.ListenerType listenerType,
         boolean enableUnstableLastVersion,
         boolean clientTelemetryEnabled
@@ -204,7 +210,10 @@ public class ApiVersionsResponse extends AbstractResponse {
             // Skip telemetry APIs if client telemetry is disabled.
             if ((apiKey == ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS || apiKey == ApiKeys.PUSH_TELEMETRY) && !clientTelemetryEnabled)
                 continue;
-            apiKey.toApiVersion(enableUnstableLastVersion).ifPresent(apiKeys::add);
+
+            if (apiKey.minRequiredInterBrokerMagic <= minRecordVersion.value) {
+                apiKey.toApiVersion(enableUnstableLastVersion).ifPresent(apiKeys::add);
+            }
         }
         return apiKeys;
     }
@@ -225,6 +234,7 @@ public class ApiVersionsResponse extends AbstractResponse {
      * known range and that of another set.
      *
      * @param listenerType the listener type which constrains the set of exposed APIs
+     * @param minRecordVersion min inter broker magic
      * @param activeControllerApiVersions controller ApiVersions
      * @param enableUnstableLastVersion whether unstable versions should be advertised or not
      * @param clientTelemetryEnabled whether client telemetry is enabled or not
@@ -232,39 +242,42 @@ public class ApiVersionsResponse extends AbstractResponse {
      */
     public static ApiVersionCollection intersectForwardableApis(
         final ApiMessageType.ListenerType listenerType,
+        final RecordVersion minRecordVersion,
         final Map<ApiKeys, ApiVersion> activeControllerApiVersions,
         boolean enableUnstableLastVersion,
         boolean clientTelemetryEnabled
     ) {
         ApiVersionCollection apiKeys = new ApiVersionCollection();
         for (ApiKeys apiKey : ApiKeys.apisForListener(listenerType)) {
-            final Optional<ApiVersion> brokerApiVersion = apiKey.toApiVersion(enableUnstableLastVersion);
-            if (brokerApiVersion.isEmpty()) {
-                // Broker does not support this API key.
-                continue;
-            }
-
-            // Skip telemetry APIs if client telemetry is disabled.
-            if ((apiKey == ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS || apiKey == ApiKeys.PUSH_TELEMETRY) && !clientTelemetryEnabled)
-                continue;
-
-            final ApiVersion finalApiVersion;
-            if (!apiKey.forwardable) {
-                finalApiVersion = brokerApiVersion.get();
-            } else {
-                Optional<ApiVersion> intersectVersion = intersect(
-                    brokerApiVersion.get(),
-                    activeControllerApiVersions.getOrDefault(apiKey, null)
-                );
-                if (intersectVersion.isPresent()) {
-                    finalApiVersion = intersectVersion.get();
-                } else {
-                    // Controller doesn't support this API key, or there is no intersection.
+            if (apiKey.minRequiredInterBrokerMagic <= minRecordVersion.value) {
+                final Optional<ApiVersion> brokerApiVersion = apiKey.toApiVersion(enableUnstableLastVersion);
+                if (brokerApiVersion.isEmpty()) {
+                    // Broker does not support this API key.
                     continue;
                 }
-            }
 
-            apiKeys.add(finalApiVersion.duplicate());
+                // Skip telemetry APIs if client telemetry is disabled.
+                if ((apiKey == ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS || apiKey == ApiKeys.PUSH_TELEMETRY) && !clientTelemetryEnabled)
+                    continue;
+
+                final ApiVersion finalApiVersion;
+                if (!apiKey.forwardable) {
+                    finalApiVersion = brokerApiVersion.get();
+                } else {
+                    Optional<ApiVersion> intersectVersion = intersect(
+                        brokerApiVersion.get(),
+                        activeControllerApiVersions.getOrDefault(apiKey, null)
+                    );
+                    if (intersectVersion.isPresent()) {
+                        finalApiVersion = intersectVersion.get();
+                    } else {
+                        // Controller doesn't support this API key, or there is no intersection.
+                        continue;
+                    }
+                }
+
+                apiKeys.add(finalApiVersion.duplicate());
+            }
         }
         return apiKeys;
     }

@@ -36,11 +36,11 @@ public class GroupCoordinatorRecordSerde extends CoordinatorRecordSerde {
     }
 
     @Override
-    protected ApiMessage apiMessageValueFor(short recordType) {
+    protected ApiMessage apiMessageValueFor(short recordVersion) {
         try {
-            return CoordinatorRecordType.fromId(recordType).newRecordValue();
+            return CoordinatorRecordType.fromId(recordVersion).newRecordValue();
         } catch (UnsupportedVersionException ex) {
-            throw new CoordinatorLoader.UnknownRecordTypeException(recordType);
+            throw new CoordinatorLoader.UnknownRecordTypeException(recordVersion);
         }
     }
 }

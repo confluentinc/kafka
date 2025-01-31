@@ -42,8 +42,6 @@ public interface Callback {
      *                      <li>{@link org.apache.kafka.common.errors.UnknownServerException UnknownServerException}
      *                      <li>{@link org.apache.kafka.common.errors.UnknownProducerIdException UnknownProducerIdException}
      *                      <li>{@link org.apache.kafka.common.errors.InvalidProducerEpochException InvalidProducerEpochException}
-     *                      <li>{@link org.apache.kafka.common.errors.AuthenticationException AuthenticationException}
-     *                      <li>{@link org.apache.kafka.common.errors.AuthorizationException AuthorizationException}
      *                  </ul>
      *                  Retriable exceptions (transient, may be covered by increasing #.retries):
      *                  <ul>
@@ -54,7 +52,6 @@ public interface Callback {
      *                      <li>{@link org.apache.kafka.common.errors.OffsetOutOfRangeException OffsetOutOfRangeException}
      *                      <li>{@link org.apache.kafka.common.errors.TimeoutException TimeoutException}
      *                      <li>{@link org.apache.kafka.common.errors.UnknownTopicOrPartitionException UnknownTopicOrPartitionException}
-     *                      <li>{@link org.apache.kafka.clients.producer.BufferExhaustedException BufferExhaustedException}
      *                  </ul>
      */
     void onCompletion(RecordMetadata metadata, Exception exception);

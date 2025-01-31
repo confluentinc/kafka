@@ -31,6 +31,7 @@ import org.apache.kafka.common.network.NetworkReceive;
 import org.apache.kafka.common.network.Send;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.record.RecordVersion;
 import org.apache.kafka.common.record.UnalignedRecords;
 import org.apache.kafka.common.requests.ApiVersionsResponse;
 import org.apache.kafka.common.requests.ByteBufferChannel;
@@ -664,7 +665,7 @@ public class TestUtils {
     ) {
         return createApiVersionsResponse(
                 throttleTimeMs,
-                ApiVersionsResponse.filterApis(listenerType, true, true),
+                ApiVersionsResponse.filterApis(RecordVersion.current(), listenerType, true, true),
                 Features.emptySupportedFeatures(),
                 false
         );
@@ -677,7 +678,7 @@ public class TestUtils {
     ) {
         return createApiVersionsResponse(
                 throttleTimeMs,
-                ApiVersionsResponse.filterApis(listenerType, enableUnstableLastVersion, true),
+                ApiVersionsResponse.filterApis(RecordVersion.current(), listenerType, enableUnstableLastVersion, true),
                 Features.emptySupportedFeatures(),
                 false
         );

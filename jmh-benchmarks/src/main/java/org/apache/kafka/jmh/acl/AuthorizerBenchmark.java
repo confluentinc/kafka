@@ -35,6 +35,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.metadata.authorizer.StandardAcl;
 import org.apache.kafka.metadata.authorizer.StandardAuthorizer;
+import org.apache.kafka.security.authorizer.AclEntry;
 import org.apache.kafka.server.authorizer.Action;
 
 import org.openjdk.jmh.annotations.Benchmark;
@@ -112,14 +113,14 @@ public class AuthorizerBenchmark {
     }
 
     private void prepareAclCache() {
-        Map<ResourcePattern, Set<AccessControlEntry>> aclEntries = new HashMap<>();
+        Map<ResourcePattern, Set<AclEntry>> aclEntries = new HashMap<>();
         for (int resourceId = 0; resourceId < resourceCount; resourceId++) {
             ResourcePattern resource = new ResourcePattern(
                 (resourceId % 10 == 0) ? ResourceType.GROUP : ResourceType.TOPIC,
                 resourceNamePrefix + resourceId,
                 (resourceId % 5 == 0) ? PatternType.PREFIXED : PatternType.LITERAL);
 
-            Set<AccessControlEntry> entries = aclEntries.computeIfAbsent(resource, k -> new HashSet<>());
+            Set<AclEntry> entries = aclEntries.computeIfAbsent(resource, k -> new HashSet<>());
 
             for (int aclId = 0; aclId < aclCount; aclId++) {
                 // The principal in the request context we are using
@@ -128,31 +129,36 @@ public class AuthorizerBenchmark {
                 AccessControlEntry allowAce = new AccessControlEntry(
                     principalName, "*", AclOperation.READ, AclPermissionType.ALLOW);
 
-                entries.add(new AccessControlEntry(allowAce.principal(), allowAce.host(), allowAce.operation(), allowAce.permissionType()));
+                entries.add(new AclEntry(allowAce));
 
                 if (shouldDeny()) {
-                    entries.add(new AccessControlEntry(principalName, "*", AclOperation.READ, AclPermissionType.DENY));
+                    // dominantly deny the resource
+                    AccessControlEntry denyAce = new AccessControlEntry(
+                        principalName, "*", AclOperation.READ, AclPermissionType.DENY);
+                    entries.add(new AclEntry(denyAce));
                 }
             }
         }
 
         ResourcePattern resourcePrefix = new ResourcePattern(ResourceType.TOPIC, resourceNamePrefix,
             PatternType.PREFIXED);
-        Set<AccessControlEntry> entriesPrefix = aclEntries.computeIfAbsent(resourcePrefix, k -> new HashSet<>());
+        Set<AclEntry> entriesPrefix = aclEntries.computeIfAbsent(resourcePrefix, k -> new HashSet<>());
         for (int hostId = 0; hostId < hostPreCount; hostId++) {
             AccessControlEntry allowAce = new AccessControlEntry(principal.toString(), "127.0.0." + hostId,
                 AclOperation.READ, AclPermissionType.ALLOW);
-            entriesPrefix.add(new AccessControlEntry(allowAce.principal(), allowAce.host(), allowAce.operation(), allowAce.permissionType()));
+            entriesPrefix.add(new AclEntry(allowAce));
 
             if (shouldDeny()) {
-                entriesPrefix.add(new AccessControlEntry(principal.toString(), "127.0.0." + hostId,
-                        AclOperation.READ, AclPermissionType.DENY));
+                // dominantly deny the resource
+                AccessControlEntry denyAce = new AccessControlEntry(principal.toString(), "127.0.0." + hostId,
+                    AclOperation.READ, AclPermissionType.DENY);
+                entriesPrefix.add(new AclEntry(denyAce));
             }
         }
 
         ResourcePattern resourceWildcard = new ResourcePattern(ResourceType.TOPIC, ResourcePattern.WILDCARD_RESOURCE,
             PatternType.LITERAL);
-        Set<AccessControlEntry> entriesWildcard = aclEntries.computeIfAbsent(resourceWildcard, k -> new HashSet<>());
+        Set<AclEntry> entriesWildcard = aclEntries.computeIfAbsent(resourceWildcard, k -> new HashSet<>());
         // get dynamic entries number for wildcard acl
         for (int hostId = 0; hostId < resourceCount / 10; hostId++) {
             String hostName = "127.0.0" + hostId;
@@ -164,22 +170,23 @@ public class AuthorizerBenchmark {
 
             AccessControlEntry allowAce = new AccessControlEntry(principal.toString(), hostName,
                 AclOperation.READ, AclPermissionType.ALLOW);
-            entriesWildcard.add(new AccessControlEntry(allowAce.principal(), allowAce.host(), allowAce.operation(), allowAce.permissionType()));
+            entriesWildcard.add(new AclEntry(allowAce));
             if (shouldDeny()) {
-                entriesWildcard.add(new AccessControlEntry(principal.toString(), hostName,
-                        AclOperation.READ, AclPermissionType.DENY));
+                AccessControlEntry denyAce = new AccessControlEntry(principal.toString(), hostName,
+                    AclOperation.READ, AclPermissionType.DENY);
+                entriesWildcard.add(new AclEntry(denyAce));
             }
         }
 
         setupAcls(aclEntries);
     }
 
-    private void setupAcls(Map<ResourcePattern, Set<AccessControlEntry>> aclEntries) {
-        for (Map.Entry<ResourcePattern, Set<AccessControlEntry>> entryMap : aclEntries.entrySet()) {
+    private void setupAcls(Map<ResourcePattern, Set<AclEntry>> aclEntries) {
+        for (Map.Entry<ResourcePattern, Set<AclEntry>> entryMap : aclEntries.entrySet()) {
             ResourcePattern resourcePattern = entryMap.getKey();
 
-            for (AccessControlEntry accessControlEntry : entryMap.getValue()) {
-                StandardAcl standardAcl = StandardAcl.fromAclBinding(new AclBinding(resourcePattern, accessControlEntry));
+            for (AclEntry aclEntry : entryMap.getValue()) {
+                StandardAcl standardAcl = StandardAcl.fromAclBinding(new AclBinding(resourcePattern, aclEntry));
                 authorizer.addAcl(Uuid.randomUuid(), standardAcl);
             }
             authorizer.completeInitialLoad();

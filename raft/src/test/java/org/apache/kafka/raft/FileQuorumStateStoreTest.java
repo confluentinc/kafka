@@ -56,28 +56,20 @@ public class FileQuorumStateStoreTest {
         final int voter1 = 1;
         final int voter2 = 2;
         final int voter3 = 3;
-        ReplicaKey votedKey = ReplicaKey.of(voter1, Uuid.randomUuid());
         Set<Integer> voters = Set.of(voter1, voter2, voter3);
 
         stateStore.writeElectionState(
-            ElectionState.withElectedLeader(epoch, voter1, Optional.of(votedKey), voters),
+            ElectionState.withElectedLeader(epoch, voter1, voters),
             kraftVersion
         );
 
         final Optional<ElectionState> expected;
         if (kraftVersion.isReconfigSupported()) {
             expected = Optional.of(
-                ElectionState.withElectedLeader(epoch, voter1, Optional.of(votedKey), Collections.emptySet())
+                ElectionState.withElectedLeader(epoch, voter1, Collections.emptySet())
             );
         } else {
-            expected = Optional.of(
-                ElectionState.withElectedLeader(
-                    epoch,
-                    voter1,
-                    Optional.of(ReplicaKey.of(voter1, ReplicaKey.NO_DIRECTORY_ID)),
-                    voters
-                )
-            );
+            expected = Optional.of(ElectionState.withElectedLeader(epoch, voter1, voters));
         }
 
         assertEquals(expected, stateStore.readElectionState());

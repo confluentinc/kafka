@@ -35,67 +35,67 @@ class PlaintextConsumerCallbackTest extends AbstractConsumerTest {
   @MethodSource(Array("getTestQuorumAndGroupProtocolParametersAll"))
   def testConsumerRebalanceListenerAssignOnPartitionsAssigned(quorum: String, groupProtocol: String): Unit = {
     val tp = new TopicPartition(topic, 0)
-    triggerOnPartitionsAssigned(tp, { (consumer, _) =>
+    triggerOnPartitionsAssigned { (consumer, _) =>
       val e: Exception = assertThrows(classOf[IllegalStateException], () => consumer.assign(Collections.singletonList(tp)))
       assertEquals(e.getMessage, "Subscription to topics, partitions and pattern are mutually exclusive")
-    })
+    }
   }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumAndGroupProtocolNames)
   @MethodSource(Array("getTestQuorumAndGroupProtocolParametersAll"))
   def testConsumerRebalanceListenerAssignmentOnPartitionsAssigned(quorum: String, groupProtocol: String): Unit = {
     val tp = new TopicPartition(topic, 0)
-    triggerOnPartitionsAssigned(tp, { (consumer, _) =>
+    triggerOnPartitionsAssigned { (consumer, _) =>
       assertTrue(consumer.assignment().contains(tp));
-    })
+    }
   }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumAndGroupProtocolNames)
   @MethodSource(Array("getTestQuorumAndGroupProtocolParametersAll"))
   def testConsumerRebalanceListenerBeginningOffsetsOnPartitionsAssigned(quorum: String, groupProtocol: String): Unit = {
     val tp = new TopicPartition(topic, 0)
-    triggerOnPartitionsAssigned(tp, { (consumer, _) =>
+    triggerOnPartitionsAssigned { (consumer, _) =>
       val map = consumer.beginningOffsets(Collections.singletonList(tp))
       assertTrue(map.containsKey(tp))
       assertEquals(0, map.get(tp))
-    })
+    }
   }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumAndGroupProtocolNames)
   @MethodSource(Array("getTestQuorumAndGroupProtocolParametersAll"))
   def testConsumerRebalanceListenerAssignOnPartitionsRevoked(quorum: String, groupProtocol: String): Unit = {
     val tp = new TopicPartition(topic, 0)
-    triggerOnPartitionsRevoked(tp, { (consumer, _) =>
+    triggerOnPartitionsRevoked { (consumer, _) =>
       val e: Exception = assertThrows(classOf[IllegalStateException], () => consumer.assign(Collections.singletonList(tp)))
       assertEquals(e.getMessage, "Subscription to topics, partitions and pattern are mutually exclusive")
-    })
+    }
   }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumAndGroupProtocolNames)
   @MethodSource(Array("getTestQuorumAndGroupProtocolParametersAll"))
   def testConsumerRebalanceListenerAssignmentOnPartitionsRevoked(quorum: String, groupProtocol: String): Unit = {
     val tp = new TopicPartition(topic, 0)
-    triggerOnPartitionsRevoked(tp, { (consumer, _) =>
+    triggerOnPartitionsRevoked { (consumer, _) =>
       assertTrue(consumer.assignment().contains(tp))
-    })
+    }
   }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumAndGroupProtocolNames)
   @MethodSource(Array("getTestQuorumAndGroupProtocolParametersAll"))
   def testConsumerRebalanceListenerBeginningOffsetsOnPartitionsRevoked(quorum: String, groupProtocol: String): Unit = {
     val tp = new TopicPartition(topic, 0)
-    triggerOnPartitionsRevoked(tp, { (consumer, _) =>
+    triggerOnPartitionsRevoked { (consumer, _) =>
       val map = consumer.beginningOffsets(Collections.singletonList(tp))
       assertTrue(map.containsKey(tp))
       assertEquals(0, map.get(tp))
-    })
+    }
   }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumAndGroupProtocolNames)
   @MethodSource(Array("getTestQuorumAndGroupProtocolParametersAll"))
   def testGetPositionOfNewlyAssignedPartitionOnPartitionsAssignedCallback(quorum: String, groupProtocol: String): Unit = {
     val tp = new TopicPartition(topic, 0)
-    triggerOnPartitionsAssigned(tp, { (consumer, _) => assertDoesNotThrow(() => consumer.position(tp)) })
+    triggerOnPartitionsAssigned { (consumer, _) => assertDoesNotThrow(() => consumer.position(tp)) }
   }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumAndGroupProtocolNames)
@@ -110,7 +110,7 @@ class PlaintextConsumerCallbackTest extends AbstractConsumerTest {
     val startingTimestamp = 0
     sendRecords(producer, totalRecords.toInt, tp, startingTimestamp)
 
-    triggerOnPartitionsAssigned(tp, consumer, { (consumer, _) =>
+    triggerOnPartitionsAssigned(consumer, { (consumer, _) =>
       consumer.seek(tp, startingOffset)
       consumer.pause(asList(tp))
     })
@@ -122,23 +122,16 @@ class PlaintextConsumerCallbackTest extends AbstractConsumerTest {
       startingTimestamp = startingOffset)
   }
 
-  private def triggerOnPartitionsAssigned(tp: TopicPartition,
-                                          execute: (Consumer[Array[Byte], Array[Byte]], util.Collection[TopicPartition]) => Unit): Unit = {
+  private def triggerOnPartitionsAssigned(execute: (Consumer[Array[Byte], Array[Byte]], util.Collection[TopicPartition]) => Unit): Unit = {
     val consumer = createConsumer()
-    triggerOnPartitionsAssigned(tp, consumer, execute)
+    triggerOnPartitionsAssigned(consumer, execute)
   }
-
-  private def triggerOnPartitionsAssigned(tp: TopicPartition,
-                                          consumer: Consumer[Array[Byte], Array[Byte]],
-                                          execute: (Consumer[Array[Byte], Array[Byte]], util.Collection[TopicPartition]) => Unit): Unit = {
+  private def triggerOnPartitionsAssigned(consumer: Consumer[Array[Byte], Array[Byte]], execute: (Consumer[Array[Byte], Array[Byte]], util.Collection[TopicPartition]) => Unit): Unit = {
     val partitionsAssigned = new AtomicBoolean(false)
     consumer.subscribe(asList(topic), new ConsumerRebalanceListener {
       override def onPartitionsAssigned(partitions: util.Collection[TopicPartition]): Unit = {
-        // Make sure the partition used in the test is actually assigned before continuing.
-        if (partitions.contains(tp)) {
-          execute(consumer, partitions)
-          partitionsAssigned.set(true)
-        }
+        execute(consumer, partitions)
+        partitionsAssigned.set(true)
       }
 
       override def onPartitionsRevoked(partitions: util.Collection[TopicPartition]): Unit = {
@@ -148,25 +141,18 @@ class PlaintextConsumerCallbackTest extends AbstractConsumerTest {
     TestUtils.pollUntilTrue(consumer, () => partitionsAssigned.get(), "Timed out before expected rebalance completed")
   }
 
-  private def triggerOnPartitionsRevoked(tp: TopicPartition,
-                                         execute: (Consumer[Array[Byte], Array[Byte]], util.Collection[TopicPartition]) => Unit): Unit = {
+  private def triggerOnPartitionsRevoked(execute: (Consumer[Array[Byte], Array[Byte]], util.Collection[TopicPartition]) => Unit): Unit = {
     val consumer = createConsumer()
     val partitionsAssigned = new AtomicBoolean(false)
     val partitionsRevoked = new AtomicBoolean(false)
     consumer.subscribe(asList(topic), new ConsumerRebalanceListener {
       override def onPartitionsAssigned(partitions: util.Collection[TopicPartition]): Unit = {
-        // Make sure the partition used in the test is actually assigned before continuing.
-        if (partitions.contains(tp)) {
-          partitionsAssigned.set(true)
-        }
+        partitionsAssigned.set(true)
       }
 
       override def onPartitionsRevoked(partitions: util.Collection[TopicPartition]): Unit = {
-        // Make sure the partition used in the test is actually revoked before continuing.
-        if (partitions.contains(tp)) {
-          execute(consumer, partitions)
-          partitionsRevoked.set(true)
-        }
+        execute(consumer, partitions)
+        partitionsRevoked.set(true)
       }
     })
     TestUtils.pollUntilTrue(consumer, () => partitionsAssigned.get(), "Timed out before expected rebalance completed")

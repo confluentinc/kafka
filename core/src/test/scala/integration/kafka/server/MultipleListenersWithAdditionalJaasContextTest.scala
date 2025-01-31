@@ -32,7 +32,8 @@ class MultipleListenersWithAdditionalJaasContextTest extends MultipleListenersWi
 
   override def staticJaasSections: Seq[JaasSection] = {
     val (serverKeytabFile, _) = maybeCreateEmptyKeytabFiles()
-    Seq(JaasTestUtils.kafkaServerSection("secure_external.KafkaServer", kafkaServerSaslMechanisms(SecureExternal).asJava, Some(serverKeytabFile).toJava))
+    JaasTestUtils.zkSections.asScala :+
+      JaasTestUtils.kafkaServerSection("secure_external.KafkaServer", kafkaServerSaslMechanisms(SecureExternal).asJava, Some(serverKeytabFile).toJava)
   }
 
   override protected def dynamicJaasSections: Properties = {

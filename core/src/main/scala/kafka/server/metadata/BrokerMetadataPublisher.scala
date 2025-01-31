@@ -17,7 +17,7 @@
 
 package kafka.server.metadata
 
-import java.util.OptionalInt
+import java.util.{OptionalInt, Properties}
 import kafka.coordinator.transaction.TransactionCoordinator
 import kafka.log.LogManager
 import kafka.server.{KafkaConfig, ReplicaManager}
@@ -241,6 +241,10 @@ class BrokerMetadataPublisher(
       case Some(leaderEpoch) => OptionalInt.of(leaderEpoch)
       case None => OptionalInt.empty
     }
+  }
+
+  def reloadUpdatedFilesWithoutConfigChange(props: Properties): Unit = {
+    config.dynamicConfig.reloadUpdatedFilesWithoutConfigChange(props)
   }
 
   /**

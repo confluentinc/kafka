@@ -47,6 +47,7 @@ import org.apache.kafka.coordinator.group.generated.OffsetCommitKey;
 import org.apache.kafka.coordinator.group.generated.OffsetCommitValue;
 import org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics;
 import org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetricsShard;
+import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
@@ -168,6 +169,11 @@ public class OffsetMetadataManager {
     private final Time time;
 
     /**
+     * The metadata image.
+     */
+    private MetadataImage metadataImage;
+
+    /**
      * The group metadata manager.
      */
     private final GroupMetadataManager groupMetadataManager;
@@ -278,6 +284,7 @@ public class OffsetMetadataManager {
         this.snapshotRegistry = snapshotRegistry;
         this.log = logContext.logger(OffsetMetadataManager.class);
         this.time = time;
+        this.metadataImage = metadataImage;
         this.groupMetadataManager = groupMetadataManager;
         this.config = config;
         this.metrics = metrics;
@@ -491,7 +498,8 @@ public class OffsetMetadataManager {
                         request.groupId(),
                         topic.name(),
                         partition.partitionIndex(),
-                        offsetAndMetadata
+                        offsetAndMetadata,
+                        metadataImage.features().metadataVersion()
                     ));
                 }
             });
@@ -550,7 +558,8 @@ public class OffsetMetadataManager {
                         request.groupId(),
                         topic.name(),
                         partition.partitionIndex(),
-                        offsetAndMetadata
+                        offsetAndMetadata,
+                        metadataImage.features().metadataVersion()
                     ));
                 }
             });
@@ -1100,6 +1109,16 @@ public class OffsetMetadataManager {
         } else {
             log.debug("Aborted transactional offset commits for producer id {}.", producerId);
         }
+    }
+
+    /**
+     * A new metadata image is available.
+     *
+     * @param newImage  The new metadata image.
+     * @param delta     The delta image.
+     */
+    public void onNewMetadataImage(MetadataImage newImage, MetadataDelta delta) {
+        metadataImage = newImage;
     }
 
     /**

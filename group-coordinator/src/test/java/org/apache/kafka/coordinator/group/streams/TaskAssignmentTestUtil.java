@@ -17,27 +17,24 @@
 package org.apache.kafka.coordinator.group.streams;
 
 import java.util.AbstractMap;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class TaskAssignmentTestUtil {
 
-    public enum TaskRole {
-        ACTIVE,
-        STANDBY,
-        WARMUP
-    }
-
-    @SafeVarargs
-    public static TasksTuple mkTasksTuple(TaskRole taskRole, Map.Entry<String, Set<Integer>>... entries) {
-        return switch (taskRole) {
-            case ACTIVE -> new TasksTuple(mkTasksPerSubtopology(entries), new HashMap<>(), new HashMap<>());
-            case STANDBY -> new TasksTuple(new HashMap<>(), mkTasksPerSubtopology(entries), new HashMap<>());
-            case WARMUP -> new TasksTuple(new HashMap<>(), new HashMap<>(), mkTasksPerSubtopology(entries));
-        };
+    public static Assignment mkAssignment(final Map<String, Set<Integer>> activeTasks,
+                                          final Map<String, Set<Integer>> standbyTasks,
+                                          final Map<String, Set<Integer>> warmupTasks) {
+        return new Assignment(
+            Collections.unmodifiableMap(Objects.requireNonNull(activeTasks)),
+            Collections.unmodifiableMap(Objects.requireNonNull(standbyTasks)),
+            Collections.unmodifiableMap(Objects.requireNonNull(warmupTasks))
+        );
     }
 
     public static Map.Entry<String, Set<Integer>> mkTasks(String subtopologyId,
@@ -49,7 +46,8 @@ public class TaskAssignmentTestUtil {
     }
 
     @SafeVarargs
-    public static Map<String, Set<Integer>> mkTasksPerSubtopology(Map.Entry<String, Set<Integer>>... entries) {
+    public static Map<String, Set<Integer>> mkTasksPerSubtopology(Map.Entry<String,
+                                                                  Set<Integer>>... entries) {
         Map<String, Set<Integer>> assignment = new HashMap<>();
         for (Map.Entry<String, Set<Integer>> entry : entries) {
             assignment.put(entry.getKey(), entry.getValue());

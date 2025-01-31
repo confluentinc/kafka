@@ -46,7 +46,7 @@ object ApiVersionManager {
   def apply(
     listenerType: ListenerType,
     config: KafkaConfig,
-    forwardingManager: ForwardingManager,
+    forwardingManager: Option[ForwardingManager],
     supportedFeatures: BrokerFeatures,
     metadataCache: MetadataCache,
     clientMetricsManager: Option[ClientMetricsManager]
@@ -129,7 +129,7 @@ class SimpleApiVersionManager(
  */
 class DefaultApiVersionManager(
   val listenerType: ListenerType,
-  forwardingManager: ForwardingManager,
+  forwardingManager: Option[ForwardingManager],
   brokerFeatures: BrokerFeatures,
   metadataCache: MetadataCache,
   val enableUnstableLastVersion: Boolean,
@@ -143,19 +143,21 @@ class DefaultApiVersionManager(
     alterFeatureLevel0: Boolean
   ): ApiVersionsResponse = {
     val finalizedFeatures = metadataCache.features()
-    val controllerApiVersions = forwardingManager.controllerApiVersions
+    val controllerApiVersions = forwardingManager.flatMap(_.controllerApiVersions)
     val clientTelemetryEnabled = clientMetricsManager match {
       case Some(manager) => manager.isTelemetryReceiverConfigured
       case None => false
     }
     val apiVersions = if (controllerApiVersions.isDefined) {
       ApiVersionsResponse.controllerApiVersions(
+        finalizedFeatures.metadataVersion().highestSupportedRecordVersion,
         controllerApiVersions.get,
         listenerType,
         enableUnstableLastVersion,
         clientTelemetryEnabled)
     } else {
       ApiVersionsResponse.brokerApiVersions(
+        finalizedFeatures.metadataVersion().highestSupportedRecordVersion,
         listenerType,
         enableUnstableLastVersion,
         clientTelemetryEnabled)

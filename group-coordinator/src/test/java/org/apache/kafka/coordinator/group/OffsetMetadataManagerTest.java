@@ -63,6 +63,7 @@ import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroup;
 import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupMember;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
+import org.apache.kafka.server.common.MetadataVersion;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
 import org.junit.jupiter.api.Test;
@@ -449,7 +450,8 @@ public class OffsetMetadataManagerTest {
                     "metadata",
                     commitTimestamp,
                     OptionalLong.empty()
-                )
+                ),
+                MetadataVersion.latestTesting()
             ));
         }
 
@@ -488,25 +490,25 @@ public class OffsetMetadataManagerTest {
         ) {
             snapshotRegistry.idempotentCreateSnapshot(lastWrittenOffset);
 
-            ApiMessage key = record.key();
+            ApiMessageAndVersion key = record.key();
             ApiMessageAndVersion value = record.value();
 
             if (key == null) {
                 throw new IllegalStateException("Received a null key in " + record);
             }
 
-            switch (CoordinatorRecordType.fromId(record.key().apiKey())) {
+            switch (CoordinatorRecordType.fromId(key.version())) {
                 case OFFSET_COMMIT:
                     offsetMetadataManager.replay(
                         lastWrittenOffset,
                         producerId,
-                        (OffsetCommitKey) key,
+                        (OffsetCommitKey) key.message(),
                         (OffsetCommitValue) messageOrNull(value)
                     );
                     break;
 
                 default:
-                    throw new IllegalStateException("Received an unknown record type " + record.key().apiKey()
+                    throw new IllegalStateException("Received an unknown record type " + key.version()
                         + " in " + record);
             }
 
@@ -906,7 +908,8 @@ public class OffsetMetadataManagerTest {
                     "",
                     context.time.milliseconds(),
                     OptionalLong.of(context.time.milliseconds() + 1234L)
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -1013,7 +1016,8 @@ public class OffsetMetadataManagerTest {
                     "",
                     context.time.milliseconds(),
                     OptionalLong.empty()
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -1072,7 +1076,8 @@ public class OffsetMetadataManagerTest {
                     "",
                     context.time.milliseconds(),
                     OptionalLong.empty()
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -1235,7 +1240,8 @@ public class OffsetMetadataManagerTest {
                     "",
                     context.time.milliseconds(),
                     OptionalLong.empty()
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -1301,7 +1307,8 @@ public class OffsetMetadataManagerTest {
                     "metadata",
                     context.time.milliseconds(),
                     OptionalLong.empty()
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -1377,7 +1384,8 @@ public class OffsetMetadataManagerTest {
                     "small",
                     context.time.milliseconds(),
                     OptionalLong.empty()
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -1443,7 +1451,8 @@ public class OffsetMetadataManagerTest {
                     "metadata",
                     context.time.milliseconds(),
                     OptionalLong.empty()
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -1600,7 +1609,8 @@ public class OffsetMetadataManagerTest {
                     "metadata",
                     context.time.milliseconds(),
                     OptionalLong.empty()
-                )
+                ),
+                MetadataImage.EMPTY.features().metadataVersion()
             )),
             result.records()
         );
@@ -3127,7 +3137,8 @@ public class OffsetMetadataManagerTest {
             groupId,
             topic,
             partition,
-            offsetAndMetadata
+            offsetAndMetadata,
+            MetadataImage.EMPTY.features().metadataVersion()
         ));
 
         assertEquals(offsetAndMetadata, context.offsetMetadataManager.offset(
@@ -3149,7 +3160,8 @@ public class OffsetMetadataManagerTest {
             groupId,
             topic,
             partition,
-            offsetAndMetadata
+            offsetAndMetadata,
+            MetadataImage.EMPTY.features().metadataVersion()
         ));
 
         assertEquals(offsetAndMetadata, context.offsetMetadataManager.pendingTransactionalOffset(
