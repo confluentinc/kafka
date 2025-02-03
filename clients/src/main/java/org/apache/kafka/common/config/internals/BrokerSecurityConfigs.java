@@ -95,4 +95,8 @@ public class BrokerSecurityConfigs {
     public static final String SASL_SERVER_MAX_RECEIVE_SIZE_DOC = "The maximum receive size allowed before and during initial SASL authentication." +
             " Default receive size is 512KB. GSSAPI limits requests to 64K, but we allow upto 512KB by default for custom SASL mechanisms. In practice," +
             " PLAIN, SCRAM and OAUTH mechanisms can use much smaller limits.";
+
+    // The allowlist of the SASL OAUTHBEARER endpoints
+    public static final String ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG = "org.apache.kafka.sasl.oauthbearer.allowed.urls";
+
 }
