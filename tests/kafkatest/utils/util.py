@@ -50,6 +50,9 @@ def _kafka_jar_versions(proc_string):
     # Pattern example: kafka-streams-0.11.0.0-SNAPSHOT.jar
     versions.extend(re.findall("kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", proc_string))
 
+    # Pattern example: kafka_2.11-1.0.0-ccs-cp1.jar
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9])+(?:-ccs)?-cp[0-9]+\.jar", proc_string))
+
     return set(versions)
 
 
