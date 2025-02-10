@@ -66,6 +66,8 @@ def _kafka_jar_versions(proc_string):
     # Pattern example: kafka_2.13-6.2.0-ccs.jar
     versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+-ccs)\.jar", proc_string))
 
+    # Pattern example: kafka_2.11-1.0.0-ccs-cp1.jar
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+)-ccs-cp[0-9]+\.jar", proc_string))
     #
     # 5 kafka-#.#.#*/bin/.../libs/* permutations
     #
