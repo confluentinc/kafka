@@ -9871,6 +9871,69 @@ class KafkaApisTest extends Logging {
     assertEquals(Errors.GROUP_AUTHORIZATION_FAILED.code, response.data.errorCode)
   }
 
+  @Test
+  def testConsumerGroupHeartbeatFilterUnauthorizedTopics(): Unit = {
+    val memberId = Uuid.randomUuid.toString
+    val fooTopicName = "foo"
+    val barTopicName = "bar"
+    val fooTopicId = Uuid.randomUuid
+    val barTopicId = Uuid.randomUuid
+    val zarTopicId = Uuid.randomUuid
+
+    metadataCache = mock(classOf[KRaftMetadataCache])
+    when(metadataCache.getTopicName(fooTopicId)).thenReturn(Some(fooTopicName))
+    when(metadataCache.getTopicName(barTopicId)).thenReturn(Some(barTopicName))
+    when(metadataCache.getTopicName(zarTopicId)).thenReturn(None)
+
+    val consumerGroupHeartbeatRequest = new ConsumerGroupHeartbeatRequestData().setGroupId("group")
+
+    val requestChannelRequest = buildRequest(new ConsumerGroupHeartbeatRequest.Builder(consumerGroupHeartbeatRequest).build())
+
+    val future = new CompletableFuture[ConsumerGroupHeartbeatResponseData]()
+    when(groupCoordinator.consumerGroupHeartbeat(
+      requestChannelRequest.context,
+      consumerGroupHeartbeatRequest
+    )).thenReturn(future)
+
+    val authorizer: Authorizer = mock(classOf[Authorizer])
+    def buildExpectedActions(topics: List[String]): util.List[Action] = {
+      topics.map { topic =>
+        val pattern = new ResourcePattern(ResourceType.TOPIC, topic, PatternType.LITERAL)
+        new Action(AclOperation.DESCRIBE, pattern, 1, true, true)
+      }.asJava
+    }
+    when(authorizer.authorize(any[RequestContext], any[util.List[Action]]))
+      .thenReturn(Seq(AuthorizationResult.ALLOWED).asJava)
+    when(authorizer.authorize(any[RequestContext], ArgumentMatchers.eq(buildExpectedActions(List(fooTopicName, barTopicName)))))
+      .thenReturn(List(AuthorizationResult.ALLOWED, AuthorizationResult.DENIED).asJava)
+    when(authorizer.authorize(any[RequestContext], ArgumentMatchers.eq(buildExpectedActions(List(barTopicName, fooTopicName)))))
+      .thenReturn(List(AuthorizationResult.DENIED, AuthorizationResult.ALLOWED).asJava)
+
+    kafkaApis = createKafkaApis(
+      authorizer = Some(authorizer),
+      featureVersions = Seq(GroupVersion.GV_1)
+    )
+    kafkaApis.handle(requestChannelRequest, RequestLocal.noCaching)
+
+    val consumerGroupHeartbeatResponse = new ConsumerGroupHeartbeatResponseData()
+      .setMemberId(memberId)
+      .setAssignment(new ConsumerGroupHeartbeatResponseData.Assignment()
+        .setTopicPartitions(List(
+          new ConsumerGroupHeartbeatResponseData.TopicPartitions().setTopicId(fooTopicId),
+          new ConsumerGroupHeartbeatResponseData.TopicPartitions().setTopicId(barTopicId),
+          new ConsumerGroupHeartbeatResponseData.TopicPartitions().setTopicId(zarTopicId)).asJava))
+
+    val expectedResponse = new ConsumerGroupHeartbeatResponseData()
+      .setMemberId(memberId)
+      .setAssignment(new ConsumerGroupHeartbeatResponseData.Assignment()
+        .setTopicPartitions(List(
+          new ConsumerGroupHeartbeatResponseData.TopicPartitions().setTopicId(fooTopicId)).asJava))
+
+    future.complete(consumerGroupHeartbeatResponse)
+    val response = verifyNoThrottling[ConsumerGroupHeartbeatResponse](requestChannelRequest)
+    assertEquals(expectedResponse, response.data)
+  }
+
   @ParameterizedTest
   @ValueSource(booleans = Array(true, false))
   def testConsumerGroupDescribe(includeAuthorizedOperations: Boolean): Unit = {

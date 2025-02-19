@@ -2536,6 +2536,15 @@ class KafkaApis(val requestChannel: RequestChannel,
         if (exception != null) {
           requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(exception))
         } else {
+          if (response.assignment != null) {
+            // Filter out the topics that the principal is not authorized to describe.
+            val authorizedForDescribeTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
+              response.assignment.topicPartitions.asScala.flatMap(tp => metadataCache.getTopicName(tp.topicId)))(identity)
+            response.assignment.setTopicPartitions(response.assignment.topicPartitions.asScala.filter(tp => {
+              val topicName = metadataCache.getTopicName(tp.topicId)
+              !topicName.isEmpty && authorizedForDescribeTopics.contains(topicName.get)
+            }).asJava)
+          }
           requestHelper.sendMaybeThrottle(request, new ConsumerGroupHeartbeatResponse(response))
         }
       }
@@ -2592,11 +2601,29 @@ class KafkaApis(val requestChannel: RequestChannel,
             response.groups.addAll(results)
           }
 
+          removeUnauthorizedTopicsFromAssignment(request, response)
+
           requestHelper.sendMaybeThrottle(request, new ConsumerGroupDescribeResponse(response))
         }
       }
     }
+  }
 
+  private def removeUnauthorizedTopicsFromAssignment(
+    request: RequestChannel.Request,
+    response: ConsumerGroupDescribeResponseData,
+  ): Unit = {
+    val topicsToCheck = response.groups.asScala.flatMap(_.members.asScala).flatMap { member =>
+      member.assignment.topicPartitions.asScala.map(_.topicName) ++
+        member.targetAssignment.topicPartitions.asScala.map(_.topicName)
+    }.toSet
+    val authorizedTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
+      topicsToCheck)(identity)
+    response.groups.forEach(_.members.forEach(member => {
+        member.assignment.topicPartitions.removeIf(tp => !authorizedTopics.contains(tp.topicName))
+        member.targetAssignment.topicPartitions.removeIf(tp => !authorizedTopics.contains(tp.topicName))
+      })
+    )
   }
 
   def handleGetTelemetrySubscriptionsRequest(request: RequestChannel.Request): Unit = {
