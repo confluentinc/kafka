@@ -2601,29 +2601,23 @@ class KafkaApis(val requestChannel: RequestChannel,
             response.groups.addAll(results)
           }
 
-          removeUnauthorizedTopicsFromAssignment(request, response)
+          // Remove the unauthorized topics from the member assignments and target assignments.
+          val topicsToCheck = response.groups.asScala.flatMap(_.members.asScala).flatMap { member =>
+            member.assignment.topicPartitions.asScala.map(_.topicName) ++
+              member.targetAssignment.topicPartitions.asScala.map(_.topicName)
+          }.toSet
+          val authorizedTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
+            topicsToCheck)(identity)
+          response.groups.forEach(_.members.forEach { member => {
+            List(member.assignment, member.targetAssignment).foreach { assignment =>
+              assignment.setTopicPartitions(assignment.topicPartitions.asScala.filter(tp =>
+                authorizedTopics.contains(tp.topicName)).asJava)}
+          }})
 
           requestHelper.sendMaybeThrottle(request, new ConsumerGroupDescribeResponse(response))
         }
       }
     }
-  }
-
-  private def removeUnauthorizedTopicsFromAssignment(
-    request: RequestChannel.Request,
-    response: ConsumerGroupDescribeResponseData,
-  ): Unit = {
-    val topicsToCheck = response.groups.asScala.flatMap(_.members.asScala).flatMap { member =>
-      member.assignment.topicPartitions.asScala.map(_.topicName) ++
-        member.targetAssignment.topicPartitions.asScala.map(_.topicName)
-    }.toSet
-    val authorizedTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
-      topicsToCheck)(identity)
-    response.groups.forEach(_.members.forEach(member => {
-        member.assignment.topicPartitions.removeIf(tp => !authorizedTopics.contains(tp.topicName))
-        member.targetAssignment.topicPartitions.removeIf(tp => !authorizedTopics.contains(tp.topicName))
-      })
-    )
   }
 
   def handleGetTelemetrySubscriptionsRequest(request: RequestChannel.Request): Unit = {
