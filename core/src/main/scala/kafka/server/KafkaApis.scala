@@ -2537,7 +2537,7 @@ class KafkaApis(val requestChannel: RequestChannel,
           requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(exception))
         } else {
           if (response.assignment != null) {
-            // Filter out the topics that the principal is not authorized to describe.
+            // Remove the unauthorized topics from the assignment.
             val authorizedForDescribeTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
               response.assignment.topicPartitions.asScala.flatMap(tp => metadataCache.getTopicName(tp.topicId)))(identity)
             response.assignment.setTopicPartitions(response.assignment.topicPartitions.asScala.filter(tp => {
