@@ -109,6 +109,7 @@ import org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics;
 import org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetricsShard;
 import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
+import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
@@ -117,6 +118,7 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -355,17 +357,19 @@ public class GroupCoordinatorShard implements CoordinatorShard<CoordinatorRecord
     /**
      * Handles a ConsumerGroupHeartbeat request.
      *
-     * @param context The request context.
-     * @param request The actual ConsumerGroupHeartbeat request.
+     * @param context       The request context.
+     * @param request       The actual ConsumerGroupHeartbeat request.
+     * @param authorizer    The authorizer to validate the regex subscription.
      *
      * @return A Result containing the ConsumerGroupHeartbeat response and
      *         a list of records to update the state machine.
      */
     public CoordinatorResult<ConsumerGroupHeartbeatResponseData, CoordinatorRecord> consumerGroupHeartbeat(
         RequestContext context,
-        ConsumerGroupHeartbeatRequestData request
+        ConsumerGroupHeartbeatRequestData request,
+        Optional<Authorizer> authorizer
     ) {
-        return groupMetadataManager.consumerGroupHeartbeat(context, request);
+        return groupMetadataManager.consumerGroupHeartbeat(context, request, authorizer);
     }
 
     /**

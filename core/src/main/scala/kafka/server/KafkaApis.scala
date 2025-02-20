@@ -2519,19 +2519,25 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   def handleConsumerGroupHeartbeat(request: RequestChannel.Request): CompletableFuture[Unit] = {
     val consumerGroupHeartbeatRequest = request.body[ConsumerGroupHeartbeatRequest]
+    var future = CompletableFuture.completedFuture[Unit](())
 
     if (!isConsumerGroupProtocolEnabled()) {
       // The API is not supported by the "old" group coordinator (the default). If the
       // new one is not enabled, we fail directly here.
       requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
-      CompletableFuture.completedFuture[Unit](())
     } else if (!authHelper.authorize(request.context, READ, GROUP, consumerGroupHeartbeatRequest.data.groupId)) {
       requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(Errors.GROUP_AUTHORIZATION_FAILED.exception))
-      CompletableFuture.completedFuture[Unit](())
+    } else if (consumerGroupHeartbeatRequest.data.subscribedTopicNames != null) {
+      val authorizedTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
+        consumerGroupHeartbeatRequest.data.subscribedTopicNames.asScala)(identity)
+      if (authorizedTopics.size < consumerGroupHeartbeatRequest.data.subscribedTopicNames.size) {
+        requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(Errors.TOPIC_AUTHORIZATION_FAILED.exception))
+      }
     } else {
-      groupCoordinator.consumerGroupHeartbeat(
+      future = groupCoordinator.consumerGroupHeartbeat(
         request.context,
         consumerGroupHeartbeatRequest.data,
+        Optional.ofNullable(authorizer.orNull)
       ).handle[Unit] { (response, exception) =>
         if (exception != null) {
           requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(exception))
@@ -2540,6 +2546,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         }
       }
     }
+    future
   }
 
   def handleConsumerGroupDescribe(request: RequestChannel.Request): CompletableFuture[Unit] = {

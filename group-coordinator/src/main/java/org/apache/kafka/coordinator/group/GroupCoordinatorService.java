@@ -79,6 +79,7 @@ import org.apache.kafka.coordinator.common.runtime.PartitionWriter;
 import org.apache.kafka.coordinator.group.metrics.GroupCoordinatorMetrics;
 import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
+import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.record.BrokerCompressionType;
 import org.apache.kafka.server.share.persister.Persister;
 import org.apache.kafka.server.share.persister.ReadShareGroupStateSummaryParameters;
@@ -336,12 +337,13 @@ public class GroupCoordinatorService implements GroupCoordinator {
     }
 
     /**
-     * See {@link GroupCoordinator#consumerGroupHeartbeat(RequestContext, ConsumerGroupHeartbeatRequestData)}.
+     * See {@link GroupCoordinator#consumerGroupHeartbeat(RequestContext, ConsumerGroupHeartbeatRequestData, Optional<Authorizer>)}.
      */
     @Override
     public CompletableFuture<ConsumerGroupHeartbeatResponseData> consumerGroupHeartbeat(
         RequestContext context,
-        ConsumerGroupHeartbeatRequestData request
+        ConsumerGroupHeartbeatRequestData request,
+        Optional<Authorizer> authorizer
     ) {
         if (!isActive.get()) {
             return CompletableFuture.completedFuture(new ConsumerGroupHeartbeatResponseData()
@@ -353,7 +355,7 @@ public class GroupCoordinatorService implements GroupCoordinator {
             "consumer-group-heartbeat",
             topicPartitionFor(request.groupId()),
             Duration.ofMillis(config.offsetCommitTimeoutMs()),
-            coordinator -> coordinator.consumerGroupHeartbeat(context, request)
+            coordinator -> coordinator.consumerGroupHeartbeat(context, request, authorizer)
         ).exceptionally(exception -> handleOperationException(
             "consumer-group-heartbeat",
             request,

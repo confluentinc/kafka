@@ -30,6 +30,7 @@ import org.apache.kafka.common.errors.InconsistentGroupProtocolException;
 import org.apache.kafka.common.errors.InvalidRegularExpression;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.RebalanceInProgressException;
+import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.errors.UnknownMemberIdException;
 import org.apache.kafka.common.errors.UnknownServerException;
 import org.apache.kafka.common.errors.UnreleasedInstanceIdException;
@@ -61,6 +62,7 @@ import org.apache.kafka.common.protocol.types.SchemaException;
 import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.requests.ShareGroupHeartbeatRequest;
+import org.apache.kafka.common.resource.ResourcePattern;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorExecutor;
@@ -140,6 +142,9 @@ import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.image.TopicImage;
 import org.apache.kafka.image.TopicsDelta;
+import org.apache.kafka.server.authorizer.Action;
+import org.apache.kafka.server.authorizer.AuthorizationResult;
+import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
 import org.apache.kafka.timeline.TimelineHashSet;
@@ -165,8 +170,10 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static org.apache.kafka.common.acl.AclOperation.DESCRIBE;
 import static org.apache.kafka.common.protocol.Errors.COORDINATOR_NOT_AVAILABLE;
 import static org.apache.kafka.common.protocol.Errors.ILLEGAL_GENERATION;
 import static org.apache.kafka.common.protocol.Errors.NOT_COORDINATOR;
@@ -175,6 +182,8 @@ import static org.apache.kafka.common.requests.ConsumerGroupHeartbeatRequest.CON
 import static org.apache.kafka.common.requests.ConsumerGroupHeartbeatRequest.LEAVE_GROUP_MEMBER_EPOCH;
 import static org.apache.kafka.common.requests.ConsumerGroupHeartbeatRequest.LEAVE_GROUP_STATIC_MEMBER_EPOCH;
 import static org.apache.kafka.common.requests.JoinGroupRequest.UNKNOWN_MEMBER_ID;
+import static org.apache.kafka.common.resource.PatternType.LITERAL;
+import static org.apache.kafka.common.resource.ResourceType.TOPIC;
 import static org.apache.kafka.coordinator.group.Group.GroupType.CLASSIC;
 import static org.apache.kafka.coordinator.group.Group.GroupType.CONSUMER;
 import static org.apache.kafka.coordinator.group.Group.GroupType.SHARE;
@@ -211,7 +220,6 @@ import static org.apache.kafka.coordinator.group.streams.StreamsCoordinatorRecor
 import static org.apache.kafka.coordinator.group.streams.StreamsCoordinatorRecordHelpers.newStreamsGroupEpochRecord;
 import static org.apache.kafka.coordinator.group.streams.StreamsCoordinatorRecordHelpers.newStreamsGroupMemberTombstoneRecord;
 import static org.apache.kafka.coordinator.group.streams.StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentTombstoneRecord;
-
 
 /**
  * The GroupMetadataManager manages the metadata of all classic and consumer groups. It holds
@@ -1753,6 +1761,7 @@ public class GroupMetadataManager {
      *    is larger than the current target assignment epoch.
      * 3) The member's assignment is reconciled with the target assignment.
      *
+     * @param context               The request context.
      * @param groupId               The group id from the request.
      * @param memberId              The member id from the request.
      * @param memberEpoch           The member epoch from the request.
@@ -1767,11 +1776,13 @@ public class GroupMetadataManager {
      *                              or null.
      * @param assignorName          The assignor name from the request or null.
      * @param ownedTopicPartitions  The list of owned partitions from the request or null.
+     * @param authorizer            The authorizer to validate the regex subscription.
      *
      * @return A Result containing the ConsumerGroupHeartbeat response and
      *         a list of records to update the state machine.
      */
     private CoordinatorResult<ConsumerGroupHeartbeatResponseData, CoordinatorRecord> consumerGroupHeartbeat(
+        RequestContext context,
         String groupId,
         String memberId,
         int memberEpoch,
@@ -1783,7 +1794,8 @@ public class GroupMetadataManager {
         List<String> subscribedTopicNames,
         String subscribedTopicRegex,
         String assignorName,
-        List<ConsumerGroupHeartbeatRequestData.TopicPartitions> ownedTopicPartitions
+        List<ConsumerGroupHeartbeatRequestData.TopicPartitions> ownedTopicPartitions,
+        Optional<Authorizer> authorizer
     ) throws ApiException {
         final long currentTimeMs = time.milliseconds();
         final List<CoordinatorRecord> records = new ArrayList<>();
@@ -1847,10 +1859,12 @@ public class GroupMetadataManager {
         );
 
         bumpGroupEpoch |= maybeUpdateRegularExpressions(
+            context,
             group,
             member,
             updatedMember,
-            records
+            records,
+            authorizer
         );
 
         int groupEpoch = group.groupEpoch();
@@ -2434,17 +2448,21 @@ public class GroupMetadataManager {
      * group. We align the refreshment of the regular expression in order to have
      * them trigger only one rebalance per update.
      *
+     * @param context       The request context.
      * @param group         The consumer group.
      * @param member        The old member.
      * @param updatedMember The new member.
      * @param records       The records accumulator.
+     * @param authorizer    The authorizer to validate the regex subscription.
      * @return Whether a rebalance must be triggered.
      */
     private boolean maybeUpdateRegularExpressions(
+        RequestContext context,
         ConsumerGroup group,
         ConsumerGroupMember member,
         ConsumerGroupMember updatedMember,
-        List<CoordinatorRecord> records
+        List<CoordinatorRecord> records,
+        Optional<Authorizer> authorizer
     ) {
         String groupId = group.groupId();
         String memberId = updatedMember.memberId();
@@ -2529,9 +2547,54 @@ public class GroupMetadataManager {
                 () -> refreshRegularExpressions(groupId, log, time, metadataImage, regexes),
                 (result, exception) -> handleRegularExpressionsResult(groupId, result, exception)
             );
+        } else if (!isNotEmpty(newSubscribedTopicRegex)) {
+            throwIfTopicDescribeAuthorizationDenied(
+                context,
+                updatedMember.memberId(),
+                authorizer,
+                group.resolvedRegularExpression(newSubscribedTopicRegex).get().topics
+            );
         }
 
         return bumpGroupEpoch;
+    }
+
+    /**
+     * This method throws a TopicAuthorizationException if the list contains
+     * topics that the member is not authorized to describe.
+     *
+     * @param context               The request context.
+     * @param memberId              The member id.
+     * @param authorizer            The authorizer to validate the regex subscription.
+     * @param topicNames            The list of topic names to validate.
+     */
+    private void throwIfTopicDescribeAuthorizationDenied(
+        RequestContext context,
+        String memberId,
+        Optional<Authorizer> authorizer,
+        Set<String> topicNames
+    ) {
+        if (authorizer.isPresent()) {
+            List<Action> actions = topicNames.stream().map(topicName -> {
+                ResourcePattern resource = new ResourcePattern(TOPIC, topicName, LITERAL);
+                return new Action(DESCRIBE, resource, 1, true, true);
+            }).collect(Collectors.toList());
+
+            List<AuthorizationResult> authorizationResults = authorizer.get().authorize(context, actions);
+            Set<String> deniedTopics = new HashSet<>();
+            IntStream.range(0, topicNames.size()).forEach(i -> {
+                if (authorizationResults.get(i) == AuthorizationResult.DENIED) {
+                    deniedTopics.add(actions.get(i).resourcePattern().name());
+                }
+            });
+
+            if (!deniedTopics.isEmpty()) {
+                throw new TopicAuthorizationException(
+                    String.format("Member %s is not authorized to access topics: %s", memberId, deniedTopics),
+                    deniedTopics
+                );
+            }
+        }
     }
 
     /**
@@ -3741,15 +3804,17 @@ public class GroupMetadataManager {
     /**
      * Handles a ConsumerGroupHeartbeat request.
      *
-     * @param context The request context.
-     * @param request The actual ConsumerGroupHeartbeat request.
+     * @param context       The request context.
+     * @param request       The actual ConsumerGroupHeartbeat request.
+     * @param authorizer    The authorizer to validate the regex subscription.
      *
      * @return A Result containing the ConsumerGroupHeartbeat response and
      *         a list of records to update the state machine.
      */
     public CoordinatorResult<ConsumerGroupHeartbeatResponseData, CoordinatorRecord> consumerGroupHeartbeat(
         RequestContext context,
-        ConsumerGroupHeartbeatRequestData request
+        ConsumerGroupHeartbeatRequestData request,
+        Optional<Authorizer> authorizer
     ) throws ApiException {
         throwIfConsumerGroupHeartbeatRequestIsInvalid(request, context.apiVersion());
 
@@ -3765,6 +3830,7 @@ public class GroupMetadataManager {
         } else {
             // Otherwise, it is a regular heartbeat.
             return consumerGroupHeartbeat(
+                context,
                 request.groupId(),
                 request.memberId(),
                 request.memberEpoch(),
@@ -3776,7 +3842,8 @@ public class GroupMetadataManager {
                 request.subscribedTopicNames(),
                 request.subscribedTopicRegex(),
                 request.serverAssignor(),
-                request.topicPartitions()
+                request.topicPartitions(),
+                authorizer
             );
         }
     }
