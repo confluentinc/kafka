@@ -9812,7 +9812,8 @@ class KafkaApisTest extends Logging {
     val future = new CompletableFuture[ConsumerGroupHeartbeatResponseData]()
     when(groupCoordinator.consumerGroupHeartbeat(
       requestChannelRequest.context,
-      consumerGroupHeartbeatRequest
+      consumerGroupHeartbeatRequest,
+      Optional.empty
     )).thenReturn(future)
     kafkaApis = createKafkaApis(
       featureVersions = Seq(GroupVersion.GV_1)
@@ -9838,7 +9839,8 @@ class KafkaApisTest extends Logging {
     val future = new CompletableFuture[ConsumerGroupHeartbeatResponseData]()
     when(groupCoordinator.consumerGroupHeartbeat(
       requestChannelRequest.context,
-      consumerGroupHeartbeatRequest
+      consumerGroupHeartbeatRequest,
+      Optional.empty
     )).thenReturn(future)
     kafkaApis = createKafkaApis(
       featureVersions = Seq(GroupVersion.GV_1)

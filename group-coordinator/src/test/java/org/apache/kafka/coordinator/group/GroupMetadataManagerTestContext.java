@@ -109,6 +109,7 @@ import org.apache.kafka.coordinator.group.modern.share.ShareGroup;
 import org.apache.kafka.coordinator.group.modern.share.ShareGroupBuilder;
 import org.apache.kafka.coordinator.group.streams.StreamsGroupBuilder;
 import org.apache.kafka.image.MetadataImage;
+import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
@@ -120,6 +121,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -621,6 +623,14 @@ public class GroupMetadataManagerTestContext {
         ConsumerGroupHeartbeatRequestData request,
         short apiVersion
     ) {
+        return consumerGroupHeartbeat(request,apiVersion, Optional.empty());
+    }
+
+    public CoordinatorResult<ConsumerGroupHeartbeatResponseData, CoordinatorRecord> consumerGroupHeartbeat(
+        ConsumerGroupHeartbeatRequestData request,
+        short apiVersion,
+        Optional<Authorizer> authorizer
+    ) {
         RequestContext context = new RequestContext(
             new RequestHeader(
                 ApiKeys.CONSUMER_GROUP_HEARTBEAT,
@@ -639,7 +649,8 @@ public class GroupMetadataManagerTestContext {
 
         CoordinatorResult<ConsumerGroupHeartbeatResponseData, CoordinatorRecord> result = groupMetadataManager.consumerGroupHeartbeat(
             context,
-            request
+            request,
+            authorizer
         );
 
         if (result.replayRecords()) {

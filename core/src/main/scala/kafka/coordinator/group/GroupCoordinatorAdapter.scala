@@ -27,6 +27,7 @@ import org.apache.kafka.common.utils.{BufferSupplier, Time}
 import org.apache.kafka.coordinator.group
 import org.apache.kafka.coordinator.group.OffsetAndMetadata
 import org.apache.kafka.image.{MetadataDelta, MetadataImage}
+import org.apache.kafka.server.authorizer.Authorizer
 import org.apache.kafka.server.common.RequestLocal
 import org.apache.kafka.server.util.FutureUtils
 
@@ -70,7 +71,8 @@ private[group] class GroupCoordinatorAdapter(
 
   override def consumerGroupHeartbeat(
     context: RequestContext,
-    request: ConsumerGroupHeartbeatRequestData
+    request: ConsumerGroupHeartbeatRequestData,
+    authorizer: Optional[Authorizer]
   ): CompletableFuture[ConsumerGroupHeartbeatResponseData] = {
     FutureUtils.failedFuture(Errors.UNSUPPORTED_VERSION.exception(
       s"The old group coordinator does not support ${ApiKeys.CONSUMER_GROUP_HEARTBEAT.name} API."
