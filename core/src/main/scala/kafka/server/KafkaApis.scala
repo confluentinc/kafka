@@ -2529,6 +2529,8 @@ class KafkaApis(val requestChannel: RequestChannel,
       requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(Errors.GROUP_AUTHORIZATION_FAILED.exception))
     } else if (consumerGroupHeartbeatRequest.data.subscribedTopicNames != null &&
       !consumerGroupHeartbeatRequest.data.subscribedTopicNames.isEmpty) {
+      // Check the authorization if the subscribed topic names are provided.
+      // Clients are not allowed to see topics that are not authorized for Describe.
       val authorizedTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
         consumerGroupHeartbeatRequest.data.subscribedTopicNames.asScala)(identity)
       if (authorizedTopics.size < consumerGroupHeartbeatRequest.data.subscribedTopicNames.size) {
@@ -2599,6 +2601,25 @@ class KafkaApis(val requestChannel: RequestChannel,
             // Otherwise, we have to copy the results into the existing ones.
             response.groups.addAll(results)
           }
+
+          // Clients are not allowed to see topics that are not authorized for Describe.
+          var topicsToCheck = Set[String]()
+          response.groups.forEach(_.members.forEach { member =>
+            List(member.assignment, member.targetAssignment).foreach { assignment =>
+              assignment.topicPartitions.asScala.foreach { tp =>
+                topicsToCheck += tp.topicName
+              }
+            }
+          })
+          val authorizedTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
+            topicsToCheck)(identity)
+          response.groups.forEach(_.members.forEach { member =>
+            List(member.assignment, member.targetAssignment).foreach { assignment =>
+              assignment.setTopicPartitions(assignment.topicPartitions.asScala.filter { tp =>
+                authorizedTopics.contains(tp.topicName)
+              }.asJava)
+            }
+          })
 
           requestHelper.sendMaybeThrottle(request, new ConsumerGroupDescribeResponse(response))
         }
