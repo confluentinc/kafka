@@ -854,7 +854,8 @@ public interface Admin extends AutoCloseable {
     DescribeDelegationTokenResult describeDelegationToken(DescribeDelegationTokenOptions options);
 
     /**
-     * Describe some consumer groups in the cluster.
+     * Describe consumer groups in the cluster. The response will exclude topic partitions
+     * if the client doesn't have the describe authorization for the topic.
      *
      * @param groupIds The IDs of the groups to describe.
      * @param options  The options to use when describing the groups.
@@ -864,7 +865,8 @@ public interface Admin extends AutoCloseable {
                                                         DescribeConsumerGroupsOptions options);
 
     /**
-     * Describe some consumer groups in the cluster, with the default options.
+     * Describe some consumer groups in the cluster, with the default options. The response
+     * will exclude topic partitions if the client doesn't have the describe authorization for the topic.
      * <p>
      * This is a convenience method for {@link #describeConsumerGroups(Collection, DescribeConsumerGroupsOptions)}
      * with default options. See the overload for more details.
