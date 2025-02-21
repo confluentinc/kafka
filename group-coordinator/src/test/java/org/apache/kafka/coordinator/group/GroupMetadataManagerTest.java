@@ -31,6 +31,7 @@ import org.apache.kafka.common.errors.InvalidRegularExpression;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.NotLeaderOrFollowerException;
 import org.apache.kafka.common.errors.RebalanceInProgressException;
+import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.errors.UnknownMemberIdException;
 import org.apache.kafka.common.errors.UnknownServerException;
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
@@ -105,6 +106,8 @@ import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
 import org.apache.kafka.image.MetadataProvenance;
 
+import org.apache.kafka.server.authorizer.AuthorizationResult;
+import org.apache.kafka.server.authorizer.Authorizer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -16592,6 +16595,68 @@ public class GroupMetadataManagerTest {
                 List.of(GroupCoordinatorRecordHelpers.newConsumerGroupEpochRecord(groupId, 11))
             ),
             task.result.records()
+        );
+    }
+
+    @Test
+    public void testConsumerGroupMemberJoinsWithRegexWithTopicAuthorizationFailure() {
+        String groupId = "fooup";
+        String memberId0 = Uuid.randomUuid().toString();
+        String memberId1 = Uuid.randomUuid().toString();
+        String memberId2 = Uuid.randomUuid().toString();
+
+        Uuid fooTopicId = Uuid.randomUuid();
+        String fooTopicName = "foo";
+        Uuid barTopicId = Uuid.randomUuid();
+        String barTopicName = "bar";
+
+        GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNORS_CONFIG, List.of(new MockPartitionAssignor("range")))
+            .withConsumerGroup(new ConsumerGroupBuilder(groupId, 10)
+                .withMember(new ConsumerGroupMember.Builder(memberId0)
+                    .setMemberEpoch(10)
+                    .setSubscribedTopicRegex("foo*")
+                    .setAssignedPartitions(mkAssignment(
+                        mkTopicAssignment(fooTopicId, 0, 1, 2)))
+                    .build())
+                .withMember(new ConsumerGroupMember.Builder(memberId1)
+                    .setMemberEpoch(10)
+                    .setSubscribedTopicRegex("foo*")
+                    .setAssignedPartitions(mkAssignment(
+                        mkTopicAssignment(fooTopicId, 3, 4, 5)))
+                    .build())
+                .withMember(new ConsumerGroupMember.Builder(memberId2)
+                    .setMemberEpoch(10)
+                    .setSubscribedTopicRegex("bar*")
+                    .setAssignedPartitions(mkAssignment(
+                        mkTopicAssignment(barTopicId, 0, 1, 2)))
+                    .build())
+                .withResolvedRegularExpression("foo*", new ResolvedRegularExpression(
+                    Set.of(fooTopicName), 0L, 0L))
+                .withResolvedRegularExpression("bar*", new ResolvedRegularExpression(
+                    Set.of(barTopicName), 0L, 0L)))
+            .build();
+
+        // sleep for more than REGEX_BATCH_REFRESH_INTERVAL_MS
+        context.time.sleep(10001L);
+
+        Authorizer authorizer = mock(Authorizer.class);
+        when(authorizer.authorize(any(), any()))
+            .thenReturn(Collections.singletonList(AuthorizationResult.DENIED));
+
+        assertThrows(TopicAuthorizationException.class, () ->
+            context.consumerGroupHeartbeat(
+                new ConsumerGroupHeartbeatRequestData()
+                    .setGroupId(groupId)
+                    .setMemberId(memberId1)
+                    .setMemberEpoch(10)
+                    .setRebalanceTimeoutMs(5000)
+                    .setSubscribedTopicRegex("bar*")
+                    .setServerAssignor("range")
+                    .setTopicPartitions(Collections.emptyList()),
+                ApiKeys.CONSUMER_GROUP_HEARTBEAT.latestVersion(),
+                Optional.of(authorizer)
+            )
         );
     }
 

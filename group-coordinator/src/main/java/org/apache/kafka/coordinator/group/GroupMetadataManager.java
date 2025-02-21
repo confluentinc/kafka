@@ -2547,7 +2547,7 @@ public class GroupMetadataManager {
                 () -> refreshRegularExpressions(groupId, log, time, metadataImage, regexes),
                 (result, exception) -> handleRegularExpressionsResult(groupId, result, exception)
             );
-        } else if (!isNotEmpty(newSubscribedTopicRegex)) {
+        } else if (isNotEmpty(newSubscribedTopicRegex)) {
             throwIfTopicDescribeAuthorizationDenied(
                 context,
                 updatedMember.memberId(),
@@ -2590,7 +2590,7 @@ public class GroupMetadataManager {
 
             if (!deniedTopics.isEmpty()) {
                 throw new TopicAuthorizationException(
-                    String.format("Member %s is not authorized to access topics: %s", memberId, deniedTopics),
+                    String.format("Member %s is not authorized to describe topics: %s", memberId, deniedTopics),
                     deniedTopics
                 );
             }

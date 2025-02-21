@@ -2527,7 +2527,8 @@ class KafkaApis(val requestChannel: RequestChannel,
       requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(Errors.UNSUPPORTED_VERSION.exception))
     } else if (!authHelper.authorize(request.context, READ, GROUP, consumerGroupHeartbeatRequest.data.groupId)) {
       requestHelper.sendMaybeThrottle(request, consumerGroupHeartbeatRequest.getErrorResponse(Errors.GROUP_AUTHORIZATION_FAILED.exception))
-    } else if (consumerGroupHeartbeatRequest.data.subscribedTopicNames != null) {
+    } else if (consumerGroupHeartbeatRequest.data.subscribedTopicNames != null &&
+      !consumerGroupHeartbeatRequest.data.subscribedTopicNames.isEmpty) {
       val authorizedTopics = authHelper.filterByAuthorized(request.context, DESCRIBE, TOPIC,
         consumerGroupHeartbeatRequest.data.subscribedTopicNames.asScala)(identity)
       if (authorizedTopics.size < consumerGroupHeartbeatRequest.data.subscribedTopicNames.size) {

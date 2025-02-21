@@ -623,7 +623,7 @@ public class GroupMetadataManagerTestContext {
         ConsumerGroupHeartbeatRequestData request,
         short apiVersion
     ) {
-        return consumerGroupHeartbeat(request,apiVersion, Optional.empty());
+        return consumerGroupHeartbeat(request, apiVersion, Optional.empty());
     }
 
     public CoordinatorResult<ConsumerGroupHeartbeatResponseData, CoordinatorRecord> consumerGroupHeartbeat(

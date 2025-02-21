@@ -9853,7 +9853,7 @@ class KafkaApisTest extends Logging {
   }
 
   @Test
-  def testConsumerGroupHeartbeatRequestAuthorizationFailed(): Unit = {
+  def testConsumerGroupHeartbeatRequestGroupAuthorizationFailed(): Unit = {
     metadataCache = mock(classOf[KRaftMetadataCache])
 
     val consumerGroupHeartbeatRequest = new ConsumerGroupHeartbeatRequestData().setGroupId("group")
@@ -9871,6 +9871,46 @@ class KafkaApisTest extends Logging {
 
     val response = verifyNoThrottling[ConsumerGroupHeartbeatResponse](requestChannelRequest)
     assertEquals(Errors.GROUP_AUTHORIZATION_FAILED.code, response.data.errorCode)
+  }
+
+  @Test
+  def testConsumerGroupHeartbeatRequestTopicAuthorizationFailed(): Unit = {
+    metadataCache = mock(classOf[KRaftMetadataCache])
+    val groupId = "group"
+    val fooTopicName = "foo"
+    val barTopicName = "bar"
+    val zarTopicName = "zar"
+
+    val consumerGroupHeartbeatRequest = new ConsumerGroupHeartbeatRequestData()
+      .setGroupId(groupId)
+      .setSubscribedTopicNames(List(fooTopicName, barTopicName, zarTopicName).asJava)
+
+    val requestChannelRequest = buildRequest(new ConsumerGroupHeartbeatRequest.Builder(consumerGroupHeartbeatRequest).build())
+
+    val authorizer: Authorizer = mock(classOf[Authorizer])
+    val acls = Map(
+      groupId      -> AuthorizationResult.ALLOWED,
+      fooTopicName -> AuthorizationResult.ALLOWED,
+      barTopicName -> AuthorizationResult.DENIED,
+    )
+    when(authorizer.authorize(
+      any[RequestContext],
+      any[util.List[Action]]
+    )).thenAnswer { invocation =>
+      val actions = invocation.getArgument(1, classOf[util.List[Action]])
+      actions.asScala.map { action =>
+        acls.getOrElse(action.resourcePattern.name, AuthorizationResult.DENIED)
+      }.asJava
+    }
+
+    kafkaApis = createKafkaApis(
+      authorizer = Some(authorizer),
+      featureVersions = Seq(GroupVersion.GV_1)
+    )
+    kafkaApis.handle(requestChannelRequest, RequestLocal.noCaching)
+
+    val response = verifyNoThrottling[ConsumerGroupHeartbeatResponse](requestChannelRequest)
+    assertEquals(Errors.TOPIC_AUTHORIZATION_FAILED.code, response.data.errorCode)
   }
 
   @ParameterizedTest
