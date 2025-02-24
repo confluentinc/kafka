@@ -80,15 +80,7 @@ public class ClientCredentialsAccessTokenRetriever extends HttpAccessTokenRetrie
 
     @Override
     protected String formatRequestBody() {
-        StringBuilder requestParameters = new StringBuilder();
-        requestParameters.append("grant_type=client_credentials");
-
-        if (!Utils.isBlank(scope)) {
-            String encodedScope = URLEncoder.encode(scope.trim(), StandardCharsets.UTF_8);
-            requestParameters.append("&scope=").append(encodedScope);
-        }
-
-        return requestParameters.toString();
+        return formatRequestBody(scope);
     }
 
     @Override
