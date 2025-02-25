@@ -75,7 +75,7 @@ public class AccessTokenRetrieverFactory  {
 
             boolean urlencodeHeader = validateUrlencodeHeader(cu);
 
-            return new HttpAccessTokenRetriever(clientId,
+            return new ClientCredentialsAccessTokenRetriever(clientId,
                 clientSecret,
                 scope,
                 sslSocketFactory,
