@@ -19,8 +19,6 @@ package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.SaslConfigs;
-import org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler;
-import org.apache.kafka.common.utils.Utils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,10 +33,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -50,19 +46,14 @@ import javax.net.ssl.SSLSocketFactory;
 
 /**
  * <code>HttpAccessTokenRetriever</code> is an {@link AccessTokenRetriever} that will
- * communicate with an OAuth/OIDC provider directly via HTTP to post client credentials
- * ({@link OAuthBearerLoginCallbackHandler#CLIENT_ID_CONFIG}/{@link OAuthBearerLoginCallbackHandler#CLIENT_SECRET_CONFIG})
- * to a publicized token endpoint URL
+ * communicate with an OAuth/OIDC provider directly via HTTP to a publicized token endpoint URL
  * ({@link SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL}).
  *
  * @see AccessTokenRetriever
- * @see OAuthBearerLoginCallbackHandler#CLIENT_ID_CONFIG
- * @see OAuthBearerLoginCallbackHandler#CLIENT_SECRET_CONFIG
- * @see OAuthBearerLoginCallbackHandler#SCOPE_CONFIG
  * @see SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL
  */
 
-public class HttpAccessTokenRetriever implements AccessTokenRetriever {
+public abstract class HttpAccessTokenRetriever implements AccessTokenRetriever {
 
     private static final Logger log = LoggerFactory.getLogger(HttpAccessTokenRetriever.class);
 
@@ -97,12 +88,6 @@ public class HttpAccessTokenRetriever implements AccessTokenRetriever {
         UNRETRYABLE_HTTP_CODES.add(HttpURLConnection.HTTP_VERSION);
     }
 
-    private final String clientId;
-
-    private final String clientSecret;
-
-    private final String scope;
-
     private final SSLSocketFactory sslSocketFactory;
 
     private final String tokenEndpointUrl;
@@ -115,29 +100,35 @@ public class HttpAccessTokenRetriever implements AccessTokenRetriever {
 
     private final Integer loginReadTimeoutMs;
 
-    private final boolean urlencodeHeader;
-
-    public HttpAccessTokenRetriever(String clientId,
-        String clientSecret,
-        String scope,
-        SSLSocketFactory sslSocketFactory,
-        String tokenEndpointUrl,
-        long loginRetryBackoffMs,
-        long loginRetryBackoffMaxMs,
-        Integer loginConnectTimeoutMs,
-        Integer loginReadTimeoutMs,
-        boolean urlencodeHeader) {
-        this.clientId = Objects.requireNonNull(clientId);
-        this.clientSecret = Objects.requireNonNull(clientSecret);
-        this.scope = scope;
+    protected HttpAccessTokenRetriever(SSLSocketFactory sslSocketFactory,
+                                       String tokenEndpointUrl,
+                                       long loginRetryBackoffMs,
+                                       long loginRetryBackoffMaxMs,
+                                       Integer loginConnectTimeoutMs,
+                                       Integer loginReadTimeoutMs) {
         this.sslSocketFactory = sslSocketFactory;
         this.tokenEndpointUrl = Objects.requireNonNull(tokenEndpointUrl);
         this.loginRetryBackoffMs = loginRetryBackoffMs;
         this.loginRetryBackoffMaxMs = loginRetryBackoffMaxMs;
         this.loginConnectTimeoutMs = loginConnectTimeoutMs;
         this.loginReadTimeoutMs = loginReadTimeoutMs;
-        this.urlencodeHeader = urlencodeHeader;
     }
+
+    /**
+     * Format the data that will be sent in the payload of the POST request. The returned
+     * String will be converted to UTF-8.
+     *
+     * @return Data to send in body of request
+     */
+    protected abstract String formatRequestBody();
+
+    /**
+     * Format and return request headers that will be sent along in the outgoing HTTP
+     * request via {@link URLConnection#setRequestProperty(String, String)}.
+     *
+     * @return Map of headers to include, or {@code null} if no extra headers are needed
+     */
+    protected abstract Map<String, String> formatRequestHeaders();
 
     /**
      * Retrieves a JWT access token in its serialized three-part form. The implementation
@@ -156,10 +147,9 @@ public class HttpAccessTokenRetriever implements AccessTokenRetriever {
 
     @Override
     public String retrieve() throws IOException {
-        String authorizationHeader = formatAuthorizationHeader(clientId, clientSecret, urlencodeHeader);
-        String requestBody = formatRequestBody(scope);
+        String requestBody = formatRequestBody();
         Retry<String> retry = new Retry<>(loginRetryBackoffMs, loginRetryBackoffMaxMs);
-        Map<String, String> headers = Collections.singletonMap(AUTHORIZATION_HEADER, authorizationHeader);
+        Map<String, String> headers = formatRequestHeaders();
 
         String responseBody;
 
@@ -353,36 +343,7 @@ public class HttpAccessTokenRetriever implements AccessTokenRetriever {
         return sanitizeString("the token endpoint response's access_token JSON attribute", accessTokenNode.textValue());
     }
 
-    static String formatAuthorizationHeader(String clientId, String clientSecret, boolean urlencode) {
-        clientId = sanitizeString("the token endpoint request client ID parameter", clientId);
-        clientSecret = sanitizeString("the token endpoint request client secret parameter", clientSecret);
-
-        // according to RFC-6749 clientId & clientSecret must be urlencoded, see https://tools.ietf.org/html/rfc6749#section-2.3.1
-        if (urlencode) {
-            clientId = URLEncoder.encode(clientId, StandardCharsets.UTF_8);
-            clientSecret = URLEncoder.encode(clientSecret, StandardCharsets.UTF_8);
-        }
-
-        String s = String.format("%s:%s", clientId, clientSecret);
-        // Per RFC-7617, we need to use the *non-URL safe* base64 encoder. See KAFKA-14496.
-        String encoded = Base64.getEncoder().encodeToString(Utils.utf8(s));
-        return String.format("Basic %s", encoded);
-    }
-
-    static String formatRequestBody(String scope) {
-        StringBuilder requestParameters = new StringBuilder();
-        requestParameters.append("grant_type=client_credentials");
-
-        if (scope != null && !scope.trim().isEmpty()) {
-            scope = scope.trim();
-            String encodedScope = URLEncoder.encode(scope, StandardCharsets.UTF_8);
-            requestParameters.append("&scope=").append(encodedScope);
-        }
-
-        return requestParameters.toString();
-    }
-
-    private static String sanitizeString(String name, String value) {
+    static String sanitizeString(String name, String value) {
         if (value == null)
             throw new IllegalArgumentException(String.format("The value for %s must be non-null", name));
 
