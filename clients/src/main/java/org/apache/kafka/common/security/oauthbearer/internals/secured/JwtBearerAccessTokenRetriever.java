@@ -78,26 +78,6 @@ public class JwtBearerAccessTokenRetriever extends HttpAccessTokenRetriever {
         }
     }
 
-    private static final String JWT_BEARER_PREFIX = "jwt-bearer.";
-    public static final String JWT_BEARER_PRIVATE_KEY_ID = JWT_BEARER_PREFIX + "privateKeyId";
-
-    // The private key used to sign the JWT token sent to the token endpoint. This must be in PEM format without
-    // the header and footer.
-    public static final String JWT_BEARER_PRIVATE_KEY_SECRET = JWT_BEARER_PREFIX + "privateKeySecret";
-
-    // The algorithm used to sign the JWT token sent to the token endpoint.
-    public static final String JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM = JWT_BEARER_PREFIX + "privateKeyAlgorithm";
-
-    // The subject of the JWT token sent to the token endpoint.
-    public static final String JWT_BEARER_SUBJECT = JWT_BEARER_PREFIX + "subject";
-
-    // The issuer of the JWT token sent to the token endpoint.
-    public static final String JWT_BEARER_ISSUER = JWT_BEARER_PREFIX + "issuer";
-
-    // The audience of the JWT token sent to the token endpoint.
-    public static final String JWT_BEARER_AUDIENCE = JWT_BEARER_PREFIX + "audience";
-    public static final String JWT_BEARER_CLAIM_PREFIX = JWT_BEARER_PREFIX + "claim.";
-
     private final Time time;
     private final String privateKeyId;
     private final String privateKeySecret;
@@ -138,24 +118,6 @@ public class JwtBearerAccessTokenRetriever extends HttpAccessTokenRetriever {
         this.issuer = issuer;
         this.audience = audience;
         this.supplementaryClaims = supplementaryClaims;
-    }
-
-    /**
-     * Support for supplementary claims allows the client to pass arbitrary additional claims
-     * to the identity provider.
-     */
-    static Map<String, String> getSupplementaryClaims(Map<String, Object> jaasConfig) {
-        Map<String, String> claims = new HashMap<>();
-
-        jaasConfig.forEach((k, v) -> {
-            if (k.startsWith(JWT_BEARER_CLAIM_PREFIX)) {
-                String claimName = k.substring(JWT_BEARER_CLAIM_PREFIX.length());
-                String claimValue = String.valueOf(v);
-                claims.put(claimName, claimValue);
-            }
-        });
-
-        return claims;
     }
 
     @Override

@@ -22,6 +22,7 @@ import org.apache.kafka.common.security.oauthbearer.GrantType;
 import org.apache.kafka.common.utils.Time;
 
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -36,15 +37,16 @@ import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_RETRY_BACKOF
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_GRANT_TYPE;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_HEADER_URLENCODE;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_ID_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_SECRET_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.SCOPE_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.internals.secured.JwtBearerAccessTokenRetriever.JWT_BEARER_AUDIENCE;
-import static org.apache.kafka.common.security.oauthbearer.internals.secured.JwtBearerAccessTokenRetriever.JWT_BEARER_ISSUER;
-import static org.apache.kafka.common.security.oauthbearer.internals.secured.JwtBearerAccessTokenRetriever.JWT_BEARER_PRIVATE_KEY_ID;
-import static org.apache.kafka.common.security.oauthbearer.internals.secured.JwtBearerAccessTokenRetriever.JWT_BEARER_PRIVATE_KEY_SECRET;
-import static org.apache.kafka.common.security.oauthbearer.internals.secured.JwtBearerAccessTokenRetriever.JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM;
-import static org.apache.kafka.common.security.oauthbearer.internals.secured.JwtBearerAccessTokenRetriever.JWT_BEARER_SUBJECT;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.SCOPE;
 
 public class AccessTokenRetrieverFactory  {
 
@@ -84,9 +86,9 @@ public class AccessTokenRetrieverFactory  {
             GrantType grantType = validateGrantType(cu);
 
             if (grantType == GrantType.CLIENT_CREDENTIALS) {
-                String clientId = jou.validateString(CLIENT_ID_CONFIG);
-                String clientSecret = jou.validateString(CLIENT_SECRET_CONFIG);
-                String scope = jou.validateString(SCOPE_CONFIG, false);
+                String clientId = jou.validateString(CLIENT_ID);
+                String clientSecret = jou.validateString(CLIENT_SECRET);
+                String scope = jou.validateString(SCOPE, false);
                 boolean urlencodeHeader = validateUrlencodeHeader(cu);
 
                 return new ClientCredentialsAccessTokenRetriever(clientId,
@@ -106,7 +108,7 @@ public class AccessTokenRetrieverFactory  {
                 String subject = jou.validateString(JWT_BEARER_SUBJECT);
                 String issuer = jou.validateString(JWT_BEARER_ISSUER);
                 String audience = jou.validateString(JWT_BEARER_AUDIENCE);
-                Map<String, String> supplementaryClaims = JwtBearerAccessTokenRetriever.getSupplementaryClaims(jaasConfig);
+                Map<String, String> supplementaryClaims = getSupplementaryClaims(jaasConfig);
 
                 return new JwtBearerAccessTokenRetriever(
                     time,
@@ -158,5 +160,23 @@ public class AccessTokenRetrieverFactory  {
             .ofNullable(configurationUtils.validateString(SASL_OAUTHBEARER_GRANT_TYPE, false))
             .map(GrantType::fromValue)
             .orElse(GrantType.CLIENT_CREDENTIALS);
+    }
+
+    /**
+     * Support for supplementary claims allows the client to pass arbitrary additional claims
+     * to the identity provider.
+     */
+    static Map<String, String> getSupplementaryClaims(Map<String, Object> jaasConfig) {
+        Map<String, String> claims = new HashMap<>();
+
+        jaasConfig.forEach((k, v) -> {
+            if (k.startsWith(JWT_BEARER_CLAIM_PREFIX)) {
+                String claimName = k.substring(JWT_BEARER_CLAIM_PREFIX.length());
+                String claimValue = String.valueOf(v);
+                claims.put(claimName, claimValue);
+            }
+        });
+
+        return claims;
     }
 }
