@@ -42,9 +42,9 @@ import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOption
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.SCOPE;
 
@@ -104,7 +104,7 @@ public class AccessTokenRetrieverFactory  {
             } else {
                 String privateKeyId = jou.validateString(JWT_BEARER_PRIVATE_KEY_ID);
                 String privateKeySecret = jou.validateString(JWT_BEARER_PRIVATE_KEY_SECRET);
-                String privateKeySigningAlgorithm = jou.validateString(JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM);
+                String privateKeySigningAlgorithm = jou.validateString(JWT_BEARER_PRIVATE_KEY_ALGORITHM);
                 String subject = jou.validateString(JWT_BEARER_SUBJECT);
                 String issuer = jou.validateString(JWT_BEARER_ISSUER);
                 String audience = jou.validateString(JWT_BEARER_AUDIENCE);

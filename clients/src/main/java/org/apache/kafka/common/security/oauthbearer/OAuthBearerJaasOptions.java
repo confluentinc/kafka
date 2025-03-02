@@ -45,7 +45,7 @@ public class OAuthBearerJaasOptions {
     private static final String JWT_BEARER_PREFIX = "jwt-bearer.";
     public static final String JWT_BEARER_PRIVATE_KEY_ID = JWT_BEARER_PREFIX + "privateKeyId";
     public static final String JWT_BEARER_PRIVATE_KEY_SECRET = JWT_BEARER_PREFIX + "privateKeySecret";
-    public static final String JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM = JWT_BEARER_PREFIX + "privateKeyAlgorithm";
+    public static final String JWT_BEARER_PRIVATE_KEY_ALGORITHM = JWT_BEARER_PREFIX + "privateKeyAlgorithm";
     public static final String JWT_BEARER_SUBJECT = JWT_BEARER_PREFIX + "subject";
     public static final String JWT_BEARER_ISSUER = JWT_BEARER_PREFIX + "issuer";
     public static final String JWT_BEARER_AUDIENCE = JWT_BEARER_PREFIX + "audience";
@@ -54,7 +54,7 @@ public class OAuthBearerJaasOptions {
     public static final String JWT_BEARER_PRIVATE_KEY_ID_DOC = "The ID for the key used to decrypt the token. Used in the 'kid' JWT header.";
     public static final String JWT_BEARER_PRIVATE_KEY_SECRET_DOC = "The private key used to sign the JWT token sent " +
         "to the token endpoint. This must be in PEM format without the header and footer.";
-    public static final String JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM_DOC = "The algorithm used to sign the " +
+    public static final String JWT_BEARER_PRIVATE_KEY_ALGORITHM_DOC = "The algorithm used to sign the " +
         "JWT token sent to the token endpoint.";
     public static final String JWT_BEARER_SUBJECT_DOC = "The subject of the JWT token sent to the token endpoint.";
     public static final String JWT_BEARER_ISSUER_DOC = "The issuer of the JWT token sent to the token endpoint.";

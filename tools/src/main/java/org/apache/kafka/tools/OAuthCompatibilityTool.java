@@ -58,6 +58,8 @@ import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECT
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECTED_AUDIENCE_DOC;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECTED_ISSUER;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECTED_ISSUER_DOC;
+import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_GRANT_TYPE;
+import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_GRANT_TYPE_DOC;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_REFRESH_MS;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_REFRESH_MS_DOC;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_RETRY_BACKOFF_MAX_MS;
@@ -116,14 +118,15 @@ import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOption
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET_DOC;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM_DOC;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID_DOC;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET_DOC;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM_DOC;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT_DOC;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.SCOPE;
@@ -229,6 +232,7 @@ public class OAuthCompatibilityTool {
             addArgument(SASL_OAUTHBEARER_SCOPE_CLAIM_NAME, SASL_OAUTHBEARER_SCOPE_CLAIM_NAME_DOC);
             addArgument(SASL_OAUTHBEARER_SUB_CLAIM_NAME, SASL_OAUTHBEARER_SUB_CLAIM_NAME_DOC);
             addArgument(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL_DOC);
+            addArgument(SASL_OAUTHBEARER_GRANT_TYPE, SASL_OAUTHBEARER_GRANT_TYPE_DOC);
 
             // SSL
             addArgument(SSL_CIPHER_SUITES_CONFIG, SSL_CIPHER_SUITES_DOC)
@@ -260,7 +264,7 @@ public class OAuthCompatibilityTool {
 
             addArgument(JWT_BEARER_PRIVATE_KEY_ID, JWT_BEARER_PRIVATE_KEY_ID_DOC);
             addArgument(JWT_BEARER_PRIVATE_KEY_SECRET, JWT_BEARER_PRIVATE_KEY_SECRET_DOC);
-            addArgument(JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM, JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM_DOC);
+            addArgument(JWT_BEARER_PRIVATE_KEY_ALGORITHM, JWT_BEARER_PRIVATE_KEY_ALGORITHM_DOC);
             addArgument(JWT_BEARER_SUBJECT, JWT_BEARER_SUBJECT_DOC);
             addArgument(JWT_BEARER_ISSUER, JWT_BEARER_ISSUER_DOC);
             addArgument(JWT_BEARER_AUDIENCE, JWT_BEARER_AUDIENCE_DOC);
@@ -307,6 +311,7 @@ public class OAuthCompatibilityTool {
             maybeAddInt(m, SASL_LOGIN_READ_TIMEOUT_MS);
             maybeAddLong(m, SASL_LOGIN_RETRY_BACKOFF_MS);
             maybeAddLong(m, SASL_LOGIN_RETRY_BACKOFF_MAX_MS);
+            maybeAddString(m, SASL_OAUTHBEARER_GRANT_TYPE);
             maybeAddString(m, SASL_OAUTHBEARER_SCOPE_CLAIM_NAME);
             maybeAddString(m, SASL_OAUTHBEARER_SUB_CLAIM_NAME);
             maybeAddString(m, SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL);
@@ -336,7 +341,7 @@ public class OAuthCompatibilityTool {
 
             maybeAddString(m, JWT_BEARER_PRIVATE_KEY_ID);
             maybeAddString(m, JWT_BEARER_PRIVATE_KEY_SECRET);
-            maybeAddString(m, JWT_BEARER_PRIVATE_KEY_SIGNING_ALGORITHM);
+            maybeAddString(m, JWT_BEARER_PRIVATE_KEY_ALGORITHM);
             maybeAddString(m, JWT_BEARER_SUBJECT);
             maybeAddString(m, JWT_BEARER_ISSUER);
             maybeAddString(m, JWT_BEARER_AUDIENCE);

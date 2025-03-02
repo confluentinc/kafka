@@ -112,7 +112,10 @@ public class JwtBearerAccessTokenRetriever extends HttpAccessTokenRetriever {
         );
         this.time = time;
         this.privateKeyId = privateKeyId;
-        this.privateKeySecret = privateKeySecret;
+        this.privateKeySecret = privateKeySecret
+            .replace("-----BEGIN PRIVATE KEY-----", "")
+            .replace("-----END PRIVATE KEY-----", "")
+            .replaceAll("\\s", "");
         this.privateKeySigningAlgorithm = SigningAlgorithm.fromName(privateKeySigningAlgorithm);
         this.subject = subject;
         this.issuer = issuer;
