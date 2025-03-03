@@ -18,10 +18,14 @@
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
 import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.common.security.oauthbearer.GrantType;
+import org.apache.kafka.common.utils.Time;
 
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.net.ssl.SSLSocketFactory;
 
@@ -30,11 +34,19 @@ import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_CONNECT_TIME
 import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_READ_TIMEOUT_MS;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_RETRY_BACKOFF_MAX_MS;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_RETRY_BACKOFF_MS;
+import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_GRANT_TYPE;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_HEADER_URLENCODE;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_ID_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_SECRET_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.SCOPE_CONFIG;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.SCOPE;
 
 public class AccessTokenRetrieverFactory  {
 
@@ -44,17 +56,19 @@ public class AccessTokenRetrieverFactory  {
      * <b>Note</b>: the returned <code>AccessTokenRetriever</code> is <em>not</em> initialized
      * here and must be done by the caller prior to use.
      *
+     * @param time       Time
      * @param configs    SASL configuration
      * @param jaasConfig JAAS configuration
      *
      * @return Non-<code>null</code> {@link AccessTokenRetriever}
      */
 
-    public static AccessTokenRetriever create(Map<String, ?> configs, Map<String, Object> jaasConfig) {
-        return create(configs, null, jaasConfig);
+    public static AccessTokenRetriever create(Time time, Map<String, ?> configs, Map<String, Object> jaasConfig) {
+        return create(time, configs, null, jaasConfig);
     }
 
-    public static AccessTokenRetriever create(Map<String, ?> configs,
+    public static AccessTokenRetriever create(Time time,
+        Map<String, ?> configs,
         String saslMechanism,
         Map<String, Object> jaasConfig) {
         ConfigurationUtils cu = new ConfigurationUtils(configs, saslMechanism);
@@ -64,27 +78,55 @@ public class AccessTokenRetrieverFactory  {
             return new FileTokenRetriever(cu.validateFile(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL));
         } else {
             JaasOptionsUtils jou = new JaasOptionsUtils(jaasConfig);
-            String clientId = jou.validateString(CLIENT_ID_CONFIG);
-            String clientSecret = jou.validateString(CLIENT_SECRET_CONFIG);
-            String scope = jou.validateString(SCOPE_CONFIG, false);
-
             SSLSocketFactory sslSocketFactory = null;
 
             if (jou.shouldCreateSSLSocketFactory(tokenEndpointUrl))
                 sslSocketFactory = jou.createSSLSocketFactory();
 
-            boolean urlencodeHeader = validateUrlencodeHeader(cu);
+            GrantType grantType = validateGrantType(cu);
 
-            return new ClientCredentialsAccessTokenRetriever(clientId,
-                clientSecret,
-                scope,
-                sslSocketFactory,
-                tokenEndpointUrl.toString(),
-                cu.validateLong(SASL_LOGIN_RETRY_BACKOFF_MS),
-                cu.validateLong(SASL_LOGIN_RETRY_BACKOFF_MAX_MS),
-                cu.validateInteger(SASL_LOGIN_CONNECT_TIMEOUT_MS, false),
-                cu.validateInteger(SASL_LOGIN_READ_TIMEOUT_MS, false),
-                urlencodeHeader);
+            if (grantType == GrantType.CLIENT_CREDENTIALS) {
+                String clientId = jou.validateString(CLIENT_ID);
+                String clientSecret = jou.validateString(CLIENT_SECRET);
+                String scope = jou.validateString(SCOPE, false);
+                boolean urlencodeHeader = validateUrlencodeHeader(cu);
+
+                return new ClientCredentialsAccessTokenRetriever(clientId,
+                    clientSecret,
+                    scope,
+                    sslSocketFactory,
+                    tokenEndpointUrl.toString(),
+                    cu.validateLong(SASL_LOGIN_RETRY_BACKOFF_MS),
+                    cu.validateLong(SASL_LOGIN_RETRY_BACKOFF_MAX_MS),
+                    cu.validateInteger(SASL_LOGIN_CONNECT_TIMEOUT_MS, false),
+                    cu.validateInteger(SASL_LOGIN_READ_TIMEOUT_MS, false),
+                    urlencodeHeader);
+            } else {
+                String privateKeyId = jou.validateString(JWT_BEARER_PRIVATE_KEY_ID);
+                String privateKeySecret = jou.validateString(JWT_BEARER_PRIVATE_KEY_SECRET);
+                String privateKeySigningAlgorithm = jou.validateString(JWT_BEARER_PRIVATE_KEY_ALGORITHM);
+                String subject = jou.validateString(JWT_BEARER_SUBJECT);
+                String issuer = jou.validateString(JWT_BEARER_ISSUER);
+                String audience = jou.validateString(JWT_BEARER_AUDIENCE);
+                Map<String, String> supplementaryClaims = getSupplementaryClaims(jaasConfig);
+
+                return new JwtBearerAccessTokenRetriever(
+                    time,
+                    privateKeyId,
+                    privateKeySecret,
+                    privateKeySigningAlgorithm,
+                    subject,
+                    issuer,
+                    audience,
+                    supplementaryClaims,
+                    sslSocketFactory,
+                    tokenEndpointUrl.toString(),
+                    cu.validateLong(SASL_LOGIN_RETRY_BACKOFF_MS),
+                    cu.validateLong(SASL_LOGIN_RETRY_BACKOFF_MAX_MS),
+                    cu.validateInteger(SASL_LOGIN_CONNECT_TIMEOUT_MS, false),
+                    cu.validateInteger(SASL_LOGIN_READ_TIMEOUT_MS, false)
+                );
+            }
         }
     }
 
@@ -107,4 +149,34 @@ public class AccessTokenRetrieverFactory  {
             return DEFAULT_SASL_OAUTHBEARER_HEADER_URLENCODE;
     }
 
+    /**
+     * In some cases, the incoming c{@link Map} doesn't contain a value for
+     * {@link SaslConfigs#SASL_OAUTHBEARER_GRANT_TYPE}. Returning {@code null} from {@link Map#get(Object)}
+     * will cause a hassle in the downstream code, so fallback to the previously supported
+     * {@link GrantType#CLIENT_CREDENTIALS} grant type.
+     */
+    static GrantType validateGrantType(ConfigurationUtils configurationUtils) {
+        return Optional
+            .ofNullable(configurationUtils.validateString(SASL_OAUTHBEARER_GRANT_TYPE, false))
+            .map(GrantType::fromValue)
+            .orElse(GrantType.CLIENT_CREDENTIALS);
+    }
+
+    /**
+     * Support for supplementary claims allows the client to pass arbitrary additional claims
+     * to the identity provider.
+     */
+    static Map<String, String> getSupplementaryClaims(Map<String, Object> jaasConfig) {
+        Map<String, String> claims = new HashMap<>();
+
+        jaasConfig.forEach((k, v) -> {
+            if (k.startsWith(JWT_BEARER_CLAIM_PREFIX)) {
+                String claimName = k.substring(JWT_BEARER_CLAIM_PREFIX.length());
+                String claimValue = String.valueOf(v);
+                claims.put(claimName, claimValue);
+            }
+        });
+
+        return claims;
+    }
 }

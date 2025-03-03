@@ -38,6 +38,7 @@ import net.sourceforge.argparse4j.inf.Argument;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
+import org.apache.kafka.common.utils.Time;
 
 import java.util.HashMap;
 import java.util.List;
@@ -57,6 +58,8 @@ import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECT
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECTED_AUDIENCE_DOC;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECTED_ISSUER;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_EXPECTED_ISSUER_DOC;
+import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_GRANT_TYPE;
+import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_GRANT_TYPE_DOC;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_REFRESH_MS;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_REFRESH_MS_DOC;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_RETRY_BACKOFF_MAX_MS;
@@ -109,12 +112,25 @@ import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_PASSWORD_
 import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_PASSWORD_DOC;
 import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_TYPE_DOC;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_ID_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_ID_DOC;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_SECRET_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.CLIENT_SECRET_DOC;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.SCOPE_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler.SCOPE_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT_DOC;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.SCOPE;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.SCOPE_DOC;
 
 public class OAuthCompatibilityTool {
 
@@ -134,12 +150,14 @@ public class OAuthCompatibilityTool {
         Map<String, ?> configs = configHandler.getConfigs();
         Map<String, Object> jaasConfigs = configHandler.getJaasOptions();
 
+        Time time = Time.SYSTEM;
+
         try {
             String accessToken;
 
             {
                 // Client side...
-                try (AccessTokenRetriever atr = AccessTokenRetrieverFactory.create(configs, jaasConfigs)) {
+                try (AccessTokenRetriever atr = AccessTokenRetrieverFactory.create(time, configs, jaasConfigs)) {
                     atr.init();
                     AccessTokenValidator atv = AccessTokenValidatorFactory.create(configs);
                     System.out.println("PASSED 1/5: client configuration");
@@ -214,6 +232,7 @@ public class OAuthCompatibilityTool {
             addArgument(SASL_OAUTHBEARER_SCOPE_CLAIM_NAME, SASL_OAUTHBEARER_SCOPE_CLAIM_NAME_DOC);
             addArgument(SASL_OAUTHBEARER_SUB_CLAIM_NAME, SASL_OAUTHBEARER_SUB_CLAIM_NAME_DOC);
             addArgument(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL_DOC);
+            addArgument(SASL_OAUTHBEARER_GRANT_TYPE, SASL_OAUTHBEARER_GRANT_TYPE_DOC);
 
             // SSL
             addArgument(SSL_CIPHER_SUITES_CONFIG, SSL_CIPHER_SUITES_DOC)
@@ -239,9 +258,16 @@ public class OAuthCompatibilityTool {
             addArgument(SSL_TRUSTSTORE_TYPE_CONFIG, SSL_TRUSTSTORE_TYPE_DOC);
 
             // JAAS options...
-            addArgument(CLIENT_ID_CONFIG, CLIENT_ID_DOC);
-            addArgument(CLIENT_SECRET_CONFIG, CLIENT_SECRET_DOC);
-            addArgument(SCOPE_CONFIG, SCOPE_DOC);
+            addArgument(CLIENT_ID, CLIENT_ID_DOC);
+            addArgument(CLIENT_SECRET, CLIENT_SECRET_DOC);
+            addArgument(SCOPE, SCOPE_DOC);
+
+            addArgument(JWT_BEARER_PRIVATE_KEY_ID, JWT_BEARER_PRIVATE_KEY_ID_DOC);
+            addArgument(JWT_BEARER_PRIVATE_KEY_SECRET, JWT_BEARER_PRIVATE_KEY_SECRET_DOC);
+            addArgument(JWT_BEARER_PRIVATE_KEY_ALGORITHM, JWT_BEARER_PRIVATE_KEY_ALGORITHM_DOC);
+            addArgument(JWT_BEARER_SUBJECT, JWT_BEARER_SUBJECT_DOC);
+            addArgument(JWT_BEARER_ISSUER, JWT_BEARER_ISSUER_DOC);
+            addArgument(JWT_BEARER_AUDIENCE, JWT_BEARER_AUDIENCE_DOC);
 
             try {
                 return parser.parseArgs(args);
@@ -285,6 +311,7 @@ public class OAuthCompatibilityTool {
             maybeAddInt(m, SASL_LOGIN_READ_TIMEOUT_MS);
             maybeAddLong(m, SASL_LOGIN_RETRY_BACKOFF_MS);
             maybeAddLong(m, SASL_LOGIN_RETRY_BACKOFF_MAX_MS);
+            maybeAddString(m, SASL_OAUTHBEARER_GRANT_TYPE);
             maybeAddString(m, SASL_OAUTHBEARER_SCOPE_CLAIM_NAME);
             maybeAddString(m, SASL_OAUTHBEARER_SUB_CLAIM_NAME);
             maybeAddString(m, SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL);
@@ -308,9 +335,18 @@ public class OAuthCompatibilityTool {
             Map<String, Object> m = new HashMap<>();
 
             // SASL/OAuth
-            maybeAddString(m, CLIENT_ID_CONFIG);
-            maybeAddString(m, CLIENT_SECRET_CONFIG);
-            maybeAddString(m, SCOPE_CONFIG);
+            maybeAddString(m, CLIENT_ID);
+            maybeAddString(m, CLIENT_SECRET);
+            maybeAddString(m, SCOPE);
+
+            maybeAddString(m, JWT_BEARER_PRIVATE_KEY_ID);
+            maybeAddString(m, JWT_BEARER_PRIVATE_KEY_SECRET);
+            maybeAddString(m, JWT_BEARER_PRIVATE_KEY_ALGORITHM);
+            maybeAddString(m, JWT_BEARER_SUBJECT);
+            maybeAddString(m, JWT_BEARER_ISSUER);
+            maybeAddString(m, JWT_BEARER_AUDIENCE);
+
+            // public static final String JWT_BEARER_CLAIM_PREFIX = JWT_BEARER_PREFIX + "claim.";
 
             // SSL
             maybeAddStringList(m, SSL_CIPHER_SUITES_CONFIG);
