@@ -42,10 +42,11 @@ import javax.net.ssl.SSLSocketFactory;
  * @see OAuthBearerJaasOptions#CLIENT_SECRET
  * @see OAuthBearerJaasOptions#SCOPE
  * @see SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL
- * @see SaslConfigs#SASL_OAUTHBEARER_GRANT_TYPE
  */
 
 public class ClientCredentialsAccessTokenRetriever extends HttpAccessTokenRetriever {
+
+    public static final String GRANT_TYPE = "client_credentials";
 
     private final String clientId;
 
@@ -107,7 +108,7 @@ public class ClientCredentialsAccessTokenRetriever extends HttpAccessTokenRetrie
 
     static String formatRequestBody(String scope) {
         StringBuilder requestParameters = new StringBuilder();
-        requestParameters.append("grant_type=client_credentials");
+        requestParameters.append("grant_type=" + GRANT_TYPE);
 
         if (!Utils.isBlank(scope)) {
             String encodedScope = URLEncoder.encode(scope.trim(), StandardCharsets.UTF_8);

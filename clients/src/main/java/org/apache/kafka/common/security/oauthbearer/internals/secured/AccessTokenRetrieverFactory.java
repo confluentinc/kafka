@@ -17,16 +17,19 @@
 
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.SaslConfigs;
-import org.apache.kafka.common.security.oauthbearer.GrantType;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.common.utils.Utils;
 
+import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import javax.net.ssl.SSLSocketFactory;
 
@@ -35,11 +38,11 @@ import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_CONNECT_TIME
 import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_READ_TIMEOUT_MS;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_RETRY_BACKOFF_MAX_MS;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_RETRY_BACKOFF_MS;
-import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_GRANT_TYPE;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_HEADER_URLENCODE;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.GRANT_TYPE;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_FILE_NAME;
@@ -81,9 +84,11 @@ public class AccessTokenRetrieverFactory  {
             if (jou.shouldCreateSSLSocketFactory(tokenEndpointUrl))
                 sslSocketFactory = jou.createSSLSocketFactory();
 
-            GrantType grantType = validateGrantType(cu);
+            String grantType = Optional
+                .ofNullable(cu.validateString(GRANT_TYPE, false))
+                .orElse(ClientCredentialsAccessTokenRetriever.GRANT_TYPE);
 
-            if (grantType == GrantType.CLIENT_CREDENTIALS) {
+            if (grantType.equalsIgnoreCase(ClientCredentialsAccessTokenRetriever.GRANT_TYPE)) {
                 String clientId = jou.validateString(CLIENT_ID);
                 String clientSecret = jou.validateString(CLIENT_SECRET);
                 String scope = jou.validateString(SCOPE, false);
@@ -99,14 +104,25 @@ public class AccessTokenRetrieverFactory  {
                     cu.validateInteger(SASL_LOGIN_CONNECT_TIMEOUT_MS, false),
                     cu.validateInteger(SASL_LOGIN_READ_TIMEOUT_MS, false),
                     urlencodeHeader);
-            } else {
+            } else if (grantType.equalsIgnoreCase(JwtBearerAccessTokenRetriever.GRANT_TYPE)) {
                 String privateKeyId = jou.validateString(JWT_BEARER_PRIVATE_KEY_ID);
                 Path privateKeyFileName = jou.validateFile(JWT_BEARER_PRIVATE_KEY_FILE_NAME);
                 String privateKeySigningAlgorithm = jou.validateString(JWT_BEARER_PRIVATE_KEY_ALGORITHM);
                 Map<String, Object> staticClaims = getStaticClaims(jaasConfig);
+
+                Supplier<String> privateKeySupplier = () -> {
+                    String fileName = privateKeyFileName.toFile().getAbsolutePath();
+
+                    try {
+                        return Utils.readFileAsString(fileName);
+                    } catch (IOException e) {
+                        throw new KafkaException("Could not read the private key from the file " + fileName, e);
+                    }
+                };
+
                 AssertionCreator assertionCreator = new DefaultAssertionCreator(
                     time,
-                    DefaultAssertionCreator.privateKeySupplier(privateKeyFileName),
+                    privateKeySupplier,
                     privateKeyId,
                     privateKeySigningAlgorithm
                 );
@@ -121,6 +137,8 @@ public class AccessTokenRetrieverFactory  {
                     cu.validateInteger(SASL_LOGIN_CONNECT_TIMEOUT_MS, false),
                     cu.validateInteger(SASL_LOGIN_READ_TIMEOUT_MS, false)
                 );
+            } else {
+                throw new KafkaException("Unsupported grant type provided: " + grantType);
             }
         }
     }
@@ -142,19 +160,6 @@ public class AccessTokenRetrieverFactory  {
             return urlencodeHeader;
         else
             return DEFAULT_SASL_OAUTHBEARER_HEADER_URLENCODE;
-    }
-
-    /**
-     * In some cases, the incoming {@link Map} doesn't contain a value for
-     * {@link SaslConfigs#SASL_OAUTHBEARER_GRANT_TYPE}. Returning {@code null} from {@link Map#get(Object)}
-     * will cause a hassle in the downstream code, so fallback to the previously supported
-     * {@link GrantType#CLIENT_CREDENTIALS} grant type.
-     */
-    static GrantType validateGrantType(ConfigurationUtils configurationUtils) {
-        return Optional
-            .ofNullable(configurationUtils.validateString(SASL_OAUTHBEARER_GRANT_TYPE, false))
-            .map(GrantType::fromValue)
-            .orElse(GrantType.CLIENT_CREDENTIALS);
     }
 
     /**

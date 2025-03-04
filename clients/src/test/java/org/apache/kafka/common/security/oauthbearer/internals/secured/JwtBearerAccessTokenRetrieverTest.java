@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
-import org.apache.kafka.common.security.oauthbearer.GrantType;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
 
@@ -47,7 +46,7 @@ public class JwtBearerAccessTokenRetrieverTest extends OAuthBearerTest {
         try (JwtBearerAccessTokenRetriever requestFormatter = generateRetriever(assertionCreator, staticClaims)) {
             String assertion = assertionCreator.create(staticClaims);
             String requestBody = requestFormatter.formatRequestBody();
-            String expected = "grant_type=" + URLEncoder.encode(GrantType.JWT_BEARER.value(), StandardCharsets.UTF_8) + "&assertion=" + assertion;
+            String expected = "grant_type=" + URLEncoder.encode(JwtBearerAccessTokenRetriever.GRANT_TYPE, StandardCharsets.UTF_8) + "&assertion=" + assertion;
             assertEquals(expected, requestBody);
         }
     }
@@ -85,7 +84,7 @@ public class JwtBearerAccessTokenRetrieverTest extends OAuthBearerTest {
             time,
             () -> Base64.getEncoder().encodeToString(privateKey.getEncoded()),
             "dummyPrivateKeyId",
-            AssertionCreator.SigningAlgorithm.RS256.name()
+            "RS256"
         );
     }
 

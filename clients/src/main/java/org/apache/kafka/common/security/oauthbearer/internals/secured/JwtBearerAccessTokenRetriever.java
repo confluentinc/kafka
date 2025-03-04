@@ -18,7 +18,6 @@
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
 import org.apache.kafka.common.config.SaslConfigs;
-import org.apache.kafka.common.security.oauthbearer.GrantType;
 import org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions;
 
 import javax.net.ssl.SSLSocketFactory;
@@ -34,13 +33,14 @@ import java.util.Map;
  *
  * @see HttpAccessTokenRetriever
  * @see OAuthBearerJaasOptions#JWT_BEARER_PRIVATE_KEY_ID
- * @see OAuthBearerJaasOptions#JWT_BEARER_PRIVATE_KEY_SECRET
+ * @see OAuthBearerJaasOptions#JWT_BEARER_PRIVATE_KEY_FILE_NAME
  * @see OAuthBearerJaasOptions#JWT_BEARER_PRIVATE_KEY_ALGORITHM
  * @see OAuthBearerJaasOptions#JWT_BEARER_CLAIM_PREFIX
  * @see SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL
- * @see SaslConfigs#SASL_OAUTHBEARER_GRANT_TYPE
  */
 public class JwtBearerAccessTokenRetriever extends HttpAccessTokenRetriever {
+
+    public static final String GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 
     private final AssertionCreator assertionCreator;
     private final Map<String, Object> staticClaims;
@@ -69,7 +69,7 @@ public class JwtBearerAccessTokenRetriever extends HttpAccessTokenRetriever {
     @Override
     protected String formatRequestBody() {
         String assertion = assertionCreator.create(staticClaims);
-        String encodedGrantType = URLEncoder.encode(GrantType.JWT_BEARER.value(), StandardCharsets.UTF_8);
+        String encodedGrantType = URLEncoder.encode(GRANT_TYPE, StandardCharsets.UTF_8);
         String encodedAssertion = URLEncoder.encode(assertion, StandardCharsets.UTF_8);
         return String.format("grant_type=%s&assertion=%s", encodedGrantType, encodedAssertion);
     }

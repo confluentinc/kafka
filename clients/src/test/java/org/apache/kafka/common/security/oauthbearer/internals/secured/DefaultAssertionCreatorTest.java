@@ -23,6 +23,7 @@ import org.jose4j.jwt.consumer.JwtConsumer;
 import org.jose4j.jwt.consumer.JwtConsumerBuilder;
 import org.jose4j.jwt.consumer.JwtContext;
 import org.jose4j.jwx.JsonWebStructure;
+import org.jose4j.lang.InvalidAlgorithmException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -36,8 +37,10 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -75,13 +78,13 @@ public class DefaultAssertionCreatorTest extends OAuthBearerTest {
     @Test
     public void testInvalidPrivateKeySecret() {
         // Intentionally "mangle" the private key secret by stripping off the first character.
-        String privateKeySecret = generatePrivateKeySecret().substring(1);
+        Supplier<String> privateKeySupplier = () -> generatePrivateKeySecret().substring(1);
 
         AssertionCreator assertionCreator = new DefaultAssertionCreator(
             new MockTime(),
-            DefaultAssertionCreator.privateKeySupplier(privateKeySecret),
+            privateKeySupplier,
             "foo",
-            AssertionCreator.SigningAlgorithm.RS256.name()
+            "RS256"
         );
 
         assertThrows(KafkaException.class, () -> assertionCreator.create(generateClaims()));
@@ -111,7 +114,13 @@ public class DefaultAssertionCreatorTest extends OAuthBearerTest {
         PrivateKey privateKey = generateKeyPair().getPrivate();
         Builder builder = new Builder(privateKey)
             .setPrivateKeySigningAlgorithm("thisisnotvalid");
-        assertThrows(IllegalArgumentException.class, builder::build);
+        AssertionCreator assertionCreator = builder.build();
+        Map<String, Object> claims = generateClaims();
+        Exception e = assertThrows(KafkaException.class, () -> assertionCreator.create(claims));
+        assertNotNull(e);
+        Throwable cause = e.getCause();
+        assertNotNull(cause);
+        assertInstanceOf(InvalidAlgorithmException.class, cause);
     }
 
     private JwtConsumer jwtConsumer(PublicKey publicKey, Map<String, Object> expectedValues) {
@@ -163,7 +172,7 @@ public class DefaultAssertionCreatorTest extends OAuthBearerTest {
         private final Time time = new MockTime();
         private final PrivateKey privateKey;
         private String privateKeyId = "testPrivateKeyId";
-        private String privateKeySigningAlgorithm = AssertionCreator.SigningAlgorithm.RS256.name();
+        private String privateKeySigningAlgorithm = "RS256";
 
         public Builder(PrivateKey privateKey) {
             this.privateKey = privateKey;
@@ -181,9 +190,11 @@ public class DefaultAssertionCreatorTest extends OAuthBearerTest {
 
 
         private AssertionCreator build() {
+            Supplier<String> privateKeySupplier = () -> Base64.getEncoder().encodeToString(privateKey.getEncoded());
+
             return new DefaultAssertionCreator(
                 time,
-                DefaultAssertionCreator.privateKeySupplier(privateKey),
+                privateKeySupplier,
                 privateKeyId,
                 privateKeySigningAlgorithm
             );

@@ -24,6 +24,8 @@ import org.apache.kafka.common.config.SaslConfigs;
  */
 public class OAuthBearerJaasOptions {
 
+    public static final String GRANT_TYPE = "grantType";
+
     public static final String CLIENT_ID = "clientId";
 
     public static final String CLIENT_SECRET = "clientSecret";
@@ -31,6 +33,7 @@ public class OAuthBearerJaasOptions {
     public static final String SCOPE = "scope";
 
     private static final String JWT_BEARER_PREFIX = "jwt-bearer.";
+
     public static final String JWT_BEARER_PRIVATE_KEY_ID = JWT_BEARER_PREFIX + "privateKeyId";
 
     public static final String JWT_BEARER_PRIVATE_KEY_FILE_NAME = JWT_BEARER_PREFIX + "privateKeyFileName";
