@@ -31,6 +31,20 @@ import java.util.Map;
  * post an assertion using the jwt-bearer grant type to a publicized token endpoint URL
  * ({@link SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL}).
  *
+ * </p>
+ *
+ * Here's an example of the <code>sasl.jaas.config</code>:
+ *
+ * <pre>
+ * sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
+ *   grantType="urn:ietf:params:oauth:grant-type:jwt-bearer" \
+ *   jwt-bearer.privateKeyId="54e64f2cf26070fe1fd67e59bf34679d" \
+ *   jwt-bearer.privateKeyFileName="/etc/rsa.key" \
+ *   jwt-bearer.privateKeyAlgorithm="RS256" \
+ *   jwt-bearer.claim.iss="foo" \
+ *   jwt-bearer.claim.aud="bar" ;
+ * </pre>
+ *
  * @see HttpAccessTokenRetriever
  * @see OAuthBearerJaasOptions#JWT_BEARER_PRIVATE_KEY_ID
  * @see OAuthBearerJaasOptions#JWT_BEARER_PRIVATE_KEY_FILE_NAME

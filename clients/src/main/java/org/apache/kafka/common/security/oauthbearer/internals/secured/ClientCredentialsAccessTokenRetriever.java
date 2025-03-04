@@ -33,13 +33,13 @@ import javax.net.ssl.SSLSocketFactory;
 /**
  * <code>ClientCredentialsAccessTokenRetriever</code> is an {@link HttpAccessTokenRetriever} that will
  * post client credentials
- * ({@link OAuthBearerJaasOptions#CLIENT_ID}/{@link OAuthBearerJaasOptions#CLIENT_SECRET})
+ * ({@link OAuthBearerJaasOptions#CLIENT_CREDENTIALS_CLIENT_ID}/{@link OAuthBearerJaasOptions#CLIENT_CREDENTIALS_CLIENT_SECRET})
  * to a publicized token endpoint URL
  * ({@link SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL}).
  *
  * @see HttpAccessTokenRetriever
- * @see OAuthBearerJaasOptions#CLIENT_ID
- * @see OAuthBearerJaasOptions#CLIENT_SECRET
+ * @see OAuthBearerJaasOptions#CLIENT_CREDENTIALS_CLIENT_ID
+ * @see OAuthBearerJaasOptions#CLIENT_CREDENTIALS_CLIENT_SECRET
  * @see OAuthBearerJaasOptions#SCOPE
  * @see SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL
  */

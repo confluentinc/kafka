@@ -47,8 +47,8 @@ import javax.security.auth.callback.UnsupportedCallbackException;
 
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL;
 import static org.apache.kafka.common.config.internals.BrokerSecurityConfigs.ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_CREDENTIALS_CLIENT_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_CREDENTIALS_CLIENT_SECRET;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -95,8 +95,8 @@ public class OAuthBearerLoginCallbackHandlerTest extends OAuthBearerTest {
         Map<String, ?> configs = getSaslConfigs(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, "http://www.example.com");
         System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, "http://www.example.com");
         Map<String, Object> jaasConfig = new HashMap<>();
-        jaasConfig.put(CLIENT_ID, "an ID");
-        jaasConfig.put(CLIENT_SECRET, "a secret");
+        jaasConfig.put(CLIENT_CREDENTIALS_CLIENT_ID, "an ID");
+        jaasConfig.put(CLIENT_CREDENTIALS_CLIENT_SECRET, "a secret");
         jaasConfig.put("extension_foo", "1");
         jaasConfig.put("extension_bar", 2);
         jaasConfig.put("EXTENSION_baz", "3");
@@ -125,8 +125,8 @@ public class OAuthBearerLoginCallbackHandlerTest extends OAuthBearerTest {
         Map<String, ?> configs = getSaslConfigs(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, "http://www.example.com");
         System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, "http://www.example.com");
         Map<String, Object> jaasConfig = new HashMap<>();
-        jaasConfig.put(CLIENT_ID, "an ID");
-        jaasConfig.put(CLIENT_SECRET, "a secret");
+        jaasConfig.put(CLIENT_CREDENTIALS_CLIENT_ID, "an ID");
+        jaasConfig.put(CLIENT_CREDENTIALS_CLIENT_SECRET, "a secret");
         jaasConfig.put(illegalKey, "this key isn't allowed per OAuthBearerClientInitialResponse.validateExtensions");
         configureHandler(handler, configs, jaasConfig);
 
@@ -235,8 +235,8 @@ public class OAuthBearerLoginCallbackHandlerTest extends OAuthBearerTest {
         Map<String, ?> configs = getSaslConfigs(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, "http://www.example.com");
         System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, "http://www.example.com");
         Map<String, Object> jaasConfigs = new HashMap<>();
-        jaasConfigs.put(CLIENT_ID, "an ID");
-        jaasConfigs.put(CLIENT_SECRET, "a secret");
+        jaasConfigs.put(CLIENT_CREDENTIALS_CLIENT_ID, "an ID");
+        jaasConfigs.put(CLIENT_CREDENTIALS_CLIENT_SECRET, "a secret");
         configureHandler(handler, configs, jaasConfigs);
         assertInstanceOf(HttpAccessTokenRetriever.class, handler.getAccessTokenRetriever());
     }

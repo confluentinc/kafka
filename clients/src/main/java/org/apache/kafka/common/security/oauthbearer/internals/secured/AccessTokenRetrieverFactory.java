@@ -40,8 +40,8 @@ import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_RETRY_BACKOF
 import static org.apache.kafka.common.config.SaslConfigs.SASL_LOGIN_RETRY_BACKOFF_MS;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_HEADER_URLENCODE;
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_CREDENTIALS_CLIENT_ID;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_CREDENTIALS_CLIENT_SECRET;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.GRANT_TYPE;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM;
@@ -89,8 +89,8 @@ public class AccessTokenRetrieverFactory  {
                 .orElse(ClientCredentialsAccessTokenRetriever.GRANT_TYPE);
 
             if (grantType.equalsIgnoreCase(ClientCredentialsAccessTokenRetriever.GRANT_TYPE)) {
-                String clientId = jou.validateString(CLIENT_ID);
-                String clientSecret = jou.validateString(CLIENT_SECRET);
+                String clientId = jou.validateString(CLIENT_CREDENTIALS_CLIENT_ID);
+                String clientSecret = jou.validateString(CLIENT_CREDENTIALS_CLIENT_SECRET);
                 String scope = jou.validateString(SCOPE, false);
                 boolean urlencodeHeader = validateUrlencodeHeader(cu);
 
