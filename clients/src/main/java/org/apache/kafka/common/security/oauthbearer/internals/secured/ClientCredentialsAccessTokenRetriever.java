@@ -42,6 +42,7 @@ import javax.net.ssl.SSLSocketFactory;
  * @see OAuthBearerJaasOptions#CLIENT_SECRET
  * @see OAuthBearerJaasOptions#SCOPE
  * @see SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL
+ * @see SaslConfigs#SASL_OAUTHBEARER_GRANT_TYPE
  */
 
 public class ClientCredentialsAccessTokenRetriever extends HttpAccessTokenRetriever {

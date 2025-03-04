@@ -22,6 +22,7 @@ import org.apache.kafka.common.security.oauthbearer.GrantType;
 import org.apache.kafka.common.utils.Time;
 
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -39,13 +40,10 @@ import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_HEADER
 import static org.apache.kafka.common.config.SaslConfigs.SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_ID;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.CLIENT_SECRET;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_AUDIENCE;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_CLAIM_PREFIX;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_ISSUER;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ALGORITHM;
+import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_FILE_NAME;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_ID;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_PRIVATE_KEY_SECRET;
-import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.JWT_BEARER_SUBJECT;
 import static org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions.SCOPE;
 
 public class AccessTokenRetrieverFactory  {
@@ -103,22 +101,19 @@ public class AccessTokenRetrieverFactory  {
                     urlencodeHeader);
             } else {
                 String privateKeyId = jou.validateString(JWT_BEARER_PRIVATE_KEY_ID);
-                String privateKeySecret = jou.validateString(JWT_BEARER_PRIVATE_KEY_SECRET);
+                Path privateKeyFileName = jou.validateFile(JWT_BEARER_PRIVATE_KEY_FILE_NAME);
                 String privateKeySigningAlgorithm = jou.validateString(JWT_BEARER_PRIVATE_KEY_ALGORITHM);
-                String subject = jou.validateString(JWT_BEARER_SUBJECT);
-                String issuer = jou.validateString(JWT_BEARER_ISSUER);
-                String audience = jou.validateString(JWT_BEARER_AUDIENCE);
-                Map<String, String> supplementaryClaims = getSupplementaryClaims(jaasConfig);
+                Map<String, Object> staticClaims = getStaticClaims(jaasConfig);
+                AssertionCreator assertionCreator = new DefaultAssertionCreator(
+                    time,
+                    DefaultAssertionCreator.privateKeySupplier(privateKeyFileName),
+                    privateKeyId,
+                    privateKeySigningAlgorithm
+                );
 
                 return new JwtBearerAccessTokenRetriever(
-                    time,
-                    privateKeyId,
-                    privateKeySecret,
-                    privateKeySigningAlgorithm,
-                    subject,
-                    issuer,
-                    audience,
-                    supplementaryClaims,
+                    assertionCreator,
+                    staticClaims,
                     sslSocketFactory,
                     tokenEndpointUrl.toString(),
                     cu.validateLong(SASL_LOGIN_RETRY_BACKOFF_MS),
@@ -150,7 +145,7 @@ public class AccessTokenRetrieverFactory  {
     }
 
     /**
-     * In some cases, the incoming c{@link Map} doesn't contain a value for
+     * In some cases, the incoming {@link Map} doesn't contain a value for
      * {@link SaslConfigs#SASL_OAUTHBEARER_GRANT_TYPE}. Returning {@code null} from {@link Map#get(Object)}
      * will cause a hassle in the downstream code, so fallback to the previously supported
      * {@link GrantType#CLIENT_CREDENTIALS} grant type.
@@ -163,11 +158,10 @@ public class AccessTokenRetrieverFactory  {
     }
 
     /**
-     * Support for supplementary claims allows the client to pass arbitrary additional claims
-     * to the identity provider.
+     * Support for static claims allows the client to pass arbitrary claims to the identity provider.
      */
-    static Map<String, String> getSupplementaryClaims(Map<String, Object> jaasConfig) {
-        Map<String, String> claims = new HashMap<>();
+    static Map<String, Object> getStaticClaims(Map<String, Object> jaasConfig) {
+        Map<String, Object> claims = new HashMap<>();
 
         jaasConfig.forEach((k, v) -> {
             if (k.startsWith(JWT_BEARER_CLAIM_PREFIX)) {
