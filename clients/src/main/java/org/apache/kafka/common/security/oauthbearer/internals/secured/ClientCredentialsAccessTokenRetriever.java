@@ -18,7 +18,7 @@
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
 import org.apache.kafka.common.config.SaslConfigs;
-import org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler;
+import org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions;
 import org.apache.kafka.common.utils.Utils;
 
 import java.net.URLEncoder;
@@ -33,18 +33,20 @@ import javax.net.ssl.SSLSocketFactory;
 /**
  * <code>ClientCredentialsAccessTokenRetriever</code> is an {@link HttpAccessTokenRetriever} that will
  * post client credentials
- * ({@link OAuthBearerLoginCallbackHandler#CLIENT_ID_CONFIG}/{@link OAuthBearerLoginCallbackHandler#CLIENT_SECRET_CONFIG})
+ * ({@link OAuthBearerJaasOptions#CLIENT_ID}/{@link OAuthBearerJaasOptions#CLIENT_SECRET})
  * to a publicized token endpoint URL
  * ({@link SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL}).
  *
  * @see HttpAccessTokenRetriever
- * @see OAuthBearerLoginCallbackHandler#CLIENT_ID_CONFIG
- * @see OAuthBearerLoginCallbackHandler#CLIENT_SECRET_CONFIG
- * @see OAuthBearerLoginCallbackHandler#SCOPE_CONFIG
+ * @see OAuthBearerJaasOptions#CLIENT_ID
+ * @see OAuthBearerJaasOptions#CLIENT_SECRET
+ * @see OAuthBearerJaasOptions#SCOPE
  * @see SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL
  */
 
 public class ClientCredentialsAccessTokenRetriever extends HttpAccessTokenRetriever {
+
+    public static final String GRANT_TYPE = "client_credentials";
 
     private final String clientId;
 
@@ -106,7 +108,7 @@ public class ClientCredentialsAccessTokenRetriever extends HttpAccessTokenRetrie
 
     static String formatRequestBody(String scope) {
         StringBuilder requestParameters = new StringBuilder();
-        requestParameters.append("grant_type=client_credentials");
+        requestParameters.append("grant_type=" + GRANT_TYPE);
 
         if (!Utils.isBlank(scope)) {
             String encodedScope = URLEncoder.encode(scope.trim(), StandardCharsets.UTF_8);
