@@ -85,7 +85,7 @@ public class AccessTokenRetrieverFactory  {
                 sslSocketFactory = jou.createSSLSocketFactory();
 
             String grantType = Optional
-                .ofNullable(cu.validateString(GRANT_TYPE, false))
+                .ofNullable(jou.validateString(GRANT_TYPE, false))
                 .orElse(ClientCredentialsAccessTokenRetriever.GRANT_TYPE);
 
             if (grantType.equalsIgnoreCase(ClientCredentialsAccessTokenRetriever.GRANT_TYPE)) {
