@@ -27,8 +27,9 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
- * <code>ClientCredentialsAccessTokenRetriever</code> is an {@link HttpAccessTokenRetriever} that will
- * post an assertion using the jwt-bearer grant type to a publicized token endpoint URL
+ * <code>JwtBearerAccessTokenRetriever</code> is an {@link HttpAccessTokenRetriever} that will
+ * post an assertion using the {@code urn:ietf:params:oauth:grant-type:jwt-bearer} grant type to
+ * a publicized token endpoint URL
  * ({@link SaslConfigs#SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL}).
  *
  * </p>
