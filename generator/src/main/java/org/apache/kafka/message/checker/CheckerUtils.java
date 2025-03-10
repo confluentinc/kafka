@@ -144,7 +144,7 @@ class CheckerUtils {
 
         String pathFromProjectRoot = projectRoot.relativize(fileAbsolutePath).toString();
 
-        Git git = Git.open(new File(projectRoot + "/.git"));
+        Git git = Git.open(Paths.get(projectRoot.toString(), ".git").toFile());
         Repository repository = git.getRepository();
         Ref head = repository.getRefDatabase().findRef(gitRef);
         if (head == null) {
