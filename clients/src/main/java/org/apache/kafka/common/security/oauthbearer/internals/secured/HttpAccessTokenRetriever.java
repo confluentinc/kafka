@@ -346,7 +346,7 @@ public abstract class HttpAccessTokenRetriever implements AccessTokenRetriever {
             snippet = String.format("%s (trimmed to first %d characters out of %d total)", s, MAX_RESPONSE_BODY_LENGTH, actualLength);
         }
 
-        throw new IOException(String.format("The token endpoint response did not contain an acceptable token value. Response: (%s)", snippet));
+        throw new IllegalArgumentException(String.format("The token endpoint response did not contain an acceptable token value. Response: (%s)", snippet));
     }
 
     static String sanitizeString(String name, String value) {
