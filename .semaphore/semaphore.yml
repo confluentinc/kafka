@@ -92,7 +92,6 @@ blocks:
         - name: Unit tests and Integration tests
           commands:
             - './gradlew 
-                --debug
                 unitTest integrationTest --no-daemon --stacktrace --continue 
                 -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
                 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
