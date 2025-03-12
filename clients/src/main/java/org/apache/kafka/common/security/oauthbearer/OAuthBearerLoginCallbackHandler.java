@@ -30,8 +30,8 @@ import org.apache.kafka.common.security.oauthbearer.internals.secured.AccessToke
 import org.apache.kafka.common.security.oauthbearer.internals.secured.AccessTokenValidatorFactory;
 import org.apache.kafka.common.security.oauthbearer.internals.secured.JaasOptionsUtils;
 import org.apache.kafka.common.security.oauthbearer.internals.secured.ValidateException;
-
 import org.apache.kafka.common.utils.Time;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

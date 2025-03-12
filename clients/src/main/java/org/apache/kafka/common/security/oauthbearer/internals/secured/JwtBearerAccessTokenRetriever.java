@@ -20,11 +20,12 @@ package org.apache.kafka.common.security.oauthbearer.internals.secured;
 import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.security.oauthbearer.OAuthBearerJaasOptions;
 
-import javax.net.ssl.SSLSocketFactory;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
+
+import javax.net.ssl.SSLSocketFactory;
 
 /**
  * <code>JwtBearerAccessTokenRetriever</code> is an {@link HttpAccessTokenRetriever} that will

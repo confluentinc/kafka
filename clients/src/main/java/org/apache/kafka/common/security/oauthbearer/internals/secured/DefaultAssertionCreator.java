@@ -17,9 +17,11 @@
 
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.utils.Time;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.jose4j.jws.JsonWebSignature;
 
 import java.nio.charset.StandardCharsets;
