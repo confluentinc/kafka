@@ -19,6 +19,8 @@ package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
 import org.apache.kafka.common.config.ConfigException;
 
+import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.common.utils.Time;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -53,8 +55,9 @@ public class AccessTokenRetrieverFactoryTest extends OAuthBearerTest {
         System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, accessTokenFile.toURI().toString());
         Map<String, ?> configs = Collections.singletonMap(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, accessTokenFile.toURI().toString());
         Map<String, Object> jaasConfig = Collections.emptyMap();
+        Time time = new MockTime();
 
-        try (AccessTokenRetriever accessTokenRetriever = AccessTokenRetrieverFactory.create(configs, jaasConfig)) {
+        try (AccessTokenRetriever accessTokenRetriever = AccessTokenRetrieverFactory.create(time, configs, jaasConfig)) {
             accessTokenRetriever.init();
             assertEquals(expected, accessTokenRetriever.retrieve());
         }
@@ -67,7 +70,8 @@ public class AccessTokenRetrieverFactoryTest extends OAuthBearerTest {
         System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, file);
         Map<String, ?> configs = getSaslConfigs(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, file);
         Map<String, Object> jaasConfig = Collections.emptyMap();
-        assertThrowsWithMessage(ConfigException.class, () -> AccessTokenRetrieverFactory.create(configs, jaasConfig), "that doesn't exist");
+        Time time = new MockTime();
+        assertThrowsWithMessage(ConfigException.class, () -> AccessTokenRetrieverFactory.create(time, configs, jaasConfig), "that doesn't exist");
     }
 
     @Test
@@ -78,7 +82,8 @@ public class AccessTokenRetrieverFactoryTest extends OAuthBearerTest {
         System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, accessTokenFile.toURI().toString());
         Map<String, ?> configs = getSaslConfigs(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, accessTokenFile.toURI().toString());
         Map<String, Object> jaasConfig = Collections.emptyMap();
-        assertThrowsWithMessage(ConfigException.class, () -> AccessTokenRetrieverFactory.create(configs, jaasConfig), "that doesn't exist");
+        Time time = new MockTime();
+        assertThrowsWithMessage(ConfigException.class, () -> AccessTokenRetrieverFactory.create(time, configs, jaasConfig), "that doesn't exist");
     }
 
     @Test
@@ -87,7 +92,8 @@ public class AccessTokenRetrieverFactoryTest extends OAuthBearerTest {
         File tmpDir = createTempDir("not_allowed");
         File accessTokenFile = new File(tmpDir, "not_allowed.json");
         Map<String, ?> configs = getSaslConfigs(SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL, accessTokenFile.toURI().toString());
-        assertThrowsWithMessage(ConfigException.class, () -> AccessTokenRetrieverFactory.create(configs, Collections.emptyMap()),
+        Time time = new MockTime();
+        assertThrowsWithMessage(ConfigException.class, () -> AccessTokenRetrieverFactory.create(time, configs, Collections.emptyMap()),
                 ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG);
     }
 

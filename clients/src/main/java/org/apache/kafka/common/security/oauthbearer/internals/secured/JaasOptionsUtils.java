@@ -28,7 +28,9 @@ import org.apache.kafka.common.security.ssl.SslFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -119,6 +121,35 @@ public class JaasOptionsUtils {
         }
 
         return value;
+    }
+
+    /**
+     * Validates that, if a value is supplied, is a file that:
+     *
+     * <li>
+     *     <ul>exists</ul>
+     *     <ul>has read permission</ul>
+     *     <ul>points to a file</ul>
+     * </li>
+     *
+     * If the value is null or an empty string, it is assumed to be an "empty" value and thus.
+     * ignored. Any whitespace is trimmed off of the beginning and end.
+     */
+
+    public Path validateFile(String name) {
+        String fileName = validateString(name);
+        File file = new File(fileName).getAbsoluteFile();
+
+        if (!file.exists())
+            throw new ConfigException(String.format("The OAuth configuration option %s contains a file (%s) that doesn't exist", name, file));
+
+        if (!file.canRead())
+            throw new ConfigException(String.format("The OAuth configuration option %s contains a file (%s) that doesn't have read permission", name, file));
+
+        if (file.isDirectory())
+            throw new ConfigException(String.format("The OAuth configuration option %s references a directory (%s), not a file", name, file));
+
+        return file.toPath();
     }
 
 }
