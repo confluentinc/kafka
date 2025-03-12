@@ -19,6 +19,7 @@ package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.common.utils.Utils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -324,23 +326,27 @@ public abstract class HttpAccessTokenRetriever implements AccessTokenRetriever {
     static String parseAccessToken(String responseBody) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode rootNode = mapper.readTree(responseBody);
-        JsonNode accessTokenNode = rootNode.at("/access_token");
 
-        if (accessTokenNode == null) {
-            // Only grab the first N characters so that if the response body is huge, we don't
-            // blow up.
-            String snippet = responseBody;
+        for (String jsonExpression : List.of("/id_token", "/access_token")) {
+            JsonNode tokenNode = rootNode.at(jsonExpression);
 
-            if (snippet.length() > MAX_RESPONSE_BODY_LENGTH) {
-                int actualLength = responseBody.length();
-                String s = responseBody.substring(0, MAX_RESPONSE_BODY_LENGTH);
-                snippet = String.format("%s (trimmed to first %d characters out of %d total)", s, MAX_RESPONSE_BODY_LENGTH, actualLength);
-            }
+            if (tokenNode == null || Utils.isBlank(tokenNode.textValue()))
+                continue;
 
-            throw new IOException(String.format("The token endpoint response did not contain an access_token value. Response: (%s)", snippet));
+            return tokenNode.textValue().trim();
         }
 
-        return sanitizeString("the token endpoint response's access_token JSON attribute", accessTokenNode.textValue());
+        // Only grab the first N characters so that if the response body is huge, we don't
+        // blow up.
+        String snippet = responseBody;
+
+        if (snippet.length() > MAX_RESPONSE_BODY_LENGTH) {
+            int actualLength = responseBody.length();
+            String s = responseBody.substring(0, MAX_RESPONSE_BODY_LENGTH);
+            snippet = String.format("%s (trimmed to first %d characters out of %d total)", s, MAX_RESPONSE_BODY_LENGTH, actualLength);
+        }
+
+        throw new IllegalArgumentException(String.format("The token endpoint response did not contain an acceptable token value. Response: (%s)", snippet));
     }
 
     static String sanitizeString(String name, String value) {
