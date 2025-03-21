@@ -50,6 +50,7 @@ public final class Lz4BlockOutputStream extends OutputStream {
     private final BD bd;
     private final int maxBlockSize;
     private OutputStream out;
+    private final Lz4ArrayPool arrayPool;
     private byte[] buffer;
     private byte[] compressedBuffer;
     private int bufferOffset;
@@ -83,8 +84,9 @@ public final class Lz4BlockOutputStream extends OutputStream {
         flg = new FLG(blockChecksum);
         bufferOffset = 0;
         maxBlockSize = bd.getBlockMaximumSize();
-        buffer = new byte[maxBlockSize];
-        compressedBuffer = new byte[compressor.maxCompressedLength(maxBlockSize)];
+        arrayPool = Lz4ArrayPool.INSTANCE;
+        buffer = arrayPool.get(maxBlockSize);
+        compressedBuffer = arrayPool.get(compressor.maxCompressedLength(maxBlockSize));
         finished = false;
         writeHeader();
     }
@@ -250,6 +252,8 @@ public final class Lz4BlockOutputStream extends OutputStream {
                         outStream.flush();
                     }
                 }
+                arrayPool.release(buffer);
+                arrayPool.release(compressedBuffer);
             } finally {
                 out = null;
                 buffer = null;
@@ -341,6 +345,9 @@ public final class Lz4BlockOutputStream extends OutputStream {
 
     public static class BD {
 
+        public static final int MINIMUM_BLOCK_SIZE_VALUE = 4;
+        public static final int MAXIMUM_BLOCK_SIZE_VALUE = 7;
+
         private final int reserved2;
         private final int blockSizeValue;
         private final int reserved3;
@@ -368,8 +375,8 @@ public final class Lz4BlockOutputStream extends OutputStream {
             if (reserved2 != 0) {
                 throw new RuntimeException("Reserved2 field must be 0");
             }
-            if (blockSizeValue < 4 || blockSizeValue > 7) {
-                throw new RuntimeException("Block size value must be between 4 and 7");
+            if (blockSizeValue < MINIMUM_BLOCK_SIZE_VALUE || blockSizeValue > MAXIMUM_BLOCK_SIZE_VALUE) {
+                throw new RuntimeException("Block size value must be between " + MINIMUM_BLOCK_SIZE_VALUE + " and " + MAXIMUM_BLOCK_SIZE_VALUE);
             }
             if (reserved3 != 0) {
                 throw new RuntimeException("Reserved3 field must be 0");
