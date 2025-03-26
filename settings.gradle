@@ -22,10 +22,22 @@ plugins {
 // Due to licensing issues with Gradle Enterprise, we must disable the enterprise features here. 
 // When merging changes to develocity from AK, ensure we keep these features disabled.
 // See more discussion here https://github.com/apache/kafka/pull/13676#issuecomment-1599025907
+def isGithubActions = System.getenv('GITHUB_ACTIONS') != null
+
+def runNew = ext.find("kafka.test.run.new") == "true"
+def runFlaky = ext.find("kafka.test.run.flaky") == "true"
+def currentJvm = JavaVersion.current()
 
 develocity {
     buildScan {
         publishing.onlyIf { false }
+        tag "JDK$currentJvm"
+        if (runFlaky) {
+            tag "flaky"
+        }
+        if (runNew) {
+            tag "new"
+        }
     }
 
     buildCache {
@@ -41,6 +53,7 @@ develocity {
 
 
 include 'clients',
+    'clients:clients-integration-tests',
     'connect:api',
     'connect:basic-auth-extension',
     'connect:file',
@@ -92,6 +105,7 @@ include 'clients',
     'streams:upgrade-system-tests-37',
     'streams:upgrade-system-tests-38',
     'streams:upgrade-system-tests-39',
+    'streams:upgrade-system-tests-40',
     'tools',
     'tools:tools-api',
     'transaction-coordinator',
