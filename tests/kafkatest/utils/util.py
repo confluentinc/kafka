@@ -134,11 +134,17 @@ def is_version(node, version_list, proc_grep_string="kafka", logger=None):
     assert len(lines) == 1
     psLine = lines[0]
 
-    versions = _kafka_jar_versions(psLine)
-    r = versions == {str(v) for v in version_list}
+    # this pattern captures just the number and optionally the build number
+    # When collecting version info from the jars, we get a lot more version info
+    # then the amount stored in the test, to avoid issues, we use this pattern
+    pattern = re.compile(r"([0-9]+\.[0-9]+\.[0-9]+)(\.[0-9]+)?(-[0-9]+)?")
+
+    jar_versions = {pattern.match(v).group() for v in _kafka_jar_versions(psLine)}
+    node_versions = {pattern.match(str(v)).group() for v in version_list}
+    r = jar_versions == node_versions
     if not r and logger is not None:
         logger.warning("%s: %s version mismatch: expected %s, actual %s, ps line %s" % \
-                       (str(node), proc_grep_string, version_list, versions, psLine))
+                       (str(node), proc_grep_string, node_versions, jar_versions, psLine))
     return r
 
 
