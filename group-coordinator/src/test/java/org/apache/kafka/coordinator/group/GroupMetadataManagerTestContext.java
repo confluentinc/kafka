@@ -93,6 +93,7 @@ import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupBuilder;
 import org.apache.kafka.coordinator.group.modern.share.ShareGroup;
 import org.apache.kafka.coordinator.group.modern.share.ShareGroupBuilder;
 import org.apache.kafka.image.MetadataImage;
+import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.common.ApiMessageAndVersion;
 import org.apache.kafka.timeline.SnapshotRegistry;
 
@@ -104,6 +105,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -149,8 +151,8 @@ public class GroupMetadataManagerTestContext {
             return new GroupCoordinatorConfigContext(
                 new AbstractConfig(
                     Utils.mergeConfigs(List.of(
+                        GroupCoordinatorConfig.CLASSIC_GROUP_CONFIG_DEF,
                         GroupCoordinatorConfig.GROUP_COORDINATOR_CONFIG_DEF,
-                        GroupCoordinatorConfig.NEW_GROUP_CONFIG_DEF,
                         GroupCoordinatorConfig.OFFSET_MANAGEMENT_CONFIG_DEF,
                         GroupCoordinatorConfig.CONSUMER_GROUP_CONFIG_DEF,
                         GroupCoordinatorConfig.SHARE_GROUP_CONFIG_DEF
@@ -451,6 +453,7 @@ public class GroupMetadataManagerTestContext {
         private ShareGroupPartitionAssignor shareGroupAssignor = new MockPartitionAssignor("share");
         private final List<ShareGroupBuilder> shareGroupBuilders = new ArrayList<>();
         private final Map<String, Object> config = new HashMap<>();
+        private Optional<Authorizer> authorizer = Optional.empty();
 
         public Builder withConfig(String key, Object value) {
             config.put(key, value);
@@ -474,6 +477,11 @@ public class GroupMetadataManagerTestContext {
 
         public Builder withShareGroupAssignor(ShareGroupPartitionAssignor shareGroupAssignor) {
             this.shareGroupAssignor = shareGroupAssignor;
+            return this;
+        }
+
+        public Builder withAuthorizer(Authorizer authorizer) {
+            this.authorizer = Optional.of(authorizer);
             return this;
         }
 
@@ -506,6 +514,7 @@ public class GroupMetadataManagerTestContext {
                     .withGroupCoordinatorMetricsShard(metrics)
                     .withShareGroupAssignor(shareGroupAssignor)
                     .withGroupConfigManager(groupConfigManager)
+                    .withAuthorizer(authorizer)
                     .build(),
                 groupConfigManager
             );
