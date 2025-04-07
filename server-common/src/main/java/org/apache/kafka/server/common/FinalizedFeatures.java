@@ -48,6 +48,17 @@ public final class FinalizedFeatures {
         }
     }
 
+    // Internal constructor only for copying FinalizedFeatures.
+    private FinalizedFeatures(
+        MetadataVersion metadataVersion,
+        Map<String, Short> finalizedFeatures,
+        long finalizedFeaturesEpoch
+    ) {
+        this.metadataVersion = metadataVersion;
+        this.finalizedFeatures = new HashMap<>(finalizedFeatures);
+        this.finalizedFeaturesEpoch = finalizedFeaturesEpoch;
+    }
+
     public MetadataVersion metadataVersion() {
         return metadataVersion;
     }
@@ -81,5 +92,27 @@ public final class FinalizedFeatures {
                 ", finalizedFeatures=" + finalizedFeatures +
                 ", finalizedFeaturesEpoch=" + finalizedFeaturesEpoch +
                 ")";
+    }
+
+    public FinalizedFeatures setFinalizedLevel(String key, short level) {
+        if (level == (short) 0) {
+            if (finalizedFeatures.containsKey(key)) {
+                Map<String, Short> newFinalizedFeatures = new HashMap<>(finalizedFeatures);
+                newFinalizedFeatures.remove(key);
+                return new FinalizedFeatures(
+                    metadataVersion,
+                    newFinalizedFeatures,
+                    finalizedFeaturesEpoch);
+            } else {
+                return this;
+            }
+        } else {
+            Map<String, Short> newFinalizedFeatures = new HashMap<>(finalizedFeatures);
+            newFinalizedFeatures.put(key, level);
+            return new FinalizedFeatures(
+                metadataVersion,
+                newFinalizedFeatures,
+                finalizedFeaturesEpoch);
+        }
     }
 }
