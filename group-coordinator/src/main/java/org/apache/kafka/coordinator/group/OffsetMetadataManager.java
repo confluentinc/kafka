@@ -199,11 +199,18 @@ public class OffsetMetadataManager {
 
     private class Offsets {
         /**
+         * Whether to preserve empty entries for groups when removing offsets.
+         * We use this to keep track of the groups associated with pending transactions.
+         */
+        private final boolean preserveGroups;
+
+        /**
          * The offsets keyed by group id, topic name and partition id.
          */
         private final TimelineHashMap<String, TimelineHashMap<String, TimelineHashMap<Integer, OffsetAndMetadata>>> offsetsByGroup;
 
-        private Offsets() {
+        private Offsets(boolean preserveGroups) {
+            this.preserveGroups = preserveGroups;
             this.offsetsByGroup = new TimelineHashMap<>(snapshotRegistry, 0);
         }
 
@@ -256,7 +263,7 @@ public class OffsetMetadataManager {
             if (partitionOffsets.isEmpty())
                 topicOffsets.remove(topic);
 
-            if (topicOffsets.isEmpty())
+            if (!preserveGroups && topicOffsets.isEmpty())
                 offsetsByGroup.remove(groupId);
 
             return removedValue;
@@ -278,7 +285,7 @@ public class OffsetMetadataManager {
         this.groupMetadataManager = groupMetadataManager;
         this.config = config;
         this.metrics = metrics;
-        this.offsets = new Offsets();
+        this.offsets = new Offsets(false);
         this.pendingTransactionalOffsets = new TimelineHashMap<>(snapshotRegistry, 0);
         this.openTransactionsByGroup = new TimelineHashMap<>(snapshotRegistry, 0);
     }
@@ -995,7 +1002,7 @@ public class OffsetMetadataManager {
                 // offsets store. Pending offsets there are moved to the main store when
                 // the transaction is committed; or removed when the transaction is aborted.
                 pendingTransactionalOffsets
-                    .computeIfAbsent(producerId, __ -> new Offsets())
+                    .computeIfAbsent(producerId, __ -> new Offsets(true))
                     .put(
                         groupId,
                         topic,

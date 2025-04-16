@@ -2593,6 +2593,67 @@ public class OffsetMetadataManagerTest {
         assertEquals(List.of(), records);
     }
 
+    @Test
+    public void testCleanupExpiredOffsetsWithDeletedPendingTransactionalOffsets() {
+        GroupMetadataManager groupMetadataManager = mock(GroupMetadataManager.class);
+        Group group = mock(Group.class);
+
+        OffsetMetadataManagerTestContext context = new OffsetMetadataManagerTestContext.Builder()
+            .withGroupMetadataManager(groupMetadataManager)
+            .withOffsetsRetentionMinutes(1)
+            .build();
+
+        long commitTimestamp = context.time.milliseconds();
+
+        context.commitOffset("group-id", "foo", 0, 100L, 0, commitTimestamp);
+        context.commitOffset(10L, "group-id", "foo", 1, 101L, 0, commitTimestamp + 500);
+
+        when(groupMetadataManager.group("group-id")).thenReturn(group);
+        when(group.offsetExpirationCondition()).thenReturn(Optional.of(
+            new OffsetExpirationConditionImpl(offsetAndMetadata -> offsetAndMetadata.commitTimestampMs)));
+        when(group.isSubscribedToTopic("foo")).thenReturn(false);
+
+        // Delete the pending transactional offset.
+        OffsetDeleteRequestData.OffsetDeleteRequestTopicCollection requestTopicCollection =
+            new OffsetDeleteRequestData.OffsetDeleteRequestTopicCollection(List.of(
+                new OffsetDeleteRequestData.OffsetDeleteRequestTopic()
+                    .setName("foo")
+                    .setPartitions(List.of(
+                        new OffsetDeleteRequestData.OffsetDeleteRequestPartition().setPartitionIndex(1)
+                    ))
+            ).iterator());
+        CoordinatorResult<OffsetDeleteResponseData, CoordinatorRecord> result = context.deleteOffsets(
+            new OffsetDeleteRequestData()
+                .setGroupId("group-id")
+                .setTopics(requestTopicCollection)
+        );
+        List<CoordinatorRecord> expectedRecords = List.of(
+            GroupCoordinatorRecordHelpers.newOffsetCommitTombstoneRecord("group-id", "foo", 1)
+        );
+        assertEquals(expectedRecords, result.records());
+
+        context.time.sleep(Duration.ofMinutes(1).toMillis());
+
+        // The group should not be deleted because it has a pending transaction.
+        expectedRecords = List.of(
+            GroupCoordinatorRecordHelpers.newOffsetCommitTombstoneRecord("group-id", "foo", 0)
+        );
+        List<CoordinatorRecord> records = new ArrayList<>();
+        assertFalse(context.cleanupExpiredOffsets("group-id", records));
+        assertEquals(expectedRecords, records);
+
+        // Commit the ongoing transaction.
+        context.replayEndTransactionMarker(10L, TransactionResult.COMMIT);
+
+        // The group should be deletable now.
+        context.commitOffset("group-id", "foo", 0, 100L, 0, commitTimestamp);
+        context.time.sleep(Duration.ofMinutes(1).toMillis());
+
+        records = new ArrayList<>();
+        assertTrue(context.cleanupExpiredOffsets("group-id", records));
+        assertEquals(expectedRecords, records);
+    }
+
     private static OffsetFetchResponseData.OffsetFetchResponsePartitions mkOffsetPartitionResponse(
         int partition,
         long offset,
