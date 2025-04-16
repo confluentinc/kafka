@@ -858,7 +858,7 @@ public class OffsetMetadataManager {
         TimelineHashMap<String, TimelineHashMap<Integer, OffsetAndMetadata>> offsetsByTopic =
             offsets.offsetsByGroup.get(groupId);
         if (offsetsByTopic == null) {
-            return true;
+            return !openTransactionsByGroup.containsKey(groupId);
         }
 
         // We expect the group to exist.
