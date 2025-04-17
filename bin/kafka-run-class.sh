@@ -226,14 +226,14 @@ fi
 # Log4j settings
 if [ -z "$KAFKA_LOG4J_OPTS" ]; then
   # Log to console. This is a tool.
-  LOG4J_CONFIG_NORMAL_INSTALL="/etc/kafka/tools-log4j.properties"
-  LOG4J_CONFIG_ZIP_INSTALL="$base_dir/etc/kafka/tools-log4j.properties"
+  LOG4J_CONFIG_NORMAL_INSTALL="/etc/kafka/tools-log4j2.yaml"
+  LOG4J_CONFIG_ZIP_INSTALL="$base_dir/etc/kafka/tools-log4j2.yaml"
   if [ -e "$LOG4J_CONFIG_NORMAL_INSTALL" ]; then # Normal install layout
     LOG4J_DIR="${LOG4J_CONFIG_NORMAL_INSTALL}"
   elif [ -e "${LOG4J_CONFIG_ZIP_INSTALL}" ]; then # Simple zip file layout
     LOG4J_DIR="${LOG4J_CONFIG_ZIP_INSTALL}"
   else # Fallback to normal default
-    LOG4J_DIR="$base_dir/config/tools-log4j.properties"
+    LOG4J_DIR="$base_dir/config/tools-log4j2.yaml"
   fi
   # If Cygwin is detected, LOG4J_DIR is converted to Windows format.
   (( WINDOWS_OS_FORMAT )) && LOG4J_DIR=$(cygpath --path --mixed "${LOG4J_DIR}")
