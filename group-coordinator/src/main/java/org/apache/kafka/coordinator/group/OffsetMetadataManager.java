@@ -193,16 +193,10 @@ public class OffsetMetadataManager {
     private final TimelineHashMap<Long, Offsets> pendingTransactionalOffsets;
 
     /**
-     * The open transactions (producer ids) keyed by group.
-     * Tracks whether groups have any open transactions.
-     */
-    private final TimelineHashMap<String, TimelineHashSet<Long>> openTransactionsByGroup;
-
-    /**
      * The open transactions (producer ids) keyed by group id, topic name and partition id.
-     * Tracks whether partitions have any pending transactional offsets.
+     * Tracks whether partitions have any pending transactional offsets that have not been deleted.
      */
-    private final TimelineHashMap<String, TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>>> openTransactionsByGroupTopicAndPartition;
+    private final TimelineHashMap<String, TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>>> openTransactionsByGroup;
 
     private class Offsets {
         /**
@@ -288,7 +282,6 @@ public class OffsetMetadataManager {
         this.offsets = new Offsets();
         this.pendingTransactionalOffsets = new TimelineHashMap<>(snapshotRegistry, 0);
         this.openTransactionsByGroup = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.openTransactionsByGroupTopicAndPartition = new TimelineHashMap<>(snapshotRegistry, 0);
     }
 
     /**
@@ -659,7 +652,7 @@ public class OffsetMetadataManager {
         // if the topic-partition was not in the main storage because we don't need to write
         // two consecutive tombstones.
         TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-            openTransactionsByGroupTopicAndPartition.get(groupId);
+            openTransactionsByGroup.get(groupId);
         if (openTransactionsByTopic != null) {
             openTransactionsByTopic.forEach((topic, openTransactionsByPartition) -> {
                 openTransactionsByPartition.forEach((partition, producerIds) -> {
@@ -688,7 +681,7 @@ public class OffsetMetadataManager {
         int partition
     ) {
         TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-            openTransactionsByGroupTopicAndPartition.get(groupId);
+            openTransactionsByGroup.get(groupId);
         if (openTransactionsByTopic == null) return false;
 
         TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition = openTransactionsByTopic.get(topic);
@@ -884,7 +877,7 @@ public class OffsetMetadataManager {
         });
         metrics.record(OFFSET_EXPIRED_SENSOR_NAME, records.size());
 
-        // We don't want to remove the group if there are ongoing transactions.
+        // We don't want to remove the group if there are ongoing transactions with undeleted offsets.
         return allOffsetsExpired.get() && !openTransactionsByGroup.containsKey(groupId);
     }
 
@@ -1003,9 +996,6 @@ public class OffsetMetadataManager {
                         OffsetAndMetadata.fromRecord(recordOffset, value)
                     );
                 openTransactionsByGroup
-                    .computeIfAbsent(groupId, __ -> new TimelineHashSet<>(snapshotRegistry, 1))
-                    .add(producerId);
-                openTransactionsByGroupTopicAndPartition
                     .computeIfAbsent(groupId, __ -> new TimelineHashMap<>(snapshotRegistry, 1))
                     .computeIfAbsent(topic, __ -> new TimelineHashMap<>(snapshotRegistry, 1))
                     .computeIfAbsent(partition, __ -> new TimelineHashSet<>(snapshotRegistry, 1))
@@ -1018,7 +1008,7 @@ public class OffsetMetadataManager {
 
             // Remove all the pending offset commits related to the tombstone.
             TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-                openTransactionsByGroupTopicAndPartition.get(groupId);
+                openTransactionsByGroup.get(groupId);
             if (openTransactionsByTopic != null) {
                 TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition = openTransactionsByTopic.get(topic);
                 if (openTransactionsByPartition != null) {
@@ -1036,7 +1026,7 @@ public class OffsetMetadataManager {
                             openTransactionsByTopic.remove(topic);
                         }
                         if (openTransactionsByTopic.isEmpty()) {
-                            openTransactionsByGroupTopicAndPartition.remove(groupId);
+                            openTransactionsByGroup.remove(groupId);
                         }
                     }
                 }
@@ -1065,16 +1055,8 @@ public class OffsetMetadataManager {
         }
 
         pendingOffsets.offsetsByGroup.forEach((groupId, topicOffsets) -> {
-            TimelineHashSet<Long> groupTransactions = openTransactionsByGroup.get(groupId);
-            if (groupTransactions != null) {
-                groupTransactions.remove(producerId);
-                if (groupTransactions.isEmpty()) {
-                    openTransactionsByGroup.remove(groupId);
-                }
-            }
-
             TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-                openTransactionsByGroupTopicAndPartition.get(groupId);
+                openTransactionsByGroup.get(groupId);
             if (openTransactionsByTopic == null) return;
 
             topicOffsets.forEach((topic, partitionOffsets) -> {
@@ -1092,7 +1074,7 @@ public class OffsetMetadataManager {
                             openTransactionsByTopic.remove(topic);
                         }
                         if (openTransactionsByTopic.isEmpty()) {
-                            openTransactionsByGroupTopicAndPartition.remove(groupId);
+                            openTransactionsByGroup.remove(groupId);
                         }
                     }
                 });
