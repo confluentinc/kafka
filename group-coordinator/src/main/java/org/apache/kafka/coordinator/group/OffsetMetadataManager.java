@@ -656,12 +656,10 @@ public class OffsetMetadataManager {
         if (openTransactionsByTopic != null) {
             openTransactionsByTopic.forEach((topic, openTransactionsByPartition) -> {
                 openTransactionsByPartition.forEach((partition, producerIds) -> {
-                    producerIds.forEach(producerId -> {
-                        if (!hasCommittedOffset(groupId, topic, partition)) {
-                            records.add(GroupCoordinatorRecordHelpers.newOffsetCommitTombstoneRecord(groupId, topic, partition));
-                            numDeletedOffsets.getAndIncrement();
-                        }
-                    });
+                    if (!hasCommittedOffset(groupId, topic, partition)) {
+                        records.add(GroupCoordinatorRecordHelpers.newOffsetCommitTombstoneRecord(groupId, topic, partition));
+                        numDeletedOffsets.getAndIncrement();
+                    }
                 });
             });
         }
