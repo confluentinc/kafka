@@ -88,37 +88,37 @@ public class OffsetMetadataManager {
         private GroupCoordinatorConfig config = null;
         private GroupCoordinatorMetricsShard metrics = null;
 
-        Builder withLogContext(LogContext logContext) {
+        public Builder withLogContext(LogContext logContext) {
             this.logContext = logContext;
             return this;
         }
 
-        Builder withSnapshotRegistry(SnapshotRegistry snapshotRegistry) {
+        public Builder withSnapshotRegistry(SnapshotRegistry snapshotRegistry) {
             this.snapshotRegistry = snapshotRegistry;
             return this;
         }
 
-        Builder withTime(Time time) {
+        public Builder withTime(Time time) {
             this.time = time;
             return this;
         }
 
-        Builder withGroupMetadataManager(GroupMetadataManager groupMetadataManager) {
+        public Builder withGroupMetadataManager(GroupMetadataManager groupMetadataManager) {
             this.groupMetadataManager = groupMetadataManager;
             return this;
         }
 
-        Builder withGroupCoordinatorConfig(GroupCoordinatorConfig config) {
+        public Builder withGroupCoordinatorConfig(GroupCoordinatorConfig config) {
             this.config = config;
             return this;
         }
 
-        Builder withMetadataImage(MetadataImage metadataImage) {
+        public Builder withMetadataImage(MetadataImage metadataImage) {
             this.metadataImage = metadataImage;
             return this;
         }
 
-        Builder withGroupCoordinatorMetricsShard(GroupCoordinatorMetricsShard metrics) {
+        public Builder withGroupCoordinatorMetricsShard(GroupCoordinatorMetricsShard metrics) {
             this.metrics = metrics;
             return this;
         }
