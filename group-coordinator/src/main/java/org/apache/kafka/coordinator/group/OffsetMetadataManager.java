@@ -62,6 +62,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import static org.apache.kafka.common.requests.OffsetFetchResponse.INVALID_OFFSET;
@@ -192,11 +193,165 @@ public class OffsetMetadataManager {
      */
     private final TimelineHashMap<Long, Offsets> pendingTransactionalOffsets;
 
+    private final OpenTransactions openTransactions;
+
     /**
-     * The open transactions (producer ids) keyed by group id, topic name and partition id.
-     * Tracks whether partitions have any pending transactional offsets that have not been deleted.
+     * Tracks open transactions (producer ids) by group id, topic name and partition id.
+     * It is the responsiblity of the caller to update {@link #pendingTransactionalOffsets}.
      */
-    private final TimelineHashMap<String, TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>>> openTransactionsByGroup;
+    private class OpenTransactions {
+        /**
+         * The open transactions (producer ids) keyed by group id, topic name and partition id.
+         * Tracks whether partitions have any pending transactional offsets that have not been deleted.
+         *
+         * Values in each level of the map will never be empty collections.
+         */
+        private final TimelineHashMap<String, TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>>> openTransactionsByGroup;
+
+        private OpenTransactions() {
+            this.openTransactionsByGroup = new TimelineHashMap<>(snapshotRegistry, 0);
+        }
+
+        /**
+         * Adds a producer id to the open transactions for the given group and topic partition.
+         *
+         * @param groupId    The group id.
+         * @param topic      The topic name.
+         * @param partition  The partition.
+         * @param producerId The producer id.
+         * @return {@code true} if the partition did not already have a pending offset from the producer id.
+         */
+        private boolean add(String groupId, String topic, int partition, long producerId) {
+            return openTransactionsByGroup
+                .computeIfAbsent(groupId, __ -> new TimelineHashMap<>(snapshotRegistry, 1))
+                .computeIfAbsent(topic, __ -> new TimelineHashMap<>(snapshotRegistry, 1))
+                .computeIfAbsent(partition, __ -> new TimelineHashSet<>(snapshotRegistry, 1))
+                .add(producerId);
+        }
+
+        /**
+         * Clears all open transactions for the given group and topic partition.
+         *
+         * @param groupId    The group id.
+         * @param topic      The topic name.
+         * @param partition  The partition.
+         */
+        private void clear(String groupId, String topic, int partition) {
+            TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
+                openTransactionsByGroup.get(groupId);
+            if (openTransactionsByTopic == null) return;
+
+            TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition = openTransactionsByTopic.get(topic);
+            if (openTransactionsByPartition == null) return;
+
+            openTransactionsByPartition.remove(partition);
+
+            if (openTransactionsByPartition.isEmpty()) {
+                openTransactionsByTopic.remove(topic);
+                if (openTransactionsByTopic.isEmpty()) {
+                    openTransactionsByGroup.remove(groupId);
+                }
+            }
+        }
+
+        /**
+         * Returns {@code true} if the given group has any pending transactional offsets.
+         *
+         * @param groupId The group id.
+         * @return {@code true} if the given group has any pending transactional offsets.
+         */
+        private boolean contains(String groupId) {
+            return openTransactionsByGroup.containsKey(groupId);
+        }
+
+        /**
+         * Returns {@code true} if the given group has any pending transactional offsets for the given topic and partition.
+         *
+         * @param groupId   The group id.
+         * @param topic     The topic name.
+         * @param partition The partition.
+         * @return {@code true} if the given group has any pending transactional offsets for the given topic and partition.
+         */
+        private boolean contains(String groupId, String topic, int partition) {
+            TimelineHashSet<Long> openTransactions = get(groupId, topic, partition);
+            return openTransactions != null;
+        }
+
+        /**
+         * Performs the given action for each partition with a pending transactional offset for the given group.
+         *
+         * @param groupId The group id.
+         * @param action  The action to be performed for each partition with a pending transactional offset.
+         */
+        private void forEachTopicPartition(String groupId, BiConsumer<String, Integer> action) {
+            TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
+                openTransactionsByGroup.get(groupId);
+            if (openTransactionsByTopic == null) return;
+
+            openTransactionsByTopic.forEach((topic, openTransactionsByPartition) -> {
+                openTransactionsByPartition.forEach((partition, producerIds) -> {
+                    action.accept(topic, partition);
+                });
+            });
+        }
+
+        /**
+         * Performs the given action for each producer id with a pending transactional offset for the given group and topic partition.
+         *
+         * @param groupId   The group id.
+         * @param topic     The topic name.
+         * @param partition The partition.
+         * @param action    The action to be performed for each producer id with a pending transactional offset.
+         */
+        private void forEach(String groupId, String topic, int partition, Consumer<Long> action) {
+            TimelineHashSet<Long> openTransactions = get(groupId, topic, partition);
+            if (openTransactions == null) return;
+
+            openTransactions.forEach(action);
+        }
+
+        /**
+         * Gets the set of producer ids with pending transactional offsets for the given group and topic partition.
+         *
+         * @param groupId   The group id.
+         * @param topic     The topic name.
+         * @param partition The partition.
+         * @return The set of producer ids with pending transactional offsets for the given group and topic partition.
+         */
+        private TimelineHashSet<Long> get(String groupId, String topic, int partition) {
+            TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
+                openTransactionsByGroup.get(groupId);
+            if (openTransactionsByTopic == null) return null;
+
+            TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition = openTransactionsByTopic.get(topic);
+            if (openTransactionsByPartition == null) return null;
+
+            return openTransactionsByPartition.get(partition);
+        }
+
+        /**
+         * Removes a producer id from the open transactions for the given group and topic partition.
+         *
+         * @param groupId    The group id.
+         * @param topic      The topic name.
+         * @param partition  The partition.
+         * @param producerId The producer id.
+         * @return {@code true} if the group and topic partition had a pending transactional offset from the producer id.
+         */
+        private boolean remove(String groupId, String topic, int partition, long producerId) {
+            TimelineHashSet<Long> openTransactions = get(groupId, topic, partition);
+            if (openTransactions == null) return false;
+
+            boolean removed = openTransactions.remove(producerId);
+
+            if (openTransactions.isEmpty()) {
+                // Re-use the clean up in clear.
+                clear(groupId, topic, partition);
+            }
+
+            return removed;
+        }
+    }
 
     private class Offsets {
         /**
@@ -281,7 +436,7 @@ public class OffsetMetadataManager {
         this.metrics = metrics;
         this.offsets = new Offsets();
         this.pendingTransactionalOffsets = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.openTransactionsByGroup = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.openTransactions = new OpenTransactions();
     }
 
     /**
@@ -651,18 +806,12 @@ public class OffsetMetadataManager {
         // Delete all the pending transactional offsets too. Here we only write a tombstone
         // if the topic-partition was not in the main storage because we don't need to write
         // two consecutive tombstones.
-        TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-            openTransactionsByGroup.get(groupId);
-        if (openTransactionsByTopic != null) {
-            openTransactionsByTopic.forEach((topic, openTransactionsByPartition) -> {
-                openTransactionsByPartition.forEach((partition, producerIds) -> {
-                    if (!hasCommittedOffset(groupId, topic, partition)) {
-                        records.add(GroupCoordinatorRecordHelpers.newOffsetCommitTombstoneRecord(groupId, topic, partition));
-                        numDeletedOffsets.getAndIncrement();
-                    }
-                });
-            });
-        }
+        openTransactions.forEachTopicPartition(groupId, (topic, partition) -> {
+            if (!hasCommittedOffset(groupId, topic, partition)) {
+                records.add(GroupCoordinatorRecordHelpers.newOffsetCommitTombstoneRecord(groupId, topic, partition));
+                numDeletedOffsets.getAndIncrement();
+            }
+        });
 
         return numDeletedOffsets.get();
     }
@@ -678,15 +827,7 @@ public class OffsetMetadataManager {
         String topic,
         int partition
     ) {
-        TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-            openTransactionsByGroup.get(groupId);
-        if (openTransactionsByTopic == null) return false;
-
-        TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition = openTransactionsByTopic.get(topic);
-        if (openTransactionsByPartition == null) return false;
-
-        TimelineHashSet<Long> openTransactions = openTransactionsByPartition.get(partition);
-        return openTransactions != null && !openTransactions.isEmpty();
+        return openTransactions.contains(groupId, topic, partition);
     }
 
     /**
@@ -876,7 +1017,7 @@ public class OffsetMetadataManager {
         metrics.record(OFFSET_EXPIRED_SENSOR_NAME, records.size());
 
         // We don't want to remove the group if there are ongoing transactions with undeleted offsets.
-        return allOffsetsExpired.get() && !openTransactionsByGroup.containsKey(groupId);
+        return allOffsetsExpired.get() && !openTransactions.contains(groupId);
     }
 
     /**
@@ -993,11 +1134,7 @@ public class OffsetMetadataManager {
                         partition,
                         OffsetAndMetadata.fromRecord(recordOffset, value)
                     );
-                openTransactionsByGroup
-                    .computeIfAbsent(groupId, __ -> new TimelineHashMap<>(snapshotRegistry, 1))
-                    .computeIfAbsent(topic, __ -> new TimelineHashMap<>(snapshotRegistry, 1))
-                    .computeIfAbsent(partition, __ -> new TimelineHashSet<>(snapshotRegistry, 1))
-                    .add(producerId);
+                openTransactions.add(groupId, topic, partition, producerId);
             }
         } else {
             if (offsets.remove(groupId, topic, partition) != null) {
@@ -1005,30 +1142,13 @@ public class OffsetMetadataManager {
             }
 
             // Remove all the pending offset commits related to the tombstone.
-            TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-                openTransactionsByGroup.get(groupId);
-            if (openTransactionsByTopic != null) {
-                TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition = openTransactionsByTopic.get(topic);
-                if (openTransactionsByPartition != null) {
-                    TimelineHashSet<Long> openTransactions = openTransactionsByPartition.get(partition);
-                    if (openTransactions != null) {
-                        openTransactions.forEach(openProducerId -> {
-                            Offsets pendingOffsets = pendingTransactionalOffsets.get(openProducerId);
-                            if (pendingOffsets != null) {
-                                pendingOffsets.remove(groupId, topic, partition);
-                            }
-                        });
-
-                        openTransactionsByPartition.remove(partition);
-                        if (openTransactionsByPartition.isEmpty()) {
-                            openTransactionsByTopic.remove(topic);
-                        }
-                        if (openTransactionsByTopic.isEmpty()) {
-                            openTransactionsByGroup.remove(groupId);
-                        }
-                    }
+            openTransactions.forEach(groupId, topic, partition, openProducerId -> {
+                Offsets pendingOffsets = pendingTransactionalOffsets.get(openProducerId);
+                if (pendingOffsets != null) {
+                    pendingOffsets.remove(groupId, topic, partition);
                 }
-            }
+            });
+            openTransactions.clear(groupId, topic, partition);
         }
     }
 
@@ -1053,28 +1173,9 @@ public class OffsetMetadataManager {
         }
 
         pendingOffsets.offsetsByGroup.forEach((groupId, topicOffsets) -> {
-            TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-                openTransactionsByGroup.get(groupId);
-            if (openTransactionsByTopic == null) return;
-
             topicOffsets.forEach((topic, partitionOffsets) -> {
-                TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition = openTransactionsByTopic.get(topic);
-                if (openTransactionsByPartition == null) return;
-
                 partitionOffsets.keySet().forEach(partitionId -> {
-                    TimelineHashSet<Long> partitionTransactions = openTransactionsByPartition.get(partitionId);
-                    if (partitionTransactions != null) {
-                        partitionTransactions.remove(producerId);
-                        if (partitionTransactions.isEmpty()) {
-                            openTransactionsByPartition.remove(partitionId);
-                        }
-                        if (openTransactionsByPartition.isEmpty()) {
-                            openTransactionsByTopic.remove(topic);
-                        }
-                        if (openTransactionsByTopic.isEmpty()) {
-                            openTransactionsByGroup.remove(groupId);
-                        }
-                    }
+                    openTransactions.remove(groupId, topic, partitionId, producerId);
                 });
             });
         });
