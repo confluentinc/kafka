@@ -134,10 +134,10 @@ public class TransactionalOffsetFetchBenchmark {
     public void run() {
         offsetMetadataManager.fetchOffsets(
             new OffsetFetchRequestData.OffsetFetchRequestGroup()
-                .setGroupId(new String(GROUP_ID))
+                .setGroupId(GROUP_ID)
                 .setTopics(List.of(
                     new OffsetFetchRequestData.OffsetFetchRequestTopics()
-                        .setName(new String(TOPIC_NAME))
+                        .setName(TOPIC_NAME)
                         .setPartitionIndexes(partitionIndexes)
                 )),
             Long.MAX_VALUE
