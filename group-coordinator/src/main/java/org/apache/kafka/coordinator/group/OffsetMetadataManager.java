@@ -868,6 +868,11 @@ public class OffsetMetadataManager {
         final List<OffsetFetchResponseData.OffsetFetchResponseTopics> topicResponses = new ArrayList<>(request.topics().size());
         final TimelineHashMap<String, TimelineHashMap<Integer, OffsetAndMetadata>> groupOffsets =
             failAllPartitions ? null : offsets.offsetsByGroup.get(request.groupId(), lastCommittedOffset);
+        // We inline the lookups from hasPendingTransactionalOffsets here, to avoid repeating string
+        // comparisons of group ids and topic names for every partition. They're only used when the
+        // client has requested stable offsets.
+        final TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
+            requireStable ? openTransactions.openTransactionsByGroup.get(request.groupId()) : null;
 
         request.topics().forEach(topic -> {
             final OffsetFetchResponseData.OffsetFetchResponseTopics topicResponse =
@@ -876,12 +881,16 @@ public class OffsetMetadataManager {
 
             final TimelineHashMap<Integer, OffsetAndMetadata> topicOffsets = groupOffsets == null ?
                 null : groupOffsets.get(topic.name(), lastCommittedOffset);
+            final TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition =
+                (requireStable && openTransactionsByTopic != null) ? openTransactionsByTopic.get(topic.name()) : null;
 
             topic.partitionIndexes().forEach(partitionIndex -> {
                 final OffsetAndMetadata offsetAndMetadata = topicOffsets == null ?
                     null : topicOffsets.get(partitionIndex, lastCommittedOffset);
 
-                if (requireStable && hasPendingTransactionalOffsets(request.groupId(), topic.name(), partitionIndex)) {
+                if (requireStable &&
+                    openTransactionsByPartition != null &&
+                    openTransactionsByPartition.containsKey(partitionIndex)) {
                     topicResponse.partitions().add(new OffsetFetchResponseData.OffsetFetchResponsePartitions()
                         .setPartitionIndex(partitionIndex)
                         .setErrorCode(Errors.UNSTABLE_OFFSET_COMMIT.code())
@@ -934,11 +943,18 @@ public class OffsetMetadataManager {
         final List<OffsetFetchResponseData.OffsetFetchResponseTopics> topicResponses = new ArrayList<>();
         final TimelineHashMap<String, TimelineHashMap<Integer, OffsetAndMetadata>> groupOffsets =
             offsets.offsetsByGroup.get(request.groupId(), lastCommittedOffset);
+        // We inline the lookups from hasPendingTransactionalOffsets here, to avoid repeating string
+        // comparisons of group ids and topic names for every partition. They're only used when the
+        // client has requested stable offsets.
+        final TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
+            requireStable ? openTransactions.openTransactionsByGroup.get(request.groupId()) : null;
 
         if (groupOffsets != null) {
             groupOffsets.entrySet(lastCommittedOffset).forEach(topicEntry -> {
                 final String topic = topicEntry.getKey();
                 final TimelineHashMap<Integer, OffsetAndMetadata> topicOffsets = topicEntry.getValue();
+                final TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition =
+                    (requireStable && openTransactionsByTopic != null) ? openTransactionsByTopic.get(topic) : null;
 
                 final OffsetFetchResponseData.OffsetFetchResponseTopics topicResponse =
                     new OffsetFetchResponseData.OffsetFetchResponseTopics().setName(topic);
@@ -948,7 +964,9 @@ public class OffsetMetadataManager {
                     final int partition = partitionEntry.getKey();
                     final OffsetAndMetadata offsetAndMetadata = partitionEntry.getValue();
 
-                    if (requireStable && hasPendingTransactionalOffsets(request.groupId(), topic, partition)) {
+                    if (requireStable &&
+                        openTransactionsByPartition != null &&
+                        openTransactionsByPartition.containsKey(partition)) {
                         topicResponse.partitions().add(new OffsetFetchResponseData.OffsetFetchResponsePartitions()
                             .setPartitionIndex(partition)
                             .setErrorCode(Errors.UNSTABLE_OFFSET_COMMIT.code())
