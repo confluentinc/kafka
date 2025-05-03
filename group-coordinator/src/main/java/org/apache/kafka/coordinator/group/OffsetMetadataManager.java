@@ -193,6 +193,9 @@ public class OffsetMetadataManager {
      */
     private final TimelineHashMap<Long, Offsets> pendingTransactionalOffsets;
 
+    /**
+     * The open transactions (producer ids) by group id, topic name and partition id.
+     */
     private final OpenTransactions openTransactions;
 
     /**
