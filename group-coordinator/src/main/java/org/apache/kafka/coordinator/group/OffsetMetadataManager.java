@@ -875,7 +875,7 @@ public class OffsetMetadataManager {
         // comparisons of group ids and topic names for every partition. They're only used when the
         // client has requested stable offsets.
         final TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-            requireStable ? openTransactions.openTransactionsByGroup.get(request.groupId()) : null;
+            requireStable ? openTransactions.openTransactionsByGroup.get(request.groupId(), lastCommittedOffset) : null;
 
         request.topics().forEach(topic -> {
             final OffsetFetchResponseData.OffsetFetchResponseTopics topicResponse =
@@ -885,7 +885,7 @@ public class OffsetMetadataManager {
             final TimelineHashMap<Integer, OffsetAndMetadata> topicOffsets = groupOffsets == null ?
                 null : groupOffsets.get(topic.name(), lastCommittedOffset);
             final TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition =
-                (requireStable && openTransactionsByTopic != null) ? openTransactionsByTopic.get(topic.name()) : null;
+                (requireStable && openTransactionsByTopic != null) ? openTransactionsByTopic.get(topic.name(), lastCommittedOffset) : null;
 
             topic.partitionIndexes().forEach(partitionIndex -> {
                 final OffsetAndMetadata offsetAndMetadata = topicOffsets == null ?
@@ -893,7 +893,7 @@ public class OffsetMetadataManager {
 
                 if (requireStable &&
                     openTransactionsByPartition != null &&
-                    openTransactionsByPartition.containsKey(partitionIndex)) {
+                    openTransactionsByPartition.containsKey(partitionIndex, lastCommittedOffset)) {
                     topicResponse.partitions().add(new OffsetFetchResponseData.OffsetFetchResponsePartitions()
                         .setPartitionIndex(partitionIndex)
                         .setErrorCode(Errors.UNSTABLE_OFFSET_COMMIT.code())
@@ -950,14 +950,14 @@ public class OffsetMetadataManager {
         // comparisons of group ids and topic names for every partition. They're only used when the
         // client has requested stable offsets.
         final TimelineHashMap<String, TimelineHashMap<Integer, TimelineHashSet<Long>>> openTransactionsByTopic =
-            requireStable ? openTransactions.openTransactionsByGroup.get(request.groupId()) : null;
+            requireStable ? openTransactions.openTransactionsByGroup.get(request.groupId(), lastCommittedOffset) : null;
 
         if (groupOffsets != null) {
             groupOffsets.entrySet(lastCommittedOffset).forEach(topicEntry -> {
                 final String topic = topicEntry.getKey();
                 final TimelineHashMap<Integer, OffsetAndMetadata> topicOffsets = topicEntry.getValue();
                 final TimelineHashMap<Integer, TimelineHashSet<Long>> openTransactionsByPartition =
-                    (requireStable && openTransactionsByTopic != null) ? openTransactionsByTopic.get(topic) : null;
+                    (requireStable && openTransactionsByTopic != null) ? openTransactionsByTopic.get(topic, lastCommittedOffset) : null;
 
                 final OffsetFetchResponseData.OffsetFetchResponseTopics topicResponse =
                     new OffsetFetchResponseData.OffsetFetchResponseTopics().setName(topic);
@@ -969,7 +969,7 @@ public class OffsetMetadataManager {
 
                     if (requireStable &&
                         openTransactionsByPartition != null &&
-                        openTransactionsByPartition.containsKey(partition)) {
+                        openTransactionsByPartition.containsKey(partition, lastCommittedOffset)) {
                         topicResponse.partitions().add(new OffsetFetchResponseData.OffsetFetchResponsePartitions()
                             .setPartitionIndex(partition)
                             .setErrorCode(Errors.UNSTABLE_OFFSET_COMMIT.code())
