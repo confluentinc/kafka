@@ -44,6 +44,7 @@ class RangeSet implements Set<Integer> {
 
     @Override
     public int size() {
+        if (to < from) return 0;
         return to - from;
     }
 
@@ -163,6 +164,7 @@ class RangeSet implements Set<Integer> {
         if (!(o instanceof Set<?> otherSet)) return false;
 
         if (o instanceof RangeSet other) {
+            if (this.size() == 0 && other.size() == 0) return true;
             return this.from == other.from && this.to == other.to;
         }
 
@@ -176,8 +178,18 @@ class RangeSet implements Set<Integer> {
 
     @Override
     public int hashCode() {
-        int result = from;
-        result = 31 * result + to;
-        return result;
+        // The hash code of a Set is defined as the sum of the hash codes of its elements.
+        // The hash code of an integer is the integer itself.
+
+        // The sum of the integers from 1 to n is n * (n + 1) / 2.
+        // To get the sum of the integers from 1 + k to n + k, we can add n * k.
+        // So our hash code comes out to n * (from + to - 1) / 2.
+        long size = (long) to - (long) from;
+        if (size <= 0) return 0;
+
+        // The arithmetic has to be done using longs, since the division by 2 is equivalent to
+        // shifting the 33rd bit right.
+        long sum = size * (from + to - 1) / 2;
+        return (int) sum;
     }
 }
