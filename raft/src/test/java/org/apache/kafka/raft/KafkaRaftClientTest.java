@@ -843,7 +843,7 @@ public class KafkaRaftClientTest {
         context.assertVotedCandidate(epoch, localId);
 
         // After backoff, we will become a candidate again
-        context.time.sleep(context.electionBackoffMaxMs);
+        context.time.sleep(context.electionBackoffMaxMs + jitterMs);
         context.client.poll();
         context.assertVotedCandidate(epoch + 1, localId);
     }
@@ -1364,6 +1364,7 @@ public class KafkaRaftClientTest {
         context.time.sleep(2 * context.electionTimeoutMs());
         context.pollUntilRequest();
         context.assertVotedCandidate(epoch, localId);
+        CandidateState candidate = context.client.quorum().candidateStateOrThrow();
 
         // Quorum size is two. If the other member rejects, then we need to schedule a revote.
         RaftRequest.Outbound request = context.assertSentVoteRequest(epoch, 0, 0L, 1);
@@ -1374,13 +1375,18 @@ public class KafkaRaftClientTest {
         );
 
         context.client.poll();
+        assertTrue(candidate.isBackingOff());
+        assertEquals(
+            context.electionBackoffMaxMs + exponentialFactor,
+            candidate.remainingBackoffMs(context.time.milliseconds())
+        );
 
         // All nodes have rejected our candidacy, but we should still remember that we had voted
         context.assertVotedCandidate(epoch, localId);
 
         // Even though our candidacy was rejected, we will backoff for jitter period
         // before we bump the epoch and start a new election.
-        context.time.sleep(context.electionBackoffMaxMs - 1);
+        context.time.sleep(context.electionBackoffMaxMs + exponentialFactor - 1);
         context.client.poll();
         context.assertVotedCandidate(epoch, localId);
 

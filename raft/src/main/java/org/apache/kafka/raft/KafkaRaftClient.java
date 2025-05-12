@@ -149,8 +149,9 @@ import static org.apache.kafka.raft.RaftUtil.hasValidTopicPartition;
  *    as FileRecords, but we use {@link UnalignedRecords} in FetchSnapshotResponse because the records
  *    are not necessarily offset-aligned.
  */
-final public class KafkaRaftClient<T> implements RaftClient<T> {
-    private static final int RETRY_BACKOFF_BASE_MS = 100;
+public final class KafkaRaftClient<T> implements RaftClient<T> {
+    // visible for testing
+    static final int RETRY_BACKOFF_BASE_MS = 50;
     public static final int MAX_FETCH_WAIT_MS = 500;
     public static final int MAX_BATCH_SIZE_BYTES = 8 * 1024 * 1024;
     public static final int MAX_FETCH_SIZE_BYTES = MAX_BATCH_SIZE_BYTES;
@@ -738,7 +739,12 @@ final public class KafkaRaftClient<T> implements RaftClient<T> {
 
                         state.startBackingOff(
                             currentTimeMs,
-                            binaryExponentialElectionBackoffMs(state.retries())
+                            RaftUtil.binaryExponentialElectionBackoffMs(
+                                quorumConfig.electionBackoffMaxMs(),
+                                RETRY_BACKOFF_BASE_MS,
+                                state.retries(),
+                                random
+                            )
                         );
                     }
                 }
@@ -750,15 +756,6 @@ final public class KafkaRaftClient<T> implements RaftClient<T> {
         } else {
             return handleUnexpectedError(error, responseMetadata);
         }
-    }
-
-    private int binaryExponentialElectionBackoffMs(int retries) {
-        if (retries <= 0) {
-            throw new IllegalArgumentException("Retries " + retries + " should be larger than zero");
-        }
-        // upper limit exponential co-efficients at 20 to avoid overflow
-        return Math.min(RETRY_BACKOFF_BASE_MS * random.nextInt(2 << Math.min(20, retries - 1)),
-                quorumConfig.electionBackoffMaxMs());
     }
 
     private int strictExponentialElectionBackoffMs(int positionInSuccessors, int totalNumSuccessors) {
@@ -2180,7 +2177,12 @@ final public class KafkaRaftClient<T> implements RaftClient<T> {
             }
             return state.remainingBackoffMs(currentTimeMs);
         } else if (state.hasElectionTimeoutExpired(currentTimeMs)) {
-            long backoffDurationMs = binaryExponentialElectionBackoffMs(state.retries());
+            long backoffDurationMs = RaftUtil.binaryExponentialElectionBackoffMs(
+                quorumConfig.electionBackoffMaxMs(),
+                RETRY_BACKOFF_BASE_MS,
+                state.retries(),
+                random
+            );
             logger.info("Election has timed out, backing off for {}ms before becoming a candidate again",
                 backoffDurationMs);
             state.startBackingOff(currentTimeMs, backoffDurationMs);
