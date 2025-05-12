@@ -40,12 +40,19 @@ class RangeSet implements Set<Integer> {
     public RangeSet(int from, int to) {
         this.from = from;
         this.to = to;
+
+        if ((long) to - (long) from > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Range exceeds the maximum size of Integer.MAX_VALUE");
+        }
     }
 
     @Override
     public int size() {
-        if (to < from) return 0;
-        return to - from;
+        // We could end up with a negative size in two cases:
+        //  * The range is empty and to < from
+        //  * The range is larger than Integer.MAX_VALUE
+        // We return 0 in the first case and forbid the second case in the constructor.
+        return Math.max(0, to - from);
     }
 
     @Override
@@ -184,7 +191,7 @@ class RangeSet implements Set<Integer> {
         // The sum of the integers from 1 to n is n * (n + 1) / 2.
         // To get the sum of the integers from 1 + k to n + k, we can add n * k.
         // So our hash code comes out to n * (from + to - 1) / 2.
-        long size = (long) to - (long) from;
+        long size = size();
         if (size <= 0) return 0;
 
         // The arithmetic has to be done using longs, since the division by 2 is equivalent to

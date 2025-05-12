@@ -33,16 +33,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RangeSetTest {
     @Test
+    void testOverflow() {
+        // This range is the maximum size we allow.
+        new RangeSet(0, Integer.MAX_VALUE);
+
+        assertThrows(IllegalArgumentException.class, () -> new RangeSet(-1, Integer.MAX_VALUE));
+    }
+
+    @Test
     void testSize() {
         RangeSet rangeSet = new RangeSet(5, 10);
         assertEquals(5, rangeSet.size());
 
         RangeSet emptyRangeSet = new RangeSet(5, -2);
         assertEquals(0, emptyRangeSet.size());
-
-        // We don't really support ranges this large, but their size shouldn't be 0.
-        RangeSet overflowRangeSet = new RangeSet(-1, 0x7FFFFFFF);
-        assertEquals(-0x80000000, overflowRangeSet.size());
     }
 
     @Test
@@ -52,10 +56,6 @@ public class RangeSetTest {
 
         RangeSet emptyRangeSet = new RangeSet(5, -2);
         assertTrue(emptyRangeSet.isEmpty());
-
-        // We don't really support ranges this large, but they aren't empty.
-        RangeSet overflowRangeSet = new RangeSet(-1, 0x7FFFFFFF);
-        assertFalse(overflowRangeSet.isEmpty());
     }
 
     @Test
@@ -95,9 +95,6 @@ public class RangeSetTest {
         RangeSet rangeSet = new RangeSet(5, 10);
         Object[] expectedArray = {5, 6, 7, 8, 9};
         assertArrayEquals(expectedArray, rangeSet.toArray());
-
-        RangeSet overflowRangeSet = new RangeSet(-1, 0x7FFFFFFF);
-        assertThrows(NegativeArraySizeException.class, () -> overflowRangeSet.toArray());
     }
 
     @Test
@@ -106,9 +103,6 @@ public class RangeSetTest {
         Integer[] inputArray = new Integer[5];
         Integer[] expectedArray = {5, 6, 7, 8, 9};
         assertArrayEquals(expectedArray, rangeSet.toArray(inputArray));
-
-        RangeSet overflowRangeSet = new RangeSet(-1, 0x7FFFFFFF);
-        assertThrows(ArrayIndexOutOfBoundsException.class, () -> overflowRangeSet.toArray(inputArray));
     }
 
     @Test
@@ -146,12 +140,6 @@ public class RangeSetTest {
         assertEquals(emptySet, emptyRangeSet1);
         assertEquals(emptySet, emptyRangeSet2);
         assertEquals(emptyRangeSet1, emptyRangeSet2);
-
-        // We don't really support ranges this large, but equality shouldn't treat them as 0-size
-        // ranges.
-        RangeSet overflowRangeSet1 = new RangeSet(-1, 0x7FFFFFFF);
-        RangeSet overflowRangeSet2 = new RangeSet(-2, 0x7FFFFFFE);
-        assertNotEquals(overflowRangeSet1, overflowRangeSet2);
     }
 
     @Test
@@ -177,9 +165,5 @@ public class RangeSetTest {
             Set.of(0x7FFFFFFD, 0x7FFFFFFE).hashCode(),
             overflowRangeSet2.hashCode() // == 0x1_FFFFFFF6 / 2
         );
-
-        // Negative and positive elements cancel out.
-        RangeSet overflowRangeSet3 = new RangeSet(-0x80000000, 0x7FFFFFFF);
-        assertEquals(Set.of(-0x80000000, -0x7FFFFFFF).hashCode(), overflowRangeSet3.hashCode());
     }
 }
