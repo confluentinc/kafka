@@ -24,6 +24,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -35,7 +36,7 @@ public class RangeSetTest {
     @Test
     void testOverflow() {
         // This range is the maximum size we allow.
-        new RangeSet(0, Integer.MAX_VALUE);
+        assertDoesNotThrow(() -> new RangeSet(0, Integer.MAX_VALUE));
 
         assertThrows(IllegalArgumentException.class, () -> new RangeSet(-1, Integer.MAX_VALUE));
     }
