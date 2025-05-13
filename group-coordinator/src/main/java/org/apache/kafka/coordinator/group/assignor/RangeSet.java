@@ -41,6 +41,10 @@ class RangeSet implements Set<Integer> {
         this.from = from;
         this.to = to;
 
+        if (to < from) {
+            throw new IllegalArgumentException("Invalid range: to must be greater than or equal to from");
+        }
+
         if ((long) to - (long) from > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Range exceeds the maximum size of Integer.MAX_VALUE");
         }
@@ -48,11 +52,7 @@ class RangeSet implements Set<Integer> {
 
     @Override
     public int size() {
-        // We could end up with a negative size in two cases:
-        //  * The range is empty and to < from
-        //  * The range is larger than Integer.MAX_VALUE
-        // We return 0 in the first case and forbid the second case in the constructor.
-        return Math.max(0, to - from);
+        return to - from;
     }
 
     @Override

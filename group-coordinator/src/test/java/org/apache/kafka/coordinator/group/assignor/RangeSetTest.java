@@ -34,6 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RangeSetTest {
     @Test
+    void testNegativeSize() {
+        assertThrows(IllegalArgumentException.class, () -> new RangeSet(0, -1));
+    }
+
+    @Test
     void testOverflow() {
         // This range is the maximum size we allow.
         assertDoesNotThrow(() -> new RangeSet(0, Integer.MAX_VALUE));
@@ -45,18 +50,12 @@ public class RangeSetTest {
     void testSize() {
         RangeSet rangeSet = new RangeSet(5, 10);
         assertEquals(5, rangeSet.size());
-
-        RangeSet emptyRangeSet = new RangeSet(5, -2);
-        assertEquals(0, emptyRangeSet.size());
     }
 
     @Test
     void testIsEmpty() {
         RangeSet rangeSet = new RangeSet(5, 5);
         assertTrue(rangeSet.isEmpty());
-
-        RangeSet emptyRangeSet = new RangeSet(5, -2);
-        assertTrue(emptyRangeSet.isEmpty());
     }
 
     @Test
@@ -135,7 +134,7 @@ public class RangeSetTest {
 
         // Empty sets are equal.
         RangeSet emptyRangeSet1 = new RangeSet(0, 0);
-        RangeSet emptyRangeSet2 = new RangeSet(2, -5);
+        RangeSet emptyRangeSet2 = new RangeSet(5, 5);
         Set<Integer> emptySet = Set.of();
 
         assertEquals(emptySet, emptyRangeSet1);
