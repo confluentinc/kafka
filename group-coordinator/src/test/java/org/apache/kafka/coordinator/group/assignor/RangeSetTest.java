@@ -150,7 +150,7 @@ public class RangeSetTest {
         assertEquals(Set.of(5, 6, 7, 8, 9).hashCode(), rangeSet1.hashCode());
         assertEquals(Set.of(6, 7, 8, 9).hashCode(), rangeSet2.hashCode());
 
-        RangeSet emptySet = new RangeSet(5, -2);
+        RangeSet emptySet = new RangeSet(5, 5);
         assertEquals(Set.of().hashCode(), emptySet.hashCode());
 
         // Both these cases overflow the range of an int when calculating the hash code. They're

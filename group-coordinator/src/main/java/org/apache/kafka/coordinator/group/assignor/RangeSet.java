@@ -191,12 +191,10 @@ class RangeSet implements Set<Integer> {
         // The sum of the integers from 1 to n is n * (n + 1) / 2.
         // To get the sum of the integers from 1 + k to n + k, we can add n * k.
         // So our hash code comes out to n * (from + to - 1) / 2.
-        long size = size();
-        if (size <= 0) return 0;
 
         // The arithmetic has to be done using longs, since the division by 2 is equivalent to
         // shifting the 33rd bit right.
-        long sum = size * (from + to - 1) / 2;
+        long sum = size() * ((long) from + (long) to - 1) / 2;
         return (int) sum;
     }
 }
