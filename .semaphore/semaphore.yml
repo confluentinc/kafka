@@ -136,4 +136,4 @@ after_pipeline:
               -b $SEMAPHORE_GIT_BRANCH; \
             else \
               echo "Skipping: either it's a PR or not a commit to master branch"; \
-            fi; 
+            fi;
