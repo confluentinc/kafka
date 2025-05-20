@@ -123,3 +123,17 @@ after_pipeline:
           - checkout
           - sem-version java 11
           - emit-sonarqube-data -a test-results
+      - name: Trigger cp-jar-build to verify CP packaging
+        commands:
+          - |
+            if [[ -z "$SEMAPHORE_GIT_PR_BRANCH" ]] && [[ "$SEMAPHORE_GIT_BRANCH" == "master" ]]; then \
+              echo "Commit to master (not a PR), triggering cp-jar-build task to verify CP packaging"; \
+              sem-trigger -p packaging \
+              -t cp-jar-build-on-commit \
+              -d "|" -i "UPSTREAM_COMPONENT|$SEMAPHORE_PROJECT_NAME" \
+              -i "UPSTREAM_GIT_SHA|$SEMAPHORE_GIT_SHA" \
+              -i "UPSTREAM_WORKFLOW_LINK|https://semaphore.ci.confluent.io/workflows/${SEMAPHORE_WORKFLOW_ID}" \
+              -b $SEMAPHORE_GIT_BRANCH; \
+            else \
+              echo "Skipping: either it's a PR or not a commit to master branch"; \
+            fi;
