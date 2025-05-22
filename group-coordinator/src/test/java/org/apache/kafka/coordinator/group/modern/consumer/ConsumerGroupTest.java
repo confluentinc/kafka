@@ -57,6 +57,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -1532,7 +1533,8 @@ public class ConsumerGroupTest {
             new SnapshotRegistry(logContext),
             mock(GroupCoordinatorMetricsShard.class),
             classicGroup,
-            metadataImage.topics()
+            metadataImage.topics(),
+            metadataImage.cluster()
         );
 
         ConsumerGroup expectedConsumerGroup = new ConsumerGroup(
@@ -1545,6 +1547,10 @@ public class ConsumerGroupTest {
         expectedConsumerGroup.updateTargetAssignment(memberId, new Assignment(mkAssignment(
             mkTopicAssignment(fooTopicId, 0)
         )));
+        expectedConsumerGroup.setSubscriptionMetadata(Map.of(
+            fooTopicName, new TopicMetadata(fooTopicId, fooTopicName, 1),
+            barTopicName, new TopicMetadata(barTopicId, barTopicName, 1)
+        ));
         expectedConsumerGroup.updateMember(new ConsumerGroupMember.Builder(memberId)
             .setMemberEpoch(classicGroup.generationId())
             .setState(MemberState.STABLE)
@@ -1576,6 +1582,7 @@ public class ConsumerGroupTest {
         assertEquals(expectedConsumerGroup.groupEpoch(), consumerGroup.groupEpoch());
         assertEquals(expectedConsumerGroup.state(), consumerGroup.state());
         assertEquals(expectedConsumerGroup.preferredServerAssignor(), consumerGroup.preferredServerAssignor());
+        assertEquals(new HashMap(expectedConsumerGroup.subscriptionMetadata()), new HashMap(consumerGroup.subscriptionMetadata()));
         assertEquals(expectedConsumerGroup.members(), consumerGroup.members());
     }
 
