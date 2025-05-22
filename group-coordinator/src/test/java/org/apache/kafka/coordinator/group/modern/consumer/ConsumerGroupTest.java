@@ -57,7 +57,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -1582,7 +1581,7 @@ public class ConsumerGroupTest {
         assertEquals(expectedConsumerGroup.groupEpoch(), consumerGroup.groupEpoch());
         assertEquals(expectedConsumerGroup.state(), consumerGroup.state());
         assertEquals(expectedConsumerGroup.preferredServerAssignor(), consumerGroup.preferredServerAssignor());
-        assertEquals(new HashMap(expectedConsumerGroup.subscriptionMetadata()), new HashMap(consumerGroup.subscriptionMetadata()));
+        assertEquals(Map.copyOf(expectedConsumerGroup.subscriptionMetadata()), Map.copyOf(consumerGroup.subscriptionMetadata()));
         assertEquals(expectedConsumerGroup.members(), consumerGroup.members());
     }
 
