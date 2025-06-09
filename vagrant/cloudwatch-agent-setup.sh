@@ -11,13 +11,13 @@
 
 set -ex
 
-architecture=arm64
+architecture=amd64
 
 if [ "$JDK_ARCH" == "x64" ]; then
     architecture=amd64
 fi
 
-echo "JDK_ARCH value: $JDK_ARCH, Architecture value: $architecture"
+echo "JDK_ARCH value: $JDK_ARCH, Architecture value: $architecture JDK_MAJOR: $jdk_major, JDK_FULL => $jdk_full"
 
 downloadUrl="https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/$architecture/latest/amazon-cloudwatch-agent.deb"
 

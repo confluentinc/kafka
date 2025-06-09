@@ -222,7 +222,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       ip_address = "192.168.50." + (100 + i).to_s
       assign_local_ip(worker, ip_address)
       worker.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
-      worker.vm.provision "shell", path: "vagrant/cloudwatch-agent-setup.sh", env: {"SEMAPHORE_JOB_ID" => semaphore_job_id}
+      worker.vm.provision "shell", path: "vagrant/cloudwatch-agent-setup.sh", env: {"SEMAPHORE_JOB_ID" => semaphore_job_id, "JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
     end
   }
 
