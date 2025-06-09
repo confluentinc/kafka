@@ -52,6 +52,8 @@ jq --version
 ###
 echo "current_directory_end"
 pwd
+cd /home/ubuntu
+
 CONFIG_FILE="/tmp/cloudwatch-agent-configuration.json"
 TEMP_FILE="${CONFIG_FILE}.tmp"
 
