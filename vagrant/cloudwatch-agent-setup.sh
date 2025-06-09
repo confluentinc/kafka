@@ -28,7 +28,8 @@ dpkg -i -E ./amazon-cloudwatch-agent.deb
 apt-get -y update && apt-get -y install collectd
 
 #apt-get -y update && apt-get -y install jq
-
+echo "current_directory_start"
+pwd
 cd /tmp
 
 # Get the latest stable jq release URL from GitHub releases page (check for the latest version)
@@ -48,10 +49,9 @@ sudo mv jq /usr/local/bin/
 # Verify the version
 jq --version
 
-cd ..
-
 ###
-
+echo "current_directory_end"
+pwd
 CONFIG_FILE="/tmp/cloudwatch-agent-configuration.json"
 TEMP_FILE="${CONFIG_FILE}.tmp"
 
