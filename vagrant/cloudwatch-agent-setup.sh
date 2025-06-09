@@ -17,7 +17,7 @@ if [ "$JDK_ARCH" == "x64" ]; then
     architecture=amd64
 fi
 
-echo "JDK_ARCH value: $JDK_ARCH, Architecture value: $architecture JDK_MAJOR: $jdk_major, JDK_FULL => $jdk_full"
+echo "JDK_ARCH value: $JDK_ARCH, Architecture value: $architecture JDK_MAJOR: $JDK_MAJOR, JDK_FULL => $JDK_FULL"
 
 downloadUrl="https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/$architecture/latest/amazon-cloudwatch-agent.deb"
 
@@ -27,9 +27,30 @@ wget -nv $downloadUrl
 dpkg -i -E ./amazon-cloudwatch-agent.deb
 apt-get -y update && apt-get -y install collectd
 
-apt-get -y update && apt-get -y install jq
+#apt-get -y update && apt-get -y install jq
 
-echo "jq_version is: $(jq --version)"
+cd /tmp
+
+# Get the latest stable jq release URL from GitHub releases page (check for the latest version)
+# As of now, jq 1.7.1 is the latest stable.
+# Find the correct download URL for your architecture (x64 for Linux)
+JQ_URL="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64" # Use jq-linux-amd64 for x64
+
+# Download the binary
+wget "$JQ_URL" -O jq
+
+# Make it executable
+chmod +x jq
+
+# Move it to a directory in your PATH (e.g., /usr/local/bin)
+sudo mv jq /usr/local/bin/
+
+# Verify the version
+jq --version
+
+cd ..
+
+###
 
 CONFIG_FILE="/tmp/cloudwatch-agent-configuration.json"
 TEMP_FILE="${CONFIG_FILE}.tmp"
