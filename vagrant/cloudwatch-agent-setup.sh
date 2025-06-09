@@ -27,7 +27,9 @@ wget -nv $downloadUrl
 dpkg -i -E ./amazon-cloudwatch-agent.deb
 apt-get -y update && apt-get -y install collectd
 
-apt-get -y install jq
+apt-get -y update && apt-get -y install jq
+
+echo "jq_version is: $(jq --version)"
 
 CONFIG_FILE="/tmp/cloudwatch-agent-configuration.json"
 TEMP_FILE="${CONFIG_FILE}.tmp"
