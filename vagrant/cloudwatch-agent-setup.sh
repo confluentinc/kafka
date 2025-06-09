@@ -30,7 +30,7 @@ apt-get -y update && apt-get -y install collectd
 #apt-get -y update && apt-get -y install jq
 echo "current_directory_start"
 pwd
-cd /tmp
+#cd /tmp
 
 # Get the latest stable jq release URL from GitHub releases page (check for the latest version)
 # As of now, jq 1.7.1 is the latest stable.
@@ -52,7 +52,7 @@ jq --version
 ###
 echo "current_directory_end"
 pwd
-cd /home/ubuntu
+#cd /home/ubuntu
 
 CONFIG_FILE="/tmp/cloudwatch-agent-configuration.json"
 TEMP_FILE="${CONFIG_FILE}.tmp"
