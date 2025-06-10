@@ -55,7 +55,7 @@ popd
 pwd
 
 CONFIG_FILE="vagrant/cloudwatch-agent-configuration.json"
-TEMP_FILE="${CONFIG_FILE}.tmp"
+TEMP_FILE="cloudwatch-agent-configuration.json.tmp"
 
 # traverse the JSON file and update the SemaphoreJobId value
 jq \
