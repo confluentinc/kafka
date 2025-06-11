@@ -221,6 +221,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       name_node(worker, name, ec2_instance_name_prefix)
       ip_address = "192.168.50." + (100 + i).to_s
       assign_local_ip(worker, ip_address)
+      worker.vm.provision "file", source: "cloudwatch-agent-configuration.json", destination: "/tmp/cloudwatch-agent-configuration.json"
       worker.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
       worker.vm.provision "shell", path: "vagrant/cloudwatch-agent-setup.sh", env: {"SEMAPHORE_JOB_ID" => semaphore_job_id, "JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
     end
