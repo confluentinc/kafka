@@ -85,7 +85,6 @@ import java.util.function.Supplier;
  */
 public class KafkaBasedLog<K, V> {
     private static final Logger log = LoggerFactory.getLogger(KafkaBasedLog.class);
-    private static final long CREATE_TOPIC_TIMEOUT_NS = TimeUnit.SECONDS.toNanos(30);
     private static final long MAX_SLEEP_MS = TimeUnit.SECONDS.toMillis(1);
     // 15min of admin retry duration to ensure successful metadata propagation.  10 seconds of backoff
     // in between retries
@@ -93,6 +92,7 @@ public class KafkaBasedLog<K, V> {
     private static final long ADMIN_CLIENT_RETRY_BACKOFF_MS = TimeUnit.SECONDS.toMillis(10);
 
     private final Time time;
+    private final long createTopicTimeoutNs;
     private final String topic;
     private int partitionCount;
     private final Map<String, Object> producerConfigs;
@@ -129,6 +129,8 @@ public class KafkaBasedLog<K, V> {
      * @param consumedCallback   callback to invoke for each {@link ConsumerRecord} consumed when tailing the log
      * @param time               Time interface
      * @param initializer        the function that should be run when this log is {@link #start() started}; may be null
+     * @param createTopicTimeoutMs the max time, in milliseconds, to search for and create the topic. Default of 30000ms
+     *                             (30sec) if argument is not provided.
      */
     public KafkaBasedLog(String topic,
                          Map<String, Object> producerConfigs,
@@ -136,7 +138,8 @@ public class KafkaBasedLog<K, V> {
                          Supplier<TopicAdmin> topicAdminSupplier,
                          Callback<ConsumerRecord<K, V>> consumedCallback,
                          Time time,
-                         java.util.function.Consumer<TopicAdmin> initializer) {
+                         java.util.function.Consumer<TopicAdmin> initializer,
+                         long createTopicTimeoutMs) {
         this.topic = topic;
         this.producerConfigs = producerConfigs;
         this.consumerConfigs = consumerConfigs;
@@ -145,6 +148,7 @@ public class KafkaBasedLog<K, V> {
         this.stopRequested = false;
         this.readLogEndOffsetCallbacks = new ArrayDeque<>();
         this.time = time;
+        this.createTopicTimeoutNs = TimeUnit.MILLISECONDS.toNanos(createTopicTimeoutMs);
         this.initializer = initializer != null ? initializer : admin -> { };
         // Initialize the producer Optional here to prevent NPEs later on
         this.producer = Optional.empty();
@@ -153,8 +157,83 @@ public class KafkaBasedLog<K, V> {
         // as it will not take records from currently-open transactions into account. We want to err on the side of caution in that
         // case: when users request a read to the end of the log, we will read up to the point where the latest offsets visible to the
         // consumer are at least as high as the (possibly-part-of-a-transaction) end offsets of the topic.
-        this.requireAdminForOffsets = IsolationLevel.READ_COMMITTED.toString()
+        this.requireAdminForOffsets = IsolationLevel.READ_COMMITTED.name().toString()
                 .equals(consumerConfigs.get(ConsumerConfig.ISOLATION_LEVEL_CONFIG));
+    }
+
+    /**
+     * Create a new KafkaBasedLog object. This does not start reading the log and writing is not permitted until
+     * {@link #start()} is invoked.
+     *
+     * @param topic              the topic to treat as a log
+     * @param producerConfigs    configuration options to use when creating the internal producer. At a minimum this must
+     *                           contain compatible serializer settings for the generic types used on this class. Some
+     *                           setting, such as the number of acks, will be overridden to ensure correct behavior of this
+     *                           class.
+     * @param consumerConfigs    configuration options to use when creating the internal consumer. At a minimum this must
+     *                           contain compatible serializer settings for the generic types used on this class. Some
+     *                           setting, such as the auto offset reset policy, will be overridden to ensure correct
+     *                           behavior of this class.
+     * @param topicAdminSupplier supplier function for an admin client, the lifecycle of which is expected to be controlled
+     *                           by the calling component; may not be null
+     * @param consumedCallback   callback to invoke for each {@link ConsumerRecord} consumed when tailing the log
+     * @param time               Time interface
+     * @param initializer        the function that should be run when this log is {@link #start() started}; may be null
+     */
+    public KafkaBasedLog(String topic,
+                         Map<String, Object> producerConfigs,
+                         Map<String, Object> consumerConfigs,
+                         Supplier<TopicAdmin> topicAdminSupplier,
+                         Callback<ConsumerRecord<K, V>> consumedCallback,
+                         Time time,
+                         java.util.function.Consumer<TopicAdmin> initializer) {
+        this(topic, producerConfigs, consumerConfigs, topicAdminSupplier, consumedCallback, time,
+                initializer, TimeUnit.SECONDS.toMillis(30));
+    }
+
+    /**
+     * Create a new KafkaBasedLog object. This does not start reading the log and writing is not permitted until
+     * {@link #start()} is invoked.
+     *
+     * @param topic the topic to treat as a log
+     * @param producerConfigs configuration options to use when creating the internal producer. At a minimum this must
+     *                        contain compatible serializer settings for the generic types used on this class. Some
+     *                        setting, such as the number of acks, will be overridden to ensure correct behavior of this
+     *                        class. If null, producer will not be created.
+     * @param consumerConfigs configuration options to use when creating the internal consumer. At a minimum this must
+     *                        contain compatible serializer settings for the generic types used on this class. Some
+     *                        setting, such as the auto offset reset policy, will be overridden to ensure correct
+     *                        behavior of this class.
+     * @param consumedCallback callback to invoke for each {@link ConsumerRecord} consumed when tailing the log
+     * @param time Time interface
+     * @param initializer the component that should be run when this log is {@link #start() started}; may be null
+     * @param createTopicTimeoutMs the max time, in milliseconds, to search for and create the topic. Default of 30000ms
+     *                             (30sec) if argument is not provided.
+     * @deprecated Replaced by {@link #KafkaBasedLog(String, Map, Map, Supplier, Callback, Time, java.util.function.Consumer, long)}
+     */
+    @Deprecated
+    public KafkaBasedLog(String topic,
+                         Map<String, Object> producerConfigs,
+                         Map<String, Object> consumerConfigs,
+                         Callback<ConsumerRecord<K, V>> consumedCallback,
+                         Time time,
+                         Runnable initializer,
+                         long createTopicTimeoutMs) {
+        this(topic, producerConfigs, consumerConfigs, () -> null, consumedCallback, time, initializer != null ? admin -> initializer.run() : null,
+                createTopicTimeoutMs);
+    }
+
+    /**
+     * @deprecated Replaced by {@link #KafkaBasedLog(String, Map, Map, Supplier, Callback, Time, java.util.function.Consumer)}
+     */
+    @Deprecated
+    public KafkaBasedLog(String topic,
+                         Map<String, Object> producerConfigs,
+                         Map<String, Object> consumerConfigs,
+                         Callback<ConsumerRecord<K, V>> consumedCallback,
+                         Time time,
+                         Runnable initializer) {
+        this(topic, producerConfigs, consumerConfigs, consumedCallback, time, initializer, TimeUnit.SECONDS.toMillis(30));
     }
 
     /**
@@ -248,7 +327,7 @@ public class KafkaBasedLog<K, V> {
         List<PartitionInfo> partitionInfos = consumer.partitionsFor(topic);
         long started = time.nanoseconds();
         long sleepMs = 100;
-        while (partitionInfos.isEmpty() && time.nanoseconds() - started < CREATE_TOPIC_TIMEOUT_NS) {
+        while (partitionInfos.isEmpty() && time.nanoseconds() - started < createTopicTimeoutNs) {
             time.sleep(sleepMs);
             sleepMs = Math.min(2 * sleepMs, MAX_SLEEP_MS);
             partitionInfos = consumer.partitionsFor(topic);
@@ -295,17 +374,25 @@ public class KafkaBasedLog<K, V> {
             consumer.wakeup();
         }
 
-        if (thread != null) {
-            try {
+        try {
+            if (thread != null) {
                 thread.join();
-            } catch (InterruptedException e) {
-                throw new ConnectException("Failed to stop KafkaBasedLog. Exiting without cleanly shutting " +
-                        "down it's producer and consumer.", e);
             }
+        } catch (InterruptedException e) {
+            throw new ConnectException("Failed to stop KafkaBasedLog. Exiting without cleanly shutting " +
+                    "down it's producer and consumer.", e);
         }
 
         producer.ifPresent(p -> Utils.closeQuietly(p, "KafkaBasedLog producer for topic " + topic));
         Utils.closeQuietly(consumer, "KafkaBasedLog consumer for topic " + topic);
+
+        if (consumer != null) {
+            try {
+                consumer.close();
+            } catch (KafkaException e) {
+                log.error("Failed to stop KafkaBasedLog consumer", e);
+            }
+        }
 
         // do not close the admin client, since we don't own it
         admin = null;
@@ -408,7 +495,14 @@ public class KafkaBasedLog<K, V> {
         return partitionCount;
     }
 
+    public long createTopicTimeoutMs() {
+        return TimeUnit.NANOSECONDS.toMillis(createTopicTimeoutNs);
+    }
+
     protected Producer<K, V> createProducer() {
+        if (producerConfigs == null)
+            return null;
+
         // Always require producer acks to all to ensure durable writes
         producerConfigs.put(ProducerConfig.ACKS_CONFIG, "all");
 
