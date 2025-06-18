@@ -4,7 +4,7 @@
     "run_as_user": "root"
   },
   "metrics": {
-    "namespace": "system-test-kafka",
+    "namespace": "system-test-ccs-kafka",
     "aggregation_dimensions": [
       [
         "InstanceId"
@@ -19,7 +19,8 @@
     "metrics_collected": {
       "cpu": {
         "append_dimensions": {
-          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}",
+          "Testing": "TEST_DIMENSION"
         },
         "measurement": [
           "usage_idle",
@@ -31,7 +32,8 @@
       },
       "disk": {
         "append_dimensions": {
-          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}",
+          "Testing": "TEST_DIMENSION"
         },
         "measurement": [
           "used_percent",
@@ -44,7 +46,8 @@
       },
       "diskio": {
         "append_dimensions": {
-          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}",
+          "Testing": "TEST_DIMENSION"
         },
         "measurement": [
           "io_time",
@@ -60,7 +63,8 @@
       },
       "mem": {
         "append_dimensions": {
-          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}",
+          "Testing": "TEST_DIMENSION"
         },
         "measurement": [
           "mem_used_percent"
@@ -69,7 +73,8 @@
       },
       "netstat": {
         "append_dimensions": {
-          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}",
+          "Testing": "TEST_DIMENSION"
         },
         "measurement": [
           "tcp_established",
@@ -84,7 +89,8 @@
       },
       "swap": {
         "append_dimensions": {
-          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}",
+          "Testing": "TEST_DIMENSION"
         },
         "measurement": [
           "swap_used_percent"
