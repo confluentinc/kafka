@@ -89,6 +89,7 @@ else
   exit 1
 fi
 
+echo "Starting amazon-cloudwatch-agent service..."
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status
 echo "Installation completed for amazon-cloudwatch-agent !!!"

@@ -46,7 +46,7 @@ ec2_ami = "ami-29ebb519"
 ec2_spot_instance = ENV['SPOT_INSTANCE'] ? ENV['SPOT_INSTANCE'] == 'true' : true
 ec2_spot_max_price = "0.113"  # On-demand price for instance type
 ec2_user = "ubuntu"
-ec2_instance_name_prefix = "kafka-vagrant"
+ec2_instance_name_prefix = "kafka-vagrant-test"
 ec2_security_groups = nil
 ec2_subnet_id = nil
 # Only override this by setting it to false if you're running in a VPC and you
@@ -168,6 +168,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         'JenkinsBuildUrl' => ENV['BUILD_URL'],
         'SemaphoreWorkflowUrl' => ENV['SEMAPHORE_WORKFLOW_URL'],
         'SemaphoreJobId' => ENV['SEMAPHORE_JOB_ID'],
+        'test_tag' => 'test_tag',
         'cflt_environment' => 'devel',
         'cflt_partition' => 'onprem',
         'cflt_managed_by' => 'iac',
@@ -187,6 +188,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   zookeepers = []
   (1..num_zookeepers).each { |i|
     name = "zk" + i.to_s
+    echo "Checkpoint Creating_Zookeeper_node: #{name}"
     zookeepers.push(name)
     config.vm.define name do |zookeeper|
       name_node(zookeeper, name, ec2_instance_name_prefix)
@@ -200,6 +202,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   (1..num_brokers).each { |i|
     name = "broker" + i.to_s
+    echo "Checkpoint Creating_Broker_node: #{name}"
     config.vm.define name do |broker|
       name_node(broker, name, ec2_instance_name_prefix)
       ip_address = "192.168.50." + (50 + i).to_s
@@ -217,6 +220,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   (1..num_workers).each { |i|
     name = "worker" + i.to_s
+    echo "Checkpoint Creating_Worker_node: #{name}"
     config.vm.define name do |worker|
       name_node(worker, name, ec2_instance_name_prefix)
       ip_address = "192.168.50." + (100 + i).to_s

@@ -16,6 +16,7 @@
 
 set -ex
 
+echo "Checkpoint: Vagrant base setup started"
 # The version of Kibosh to use for testing.
 # If you update this, also update tests/docker/Dockerfile
 export KIBOSH_VERSION=8841dd392e6fbf02986e2fb1f1ebf04df344b65a
@@ -197,3 +198,5 @@ echo "* hard nofile 128000" >> /etc/security/limits.d/nofile.conf
 
 ulimit -Hn 128000
 ulimit -Sn 128000
+
+echo "Checkpoint: Vagrant base setup complete"
