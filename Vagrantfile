@@ -185,42 +185,39 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   end
 
   ## Cluster definition
-  zookeepers = []
-  (1..num_zookeepers).each { |i|
-    name = "zk" + i.to_s
-    echo "Checkpoint Creating_Zookeeper_node: #{name}"
-    zookeepers.push(name)
-    config.vm.define name do |zookeeper|
-      name_node(zookeeper, name, ec2_instance_name_prefix)
-      ip_address = "192.168.50." + (10 + i).to_s
-      assign_local_ip(zookeeper, ip_address)
-      zookeeper.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
-      zk_jmx_port = enable_jmx ? (8000 + i).to_s : ""
-      zookeeper.vm.provision "shell", path: "vagrant/zk.sh", :args => [i.to_s, num_zookeepers, zk_jmx_port]
-    end
-  }
-
-  (1..num_brokers).each { |i|
-    name = "broker" + i.to_s
-    echo "Checkpoint Creating_Broker_node: #{name}"
-    config.vm.define name do |broker|
-      name_node(broker, name, ec2_instance_name_prefix)
-      ip_address = "192.168.50." + (50 + i).to_s
-      assign_local_ip(broker, ip_address)
-      # We need to be careful about what we list as the publicly routable
-      # address since this is registered in ZK and handed out to clients. If
-      # host DNS isn't setup, we shouldn't use hostnames -- IP addresses must be
-      # used to support clients running on the host.
-      zookeeper_connect = zookeepers.map{ |zk_addr| zk_addr + ":2181"}.join(",")
-      broker.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
-      kafka_jmx_port = enable_jmx ? (9000 + i).to_s : ""
-      broker.vm.provision "shell", path: "vagrant/broker.sh", :args => [i.to_s, enable_dns ? name : ip_address, zookeeper_connect, kafka_jmx_port]
-    end
-  }
+#   zookeepers = []
+#   (1..num_zookeepers).each { |i|
+#     name = "zk" + i.to_s
+#     zookeepers.push(name)
+#     config.vm.define name do |zookeeper|
+#       name_node(zookeeper, name, ec2_instance_name_prefix)
+#       ip_address = "192.168.50." + (10 + i).to_s
+#       assign_local_ip(zookeeper, ip_address)
+#       zookeeper.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
+#       zk_jmx_port = enable_jmx ? (8000 + i).to_s : ""
+#       zookeeper.vm.provision "shell", path: "vagrant/zk.sh", :args => [i.to_s, num_zookeepers, zk_jmx_port]
+#     end
+#   }
+#
+#   (1..num_brokers).each { |i|
+#     name = "broker" + i.to_s
+#     config.vm.define name do |broker|
+#       name_node(broker, name, ec2_instance_name_prefix)
+#       ip_address = "192.168.50." + (50 + i).to_s
+#       assign_local_ip(broker, ip_address)
+#       # We need to be careful about what we list as the publicly routable
+#       # address since this is registered in ZK and handed out to clients. If
+#       # host DNS isn't setup, we shouldn't use hostnames -- IP addresses must be
+#       # used to support clients running on the host.
+#       zookeeper_connect = zookeepers.map{ |zk_addr| zk_addr + ":2181"}.join(",")
+#       broker.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
+#       kafka_jmx_port = enable_jmx ? (9000 + i).to_s : ""
+#       broker.vm.provision "shell", path: "vagrant/broker.sh", :args => [i.to_s, enable_dns ? name : ip_address, zookeeper_connect, kafka_jmx_port]
+#     end
+#   }
 
   (1..num_workers).each { |i|
     name = "worker" + i.to_s
-    echo "Checkpoint Creating_Worker_node: #{name}"
     config.vm.define name do |worker|
       name_node(worker, name, ec2_instance_name_prefix)
       ip_address = "192.168.50." + (100 + i).to_s
