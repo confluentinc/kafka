@@ -17,10 +17,13 @@
 package org.apache.kafka.coordinator.group.modern.share;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.coordinator.group.MetadataImageBuilder;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
-
+import org.apache.kafka.image.MetadataImage;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.apache.kafka.coordinator.group.AssignmentTestUtil.mkAssignment;
 import static org.apache.kafka.coordinator.group.AssignmentTestUtil.mkTopicAssignment;
@@ -30,19 +33,28 @@ public class ShareGroupAssignmentBuilderTest {
 
     @Test
     public void testStableToStable() {
+        String topic1 = "topic1";
+        String topic2 = "topic2";
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
+
+        MetadataImage metadataImage = new MetadataImageBuilder()
+            .addTopic(topicId1, topic1, 10)
+            .addTopic(topicId2, topic2, 10)
+            .build();
 
         ShareGroupMember member = new ShareGroupMember.Builder("member")
             .setState(MemberState.STABLE)
             .setMemberEpoch(10)
             .setPreviousMemberEpoch(10)
+            .setSubscribedTopicNames(List.of(topic1, topic2))
             .setAssignedPartitions(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6)))
             .build();
 
         ShareGroupMember updatedMember = new ShareGroupAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6))))
@@ -53,6 +65,7 @@ public class ShareGroupAssignmentBuilderTest {
                 .setState(MemberState.STABLE)
                 .setMemberEpoch(11)
                 .setPreviousMemberEpoch(10)
+                .setSubscribedTopicNames(List.of(topic1, topic2))
                 .setAssignedPartitions(mkAssignment(
                     mkTopicAssignment(topicId1, 1, 2, 3),
                     mkTopicAssignment(topicId2, 4, 5, 6)))
@@ -63,19 +76,28 @@ public class ShareGroupAssignmentBuilderTest {
 
     @Test
     public void testStableToStableWithNewPartitions() {
+        String topic1 = "topic1";
+        String topic2 = "topic2";
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
+
+        MetadataImage metadataImage = new MetadataImageBuilder()
+            .addTopic(topicId1, topic1, 10)
+            .addTopic(topicId2, topic2, 10)
+            .build();
 
         ShareGroupMember member = new ShareGroupMember.Builder("member")
             .setState(MemberState.STABLE)
             .setMemberEpoch(10)
             .setPreviousMemberEpoch(10)
+            .setSubscribedTopicNames(List.of(topic1, topic2))
             .setAssignedPartitions(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6)))
             .build();
 
         ShareGroupMember updatedMember = new ShareGroupAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
             .withTargetAssignment(11, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3, 4),
                 mkTopicAssignment(topicId2, 4, 5, 6, 7))))
@@ -86,9 +108,52 @@ public class ShareGroupAssignmentBuilderTest {
                 .setState(MemberState.STABLE)
                 .setMemberEpoch(11)
                 .setPreviousMemberEpoch(10)
+                .setSubscribedTopicNames(List.of(topic1, topic2))
                 .setAssignedPartitions(mkAssignment(
                     mkTopicAssignment(topicId1, 1, 2, 3, 4),
                     mkTopicAssignment(topicId2, 4, 5, 6, 7)))
+                .build(),
+            updatedMember
+        );
+    }
+
+    @Test
+    public void testAssignmentTopicsNoLongerInSubscription() {
+        String topic1 = "topic1";
+        String topic2 = "topic2";
+        Uuid topicId1 = Uuid.randomUuid();
+        Uuid topicId2 = Uuid.randomUuid();
+
+        MetadataImage metadataImage = new MetadataImageBuilder()
+            .addTopic(topicId1, topic1, 10)
+            .addTopic(topicId2, topic2, 10)
+            .build();
+
+        ShareGroupMember member = new ShareGroupMember.Builder("member")
+            .setState(MemberState.STABLE)
+            .setMemberEpoch(10)
+            .setPreviousMemberEpoch(10)
+            .setSubscribedTopicNames(List.of(topic2))
+            .setAssignedPartitions(mkAssignment(
+                mkTopicAssignment(topicId1, 1, 2, 3),
+                mkTopicAssignment(topicId2, 4, 5, 6)))
+            .build();
+
+        ShareGroupMember updatedMember = new ShareGroupAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
+            .withTargetAssignment(11, new Assignment(mkAssignment(
+                mkTopicAssignment(topicId1, 1, 2, 3),
+                mkTopicAssignment(topicId2, 4, 5, 6))))
+            .build();
+
+        assertEquals(
+            new ShareGroupMember.Builder("member")
+                .setState(MemberState.STABLE)
+                .setMemberEpoch(11)
+                .setPreviousMemberEpoch(10)
+                .setSubscribedTopicNames(List.of(topic2))
+                .setAssignedPartitions(mkAssignment(
+                    mkTopicAssignment(topicId2, 4, 5, 6)))
                 .build(),
             updatedMember
         );

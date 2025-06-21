@@ -2649,6 +2649,8 @@ public class GroupMetadataManager {
             updatedMember,
             targetAssignmentEpoch,
             targetAssignment,
+            // Force consistency with the subscription when the subscription has changed.
+            bumpGroupEpoch,
             records
         );
 
@@ -3520,11 +3522,12 @@ public class GroupMetadataManager {
     /**
      * Reconciles the current assignment of the member towards the target assignment if needed.
      *
-     * @param groupId               The group id.
-     * @param member                The member to reconcile.
-     * @param targetAssignmentEpoch The target assignment epoch.
-     * @param targetAssignment      The target assignment.
-     * @param records               The list to accumulate any new records.
+     * @param groupId                      The group id.
+     * @param member                       The member to reconcile.
+     * @param targetAssignmentEpoch        The target assignment epoch.
+     * @param targetAssignment             The target assignment.
+     * @param forceSubscriptionConsistency If true, always removes unsubscribed topics from the current assignment.
+     * @param records                      The list to accumulate any new records.
      * @return The received member if no changes have been made; or a new
      *         member containing the new assignment.
      */
@@ -3533,13 +3536,15 @@ public class GroupMetadataManager {
         ShareGroupMember member,
         int targetAssignmentEpoch,
         Assignment targetAssignment,
+        boolean forceSubscriptionConsistency,
         List<CoordinatorRecord> records
     ) {
-        if (member.isReconciledTo(targetAssignmentEpoch)) {
+        if (!forceSubscriptionConsistency && member.isReconciledTo(targetAssignmentEpoch)) {
             return member;
         }
 
         ShareGroupMember updatedMember = new ShareGroupAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
             .withTargetAssignment(targetAssignmentEpoch, targetAssignment)
             .build();
 

@@ -16,10 +16,16 @@
  */
 package org.apache.kafka.coordinator.group.modern.share;
 
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
+import org.apache.kafka.coordinator.group.modern.TopicIds;
+import org.apache.kafka.image.MetadataImage;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * The ShareGroupAssignmentBuilder class encapsulates the reconciliation engine of the
@@ -31,6 +37,11 @@ public class ShareGroupAssignmentBuilder {
      * The share group member which is reconciled.
      */
     private final ShareGroupMember member;
+
+    /**
+     * The metadata image.
+     */
+    private MetadataImage metadataImage = MetadataImage.EMPTY;
 
     /**
      * The target assignment epoch.
@@ -50,6 +61,19 @@ public class ShareGroupAssignmentBuilder {
      */
     public ShareGroupAssignmentBuilder(ShareGroupMember member) {
         this.member = Objects.requireNonNull(member);
+    }
+
+    /**
+     * Sets the metadata image.
+     *
+     * @param metadataImage    The metadata image.
+     * @return This object.
+     */
+    public ShareGroupAssignmentBuilder withMetadataImage(
+        MetadataImage metadataImage
+    ) {
+        this.metadataImage = metadataImage;
+        return this;
     }
 
     /**
@@ -83,11 +107,33 @@ public class ShareGroupAssignmentBuilder {
             // when the member is updated.
             return new ShareGroupMember.Builder(member)
                 .setState(MemberState.STABLE)
-                .setAssignedPartitions(targetAssignment.partitions())
+                .setAssignedPartitions(filterAssignedPartitions(targetAssignment.partitions(), member.subscribedTopicNames()))
                 .updateMemberEpoch(targetAssignmentEpoch)
                 .build();
+        } else {
+            return new ShareGroupMember.Builder(member)
+                .setAssignedPartitions(filterAssignedPartitions(targetAssignment.partitions(), member.subscribedTopicNames()))
+                .build();
         }
+    }
 
-        return member;
+    private Map<Uuid, Set<Integer>> filterAssignedPartitions(
+        Map<Uuid, Set<Integer>> partitions,
+        Set<String> subscribedTopicNames
+    ) {
+        TopicIds.TopicResolver topicResolver = new TopicIds.CachedTopicResolver(metadataImage.topics());
+        TopicIds subscribedTopicIds = new TopicIds(member.subscribedTopicNames(), topicResolver);
+
+        // Reuse the original map if no topics need to be removed.
+        Map<Uuid, Set<Integer>> filteredPartitions = partitions;
+        for (Map.Entry<Uuid, Set<Integer>> entry : partitions.entrySet()) {
+            if (!subscribedTopicIds.contains(entry.getKey())) {
+                if (filteredPartitions == partitions) {
+                    filteredPartitions = new HashMap<>(partitions);
+                }
+                filteredPartitions.remove(entry.getKey());
+            }
+        }
+        return filteredPartitions;
     }
 }
