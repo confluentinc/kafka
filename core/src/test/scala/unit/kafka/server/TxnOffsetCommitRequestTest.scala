@@ -16,13 +16,13 @@
  */
 package kafka.server
 
-import org.apache.kafka.common.test.api.{ClusterConfigProperty, ClusterTest, ClusterTestDefaults, Type}
 import kafka.utils.TestUtils
 import org.apache.kafka.common.errors.UnsupportedVersionException
 import org.apache.kafka.common.message.OffsetFetchRequestData
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 import org.apache.kafka.common.requests.JoinGroupRequest
 import org.apache.kafka.common.test.ClusterInstance
+import org.apache.kafka.common.test.api.{ClusterConfigProperty, ClusterTest, ClusterTestDefaults, Type}
 import org.apache.kafka.common.utils.ProducerIdAndEpoch
 import org.apache.kafka.coordinator.group.GroupCoordinatorConfig
 import org.apache.kafka.coordinator.transaction.TransactionLogConfig
@@ -233,5 +233,96 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
     val topicRecord = groupIdRecord.topics.asScala.find(_.name == topic).head
     val partitionRecord = topicRecord.partitions.asScala.find(_.partitionIndex == partition).head
     partitionRecord.committedOffset
+  }
+
+  @ClusterTest
+  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(): Unit = {
+    val topic = "topic"
+    val partition = 0
+    val transactionalId = "txn"
+    val groupId = "group"
+    val offset = 100L
+
+    val useNewProtocol = true
+
+    // Creates the __consumer_offsets and __transaction_state topics because it won't be created automatically
+    // in this test because it does not use FindCoordinator API.
+    createOffsetsTopic()
+    createTransactionStateTopic()
+
+    // Join the consumer group. Note that we don't heartbeat here so we must use
+    // a session long enough for the duration of the test.
+    val (memberId: String, memberEpoch: Int) = joinConsumerGroup(groupId, useNewProtocol)
+    assertTrue(memberId != JoinGroupRequest.UNKNOWN_MEMBER_ID)
+    assertTrue(memberEpoch != JoinGroupRequest.UNKNOWN_GENERATION_ID)
+
+    createTopic(topic, 1)
+
+    // The member ID must not be empty from version 3 onwards.
+    for (version <- ApiKeys.TXN_OFFSET_COMMIT.oldestVersion to ApiKeys.TXN_OFFSET_COMMIT.latestVersion(isUnstableApiEnabled)) {
+      val useTV2 = version >= 5
+
+      // Initialize producer. Wait until the coordinator finishes loading.
+      var producerIdAndEpoch: ProducerIdAndEpoch = null
+      TestUtils.waitUntilTrue(() =>
+        try {
+          producerIdAndEpoch = initProducerId(
+            transactionalId = transactionalId,
+            producerIdAndEpoch = ProducerIdAndEpoch.NONE,
+            expectedError = Errors.NONE
+          )
+          true
+        } catch {
+          case _: Throwable => false
+        }, "initProducerId request failed"
+      )
+
+      addOffsetsToTxn(
+        groupId = groupId,
+        producerId = producerIdAndEpoch.producerId,
+        producerEpoch = producerIdAndEpoch.epoch,
+        transactionalId = transactionalId
+      )
+
+      // Complete the transaction.
+      endTxn(
+        producerId = producerIdAndEpoch.producerId,
+        producerEpoch = producerIdAndEpoch.epoch,
+        transactionalId = transactionalId,
+        isTransactionV2Enabled = useTV2,
+        committed = true,
+        expectedError = Errors.NONE
+      )
+
+      // Start a new transaction. Wait for the previous transaction to complete.
+      TestUtils.waitUntilTrue(() =>
+        try {
+          addOffsetsToTxn(
+            groupId = groupId,
+            producerId = producerIdAndEpoch.producerId,
+            producerEpoch = if (useTV2) (producerIdAndEpoch.epoch + 1).toShort else producerIdAndEpoch.epoch,
+            transactionalId = transactionalId
+          )
+          true
+        } catch {
+          case _: Throwable => false
+        }, "addOffsetsToTxn request failed"
+      )
+
+      // Committing offset with old epoch succeeds for TV1 and fails for TV2.
+      commitTxnOffset(
+        groupId = groupId,
+        memberId = if (version >= 3) memberId else JoinGroupRequest.UNKNOWN_MEMBER_ID,
+        generationId = if (version >= 3) 1 else JoinGroupRequest.UNKNOWN_GENERATION_ID,
+        producerId = producerIdAndEpoch.producerId,
+        producerEpoch = producerIdAndEpoch.epoch,
+        transactionalId = transactionalId,
+        topic = topic,
+        partition = partition,
+        offset = offset,
+        expectedError = if (useTV2) Errors.INVALID_PRODUCER_EPOCH else Errors.NONE,
+        version = version.toShort
+      )
+    }
   }
 }
