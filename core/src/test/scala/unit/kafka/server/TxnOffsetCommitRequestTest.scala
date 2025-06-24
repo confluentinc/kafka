@@ -258,7 +258,6 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
 
     createTopic(topic, 1)
 
-    // The member ID must not be empty from version 3 onwards.
     for (version <- ApiKeys.TXN_OFFSET_COMMIT.oldestVersion to ApiKeys.TXN_OFFSET_COMMIT.latestVersion(isUnstableApiEnabled)) {
       val useTV2 = version >= 5
 
