@@ -21,6 +21,9 @@ import org.apache.kafka.common.errors.FencedMemberEpochException;
 import org.apache.kafka.common.message.ConsumerGroupHeartbeatRequestData;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
+import org.apache.kafka.coordinator.group.modern.TopicIds;
+import org.apache.kafka.coordinator.group.modern.UnionSet;
+import org.apache.kafka.image.MetadataImage;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,6 +45,11 @@ public class CurrentAssignmentBuilder {
     private final ConsumerGroupMember member;
 
     /**
+     * The metadata image.
+     */
+    private MetadataImage metadataImage = MetadataImage.EMPTY;
+
+    /**
      * The target assignment epoch.
      */
     private int targetAssignmentEpoch;
@@ -50,6 +58,11 @@ public class CurrentAssignmentBuilder {
      * The target assignment.
      */
     private Assignment targetAssignment;
+
+    /**
+     * The resolved regular expressions.
+     */
+    private Map<String, ResolvedRegularExpression> resolvedRegularExpressions = Map.of();
 
     /**
      * A function which returns the current epoch of a topic-partition or -1 if the
@@ -74,6 +87,19 @@ public class CurrentAssignmentBuilder {
     }
 
     /**
+     * Sets the metadata image.
+     *
+     * @param metadataImage    The metadata image.
+     * @return This object.
+     */
+    public CurrentAssignmentBuilder withMetadataImage(
+        MetadataImage metadataImage
+    ) {
+        this.metadataImage = metadataImage;
+        return this;
+    }
+
+    /**
      * Sets the target assignment epoch and the target assignment that the
      * consumer group member must be reconciled to.
      *
@@ -87,6 +113,19 @@ public class CurrentAssignmentBuilder {
     ) {
         this.targetAssignmentEpoch = targetAssignmentEpoch;
         this.targetAssignment = Objects.requireNonNull(targetAssignment);
+        return this;
+    }
+
+    /**
+     * Sets the resolved regular expressions.
+     *
+     * @param resolvedRegularExpressions The resolved regular expressions.
+     * @return This object.
+     */
+    public CurrentAssignmentBuilder withResolvedRegularExpressions(
+        Map<String, ResolvedRegularExpression> resolvedRegularExpressions
+    ) {
+        this.resolvedRegularExpressions = resolvedRegularExpressions;
         return this;
     }
 
@@ -139,7 +178,7 @@ public class CurrentAssignmentBuilder {
                         member.assignedPartitions()
                     );
                 } else {
-                    return member;
+                    return computeCurrentAssignment(member.assignedPartitions());
                 }
 
             case UNREVOKED_PARTITIONS:
@@ -151,14 +190,14 @@ public class CurrentAssignmentBuilder {
                 // If the member provides its owned partitions. We verify if it still
                 // owns any of the revoked partitions. If it does, we cannot progress.
                 if (ownsRevokedPartitions(member.partitionsPendingRevocation())) {
-                    return member;
+                    return computeCurrentAssignment(member.assignedPartitions());
                 }
 
                 // When the member has revoked all the pending partitions, it can
                 // transition to the next epoch (current + 1) and we can reconcile
                 // its state towards the latest target assignment.
                 return computeNextAssignment(
-                    member.memberEpoch() + 1,
+                    Math.min(member.memberEpoch() + 1, targetAssignmentEpoch),
                     member.assignedPartitions()
                 );
 
@@ -216,6 +255,56 @@ public class CurrentAssignmentBuilder {
     }
 
     /**
+     * Updates the current assignment, removing any partitions that are not part of the subscribed topics.
+     *
+     * @param memberAssignedPartitions  The assigned partitions of the member to use.
+     * @return A new ConsumerGroupMember.
+     */
+    private ConsumerGroupMember computeCurrentAssignment(
+        Map<Uuid, Set<Integer>> memberAssignedPartitions
+    ) {
+        Set<Uuid> subscribedTopicIds = subscribedTopicIds();
+        if (subscribedTopicIds == null) {
+            // The member's subscribed topic regex is unresolved, so we cannot tell whether topics
+            // are part of its subscription.
+            return member;
+        }
+
+        // Reuse the original map if no topics need to be removed.
+        Map<Uuid, Set<Integer>> newAssignedPartitions = memberAssignedPartitions;
+        Map<Uuid, Set<Integer>> newPartitionsPendingRevocation = new HashMap<>(member.partitionsPendingRevocation());
+        for (Map.Entry<Uuid, Set<Integer>> entry : memberAssignedPartitions.entrySet()) {
+            if (!subscribedTopicIds.contains(entry.getKey())) {
+                if (newAssignedPartitions == memberAssignedPartitions) {
+                    newAssignedPartitions = new HashMap<>(memberAssignedPartitions);
+                    newPartitionsPendingRevocation = new HashMap<>(member.partitionsPendingRevocation());
+                }
+                newAssignedPartitions.remove(entry.getKey());
+                newPartitionsPendingRevocation.merge(
+                    entry.getKey(),
+                    entry.getValue(),
+                    (existing, additional) -> {
+                        existing = new HashSet<>(existing);
+                        existing.addAll(additional);
+                        return existing;
+                    }
+                );
+            }
+        }
+
+        if (newAssignedPartitions == memberAssignedPartitions) {
+            // If no partitions were removed, we can return the member as is.
+            return member;
+        }
+
+        return new ConsumerGroupMember.Builder(member)
+            .setState(MemberState.UNREVOKED_PARTITIONS)
+            .setAssignedPartitions(newAssignedPartitions)
+            .setPartitionsPendingRevocation(newPartitionsPendingRevocation)
+            .build();
+    }
+
+    /**
      * Computes the next assignment.
      *
      * @param memberEpoch               The epoch of the member to use. This may be different
@@ -227,6 +316,8 @@ public class CurrentAssignmentBuilder {
         int memberEpoch,
         Map<Uuid, Set<Integer>> memberAssignedPartitions
     ) {
+        Set<Uuid> subscribedTopicIds = subscribedTopicIds();
+
         boolean hasUnreleasedPartitions = false;
         Map<Uuid, Set<Integer>> newAssignedPartitions = new HashMap<>();
         Map<Uuid, Set<Integer>> newPartitionsPendingRevocation = new HashMap<>();
@@ -240,6 +331,11 @@ public class CurrentAssignmentBuilder {
                 .getOrDefault(topicId, Set.of());
             Set<Integer> currentAssignedPartitions = memberAssignedPartitions
                 .getOrDefault(topicId, Set.of());
+
+            // If the member is no longer subscribed to the topic, treat its target assignment as empty.
+            if (subscribedTopicIds != null && !subscribedTopicIds.contains(topicId)) {
+                target = Set.of();
+            }
 
             // New Assigned Partitions = Previous Assigned Partitions ∩ Target
             Set<Integer> assignedPartitions = new HashSet<>(currentAssignedPartitions);
@@ -316,5 +412,32 @@ public class CurrentAssignmentBuilder {
                 .setPartitionsPendingRevocation(Map.of())
                 .build();
         }
+    }
+
+    /**
+     * Gets the set of topic IDs that the member is subscribed to. Returns null if the member is
+     * subscribed to a regex and the regex is not resolved yet.
+     *
+     * @return The set of topic IDs that the member is subscribed to, or null if the subscription regex is unresolved.
+     */
+    private Set<Uuid> subscribedTopicIds() {
+        Set<String> subscriptions = member.subscribedTopicNames();
+        String subscribedTopicRegex = member.subscribedTopicRegex();
+        if (subscribedTopicRegex != null && !subscribedTopicRegex.isEmpty()) {
+            ResolvedRegularExpression resolvedRegularExpression = resolvedRegularExpressions.get(subscribedTopicRegex);
+            if (resolvedRegularExpression != null) {
+                if (subscriptions.isEmpty()) {
+                    subscriptions = resolvedRegularExpression.topics;
+                } else if (!resolvedRegularExpression.topics.isEmpty()) {
+                    subscriptions = new UnionSet<>(subscriptions, resolvedRegularExpression.topics);
+                }
+            } else {
+                return null;
+            }
+        }
+
+        TopicIds.TopicResolver topicResolver = new TopicIds.CachedTopicResolver(metadataImage.topics());
+        TopicIds subscribedTopicIds = new TopicIds(subscriptions, topicResolver);
+        return subscribedTopicIds;
     }
 }
