@@ -51,6 +51,16 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
     testTxnOffsetCommit(false)
   }
 
+  @ClusterTest
+  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithOldConsumerGroupProtocol(): Unit = {
+    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(true)
+  }
+
+  @ClusterTest
+  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithNewConsumerGroupProtocol(): Unit = {
+    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(false)
+  }
+
   private def testTxnOffsetCommit(useNewProtocol: Boolean): Unit = {
     val topic = "topic"
     val partition = 0
@@ -235,15 +245,12 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
     partitionRecord.committedOffset
   }
 
-  @ClusterTest
-  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(): Unit = {
+  private def testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(useNewProtocol: Boolean): Unit = {
     val topic = "topic"
     val partition = 0
     val transactionalId = "txn"
     val groupId = "group"
     val offset = 100L
-
-    val useNewProtocol = true
 
     // Creates the __consumer_offsets and __transaction_state topics because it won't be created automatically
     // in this test because it does not use FindCoordinator API.
