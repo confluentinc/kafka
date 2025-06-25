@@ -232,7 +232,9 @@ if (repo != null) {
         'streams/streams-scala/logs/*',
         'licenses/*',
         '**/generated/**',
-        'clients/src/test/resources/serializedData/*'
+        'clients/src/test/resources/serializedData/*',
+        'vagrant/cloudwatch-agent-setup.sh',
+        'vagrant/cloudwatch-agent-configuration.json'
     ])
   }
 } else {
