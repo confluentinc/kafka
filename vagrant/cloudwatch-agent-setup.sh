@@ -14,7 +14,7 @@ set -ex
 architecture=arm64
 arch=$(uname -m)
 
-if [ $arch == "x86_64" ]; then
+if [ "$arch" == "x86_64" ]; then
     architecture=amd64
 fi
 
