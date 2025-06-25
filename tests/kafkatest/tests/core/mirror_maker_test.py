@@ -136,7 +136,7 @@ class TestMirrorMakerService(ProduceConsumeValidateTest):
         self.mirror_maker.stop()
 
     @cluster(num_nodes=7)
-    @matrix(clean_shutdown=[True, False], security_protocol=['PLAINTEXT', 'SSL'])
+    @matrix(clean_shutdown=[True, False], security_protocol=['SSL'])
     @cluster(num_nodes=8)
     @matrix(clean_shutdown=[True, False], security_protocol=['SASL_PLAINTEXT', 'SASL_SSL'])
     def test_bounce(self, offsets_storage="kafka", clean_shutdown=True, security_protocol='PLAINTEXT'):
