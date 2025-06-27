@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 
@@ -43,7 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class CoordinatorRuntimeMetricsImplTest {
 
     private static final String METRICS_GROUP = "test-runtime-metrics";
-    
+    private static final String OTHER_METRICS_GROUP = "test-runtime-metrics-2";
+
     @Test
     public void testMetricNames() {
         Metrics metrics = new Metrics();
@@ -93,7 +95,8 @@ public class CoordinatorRuntimeMetricsImplTest {
     public void testUpdateNumPartitionsMetrics() {
         Metrics metrics = new Metrics();
 
-        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP)) {
+        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
+             CoordinatorRuntimeMetricsImpl runtimeMetrics2 = new CoordinatorRuntimeMetricsImpl(metrics, OTHER_METRICS_GROUP)) {
             IntStream.range(0, 10)
                 .forEach(__ -> runtimeMetrics.recordPartitionStateChange(CoordinatorState.INITIAL, CoordinatorState.LOADING));
             IntStream.range(0, 8)
@@ -106,6 +109,11 @@ public class CoordinatorRuntimeMetricsImplTest {
             assertMetricGauge(metrics, kafkaMetricName(metrics, NUM_PARTITIONS_METRIC_NAME, "state", "loading"), 2);
             assertMetricGauge(metrics, kafkaMetricName(metrics, NUM_PARTITIONS_METRIC_NAME, "state", "active"), 0);
             assertMetricGauge(metrics, kafkaMetricName(metrics, NUM_PARTITIONS_METRIC_NAME, "state", "failed"), 6);
+
+            // Check metric group isolation
+            assertMetricGauge(metrics, otherGroupKafkaMetricName(metrics, NUM_PARTITIONS_METRIC_NAME, "state", "loading"), 0);
+            assertMetricGauge(metrics, otherGroupKafkaMetricName(metrics, NUM_PARTITIONS_METRIC_NAME, "state", "active"), 0);
+            assertMetricGauge(metrics, otherGroupKafkaMetricName(metrics, NUM_PARTITIONS_METRIC_NAME, "state", "failed"), 0);
         }
     }
 
@@ -114,7 +122,8 @@ public class CoordinatorRuntimeMetricsImplTest {
         Time time = new MockTime();
         Metrics metrics = new Metrics(time);
 
-        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP)) {
+        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
+             CoordinatorRuntimeMetricsImpl runtimeMetrics2 = new CoordinatorRuntimeMetricsImpl(metrics, OTHER_METRICS_GROUP)) {
             long startTimeMs = time.milliseconds();
             runtimeMetrics.recordPartitionLoadSensor(startTimeMs, startTimeMs + 1000);
             runtimeMetrics.recordPartitionLoadSensor(startTimeMs, startTimeMs + 2000);
@@ -127,6 +136,13 @@ public class CoordinatorRuntimeMetricsImplTest {
             metricName = kafkaMetricName(metrics, "partition-load-time-max");
             metric = metrics.metrics().get(metricName);
             assertEquals(2000.0, metric.metricValue());
+
+            // Check metric group isolation
+            for (String name : List.of("partition-load-time-avg", "partition-load-time-max")) {
+                org.apache.kafka.common.MetricName otherGroupMetricName = otherGroupKafkaMetricName(metrics, name);
+                KafkaMetric otherMetric = metrics.metrics().get(otherGroupMetricName);
+                assertEquals(Double.NaN, otherMetric.metricValue());
+            }
         }
     }
 
@@ -135,12 +151,18 @@ public class CoordinatorRuntimeMetricsImplTest {
         Time time = new MockTime();
         Metrics metrics = new Metrics(time);
 
-        CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
-        IntStream.range(0, 3).forEach(i -> runtimeMetrics.recordThreadIdleTime((i + 1) * 1000.0));
+        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
+             CoordinatorRuntimeMetricsImpl runtimeMetrics2 = new CoordinatorRuntimeMetricsImpl(metrics, OTHER_METRICS_GROUP)) {
+            IntStream.range(0, 3).forEach(i -> runtimeMetrics.recordThreadIdleTime((i + 1) * 1000.0));
 
-        org.apache.kafka.common.MetricName metricName = kafkaMetricName(metrics, "thread-idle-ratio-avg");
-        KafkaMetric metric = metrics.metrics().get(metricName);
-        assertEquals(6 / 30.0, metric.metricValue()); // 'total_ms / window_ms'
+            org.apache.kafka.common.MetricName metricName = kafkaMetricName(metrics, "thread-idle-ratio-avg");
+            KafkaMetric metric = metrics.metrics().get(metricName);
+            assertEquals(6 / 30.0, metric.metricValue()); // 'total_ms / window_ms'
+
+            // Check metric group isolation
+            org.apache.kafka.common.MetricName otherGroupMetricName = otherGroupKafkaMetricName(metrics, "thread-idle-ratio-avg");
+            assertEquals(0.0, metrics.metrics().get(otherGroupMetricName).metricValue());
+        }
     }
 
     @Test
@@ -148,9 +170,14 @@ public class CoordinatorRuntimeMetricsImplTest {
         Time time = new MockTime();
         Metrics metrics = new Metrics(time);
 
-        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP)) {
+        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
+             CoordinatorRuntimeMetricsImpl otherRuntimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, OTHER_METRICS_GROUP)) {
             runtimeMetrics.registerEventQueueSizeGauge(() -> 5);
+            otherRuntimeMetrics.registerEventQueueSizeGauge(() -> 0);
             assertMetricGauge(metrics, kafkaMetricName(metrics, "event-queue-size"), 5);
+
+            // Check metric group isolation
+            assertMetricGauge(metrics, otherGroupKafkaMetricName(metrics, "event-queue-size"), 0);
         }
     }
 
@@ -165,43 +192,51 @@ public class CoordinatorRuntimeMetricsImplTest {
         Time time = new MockTime();
         Metrics metrics = new Metrics(time);
 
-        CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
+        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
+             CoordinatorRuntimeMetricsImpl runtimeMetrics2 = new CoordinatorRuntimeMetricsImpl(metrics, OTHER_METRICS_GROUP)) {
+            IntStream.range(1, 1001).forEach(i -> {
+                switch (metricNamePrefix) {
+                    case EVENT_QUEUE_TIME_METRIC_NAME:
+                        runtimeMetrics.recordEventQueueTime(i);
+                        break;
+                    case EVENT_PROCESSING_TIME_METRIC_NAME:
+                        runtimeMetrics.recordEventProcessingTime(i);
+                        break;
+                    case EVENT_PURGATORY_TIME_METRIC_NAME:
+                        runtimeMetrics.recordEventPurgatoryTime(i);
+                        break;
+                    case BATCH_FLUSH_TIME_METRIC_NAME:
+                        runtimeMetrics.recordFlushTime(i);
+                }
+            });
 
-        IntStream.range(1, 1001).forEach(i -> {
-            switch (metricNamePrefix) {
-                case EVENT_QUEUE_TIME_METRIC_NAME:
-                    runtimeMetrics.recordEventQueueTime(i);
-                    break;
-                case EVENT_PROCESSING_TIME_METRIC_NAME:
-                    runtimeMetrics.recordEventProcessingTime(i);
-                    break;
-                case EVENT_PURGATORY_TIME_METRIC_NAME:
-                    runtimeMetrics.recordEventPurgatoryTime(i);
-                    break;
-                case BATCH_FLUSH_TIME_METRIC_NAME:
-                    runtimeMetrics.recordFlushTime(i);
+            MetricName metricName = kafkaMetricName(metrics, metricNamePrefix + "-max");
+            KafkaMetric metric = metrics.metrics().get(metricName);
+            assertEquals(1000.0, metric.metricValue());
+
+            metricName = kafkaMetricName(metrics, metricNamePrefix + "-p50");
+            metric = metrics.metrics().get(metricName);
+            assertEquals(500.0, metric.metricValue());
+
+            metricName = kafkaMetricName(metrics, metricNamePrefix + "-p95");
+            metric = metrics.metrics().get(metricName);
+            assertEquals(950.0, metric.metricValue());
+
+            metricName = kafkaMetricName(metrics, metricNamePrefix + "-p99");
+            metric = metrics.metrics().get(metricName);
+            assertEquals(990.0, metric.metricValue());
+
+            metricName = kafkaMetricName(metrics, metricNamePrefix + "-p999");
+            metric = metrics.metrics().get(metricName);
+            assertEquals(999.0, metric.metricValue());
+
+            // Check metric group isolation
+            for (String suffix : List.of("-max", "-p50", "-p95", "-p99", "-p999")) {
+                org.apache.kafka.common.MetricName otherGroupMetricName = otherGroupKafkaMetricName(metrics, metricNamePrefix + suffix);
+                KafkaMetric otherMetric = metrics.metrics().get(otherGroupMetricName);
+                assertEquals(0.0, otherMetric.metricValue());
             }
-        });
-
-        MetricName metricName = kafkaMetricName(metrics, metricNamePrefix + "-max");
-        KafkaMetric metric = metrics.metrics().get(metricName);
-        assertEquals(1000.0, metric.metricValue());
-
-        metricName = kafkaMetricName(metrics, metricNamePrefix + "-p50");
-        metric = metrics.metrics().get(metricName);
-        assertEquals(500.0, metric.metricValue());
-
-        metricName = kafkaMetricName(metrics, metricNamePrefix + "-p95");
-        metric = metrics.metrics().get(metricName);
-        assertEquals(950.0, metric.metricValue());
-
-        metricName = kafkaMetricName(metrics, metricNamePrefix + "-p99");
-        metric = metrics.metrics().get(metricName);
-        assertEquals(990.0, metric.metricValue());
-
-        metricName = kafkaMetricName(metrics, metricNamePrefix + "-p999");
-        metric = metrics.metrics().get(metricName);
-        assertEquals(999.0, metric.metricValue());
+        }
     }
 
     @Test
@@ -209,16 +244,16 @@ public class CoordinatorRuntimeMetricsImplTest {
         Time time = new MockTime();
         Metrics metrics = new Metrics(time);
 
-        CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP);
+        try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP)) {
+            IntStream.range(1, 1001).forEach(__ -> runtimeMetrics.recordEventPurgatoryTime(MAX_LATENCY_MS + 1000L));
 
-        IntStream.range(1, 1001).forEach(__ -> runtimeMetrics.recordEventPurgatoryTime(MAX_LATENCY_MS + 1000L));
+            MetricName metricName = kafkaMetricName(metrics, EVENT_PURGATORY_TIME_METRIC_NAME + "-max");
+            KafkaMetric metric = metrics.metrics().get(metricName);
+            long value = ((Double) metric.metricValue()).longValue();
 
-        MetricName metricName = kafkaMetricName(metrics, EVENT_PURGATORY_TIME_METRIC_NAME + "-max");
-        KafkaMetric metric = metrics.metrics().get(metricName);
-        long value = ((Double) metric.metricValue()).longValue();
-
-        // 3 sigfigs in HdrHistogram is not precise enough.
-        assertTrue(value >= MAX_LATENCY_MS && value < MAX_LATENCY_MS + 1000L);
+            // 3 sigfigs in HdrHistogram is not precise enough.
+            assertTrue(value >= MAX_LATENCY_MS && value < MAX_LATENCY_MS + 1000L);
+        }
     }
 
     private static void assertMetricGauge(Metrics metrics, org.apache.kafka.common.MetricName metricName, long count) {
@@ -227,5 +262,9 @@ public class CoordinatorRuntimeMetricsImplTest {
 
     private static MetricName kafkaMetricName(Metrics metrics, String name, String... keyValue) {
         return metrics.metricName(name, METRICS_GROUP, "", keyValue);
+    }
+
+    private static MetricName otherGroupKafkaMetricName(Metrics metrics, String name, String... keyValue) {
+        return metrics.metricName(name, OTHER_METRICS_GROUP, "", keyValue);
     }
 }
