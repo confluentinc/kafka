@@ -29,6 +29,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.apache.kafka.coordinator.group.AssignmentTestUtil.mkAssignment;
 import static org.apache.kafka.coordinator.group.AssignmentTestUtil.mkTopicAssignment;
@@ -880,6 +882,121 @@ public class CurrentAssignmentBuilderTest {
                 .setPartitionsPendingRevocation(mkAssignment(
                     mkTopicAssignment(topicId1, 1, 2, 3),
                     mkTopicAssignment(topicId2, 4)))
+                .build(),
+            updatedMember
+        );
+    }
+
+    @Test
+    public void testUnresolvedRegularExpression() {
+        String fooTopic = "foo";
+        String barTopic = "bar";
+        Uuid fooTopicId = Uuid.randomUuid();
+        Uuid barTopicId = Uuid.randomUuid();
+
+        MetadataImage metadataImage = new MetadataImageBuilder()
+            .addTopic(fooTopicId, fooTopic, 10)
+            .addTopic(barTopicId, barTopic, 10)
+            .build();
+
+        ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
+            .setState(MemberState.STABLE)
+            .setMemberEpoch(10)
+            .setPreviousMemberEpoch(10)
+            .setSubscribedTopicNames(List.of(fooTopic))
+            .setSubscribedTopicRegex("bar*")
+            .setAssignedPartitions(mkAssignment(
+                mkTopicAssignment(fooTopicId, 1, 2, 3),
+                mkTopicAssignment(barTopicId, 4, 5, 6)))
+            .build();
+
+        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
+            .withTargetAssignment(10, new Assignment(mkAssignment(
+                mkTopicAssignment(fooTopicId, 1, 2, 3),
+                mkTopicAssignment(barTopicId, 4, 5, 6))))
+            .withResolvedRegularExpressions(Map.of())
+            .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
+            .withOwnedTopicPartitions(Arrays.asList(
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(fooTopicId)
+                    .setPartitions(Arrays.asList(1, 2, 3)),
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(barTopicId)
+                    .setPartitions(Arrays.asList(4, 5, 6))))
+            .build();
+
+        assertEquals(
+            new ConsumerGroupMember.Builder("member")
+                .setState(MemberState.UNREVOKED_PARTITIONS)
+                .setMemberEpoch(10)
+                .setPreviousMemberEpoch(10)
+                .setSubscribedTopicNames(List.of(fooTopic))
+                .setSubscribedTopicRegex("bar*")
+                .setAssignedPartitions(mkAssignment(
+                    mkTopicAssignment(fooTopicId, 1, 2, 3)))
+                .setPartitionsPendingRevocation(mkAssignment(
+                    mkTopicAssignment(barTopicId, 4, 5, 6)))
+                .build(),
+            updatedMember
+        );
+    }
+
+    @Test
+    public void testResolvedRegularExpression() {
+        String fooTopic = "foo";
+        String barTopic = "bar";
+        Uuid fooTopicId = Uuid.randomUuid();
+        Uuid barTopicId = Uuid.randomUuid();
+
+        MetadataImage metadataImage = new MetadataImageBuilder()
+            .addTopic(fooTopicId, fooTopic, 10)
+            .addTopic(barTopicId, barTopic, 10)
+            .build();
+
+        ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
+            .setState(MemberState.STABLE)
+            .setMemberEpoch(10)
+            .setPreviousMemberEpoch(10)
+            .setSubscribedTopicNames(List.of(fooTopic))
+            .setSubscribedTopicRegex("bar*")
+            .setAssignedPartitions(mkAssignment(
+                mkTopicAssignment(fooTopicId, 1, 2, 3),
+                mkTopicAssignment(barTopicId, 4, 5, 6)))
+            .build();
+
+        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
+            .withTargetAssignment(10, new Assignment(mkAssignment(
+                mkTopicAssignment(fooTopicId, 1, 2, 3),
+                mkTopicAssignment(barTopicId, 4, 5, 6))))
+            .withResolvedRegularExpressions(Map.of(
+                "bar*", new ResolvedRegularExpression(
+                    Set.of("bar"),
+                    12345L,
+                    0L
+                )
+            ))
+            .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
+            .withOwnedTopicPartitions(Arrays.asList(
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(fooTopicId)
+                    .setPartitions(Arrays.asList(1, 2, 3)),
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(barTopicId)
+                    .setPartitions(Arrays.asList(4, 5, 6))))
+            .build();
+
+        assertEquals(
+            new ConsumerGroupMember.Builder("member")
+                .setState(MemberState.STABLE)
+                .setMemberEpoch(10)
+                .setPreviousMemberEpoch(10)
+                .setSubscribedTopicNames(List.of(fooTopic))
+                .setSubscribedTopicRegex("bar*")
+                .setAssignedPartitions(mkAssignment(
+                    mkTopicAssignment(fooTopicId, 1, 2, 3),
+                    mkTopicAssignment(barTopicId, 4, 5, 6)))
                 .build(),
             updatedMember
         );

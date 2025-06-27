@@ -265,11 +265,6 @@ public class CurrentAssignmentBuilder {
         Map<Uuid, Set<Integer>> memberAssignedPartitions
     ) {
         Set<Uuid> subscribedTopicIds = subscribedTopicIds();
-        if (subscribedTopicIds == null) {
-            // The member's subscribed topic regex is unresolved, so we cannot tell whether topics
-            // are part of its subscription.
-            return member;
-        }
 
         // Reuse the original map if no topics need to be removed.
         Map<Uuid, Set<Integer>> newAssignedPartitions = memberAssignedPartitions;
@@ -346,7 +341,7 @@ public class CurrentAssignmentBuilder {
                 .getOrDefault(topicId, Set.of());
 
             // If the member is no longer subscribed to the topic, treat its target assignment as empty.
-            if (subscribedTopicIds != null && !subscribedTopicIds.contains(topicId)) {
+            if (!subscribedTopicIds.contains(topicId)) {
                 target = Set.of();
             }
 
@@ -428,10 +423,9 @@ public class CurrentAssignmentBuilder {
     }
 
     /**
-     * Gets the set of topic IDs that the member is subscribed to. Returns null if the member is
-     * subscribed to a regex and the regex is not resolved yet.
+     * Gets the set of topic IDs that the member is subscribed to.
      *
-     * @return The set of topic IDs that the member is subscribed to, or null if the subscription regex is unresolved.
+     * @return The set of topic IDs that the member is subscribed to.
      */
     private Set<Uuid> subscribedTopicIds() {
         Set<String> subscriptions = member.subscribedTopicNames();
@@ -445,7 +439,7 @@ public class CurrentAssignmentBuilder {
                     subscriptions = new UnionSet<>(subscriptions, resolvedRegularExpression.topics);
                 }
             } else {
-                return null;
+                // Treat an unresolved regex as matching no topics, to be conservative.
             }
         }
 

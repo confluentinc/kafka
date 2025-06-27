@@ -2307,7 +2307,7 @@ public class GroupMetadataManager {
             targetAssignment,
             group.resolvedRegularExpressions(),
             // Force consistency with the subscription when the subscription has changed.
-            bumpGroupEpoch,
+            bumpGroupEpoch || hasMemberRegularExpressionChanged(member, updatedMember),
             ownedTopicPartitions,
             records
         );
@@ -3062,6 +3062,22 @@ public class GroupMetadataManager {
             }
         }
         return false;
+    }
+
+    /**
+     * Check whether the member has updated its subscribed topic regular expression.
+     *
+     * @param member        The old member.
+     * @param updatedMember The new member.
+     * @return A boolean indicating whether the subscribed topic regular expression has changed.
+     */
+    private boolean hasMemberRegularExpressionChanged(
+        ConsumerGroupMember member,
+        ConsumerGroupMember updatedMember
+    ) {
+        String oldSubscribedTopicRegex = member.subscribedTopicRegex();
+        String newSubscribedTopicRegex = updatedMember.subscribedTopicRegex();
+        return !Objects.equals(oldSubscribedTopicRegex, newSubscribedTopicRegex);
     }
 
     private static boolean isNotEmpty(String value) {
