@@ -178,7 +178,7 @@ public class CurrentAssignmentBuilder {
                         member.assignedPartitions()
                     );
                 } else {
-                    return computeCurrentAssignment(member.assignedPartitions());
+                    return updateCurrentAssignment(member.assignedPartitions());
                 }
 
             case UNREVOKED_PARTITIONS:
@@ -190,7 +190,7 @@ public class CurrentAssignmentBuilder {
                 // If the member provides its owned partitions. We verify if it still
                 // owns any of the revoked partitions. If it does, we cannot progress.
                 if (ownsRevokedPartitions(member.partitionsPendingRevocation())) {
-                    return computeCurrentAssignment(member.assignedPartitions());
+                    return updateCurrentAssignment(member.assignedPartitions());
                 }
 
                 // When the member has revoked all the pending partitions, it can
@@ -260,7 +260,7 @@ public class CurrentAssignmentBuilder {
      * @param memberAssignedPartitions  The assigned partitions of the member to use.
      * @return A new ConsumerGroupMember.
      */
-    private ConsumerGroupMember computeCurrentAssignment(
+    private ConsumerGroupMember updateCurrentAssignment(
         Map<Uuid, Set<Integer>> memberAssignedPartitions
     ) {
         Set<Uuid> subscribedTopicIds = subscribedTopicIds();
