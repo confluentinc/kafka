@@ -256,6 +256,7 @@ public class CurrentAssignmentBuilder {
 
     /**
      * Updates the current assignment, removing any partitions that are not part of the subscribed topics.
+     * This method is a lot faster than running the full reconciliation logic in computeNextAssignment.
      *
      * @param memberAssignedPartitions  The assigned partitions of the member to use.
      * @return A new ConsumerGroupMember.
