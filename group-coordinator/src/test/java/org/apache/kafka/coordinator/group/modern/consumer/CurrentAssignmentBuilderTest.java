@@ -722,8 +722,12 @@ public class CurrentAssignmentBuilderTest {
         );
     }
 
-    @Test
-    public void testStableToUnrevokedPartitionsWithAssignmentTopicsNoLongerInSubscription() {
+    @ParameterizedTest
+    @CsvSource({
+        "10, 11, 11", // Test with a new target assignment.
+        "10, 10, 10", // Test with no new target assignment.
+    })
+    public void testStableToStableWithAssignmentTopicsNoLongerInSubscription(int memberEpoch, int targetAssignmentEpoch, int expectedMemberEpoch) {
         String topic1 = "topic1";
         String topic2 = "topic2";
         Uuid topicId1 = Uuid.randomUuid();
@@ -736,8 +740,8 @@ public class CurrentAssignmentBuilderTest {
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
-            .setMemberEpoch(10)
-            .setPreviousMemberEpoch(10)
+            .setMemberEpoch(memberEpoch)
+            .setPreviousMemberEpoch(memberEpoch)
             .setSubscribedTopicNames(List.of(topic2))
             .setAssignedPartitions(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
@@ -746,17 +750,75 @@ public class CurrentAssignmentBuilderTest {
 
         ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
-            .withTargetAssignment(11, new Assignment(mkAssignment(
+            .withTargetAssignment(targetAssignmentEpoch, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6))))
             .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
+            .withOwnedTopicPartitions(Arrays.asList(
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(topicId2)
+                    .setPartitions(Arrays.asList(4, 5, 6))))
+            .build();
+
+        assertEquals(
+            new ConsumerGroupMember.Builder("member")
+                .setState(MemberState.STABLE)
+                .setMemberEpoch(expectedMemberEpoch)
+                .setPreviousMemberEpoch(memberEpoch)
+                .setSubscribedTopicNames(List.of(topic2))
+                .setAssignedPartitions(mkAssignment(
+                    mkTopicAssignment(topicId2, 4, 5, 6)))
+                .build(),
+            updatedMember
+        );
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "10, 11, 10", // Test with a new target assignment.
+        "10, 10, 10", // Test with no new target assignment.
+    })
+    public void testStableToUnrevokedPartitionsWithAssignmentTopicsNoLongerInSubscription(int memberEpoch, int targetAssignmentEpoch, int expectedMemberEpoch) {
+        String topic1 = "topic1";
+        String topic2 = "topic2";
+        Uuid topicId1 = Uuid.randomUuid();
+        Uuid topicId2 = Uuid.randomUuid();
+
+        MetadataImage metadataImage = new MetadataImageBuilder()
+            .addTopic(topicId1, topic1, 10)
+            .addTopic(topicId2, topic2, 10)
+            .build();
+
+        ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
+            .setState(MemberState.STABLE)
+            .setMemberEpoch(memberEpoch)
+            .setPreviousMemberEpoch(memberEpoch)
+            .setSubscribedTopicNames(List.of(topic2))
+            .setAssignedPartitions(mkAssignment(
+                mkTopicAssignment(topicId1, 1, 2, 3),
+                mkTopicAssignment(topicId2, 4, 5, 6)))
+            .build();
+
+        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
+            .withTargetAssignment(targetAssignmentEpoch, new Assignment(mkAssignment(
+                mkTopicAssignment(topicId1, 1, 2, 3),
+                mkTopicAssignment(topicId2, 4, 5, 6))))
+            .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
+            .withOwnedTopicPartitions(Arrays.asList(
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(topicId1)
+                    .setPartitions(Arrays.asList(1, 2, 3)),
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(topicId2)
+                    .setPartitions(Arrays.asList(4, 5, 6))))
             .build();
 
         assertEquals(
             new ConsumerGroupMember.Builder("member")
                 .setState(MemberState.UNREVOKED_PARTITIONS)
-                .setMemberEpoch(10)
-                .setPreviousMemberEpoch(10)
+                .setMemberEpoch(expectedMemberEpoch)
+                .setPreviousMemberEpoch(memberEpoch)
                 .setSubscribedTopicNames(List.of(topic2))
                 .setAssignedPartitions(mkAssignment(
                     mkTopicAssignment(topicId2, 4, 5, 6)))

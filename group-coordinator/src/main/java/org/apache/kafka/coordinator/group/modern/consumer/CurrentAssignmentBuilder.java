@@ -298,11 +298,23 @@ public class CurrentAssignmentBuilder {
             return member;
         }
 
-        return new ConsumerGroupMember.Builder(member)
-            .setState(MemberState.UNREVOKED_PARTITIONS)
-            .setAssignedPartitions(newAssignedPartitions)
-            .setPartitionsPendingRevocation(newPartitionsPendingRevocation)
-            .build();
+        if (ownsRevokedPartitions(newPartitionsPendingRevocation)) {
+            return new ConsumerGroupMember.Builder(member)
+                .setState(MemberState.UNREVOKED_PARTITIONS)
+                .setAssignedPartitions(newAssignedPartitions)
+                .setPartitionsPendingRevocation(newPartitionsPendingRevocation)
+                .build();
+        } else {
+            // There were partitions removed, but they were already revoked.
+            // Keep the member in the current state and shrink the assigned partitions.
+
+            // We do not expect to be in the UNREVOKED_PARTITIONS state here. The full
+            // reconciliation logic should handle the case where the member has revoked all its
+            // partitions pending revocation.
+            return new ConsumerGroupMember.Builder(member)
+                .setAssignedPartitions(newAssignedPartitions)
+                .build();
+        }
     }
 
     /**
