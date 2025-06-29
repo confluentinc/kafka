@@ -402,7 +402,7 @@ public class CurrentAssignmentBuilderTest {
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNREVOKED_PARTITIONS)
             .setMemberEpoch(memberEpoch)
-            .setPreviousMemberEpoch(10)
+            .setPreviousMemberEpoch(memberEpoch)
             .setSubscribedTopicNames(List.of(topic1, topic2))
             .setAssignedPartitions(mkAssignment(
                 mkTopicAssignment(topicId1, 2, 3),
@@ -431,7 +431,7 @@ public class CurrentAssignmentBuilderTest {
             new ConsumerGroupMember.Builder("member")
                 .setState(MemberState.UNREVOKED_PARTITIONS)
                 .setMemberEpoch(expectedMemberEpoch)
-                .setPreviousMemberEpoch(10)
+                .setPreviousMemberEpoch(memberEpoch)
                 .setSubscribedTopicNames(List.of(topic1, topic2))
                 .setAssignedPartitions(mkAssignment(
                     mkTopicAssignment(topicId1, 3),
