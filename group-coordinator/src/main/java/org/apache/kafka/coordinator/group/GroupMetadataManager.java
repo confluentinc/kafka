@@ -3468,18 +3468,18 @@ public class GroupMetadataManager {
     /**
      * Reconciles the current assignment of the member towards the target assignment if needed.
      *
-     * @param groupId                      The group id.
-     * @param member                       The member to reconcile.
-     * @param currentPartitionEpoch        The function returning the current epoch of
-     *                                     a given partition.
-     * @param targetAssignmentEpoch        The target assignment epoch.
-     * @param targetAssignment             The target assignment.
-     * @param resolvedRegularExpressions   The resolved regular expressions.
-     * @param forceSubscriptionConsistency If true, always removes unsubscribed topics from the current assignment.
-     * @param ownedTopicPartitions         The list of partitions owned by the member. This
-     *                                     is reported in the ConsumerGroupHeartbeat API and
-     *                                     it could be null if not provided.
-     * @param records                      The list to accumulate any new records.
+     * @param groupId                    The group id.
+     * @param member                     The member to reconcile.
+     * @param currentPartitionEpoch      The function returning the current epoch of
+     *                                   a given partition.
+     * @param targetAssignmentEpoch      The target assignment epoch.
+     * @param targetAssignment           The target assignment.
+     * @param resolvedRegularExpressions The resolved regular expressions.
+     * @param hasSubscriptionChanged     If true, always removes unsubscribed topics from the current assignment.
+     * @param ownedTopicPartitions       The list of partitions owned by the member. This
+     *                                   is reported in the ConsumerGroupHeartbeat API and
+     *                                   it could be null if not provided.
+     * @param records                    The list to accumulate any new records.
      * @return The received member if no changes have been made; or a new
      *         member containing the new assignment.
      */
@@ -3490,11 +3490,11 @@ public class GroupMetadataManager {
         int targetAssignmentEpoch,
         Assignment targetAssignment,
         Map<String, ResolvedRegularExpression> resolvedRegularExpressions,
-        boolean forceSubscriptionConsistency,
+        boolean hasSubscriptionChanged,
         List<ConsumerGroupHeartbeatRequestData.TopicPartitions> ownedTopicPartitions,
         List<CoordinatorRecord> records
     ) {
-        if (!forceSubscriptionConsistency && member.isReconciledTo(targetAssignmentEpoch)) {
+        if (!hasSubscriptionChanged && member.isReconciledTo(targetAssignmentEpoch)) {
             return member;
         }
 
@@ -3538,12 +3538,12 @@ public class GroupMetadataManager {
     /**
      * Reconciles the current assignment of the member towards the target assignment if needed.
      *
-     * @param groupId                      The group id.
-     * @param member                       The member to reconcile.
-     * @param targetAssignmentEpoch        The target assignment epoch.
-     * @param targetAssignment             The target assignment.
-     * @param forceSubscriptionConsistency If true, always removes unsubscribed topics from the current assignment.
-     * @param records                      The list to accumulate any new records.
+     * @param groupId                The group id.
+     * @param member                 The member to reconcile.
+     * @param targetAssignmentEpoch  The target assignment epoch.
+     * @param targetAssignment       The target assignment.
+     * @param hasSubscriptionChanged If true, always removes unsubscribed topics from the current assignment.
+     * @param records                The list to accumulate any new records.
      * @return The received member if no changes have been made; or a new
      *         member containing the new assignment.
      */
@@ -3552,10 +3552,10 @@ public class GroupMetadataManager {
         ShareGroupMember member,
         int targetAssignmentEpoch,
         Assignment targetAssignment,
-        boolean forceSubscriptionConsistency,
+        boolean hasSubscriptionChanged,
         List<CoordinatorRecord> records
     ) {
-        if (!forceSubscriptionConsistency && member.isReconciledTo(targetAssignmentEpoch)) {
+        if (!hasSubscriptionChanged && member.isReconciledTo(targetAssignmentEpoch)) {
             return member;
         }
 
