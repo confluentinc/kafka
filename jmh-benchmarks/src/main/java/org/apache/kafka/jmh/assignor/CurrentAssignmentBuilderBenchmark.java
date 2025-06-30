@@ -137,6 +137,7 @@ public class CurrentAssignmentBuilderBenchmark {
         return new CurrentAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
             .withTargetAssignment(member.memberEpoch(), targetAssignment)
+            .withHasSubscriptionChanged(true)
             .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
             .build();
     }

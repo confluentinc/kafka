@@ -727,10 +727,16 @@ public class CurrentAssignmentBuilderTest {
 
     @ParameterizedTest
     @CsvSource({
-        "10, 11, 11", // Test with a new target assignment.
-        "10, 10, 10", // Test with no new target assignment.
+        "10, 11, 11, false", // When advancing to a new target assignment, the assignment should
+        "10, 11, 11, true",  // always take the subscription into account.
+        "10, 10, 10, true",
     })
-    public void testStableToStableWithAssignmentTopicsNoLongerInSubscription(int memberEpoch, int targetAssignmentEpoch, int expectedMemberEpoch) {
+    public void testStableToStableWithAssignmentTopicsNoLongerInSubscription(
+        int memberEpoch,
+        int targetAssignmentEpoch,
+        int expectedMemberEpoch,
+        boolean hasSubscriptionChanged
+    ) {
         String topic1 = "topic1";
         String topic2 = "topic2";
         Uuid topicId1 = Uuid.randomUuid();
@@ -756,6 +762,7 @@ public class CurrentAssignmentBuilderTest {
             .withTargetAssignment(targetAssignmentEpoch, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6))))
+            .withHasSubscriptionChanged(hasSubscriptionChanged)
             .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
             .withOwnedTopicPartitions(Arrays.asList(
                 new ConsumerGroupHeartbeatRequestData.TopicPartitions()
@@ -778,10 +785,16 @@ public class CurrentAssignmentBuilderTest {
 
     @ParameterizedTest
     @CsvSource({
-        "10, 11, 10", // Test with a new target assignment.
-        "10, 10, 10", // Test with no new target assignment.
+        "10, 11, 10, false", // When advancing to a new target assignment, the assignment should always
+        "10, 11, 10, true",  // take the subscription into account.
+        "10, 10, 10, true"
     })
-    public void testStableToUnrevokedPartitionsWithAssignmentTopicsNoLongerInSubscription(int memberEpoch, int targetAssignmentEpoch, int expectedMemberEpoch) {
+    public void testStableToUnrevokedPartitionsWithAssignmentTopicsNoLongerInSubscription(
+        int memberEpoch,
+        int targetAssignmentEpoch,
+        int expectedMemberEpoch,
+        boolean hasSubscriptionChanged
+    ) {
         String topic1 = "topic1";
         String topic2 = "topic2";
         Uuid topicId1 = Uuid.randomUuid();
@@ -807,6 +820,7 @@ public class CurrentAssignmentBuilderTest {
             .withTargetAssignment(targetAssignmentEpoch, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6))))
+            .withHasSubscriptionChanged(hasSubscriptionChanged)
             .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
             .withOwnedTopicPartitions(Arrays.asList(
                 new ConsumerGroupHeartbeatRequestData.TopicPartitions()
@@ -862,6 +876,7 @@ public class CurrentAssignmentBuilderTest {
             .withTargetAssignment(12, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 3, 4),
                 mkTopicAssignment(topicId2, 6, 7))))
+            .withHasSubscriptionChanged(true)
             .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
             .withOwnedTopicPartitions(Arrays.asList(
                 new ConsumerGroupHeartbeatRequestData.TopicPartitions()
@@ -916,6 +931,7 @@ public class CurrentAssignmentBuilderTest {
             .withTargetAssignment(10, new Assignment(mkAssignment(
                 mkTopicAssignment(fooTopicId, 1, 2, 3),
                 mkTopicAssignment(barTopicId, 4, 5, 6))))
+            .withHasSubscriptionChanged(true)
             .withResolvedRegularExpressions(Map.of())
             .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
             .withOwnedTopicPartitions(Arrays.asList(
@@ -971,6 +987,7 @@ public class CurrentAssignmentBuilderTest {
             .withTargetAssignment(10, new Assignment(mkAssignment(
                 mkTopicAssignment(fooTopicId, 1, 2, 3),
                 mkTopicAssignment(barTopicId, 4, 5, 6))))
+            .withHasSubscriptionChanged(true)
             .withResolvedRegularExpressions(Map.of(
                 "bar*", new ResolvedRegularExpression(
                     Set.of("bar"),

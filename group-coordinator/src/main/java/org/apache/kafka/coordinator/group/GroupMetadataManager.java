@@ -3475,7 +3475,7 @@ public class GroupMetadataManager {
      * @param targetAssignmentEpoch      The target assignment epoch.
      * @param targetAssignment           The target assignment.
      * @param resolvedRegularExpressions The resolved regular expressions.
-     * @param hasSubscriptionChanged     If true, always removes unsubscribed topics from the current assignment.
+     * @param hasSubscriptionChanged     Whether the member has changed its subscription on the current heartbeat.
      * @param ownedTopicPartitions       The list of partitions owned by the member. This
      *                                   is reported in the ConsumerGroupHeartbeat API and
      *                                   it could be null if not provided.
@@ -3494,13 +3494,10 @@ public class GroupMetadataManager {
         List<ConsumerGroupHeartbeatRequestData.TopicPartitions> ownedTopicPartitions,
         List<CoordinatorRecord> records
     ) {
-        if (!hasSubscriptionChanged && member.isReconciledTo(targetAssignmentEpoch)) {
-            return member;
-        }
-
         ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
             .withTargetAssignment(targetAssignmentEpoch, targetAssignment)
+            .withHasSubscriptionChanged(hasSubscriptionChanged)
             .withResolvedRegularExpressions(resolvedRegularExpressions)
             .withCurrentPartitionEpoch(currentPartitionEpoch)
             .withOwnedTopicPartitions(ownedTopicPartitions)
@@ -3542,7 +3539,7 @@ public class GroupMetadataManager {
      * @param member                 The member to reconcile.
      * @param targetAssignmentEpoch  The target assignment epoch.
      * @param targetAssignment       The target assignment.
-     * @param hasSubscriptionChanged If true, always removes unsubscribed topics from the current assignment.
+     * @param hasSubscriptionChanged Whether the member has changed its subscription on the current heartbeat.
      * @param records                The list to accumulate any new records.
      * @return The received member if no changes have been made; or a new
      *         member containing the new assignment.
@@ -3555,13 +3552,10 @@ public class GroupMetadataManager {
         boolean hasSubscriptionChanged,
         List<CoordinatorRecord> records
     ) {
-        if (!hasSubscriptionChanged && member.isReconciledTo(targetAssignmentEpoch)) {
-            return member;
-        }
-
         ShareGroupMember updatedMember = new ShareGroupAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
             .withTargetAssignment(targetAssignmentEpoch, targetAssignment)
+            .withHasSubscriptionChanged(hasSubscriptionChanged)
             .build();
 
         if (!updatedMember.equals(member)) {

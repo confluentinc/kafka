@@ -60,6 +60,11 @@ public class CurrentAssignmentBuilder {
     private Assignment targetAssignment;
 
     /**
+     * Whether the member has changed its subscription on the current heartbeat.
+     */
+    private boolean hasSubscriptionChanged;
+
+    /**
      * The resolved regular expressions.
      */
     private Map<String, ResolvedRegularExpression> resolvedRegularExpressions = Map.of();
@@ -113,6 +118,19 @@ public class CurrentAssignmentBuilder {
     ) {
         this.targetAssignmentEpoch = targetAssignmentEpoch;
         this.targetAssignment = Objects.requireNonNull(targetAssignment);
+        return this;
+    }
+
+    /**
+     * Sets whether the member has changed its subscription on the current heartbeat.
+     *
+     * @param hasSubscriptionChanged If true, always removes unsubscribed topics from the current assignment.
+     * @return This object.
+     */
+    public CurrentAssignmentBuilder withHasSubscriptionChanged(
+        boolean hasSubscriptionChanged
+    ) {
+        this.hasSubscriptionChanged = hasSubscriptionChanged;
         return this;
     }
 
@@ -177,8 +195,10 @@ public class CurrentAssignmentBuilder {
                         member.memberEpoch(),
                         member.assignedPartitions()
                     );
-                } else {
+                } else if (hasSubscriptionChanged) {
                     return updateCurrentAssignment(member.assignedPartitions());
+                } else {
+                    return member;
                 }
 
             case UNREVOKED_PARTITIONS:
@@ -190,7 +210,11 @@ public class CurrentAssignmentBuilder {
                 // If the member provides its owned partitions. We verify if it still
                 // owns any of the revoked partitions. If it does, we cannot progress.
                 if (ownsRevokedPartitions(member.partitionsPendingRevocation())) {
-                    return updateCurrentAssignment(member.assignedPartitions());
+                    if (hasSubscriptionChanged) {
+                        return updateCurrentAssignment(member.assignedPartitions());
+                    } else {
+                        return member;
+                    }
                 }
 
                 // When the member has revoked all the pending partitions, it can

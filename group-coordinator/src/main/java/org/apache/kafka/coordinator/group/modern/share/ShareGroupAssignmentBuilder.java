@@ -54,6 +54,11 @@ public class ShareGroupAssignmentBuilder {
     private Assignment targetAssignment;
 
     /**
+     * Whether the member has changed its subscription on the current heartbeat.
+     */
+    private boolean hasSubscriptionChanged;
+
+    /**
      * Constructs the ShareGroupAssignmentBuilder based on the current state of the
      * provided share group member.
      *
@@ -94,6 +99,19 @@ public class ShareGroupAssignmentBuilder {
     }
 
     /**
+     * Sets whether the member has changed its subscription on the current heartbeat.
+     *
+     * @param hasSubscriptionChanged If true, always removes unsubscribed topics from the current assignment.
+     * @return This object.
+     */
+    public ShareGroupAssignmentBuilder withHasSubscriptionChanged(
+        boolean hasSubscriptionChanged
+    ) {
+        this.hasSubscriptionChanged = hasSubscriptionChanged;
+        return this;
+    }
+
+    /**
      * Builds the next state for the member or keep the current one if it
      * is not possible to move forward with the current state.
      *
@@ -110,10 +128,12 @@ public class ShareGroupAssignmentBuilder {
                 .setAssignedPartitions(filterAssignedPartitions(targetAssignment.partitions(), member.subscribedTopicNames()))
                 .updateMemberEpoch(targetAssignmentEpoch)
                 .build();
-        } else {
+        } else if (hasSubscriptionChanged) {
             return new ShareGroupMember.Builder(member)
                 .setAssignedPartitions(filterAssignedPartitions(targetAssignment.partitions(), member.subscribedTopicNames()))
                 .build();
+        } else {
+            return member;
         }
     }
 

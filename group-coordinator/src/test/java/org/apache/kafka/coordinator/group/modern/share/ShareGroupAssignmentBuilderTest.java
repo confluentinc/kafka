@@ -122,10 +122,15 @@ public class ShareGroupAssignmentBuilderTest {
 
     @ParameterizedTest
     @CsvSource({
-        "10, 11",
-        "10, 10"
+        "10, 11, false", // When advancing to a new target assignment, the assignment should always
+        "10, 11, true",  // take the subscription into account.
+        "10, 10, true"
     })
-    public void testStableToStableWithAssignmentTopicsNoLongerInSubscription(int memberEpoch, int targetAssignmentEpoch) {
+    public void testStableToStableWithAssignmentTopicsNoLongerInSubscription(
+        int memberEpoch,
+        int targetAssignmentEpoch,
+        boolean hasSubscriptionChanged
+    ) {
         String topic1 = "topic1";
         String topic2 = "topic2";
         Uuid topicId1 = Uuid.randomUuid();
@@ -151,6 +156,7 @@ public class ShareGroupAssignmentBuilderTest {
             .withTargetAssignment(targetAssignmentEpoch, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6))))
+            .withHasSubscriptionChanged(hasSubscriptionChanged)
             .build();
 
         assertEquals(
