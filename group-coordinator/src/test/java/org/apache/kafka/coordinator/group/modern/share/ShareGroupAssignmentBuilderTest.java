@@ -23,6 +23,8 @@ import org.apache.kafka.coordinator.group.modern.MemberState;
 import org.apache.kafka.image.MetadataImage;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
 
@@ -118,8 +120,12 @@ public class ShareGroupAssignmentBuilderTest {
         );
     }
 
-    @Test
-    public void testAssignmentTopicsNoLongerInSubscription() {
+    @ParameterizedTest
+    @CsvSource({
+        "10, 11",
+        "10, 10"
+    })
+    public void testStableToStableWithAssignmentTopicsNoLongerInSubscription(int memberEpoch, int targetAssignmentEpoch) {
         String topic1 = "topic1";
         String topic2 = "topic2";
         Uuid topicId1 = Uuid.randomUuid();
@@ -132,8 +138,8 @@ public class ShareGroupAssignmentBuilderTest {
 
         ShareGroupMember member = new ShareGroupMember.Builder("member")
             .setState(MemberState.STABLE)
-            .setMemberEpoch(10)
-            .setPreviousMemberEpoch(10)
+            .setMemberEpoch(memberEpoch)
+            .setPreviousMemberEpoch(memberEpoch)
             .setSubscribedTopicNames(List.of(topic2))
             .setAssignedPartitions(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
@@ -142,7 +148,7 @@ public class ShareGroupAssignmentBuilderTest {
 
         ShareGroupMember updatedMember = new ShareGroupAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
-            .withTargetAssignment(11, new Assignment(mkAssignment(
+            .withTargetAssignment(targetAssignmentEpoch, new Assignment(mkAssignment(
                 mkTopicAssignment(topicId1, 1, 2, 3),
                 mkTopicAssignment(topicId2, 4, 5, 6))))
             .build();
@@ -150,8 +156,8 @@ public class ShareGroupAssignmentBuilderTest {
         assertEquals(
             new ShareGroupMember.Builder("member")
                 .setState(MemberState.STABLE)
-                .setMemberEpoch(11)
-                .setPreviousMemberEpoch(10)
+                .setMemberEpoch(targetAssignmentEpoch)
+                .setPreviousMemberEpoch(memberEpoch)
                 .setSubscribedTopicNames(List.of(topic2))
                 .setAssignedPartitions(mkAssignment(
                     mkTopicAssignment(topicId2, 4, 5, 6)))
