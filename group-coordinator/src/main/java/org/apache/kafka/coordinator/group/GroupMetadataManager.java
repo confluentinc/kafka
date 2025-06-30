@@ -3071,7 +3071,7 @@ public class GroupMetadataManager {
      * @param updatedMember The new member.
      * @return A boolean indicating whether the subscribed topic regular expression has changed.
      */
-    private boolean hasMemberRegularExpressionChanged(
+    private static boolean hasMemberRegularExpressionChanged(
         ConsumerGroupMember member,
         ConsumerGroupMember updatedMember
     ) {
