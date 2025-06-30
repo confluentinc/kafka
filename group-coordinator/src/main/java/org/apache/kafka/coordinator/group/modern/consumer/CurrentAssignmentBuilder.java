@@ -467,8 +467,7 @@ public class CurrentAssignmentBuilder {
             }
         }
 
-        TopicIds.TopicResolver topicResolver = new TopicIds.CachedTopicResolver(metadataImage.topics());
-        TopicIds subscribedTopicIds = new TopicIds(subscriptions, topicResolver);
+        TopicIds subscribedTopicIds = new TopicIds(subscriptions, metadataImage.topics());
         return subscribedTopicIds;
     }
 }
