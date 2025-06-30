@@ -189,7 +189,8 @@ public class CurrentAssignmentBuilder {
             case STABLE:
                 // When the member is in the STABLE state, we verify if a newer
                 // epoch (or target assignment) is available. If it is, we can
-                // reconcile the member towards it. Otherwise, we return.
+                // reconcile the member towards it. Otherwise, we ensure the
+                // assignment is consistent with the subscribed topics, if changed.
                 if (member.memberEpoch() != targetAssignmentEpoch) {
                     return computeNextAssignment(
                         member.memberEpoch(),
@@ -206,6 +207,8 @@ public class CurrentAssignmentBuilder {
                 // until the member has revoked the necessary partitions. They are
                 // considered revoked when they are not anymore reported in the
                 // owned partitions set in the ConsumerGroupHeartbeat API.
+                // Additional partitions may need revoking when the member's
+                // subscription changes.
 
                 // If the member provides its owned partitions. We verify if it still
                 // owns any of the revoked partitions. If it does, we cannot progress.
@@ -221,6 +224,9 @@ public class CurrentAssignmentBuilder {
                 // transition to the next epoch (current + 1) and we can reconcile
                 // its state towards the latest target assignment.
                 return computeNextAssignment(
+                    // When we enter UNREVOKED_PARTITIONS due to a subscription change,
+                    // we must not advance the member epoch when the new target
+                    // assignment is not available yet.
                     Math.min(member.memberEpoch() + 1, targetAssignmentEpoch),
                     member.assignedPartitions()
                 );

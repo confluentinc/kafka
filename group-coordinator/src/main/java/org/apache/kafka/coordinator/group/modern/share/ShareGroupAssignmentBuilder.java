@@ -125,6 +125,10 @@ public class ShareGroupAssignmentBuilder {
             // when the member is updated.
             return new ShareGroupMember.Builder(member)
                 .setState(MemberState.STABLE)
+                // If we have client-side assignors, the latest target assignment may not
+                // be consistent with the latest subscribed topics, so we must always
+                // filter the assigned partitions to ensure they are consistent with the
+                // subscribed topics.
                 .setAssignedPartitions(filterAssignedPartitions(targetAssignment.partitions(), member.subscribedTopicNames()))
                 .updateMemberEpoch(targetAssignmentEpoch)
                 .build();
