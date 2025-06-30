@@ -2243,13 +2243,12 @@ public class GroupMetadataManager {
         // epoch 0 and that it is fully initialized.
         boolean bumpGroupEpoch = group.groupEpoch() == 0;
 
-        bumpGroupEpoch |= hasMemberSubscriptionChanged(
+        boolean subscribedTopicNamesChanged = hasMemberSubscriptionChanged(
             groupId,
             member,
             updatedMember,
             records
         );
-
         UpdateRegularExpressionsResult updateRegularExpressionsResult = maybeUpdateRegularExpressions(
             context,
             group,
@@ -2257,8 +2256,16 @@ public class GroupMetadataManager {
             updatedMember,
             records
         );
-        bumpGroupEpoch |= updateRegularExpressionsResult.bumpGroupEpoch;
-        boolean subscribedTopicRegexChanged = updateRegularExpressionsResult.subscribedTopicRegexChanged;
+
+        // The subscription has changed when either the subscribed topic names or subscribed topic
+        // regex has changed.
+        boolean hasSubscriptionChanged = subscribedTopicNamesChanged || updateRegularExpressionsResult.subscribedTopicRegexChanged;
+        // Bumping the group epoch signals that the target assignment should be updated. We bump the
+        // group epoch when the member has changed its subscribed topic names or the member has
+        // changed its subscribed topic regex to a regex that is already resolved. We explicitly
+        // avoid bumping the group epoch when the new subscribed topic regex has not been resolved
+        // yet, since we will have to update the target assignment again later.
+        bumpGroupEpoch |= subscribedTopicNamesChanged || updateRegularExpressionsResult.bumpGroupEpoch;
 
         int groupEpoch = group.groupEpoch();
         SubscriptionType subscriptionType = group.subscriptionType();
@@ -2309,7 +2316,7 @@ public class GroupMetadataManager {
             targetAssignment,
             group.resolvedRegularExpressions(),
             // Force consistency with the subscription when the subscription has changed.
-            bumpGroupEpoch || subscribedTopicRegexChanged,
+            hasSubscriptionChanged,
             ownedTopicPartitions,
             records
         );
