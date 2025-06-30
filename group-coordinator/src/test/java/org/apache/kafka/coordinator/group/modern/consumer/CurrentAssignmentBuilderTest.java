@@ -388,8 +388,8 @@ public class CurrentAssignmentBuilderTest {
 
     @ParameterizedTest
     @CsvSource({
-        "10,12,11",
-        "10,10,10", // The member epoch must not advance past the target assignment epoch.
+        "10, 12, 11",
+        "10, 10, 10", // The member epoch must not advance past the target assignment epoch.
     })
     public void testUnrevokedPartitionsToUnrevokedPartitions(int memberEpoch, int targetAssignmentEpoch, int expectedMemberEpoch) {
         String topic1 = "topic1";
