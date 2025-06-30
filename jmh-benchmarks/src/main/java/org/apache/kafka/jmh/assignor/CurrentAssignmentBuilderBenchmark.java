@@ -68,6 +68,8 @@ public class CurrentAssignmentBuilderBenchmark {
 
     private ConsumerGroupMember member;
 
+    private ConsumerGroupMember memberWithUnsubscribedTopics;
+
     private Assignment targetAssignment;
 
     @Setup(Level.Trial)
@@ -89,12 +91,6 @@ public class CurrentAssignmentBuilderBenchmark {
     }
 
     private void setupMember() {
-        ConsumerGroupMember.Builder memberBuilder = new ConsumerGroupMember.Builder("member")
-            .setState(MemberState.STABLE)
-            .setMemberEpoch(10)
-            .setPreviousMemberEpoch(10)
-            .setSubscribedTopicNames(topicNames);
-
         Map<Uuid, Set<Integer>> assignedPartitions = new HashMap<>();
         for (Uuid topicId : topicIds) {
             Set<Integer> partitions = IntStream.range(0, partitionsPerTopic)
@@ -103,8 +99,16 @@ public class CurrentAssignmentBuilderBenchmark {
             assignedPartitions.put(topicId, partitions);
         }
 
-        member = memberBuilder
-            .setAssignedPartitions(assignedPartitions)
+        ConsumerGroupMember.Builder memberBuilder = new ConsumerGroupMember.Builder("member")
+            .setState(MemberState.STABLE)
+            .setMemberEpoch(10)
+            .setPreviousMemberEpoch(10)
+            .setSubscribedTopicNames(topicNames)
+            .setAssignedPartitions(assignedPartitions);
+
+        member = memberBuilder.build();
+        memberWithUnsubscribedTopics = memberBuilder
+            .setSubscribedTopicNames(topicNames.subList(0, topicNames.size() - 1))
             .build();
     }
 
@@ -122,7 +126,18 @@ public class CurrentAssignmentBuilderBenchmark {
     @Benchmark
     @Threads(1)
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public ConsumerGroupMember stableToStableNextEpoch() {
+    public ConsumerGroupMember stableToStableWithNoChange() {
+        return new CurrentAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
+            .withTargetAssignment(member.memberEpoch(), targetAssignment)
+            .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
+            .build();
+    }
+
+    @Benchmark
+    @Threads(1)
+    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    public ConsumerGroupMember stableToStableWithNewTargetAssignment() {
         return new CurrentAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
             .withTargetAssignment(member.memberEpoch() + 1, targetAssignment)
@@ -133,10 +148,22 @@ public class CurrentAssignmentBuilderBenchmark {
     @Benchmark
     @Threads(1)
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    public ConsumerGroupMember stableToStableSameEpoch() {
+    public ConsumerGroupMember stableToStableWithSubscriptionChange() {
         return new CurrentAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
             .withTargetAssignment(member.memberEpoch(), targetAssignment)
+            .withHasSubscriptionChanged(true)
+            .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
+            .build();
+    }
+
+    @Benchmark
+    @Threads(1)
+    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    public ConsumerGroupMember stableToUnrevokedPartitionsWithSubscriptionChange() {
+        return new CurrentAssignmentBuilder(memberWithUnsubscribedTopics)
+            .withMetadataImage(metadataImage)
+            .withTargetAssignment(memberWithUnsubscribedTopics.memberEpoch(), targetAssignment)
             .withHasSubscriptionChanged(true)
             .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
             .build();
