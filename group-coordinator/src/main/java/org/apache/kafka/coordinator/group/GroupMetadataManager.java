@@ -2250,13 +2250,15 @@ public class GroupMetadataManager {
             records
         );
 
-        bumpGroupEpoch |= maybeUpdateRegularExpressions(
+        UpdateRegularExpressionsResult updateRegularExpressionsResult = maybeUpdateRegularExpressions(
             context,
             group,
             member,
             updatedMember,
             records
         );
+        bumpGroupEpoch |= updateRegularExpressionsResult.bumpGroupEpoch;
+        boolean subscribedTopicRegexChanged = updateRegularExpressionsResult.subscribedTopicRegexChanged;
 
         int groupEpoch = group.groupEpoch();
         SubscriptionType subscriptionType = group.subscriptionType();
@@ -2307,7 +2309,7 @@ public class GroupMetadataManager {
             targetAssignment,
             group.resolvedRegularExpressions(),
             // Force consistency with the subscription when the subscription has changed.
-            bumpGroupEpoch || hasMemberRegularExpressionChanged(member, updatedMember),
+            bumpGroupEpoch || subscribedTopicRegexChanged,
             ownedTopicPartitions,
             records
         );
@@ -3064,25 +3066,14 @@ public class GroupMetadataManager {
         return false;
     }
 
-    /**
-     * Check whether the member has updated its subscribed topic regular expression.
-     *
-     * @param member        The old member.
-     * @param updatedMember The new member.
-     * @return A boolean indicating whether the subscribed topic regular expression has changed.
-     */
-    private static boolean hasMemberRegularExpressionChanged(
-        ConsumerGroupMember member,
-        ConsumerGroupMember updatedMember
-    ) {
-        String oldSubscribedTopicRegex = member.subscribedTopicRegex();
-        String newSubscribedTopicRegex = updatedMember.subscribedTopicRegex();
-        return !Objects.equals(oldSubscribedTopicRegex, newSubscribedTopicRegex);
-    }
-
     private static boolean isNotEmpty(String value) {
         return value != null && !value.isEmpty();
     }
+
+    private record UpdateRegularExpressionsResult(
+        boolean bumpGroupEpoch,
+        boolean subscribedTopicRegexChanged
+    ) { }
 
     /**
      * Check whether the member has updated its subscribed topic regular expression and
@@ -3097,7 +3088,7 @@ public class GroupMetadataManager {
      * @param records       The records accumulator.
      * @return Whether a rebalance must be triggered.
      */
-    private boolean maybeUpdateRegularExpressions(
+    private UpdateRegularExpressionsResult maybeUpdateRegularExpressions(
         AuthorizableRequestContext context,
         ConsumerGroup group,
         ConsumerGroupMember member,
@@ -3114,7 +3105,8 @@ public class GroupMetadataManager {
         boolean requireRefresh = false;
 
         // Check whether the member has changed its subscribed regex.
-        if (!Objects.equals(oldSubscribedTopicRegex, newSubscribedTopicRegex)) {
+        boolean subscribedTopicRegexChanged = !Objects.equals(oldSubscribedTopicRegex, newSubscribedTopicRegex);
+        if (subscribedTopicRegexChanged) {
             log.debug("[GroupId {}] Member {} updated its subscribed regex to: {}.",
                 groupId, memberId, newSubscribedTopicRegex);
 
@@ -3152,20 +3144,20 @@ public class GroupMetadataManager {
         // 0. The group is subscribed to regular expressions. We also take the one
         //    that the current may have just introduced.
         if (!requireRefresh && group.subscribedRegularExpressions().isEmpty()) {
-            return bumpGroupEpoch;
+            return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
         }
 
         // 1. There is no ongoing refresh for the group.
         String key = group.groupId() + "-regex";
         if (executor.isScheduled(key)) {
-            return bumpGroupEpoch;
+            return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
         }
 
         // 2. The last refresh is older than 10s. If the group does not have any regular
         //    expressions but the current member just brought a new one, we should continue.
         long lastRefreshTimeMs = group.lastResolvedRegularExpressionRefreshTimeMs();
         if (currentTimeMs <= lastRefreshTimeMs + REGEX_BATCH_REFRESH_MIN_INTERVAL_MS) {
-            return bumpGroupEpoch;
+            return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
         }
 
         // 3.1 The group has unresolved regular expressions.
@@ -3194,7 +3186,7 @@ public class GroupMetadataManager {
             );
         }
 
-        return bumpGroupEpoch;
+        return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
     }
 
     /**
