@@ -473,7 +473,6 @@ public class CurrentAssignmentBuilder {
             }
         }
 
-        TopicIds subscribedTopicIds = new TopicIds(subscriptions, metadataImage.topics());
-        return subscribedTopicIds;
+        return new TopicIds(subscriptions, metadataImage.topics());
     }
 }
