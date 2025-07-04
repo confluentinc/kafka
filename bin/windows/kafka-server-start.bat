@@ -21,7 +21,11 @@ IF [%1] EQU [] (
 
 SetLocal
 IF ["%KAFKA_LOG4J_OPTS%"] EQU [""] (
-    set KAFKA_LOG4J_OPTS=-Dlog4j2.configurationFile=%~dp0../../config/log4j2.yaml
+    if exist %~dp0../../etc/kafka/log4j2.yaml (
+        set KAFKA_LOG4J_OPTS=-Dlog4j2.configurationFile=%~dp0../../etc/kafka/log4j2.yaml
+    ) else (
+        set KAFKA_LOG4J_OPTS=-Dlog4j.configurationFile=%~dp0../../config/log4j2.yaml
+    )
 )
 IF ["%KAFKA_HEAP_OPTS%"] EQU [""] (
     rem detect OS architecture
