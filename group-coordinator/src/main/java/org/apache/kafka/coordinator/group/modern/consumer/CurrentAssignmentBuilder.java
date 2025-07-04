@@ -297,24 +297,31 @@ public class CurrentAssignmentBuilder {
         Set<Uuid> subscribedTopicIds = subscribedTopicIds();
 
         // Reuse the original map if no topics need to be removed.
-        Map<Uuid, Set<Integer>> newAssignedPartitions = memberAssignedPartitions;
-        Map<Uuid, Set<Integer>> newPartitionsPendingRevocation = new HashMap<>(member.partitionsPendingRevocation());
-        for (Map.Entry<Uuid, Set<Integer>> entry : memberAssignedPartitions.entrySet()) {
-            if (!subscribedTopicIds.contains(entry.getKey())) {
-                if (newAssignedPartitions == memberAssignedPartitions) {
-                    newAssignedPartitions = new HashMap<>(memberAssignedPartitions);
-                    newPartitionsPendingRevocation = new HashMap<>(member.partitionsPendingRevocation());
-                }
-                newAssignedPartitions.remove(entry.getKey());
-                newPartitionsPendingRevocation.merge(
-                    entry.getKey(),
-                    entry.getValue(),
-                    (existing, additional) -> {
-                        existing = new HashSet<>(existing);
-                        existing.addAll(additional);
-                        return existing;
+        Map<Uuid, Set<Integer>> newAssignedPartitions;
+        Map<Uuid, Set<Integer>> newPartitionsPendingRevocation;
+        if (subscribedTopicIds.isEmpty() && member.partitionsPendingRevocation().isEmpty()) {
+            newAssignedPartitions = Map.of();
+            newPartitionsPendingRevocation = memberAssignedPartitions;
+        } else {
+            newAssignedPartitions = memberAssignedPartitions;
+            newPartitionsPendingRevocation = new HashMap<>(member.partitionsPendingRevocation());
+            for (Map.Entry<Uuid, Set<Integer>> entry : memberAssignedPartitions.entrySet()) {
+                if (!subscribedTopicIds.contains(entry.getKey())) {
+                    if (newAssignedPartitions == memberAssignedPartitions) {
+                        newAssignedPartitions = new HashMap<>(memberAssignedPartitions);
+                        newPartitionsPendingRevocation = new HashMap<>(member.partitionsPendingRevocation());
                     }
-                );
+                    newAssignedPartitions.remove(entry.getKey());
+                    newPartitionsPendingRevocation.merge(
+                        entry.getKey(),
+                        entry.getValue(),
+                        (existing, additional) -> {
+                            existing = new HashSet<>(existing);
+                            existing.addAll(additional);
+                            return existing;
+                        }
+                    );
+                }
             }
         }
 
@@ -323,7 +330,7 @@ public class CurrentAssignmentBuilder {
             return member;
         }
 
-        if (ownsRevokedPartitions(newPartitionsPendingRevocation)) {
+        if (!newPartitionsPendingRevocation.isEmpty() && ownsRevokedPartitions(newPartitionsPendingRevocation)) {
             return new ConsumerGroupMember.Builder(member)
                 .setState(MemberState.UNREVOKED_PARTITIONS)
                 .setAssignedPartitions(newAssignedPartitions)

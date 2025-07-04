@@ -904,7 +904,7 @@ public class CurrentAssignmentBuilderTest {
     }
 
     @Test
-    public void testUnresolvedRegularExpression() {
+    public void testSubscribedTopicNameAndUnresolvedRegularExpression() {
         String fooTopic = "foo";
         String barTopic = "bar";
         Uuid fooTopicId = Uuid.randomUuid();
@@ -960,7 +960,63 @@ public class CurrentAssignmentBuilderTest {
     }
 
     @Test
-    public void testResolvedRegularExpression() {
+    public void testUnresolvedRegularExpression() {
+        String fooTopic = "foo";
+        String barTopic = "bar";
+        Uuid fooTopicId = Uuid.randomUuid();
+        Uuid barTopicId = Uuid.randomUuid();
+
+        MetadataImage metadataImage = new MetadataImageBuilder()
+            .addTopic(fooTopicId, fooTopic, 10)
+            .addTopic(barTopicId, barTopic, 10)
+            .build();
+
+        ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
+            .setState(MemberState.STABLE)
+            .setMemberEpoch(10)
+            .setPreviousMemberEpoch(10)
+            .setSubscribedTopicNames(List.of())
+            .setSubscribedTopicRegex("bar*")
+            .setAssignedPartitions(mkAssignment(
+                mkTopicAssignment(fooTopicId, 1, 2, 3),
+                mkTopicAssignment(barTopicId, 4, 5, 6)))
+            .build();
+
+        ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
+            .withMetadataImage(metadataImage)
+            .withTargetAssignment(10, new Assignment(mkAssignment(
+                mkTopicAssignment(fooTopicId, 1, 2, 3),
+                mkTopicAssignment(barTopicId, 4, 5, 6))))
+            .withHasSubscriptionChanged(true)
+            .withResolvedRegularExpressions(Map.of())
+            .withCurrentPartitionEpoch((topicId, partitionId) -> -1)
+            .withOwnedTopicPartitions(Arrays.asList(
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(fooTopicId)
+                    .setPartitions(Arrays.asList(1, 2, 3)),
+                new ConsumerGroupHeartbeatRequestData.TopicPartitions()
+                    .setTopicId(barTopicId)
+                    .setPartitions(Arrays.asList(4, 5, 6))))
+            .build();
+
+        assertEquals(
+            new ConsumerGroupMember.Builder("member")
+                .setState(MemberState.UNREVOKED_PARTITIONS)
+                .setMemberEpoch(10)
+                .setPreviousMemberEpoch(10)
+                .setSubscribedTopicNames(List.of())
+                .setSubscribedTopicRegex("bar*")
+                .setAssignedPartitions(mkAssignment())
+                .setPartitionsPendingRevocation(mkAssignment(
+                    mkTopicAssignment(fooTopicId, 1, 2, 3),
+                    mkTopicAssignment(barTopicId, 4, 5, 6)))
+                .build(),
+            updatedMember
+        );
+    }
+
+    @Test
+    public void testSubscribedTopicNameAndResolvedRegularExpression() {
         String fooTopic = "foo";
         String barTopic = "bar";
         Uuid fooTopicId = Uuid.randomUuid();
