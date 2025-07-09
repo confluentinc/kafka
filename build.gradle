@@ -329,7 +329,11 @@ if (repo != null) {
         'docker/docker_official_images/.gitkeep',
         'sonar-project.properties',
         'vagrant/cloudwatch-agent-setup.sh',
-        'vagrant/cloudwatch-agent-configuration.json'
+        'vagrant/cloudwatch-agent-configuration.json',
+        'vagrant/aws-packer.json',
+        'vagrant/worker-ami.json',
+        'ssh_checkers/aws_checker.py',
+        'terraform/*'
     ])
   }
 } else {
