@@ -331,7 +331,11 @@ if (repo != null) {
         'docker/examples/fixtures/secrets/*',
         'docker/docker_official_images/.gitkeep',
         'vagrant/cloudwatch-agent-setup.sh',
-        'vagrant/cloudwatch-agent-configuration.json'
+        'vagrant/cloudwatch-agent-configuration.json',
+        'vagrant/aws-packer.json',
+        'vagrant/worker-ami.json',
+        'ssh_checkers/aws_checker.py',
+        'terraform/*'
     ])
   }
 } else {
