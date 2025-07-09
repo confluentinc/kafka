@@ -20,7 +20,7 @@ import kafka.utils.TestUtils
 import org.apache.kafka.common.errors.UnsupportedVersionException
 import org.apache.kafka.common.message.OffsetFetchRequestData
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
-import org.apache.kafka.common.requests.JoinGroupRequest
+import org.apache.kafka.common.requests.{EndTxnRequest, JoinGroupRequest}
 import org.apache.kafka.common.test.ClusterInstance
 import org.apache.kafka.common.test.api.{ClusterConfigProperty, ClusterTest, ClusterTestDefaults, Type}
 import org.apache.kafka.common.utils.ProducerIdAndEpoch
@@ -53,12 +53,12 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
 
   @ClusterTest
   def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithOldConsumerGroupProtocol(): Unit = {
-    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(true)
+    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(false)
   }
 
   @ClusterTest
   def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithNewConsumerGroupProtocol(): Unit = {
-    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(false)
+    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(true)
   }
 
   private def testTxnOffsetCommit(useNewProtocol: Boolean): Unit = {
@@ -266,7 +266,7 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
     createTopic(topic, 1)
 
     for (version <- ApiKeys.TXN_OFFSET_COMMIT.oldestVersion to ApiKeys.TXN_OFFSET_COMMIT.latestVersion(isUnstableApiEnabled)) {
-      val useTV2 = version >= 5
+      val useTV2 = version >= EndTxnRequest.LAST_STABLE_VERSION_BEFORE_TRANSACTION_V2
 
       // Initialize producer. Wait until the coordinator finishes loading.
       var producerIdAndEpoch: ProducerIdAndEpoch = null
@@ -328,6 +328,16 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
         offset = offset,
         expectedError = if (useTV2) Errors.INVALID_PRODUCER_EPOCH else Errors.NONE,
         version = version.toShort
+      )
+
+      // Complete the transaction.
+      endTxn(
+        producerId = producerIdAndEpoch.producerId,
+        producerEpoch = if (useTV2) (producerIdAndEpoch.epoch + 1).toShort else producerIdAndEpoch.epoch,
+        transactionalId = transactionalId,
+        isTransactionV2Enabled = useTV2,
+        committed = true,
+        expectedError = Errors.NONE
       )
     }
   }
