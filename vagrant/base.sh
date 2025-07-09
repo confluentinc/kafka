@@ -38,6 +38,7 @@ fetch_jdk_tgz() {
 
 JDK_MAJOR="${JDK_MAJOR:-8}"
 JDK_FULL="${JDK_FULL:-8u202-linux-x64}"
+
 echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH"
 export DEBIAN_FRONTEND=noninteractive
 
