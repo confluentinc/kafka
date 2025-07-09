@@ -279,7 +279,7 @@ if (repo != null) {
         'vagrant/aws-packer.json',
         'vagrant/worker-ami.json',
         'ssh_checkers/aws_checker.py',
-        'terraform/*',
+        'terraform/*'
     ])
   }
 } else {
