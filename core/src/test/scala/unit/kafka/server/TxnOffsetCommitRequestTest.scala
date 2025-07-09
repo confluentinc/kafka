@@ -26,7 +26,7 @@ import org.apache.kafka.common.test.api.{ClusterConfigProperty, ClusterTest, Clu
 import org.apache.kafka.common.utils.ProducerIdAndEpoch
 import org.apache.kafka.coordinator.group.GroupCoordinatorConfig
 import org.apache.kafka.coordinator.transaction.TransactionLogConfig
-import org.junit.jupiter.api.Assertions.{assertThrows, assertTrue}
+import org.junit.jupiter.api.Assertions.{assertNotEquals, assertThrows}
 
 import scala.jdk.CollectionConverters._
 
@@ -75,8 +75,8 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
     // Join the consumer group. Note that we don't heartbeat here so we must use
     // a session long enough for the duration of the test.
     val (memberId: String, memberEpoch: Int) = joinConsumerGroup(groupId, useNewProtocol)
-    assertTrue(memberId != JoinGroupRequest.UNKNOWN_MEMBER_ID)
-    assertTrue(memberEpoch != JoinGroupRequest.UNKNOWN_GENERATION_ID)
+    assertNotEquals(JoinGroupRequest.UNKNOWN_MEMBER_ID, memberId)
+    assertNotEquals(JoinGroupRequest.UNKNOWN_GENERATION_ID, memberEpoch)
 
     createTopic(topic, 1)
 
@@ -260,8 +260,8 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
     // Join the consumer group. Note that we don't heartbeat here so we must use
     // a session long enough for the duration of the test.
     val (memberId: String, memberEpoch: Int) = joinConsumerGroup(groupId, useNewProtocol)
-    assertTrue(memberId != JoinGroupRequest.UNKNOWN_MEMBER_ID)
-    assertTrue(memberEpoch != JoinGroupRequest.UNKNOWN_GENERATION_ID)
+    assertNotEquals(JoinGroupRequest.UNKNOWN_MEMBER_ID, memberId)
+    assertNotEquals(JoinGroupRequest.UNKNOWN_GENERATION_ID, memberEpoch)
 
     createTopic(topic, 1)
 
