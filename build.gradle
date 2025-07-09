@@ -238,7 +238,11 @@ if (file('.git').exists()) {
         '**/generated/**',
         'clients/src/test/resources/serializedData/*',
         'vagrant/cloudwatch-agent-setup.sh',
-        'vagrant/cloudwatch-agent-configuration.json'
+        'vagrant/cloudwatch-agent-configuration.json',
+        'vagrant/aws-packer.json',
+        'vagrant/worker-ami.json',
+        'ssh_checkers/aws_checker.py',
+        'terraform/*'
     ])
   }
 } else {
