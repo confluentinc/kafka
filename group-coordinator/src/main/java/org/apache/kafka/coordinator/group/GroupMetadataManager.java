@@ -3093,7 +3093,7 @@ public class GroupMetadataManager {
      * @param member        The old member.
      * @param updatedMember The new member.
      * @param records       The records accumulator.
-     * @return Whether a rebalance must be triggered.
+     * @return The result of the update.
      */
     private UpdateRegularExpressionsResult maybeUpdateRegularExpressions(
         AuthorizableRequestContext context,
