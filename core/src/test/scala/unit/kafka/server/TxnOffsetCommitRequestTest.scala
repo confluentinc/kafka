@@ -242,7 +242,7 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
     createTopic(topic, 1)
 
     for (version <- ApiKeys.TXN_OFFSET_COMMIT.oldestVersion to ApiKeys.TXN_OFFSET_COMMIT.latestVersion(isUnstableApiEnabled)) {
-      val useTV2 = version >= EndTxnRequest.LAST_STABLE_VERSION_BEFORE_TRANSACTION_V2
+      val useTV2 = version > EndTxnRequest.LAST_STABLE_VERSION_BEFORE_TRANSACTION_V2
 
       // Initialize producer. Wait until the coordinator finishes loading.
       var producerIdAndEpoch: ProducerIdAndEpoch = null
