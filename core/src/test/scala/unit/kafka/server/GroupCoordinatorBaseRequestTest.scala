@@ -298,7 +298,7 @@ class GroupCoordinatorBaseRequestTest(cluster: ClusterInstance) {
     producerEpoch: Short,
     transactionalId: String,
     version: Short = ApiKeys.ADD_OFFSETS_TO_TXN.latestVersion(isUnstableApiEnabled)
-  ): AddOffsetsToTxnResponse = {
+  ): Unit = {
     val request = new AddOffsetsToTxnRequest.Builder(
       new AddOffsetsToTxnRequestData()
         .setTransactionalId(transactionalId)
@@ -309,7 +309,6 @@ class GroupCoordinatorBaseRequestTest(cluster: ClusterInstance) {
 
     val response = connectAndReceive[AddOffsetsToTxnResponse](request)
     assertEquals(new AddOffsetsToTxnResponseData(), response.data)
-    response
   }
 
   protected def initProducerId(
