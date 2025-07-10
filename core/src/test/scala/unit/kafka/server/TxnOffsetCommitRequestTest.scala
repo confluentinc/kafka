@@ -18,7 +18,6 @@ package kafka.server
 
 import kafka.utils.TestUtils
 import org.apache.kafka.common.errors.UnsupportedVersionException
-import org.apache.kafka.common.message.OffsetFetchRequestData
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 import org.apache.kafka.common.requests.{EndTxnRequest, JoinGroupRequest}
 import org.apache.kafka.common.test.ClusterInstance
@@ -27,8 +26,6 @@ import org.apache.kafka.common.utils.ProducerIdAndEpoch
 import org.apache.kafka.coordinator.group.GroupCoordinatorConfig
 import org.apache.kafka.coordinator.transaction.TransactionLogConfig
 import org.junit.jupiter.api.Assertions.{assertNotEquals, assertThrows}
-
-import scala.jdk.CollectionConverters._
 
 @ClusterTestDefaults(
   types = Array(Type.KRAFT),
@@ -52,13 +49,13 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
   }
 
   @ClusterTest
-  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithOldConsumerGroupProtocol(): Unit = {
-    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(false)
+  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithNewConsumerGroupProtocol(): Unit = {
+    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(true)
   }
 
   @ClusterTest
-  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithNewConsumerGroupProtocol(): Unit = {
-    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(true)
+  def testDelayedTxnOffsetCommitWithBumpedEpochIsRejectedWithOldConsumerGroupProtocol(): Unit = {
+    testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(false)
   }
 
   private def testTxnOffsetCommit(useNewProtocol: Boolean): Unit = {
@@ -222,27 +219,6 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
         case _: Throwable => false
       }, "txn commit offset validation failed"
     )
-  }
-
-  private def fetchOffset(
-     topic: String,
-     partition: Int,
-     groupId: String
-  ): Long = {
-    val groupIdRecord = fetchOffsets(
-      group = new OffsetFetchRequestData.OffsetFetchRequestGroup()
-        .setGroupId(groupId)
-        .setTopics(List(
-          new OffsetFetchRequestData.OffsetFetchRequestTopics()
-            .setName(topic)
-            .setPartitionIndexes(List[Integer](partition).asJava)
-        ).asJava),
-      requireStable = true,
-      version = 9
-    )
-    val topicRecord = groupIdRecord.topics.asScala.find(_.name == topic).head
-    val partitionRecord = topicRecord.partitions.asScala.find(_.partitionIndex == partition).head
-    partitionRecord.committedOffset
   }
 
   private def testDelayedTxnOffsetCommitWithBumpedEpochIsRejected(useNewProtocol: Boolean): Unit = {
