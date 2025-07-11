@@ -16,7 +16,7 @@ from paramiko.ssh_exception import NoValidConnectionsError
 
 from terraform.kafka_runner.util import run, SOURCE_INSTALL,ssh
 from terraform.kafka_runner.package_ami import package_worker_ami
-from terraform.kafka_runner.util import INSTANCE_TYPE, ABS_KAFKA_DIR, JOB_ID, AWS_REGION, AWS_ACCOUNT_ID, AMI, IPV4_SUBNET_ID,IPV6_SUBNET_ID, IS_IPV6_RUN
+from terraform.kafka_runner.util import INSTANCE_TYPE, ABS_KAFKA_DIR, JOB_ID, AWS_REGION, AWS_ACCOUNT_ID, AMI, IPV4_SUBNET_ID, IS_IPV6_RUN
 from terraform.kafka_runner.util import setup_virtualenv, parse_args, parse_bool
 from ssh_checkers.aws_checker import aws_ssh_checker
 
