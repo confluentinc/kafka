@@ -97,6 +97,7 @@ versions += [
   // CVE-2023-2976 and CVE-2020-8908 can be dropped from
   // gradle/resources/dependencycheck-suppressions.xml
   checkstyle: "8.36.2",
+  commonsBeanutils: "1.11.0",
   commonsCli: "1.4",
   commonsIo: "2.16.0", // ZooKeeper dependency. Do not use, this is going away.
   commonsValidator: "1.7",
@@ -186,6 +187,7 @@ libs += [
   caffeine: "com.github.ben-manes.caffeine:caffeine:$versions.caffeine",
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
   commonsIo: "commons-io:commons-io:$versions.commonsIo",
+  commonsBeanutils: "commons-beanutils:commons-beanutils:$versions.commonsBeanutils",
   commonsValidator: "commons-validator:commons-validator:$versions.commonsValidator",
   commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
   easymock: "org.easymock:easymock:$easymockVersion",
