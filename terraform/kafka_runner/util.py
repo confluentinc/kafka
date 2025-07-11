@@ -54,7 +54,7 @@ def ssh(host, command, port=22, username='ubuntu', password=None, key_file = os.
     :param key_file: pem file path that require for ssh
     :return: success of ssh or not
     """
-    logging.info("test_log: Starting to ssh into host: %s, command: %s, key_file: %s", host, command, key_file)
+    logging.info("test_log: Starting to ssh into host: %s, command: %s", host, command)
     os.chmod(key_file, 0o444)
     client = SSHClient()
     client.set_missing_host_key_policy(IgnoreMissingHostKeyPolicy())
