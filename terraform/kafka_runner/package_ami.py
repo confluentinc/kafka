@@ -175,7 +175,7 @@ def package_worker_ami(install_type, volume_size, source_ami=AMI,
     base_ami = package_base_ami(instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account,
                                 volume_size=volume_size, **extras)
 
-    logging.info("test_log: Worker AMI name: %s, ssh_account: %s, source_ami: %s" % WORKER_AMI_NAME, ssh_account, source_ami)
+    logging.info("Worker AMI name: %s" % WORKER_AMI_NAME)
     image = create_ami(WORKER_AMI_NAME, source_ami=base_ami, packer_json= WORKER_AMI_JSON, install_type=install_type,
                        ssh_account=ssh_account, volume_size=volume_size, instance_type=instance_type, **extras)
     delete_old_worker_amis()
