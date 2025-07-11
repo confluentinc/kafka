@@ -64,7 +64,7 @@ resource "aws_instance" "worker" {
   user_data = data.cloudinit_config.user_data.rendered
   ipv6_address_count = var.ipv6_address_count
   tags = {
-    Name = format("ccs-kafka-%d", count.index),
+    Name = format("kafka-vagrant-%d", count.index),
     "SemaphoreBuildUrl":var.build_url,
     "SemaphoreWorkflowUrl":var.build_url,
     "SemaphoreJobId": var.job_id

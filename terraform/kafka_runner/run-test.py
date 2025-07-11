@@ -163,7 +163,7 @@ class KafkaRunner:
             "public_key": self.public_key,
             "spot_price": self.args.spot_price,
             "build_url": self.args.build_url,
-            "subnet_id": IPV6_SUBNET_ID if IS_IPV6_RUN else IPV4_SUBNET_ID,
+            "subnet_id": IPV4_SUBNET_ID,
             "ipv6_address_count": 1 if IS_IPV6_RUN else 0,
             "job_id": JOB_ID
         }
