@@ -34,7 +34,7 @@ WORKER_AMI_NAME = 'kafka-{}'.format(  # E.g. BUILD_TAG = semaphore-system-test-k
 AMI= os.environ.get('AMI_ID')
 INSTANCE_TYPE= os.environ.get('INSTANCE_TYPE')
 IPV4_SUBNET_ID= "subnet-0429253329fde0351"
-IPV6_SUBNET_ID= "subnet-00c4999d6841fd454"
+# IPV6_SUBNET_ID= "subnet-00c4999d6841fd454"
 
 VPC_NAME= "system-test-ducktape-infra"
 VPC_ID= "vpc-00acc0e3d6688724b"
@@ -54,6 +54,7 @@ def ssh(host, command, port=22, username='ubuntu', password=None, key_file = os.
     :param key_file: pem file path that require for ssh
     :return: success of ssh or not
     """
+    logging.info("test_log: Starting to ssh into host: %s, command: %s, key_file: %s", host, command, key_file)
     os.chmod(key_file, 0o444)
     client = SSHClient()
     client.set_missing_host_key_policy(IgnoreMissingHostKeyPolicy())
@@ -69,6 +70,7 @@ def ssh(host, command, port=22, username='ubuntu', password=None, key_file = os.
     stdout = stdout.read()
     stderr = stderr.read()
     client.close()
+    logging.info("test_log: Finished ssh command with code: %s, stdout: %s, stderr: %s", code, stdout.decode(), stderr.decode())
     return code, stdout, stderr
 
 def run(cmd, venv=False, venv_dir="venv", print_output=False, allow_fail=True, return_stdout=False, cwd=None):
