@@ -154,14 +154,16 @@ def package_base_ami(instance_type=INSTANCE_TYPE, source_ami=AMI, ssh_account=No
     logging.info("Base AMI name: %s (created from %s)" % (ami_name, source_ami))
 
     # Check for cached image, and create if not present
-    image = image_from(name=ami_name)
-    if image:
-        logging.info("Found image matching %s: %s" % (ami_name, image))
-        # Corner case: wait until image is ready
-        wait_ready(image.image_id)
-    else:
-        logging.info("No image matching %s." % ami_name)
-        image = create_ami(ami_name, instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account, volume_size=volume_size, packer_json=AWS_PACKER_JSON, **hash_extras)
+    logging.info("No image matching %s." % ami_name)
+    image = create_ami(ami_name, instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account, volume_size=volume_size, packer_json=AWS_PACKER_JSON, **hash_extras)
+    # image = image_from(name=ami_name)
+    # if image:
+    #     logging.info("Found image matching %s: %s" % (ami_name, image))
+    #     # Corner case: wait until image is ready
+    #     wait_ready(image.image_id)
+    # else:
+    #     logging.info("No image matching %s." % ami_name)
+    #     image = create_ami(ami_name, instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account, volume_size=volume_size, packer_json=AWS_PACKER_JSON, **hash_extras)
 
     return image.image_id
 
@@ -173,7 +175,7 @@ def package_worker_ami(install_type, volume_size, source_ami=AMI,
     base_ami = package_base_ami(instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account,
                                 volume_size=volume_size, **extras)
 
-    logging.info("Worker AMI name: %s" % WORKER_AMI_NAME)
+    logging.info("test_log: Worker AMI name: %s, ssh_account: %s, source_ami: %s" % WORKER_AMI_NAME, ssh_account, source_ami)
     image = create_ami(WORKER_AMI_NAME, source_ami=base_ami, packer_json= WORKER_AMI_JSON, install_type=install_type,
                        ssh_account=ssh_account, volume_size=volume_size, instance_type=instance_type, **extras)
     delete_old_worker_amis()
