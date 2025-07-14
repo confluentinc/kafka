@@ -153,15 +153,17 @@ def package_base_ami(instance_type=INSTANCE_TYPE, source_ami=AMI, ssh_account=No
     ami_name = ami_name[:AMI_NAME_MAX_LENGTH]  # Truncate to maximum length
     logging.info("Base AMI name: %s (created from %s)" % (ami_name, source_ami))
 
+    logging.info("No image matching %s." % ami_name)
+    image = create_ami(ami_name, instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account, volume_size=volume_size, packer_json=AWS_PACKER_JSON, **hash_extras)
     # Check for cached image, and create if not present
-    image = image_from(name=ami_name)
-    if image:
-        logging.info("Found image matching %s: %s" % (ami_name, image))
-        # Corner case: wait until image is ready
-        wait_ready(image.image_id)
-    else:
-        logging.info("No image matching %s." % ami_name)
-        image = create_ami(ami_name, instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account, volume_size=volume_size, packer_json=AWS_PACKER_JSON, **hash_extras)
+    # image = image_from(name=ami_name)
+    # if image:
+    #     logging.info("Found image matching %s: %s" % (ami_name, image))
+    #     # Corner case: wait until image is ready
+    #     wait_ready(image.image_id)
+    # else:
+    #     logging.info("No image matching %s." % ami_name)
+    #     image = create_ami(ami_name, instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account, volume_size=volume_size, packer_json=AWS_PACKER_JSON, **hash_extras)
 
     return image.image_id
 
