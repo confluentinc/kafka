@@ -60,7 +60,9 @@
         "sudo mkdir -p ~/.m2",
         "sudo chown -R {{user `ssh_account`}}:{{user `ssh_account`}} ~/.m2",
         "sudo chown -R {{user `ssh_account`}}:{{user `ssh_account`}} /vagrant",
-        "sudo ln -s /vagrant /opt/kafka"
+        "sudo ln -s /vagrant /opt/kafka",
+        "sudo chmod a+rw /opt",
+        "sudo chmod a+rwx /mnt"
       ]
     },
     {

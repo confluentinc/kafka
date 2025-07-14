@@ -52,7 +52,7 @@
         "JDK_MAJOR={{ user `jdk_version` }}",
         "JDK_ARCH={{ user `jdk_arch` }}"
       ],
-      "execute_command": "echo 'packer' | {{ .Vars }} sudo -E -S bash '{{ .Path }}'",
+      "execute_command": "echo 'packer' | {{ .Vars }} sudo -E -S bash '{{ .Path }}' -u {{user `ssh_account`}} -g {{user `ssh_account`}}",
       "type": "shell",
       "scripts": [
         "../vagrant/base.sh"
