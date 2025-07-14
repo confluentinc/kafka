@@ -143,7 +143,7 @@ class WriteTxnMarkersRequestTest(cluster:ClusterInstance) extends GroupCoordinat
       // The offset is committed for TV1 and not committed for TV2.
       TestUtils.waitUntilTrue(() =>
         try {
-          fetchOffset(topic, partition, groupId) == (if (useTV2) -1L else offset + version)
+          fetchOffset(groupId, topic, partition) == (if (useTV2) -1L else offset + version)
         } catch {
           case _: Throwable => false
         }, "unexpected txn commit offset"
@@ -162,7 +162,7 @@ class WriteTxnMarkersRequestTest(cluster:ClusterInstance) extends GroupCoordinat
       // The offset is committed for TV2.
       TestUtils.waitUntilTrue(() =>
         try {
-          fetchOffset(topic, partition, groupId) == offset + version
+          fetchOffset(groupId, topic, partition) == offset + version
         } catch {
           case _: Throwable => false
         }, "txn commit offset validation failed"

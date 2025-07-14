@@ -185,7 +185,7 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
       transactionalId = transactionalId
     )
 
-    val originalOffset = fetchOffset(topic, partition, groupId)
+    val originalOffset = fetchOffset(groupId, topic, partition)
 
     commitTxnOffset(
       groupId = groupId,
@@ -214,7 +214,7 @@ class TxnOffsetCommitRequestTest(cluster:ClusterInstance) extends GroupCoordinat
 
     TestUtils.waitUntilTrue(() =>
       try {
-        fetchOffset(topic, partition, groupId) == expectedOffset
+        fetchOffset(groupId, topic, partition) == expectedOffset
       } catch {
         case _: Throwable => false
       }, "txn commit offset validation failed"

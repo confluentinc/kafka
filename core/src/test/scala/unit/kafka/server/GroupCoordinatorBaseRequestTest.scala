@@ -453,9 +453,9 @@ class GroupCoordinatorBaseRequestTest(cluster: ClusterInstance) {
   }
 
   protected def fetchOffset(
+    groupId: String,
     topic: String,
-    partition: Int,
-    groupId: String
+    partition: Int
   ): Long = {
     val groupIdRecord = fetchOffsets(
       group = new OffsetFetchRequestData.OffsetFetchRequestGroup()
