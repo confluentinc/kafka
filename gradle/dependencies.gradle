@@ -80,6 +80,7 @@ versions += [
   bcpkix: "1.77",
   caffeine: "2.9.3", // 3.x supports JDK 11 and above
   checkstyle: "8.36.2",
+  commonsBeanutils: "1.11.0",
   commonsCli: "1.4",
   commonsIo: "2.16.0", // ZooKeeper dependency. Do not use, this is going away.
   commonsValidator: "1.7",
@@ -168,6 +169,7 @@ libs += [
   bcpkix: "org.bouncycastle:bcpkix-jdk18on:$versions.bcpkix",
   caffeine: "com.github.ben-manes.caffeine:caffeine:$versions.caffeine",
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
+  commonsBeanutils: "commons-beanutils:commons-beanutils:$versions.commonsBeanutils",
   commonsValidator: "commons-validator:commons-validator:$versions.commonsValidator",
   commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
   commonsIo: "commons-io:commons-io:$versions.commonsIo",
