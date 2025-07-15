@@ -295,6 +295,20 @@ def main():
                 logging.debug(f'starting with cluster: {f.read()}')
 
         test_runner.wait_until_ready()
+    except Exception as ex:
+        file_path = "~/infra_failure.log"
+        file_expanded = os.path.expanduser(file_path)
+        error_txt = "INFRA_FAILURE " + str(ex)
+        logging.error(error_txt)
+        with open(file_expanded, "w") as f:
+            f.write(error_txt)
+        logging.info("bringing down terraform cluster")
+        test_runner.destroy_terraform()
+        sys.exit(1)
+
+    logging.info("Cluster is up and running")
+
+    try:
 
         source= os.path.join(os.environ.get('WORKSPACE'),'kafka')
 
