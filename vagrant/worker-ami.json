@@ -64,6 +64,7 @@
         "sudo chmod a+rw /opt",
         "sudo chmod a+rwx /mnt",
         "sudo mkdir -p /mnt/zookeeper",
+        "sudo mkdir -p /mnt/zookeeper/data",
         "sudo chown -R {{user `ssh_account`}}:{{user `ssh_account`}} /mnt/zookeeper"
       ]
     },
