@@ -295,6 +295,10 @@ def main():
                 logging.debug(f'starting with cluster: {f.read()}')
 
         test_runner.wait_until_ready()
+        one_hour_in_seconds = 7200 # 60 minutes * 60 seconds
+        logging.info(f"Pausing for {one_hour_in_seconds} seconds (1 hour) after all nodes are ready...")
+        time.sleep(one_hour_in_seconds)
+        logging.info("Resuming test execution after 1-hour pause.")
 
         source= os.path.join(os.environ.get('WORKSPACE'),'kafka')
 
