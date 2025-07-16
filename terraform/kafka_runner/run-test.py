@@ -186,8 +186,8 @@ class KafkaRunner:
         Destroy all resources that are created by terraform
         """
         self._run_creds(f"terraform init", print_output=True, allow_fail=True, cwd=self.kafka_dir)
-        self._run_creds(f"terraform destroy -auto-approve -var-file={self.tf_variables_file}", print_output=True,
-                        allow_fail=allow_fail, cwd=self.kafka_dir)
+        # self._run_creds(f"terraform destroy -auto-approve -var-file={self.tf_variables_file}", print_output=True,
+        #                 allow_fail=allow_fail, cwd=self.kafka_dir)
 
     def install_custom_ducktape_branch(self, ducktape_branch):
         """Override the default ducktape installation with the given branch"""
@@ -317,7 +317,7 @@ def main():
     finally:
         # Cleanup and teardown all workers
         if not args.collect_only and args.cleanup:
-            logging.info("bringing down terraform cluster...")
+            logging.info("Skipping bringing down terraform cluster...")
             # test_runner.destroy_terraform()
         elif not args.cleanup:
             logging.warning("--cleanup is false, leaving nodes alive")
