@@ -59,7 +59,7 @@ resource "aws_instance" "worker" {
   key_name = "semaphore-muckrake"
   subnet_id = var.subnet_id
   vpc_security_group_ids = [var.security_group]
-  associate_public_ip_address = false
+  associate_public_ip_address = true
   iam_instance_profile = "semaphore-access"
   user_data = data.cloudinit_config.user_data.rendered
   ipv6_address_count = var.ipv6_address_count

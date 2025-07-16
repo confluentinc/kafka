@@ -275,7 +275,7 @@ def main():
         logging.info(f"ami: {image_id}")
         test_runner.generate_tf_file()
         test_runner.setup_tf_variables(image_id)
-        test_runner.destroy_terraform(allow_fail=True)
+        # test_runner.destroy_terraform(allow_fail=True)
         cluster_file_name = f"{kafka_dir}/tf-cluster.json"
 
         if args.aws:
@@ -318,7 +318,7 @@ def main():
         # Cleanup and teardown all workers
         if not args.collect_only and args.cleanup:
             logging.info("bringing down terraform cluster...")
-            test_runner.destroy_terraform()
+            # test_runner.destroy_terraform()
         elif not args.cleanup:
             logging.warning("--cleanup is false, leaving nodes alive")
         sys.exit(exit_status)
