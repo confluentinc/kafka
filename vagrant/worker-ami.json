@@ -56,6 +56,7 @@
     {
       "type": "shell",
       "inline": [
+        "echo '======= Starting executing commands on worker ami'",
         "sudo mkdir -p /vagrant",
         "sudo mkdir -p ~/.m2",
         "sudo chown -R {{user `ssh_account`}}:{{user `ssh_account`}} ~/.m2",
@@ -66,7 +67,9 @@
         "sudo chown -R {{user `ssh_account`}}:{{user `ssh_account`}} /mnt",
         "sudo chown -R ubuntu:ubuntu /mnt",
         "sudo ln -s /vagrant /opt/kafka",
-        "sudo chmod a+rw /opt"
+        "sudo chmod a+rw /opt",
+        "echo '======= Final /mnt permissions'",
+        "ls -ld /mnt"
       ]
     },
     {
