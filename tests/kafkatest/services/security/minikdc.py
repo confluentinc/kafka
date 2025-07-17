@@ -93,7 +93,7 @@ class MiniKdc(KafkaPathResolverMixin, Service):
 
     def start_node(self, node):
         # node.account.ssh("mkdir -p %s" % MiniKdc.WORK_DIR, allow_fail=False)
-        node.account.mkdirs(MiniKdc.WORK_DIR)
+        # node.account.mkdirs(MiniKdc.WORK_DIR)
         props_file = self.render('minikdc.properties',  node=node)
         node.account.create_file(MiniKdc.PROPS_FILE, props_file)
         self.logger.info("minikdc.properties")
