@@ -92,7 +92,7 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
         idx = self.idx(node)
         self.logger.info("Starting ZK node %d on %s", idx, node.account.hostname)
 
-        node.account.ssh("mkdir -p %s" % ZookeeperService.DATA)
+        node.account.mkdirs(ZookeeperService.DATA)
         node.account.ssh("echo %d > %s/myid" % (idx, ZookeeperService.DATA))
 
         self.security_config.setup_node(node)
