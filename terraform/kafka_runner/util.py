@@ -15,8 +15,8 @@ from botocore.exceptions import ClientError
 HASH_ALGORITHM = "sha224"
 BASE_KAFKA_DIR = os.path.join(os.path.dirname(__file__), "..")
 ABS_KAFKA_DIR = os.path.abspath(BASE_KAFKA_DIR)
-WORKER_AMI_JSON = '../../vagrant/worker-ami.json'
-AWS_PACKER_JSON = '../../vagrant/aws-packer.json'
+WORKER_AMI_JSON = '../vagrant/worker-ami.json'
+AWS_PACKER_JSON = '../vagrant/aws-packer.json'
 
 # List files in the directory
 workspace= os.environ.get('WORKSPACE')
