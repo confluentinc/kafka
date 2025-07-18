@@ -82,7 +82,7 @@ class KafkaRunner:
         with open(self.cluster_file_name, 'w') as f:
             json.dump({"nodes": nodes}, f)
 
-    def wait_until_ready(self, timeoutSecond=180, polltime=2):
+    def wait_until_ready(self, timeoutSecond=1200, polltime=2):
         """
         Function to wait until worker node is not ready
         """
