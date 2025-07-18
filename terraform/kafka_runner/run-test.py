@@ -90,6 +90,7 @@ class KafkaRunner:
         worker_ips = [ip[0] for ip in terraform_outputs_dict['worker-ipv6s']["value"]] if IS_IPV6_RUN else terraform_outputs_dict['worker-private-ips']["value"]
         worker_instance_id= terraform_outputs_dict['worker-instance-ids']["value"]
         start = time.time()
+        logging.info(f"waiting for the ssh to become availble at: {start}")
         # print all instance ids
         for instance_id in worker_instance_id:
             logging.info(f"instance_id: {instance_id}")
@@ -101,9 +102,10 @@ class KafkaRunner:
         def check_for_ssh(host):
             try:
                 ssh(host, "true")
+                logging.info(f"SSH connection to {host} successful")
                 return True
-            except NoValidConnectionsError as e:
-                logging.error(f"{e}")
+            except (NoValidConnectionsError, Exception) as e:
+                logging.debug(f"SSH connection to {host} failed: {e}")
                 return False
 
         def poll_all_nodes():
@@ -115,11 +117,21 @@ class KafkaRunner:
                 time_diff = time.time() - start
                 logging.warning(f"{time_diff}: still waiting for {unfinished_nodes}")
             return result
-        wait_until(lambda: all(check_for_ssh(ip) for ip in worker_ips),
-                   1200, 3, err_msg="ssh didn't become available")
+        logging.info(f"Waiting for SSH to become available on {len(worker_ips)} nodes (timeout: 30 minutes)...")
+        def check_all_ssh():
+            ssh_ready = [ip for ip in worker_ips if check_for_ssh(ip)]
+            ssh_pending = [ip for ip in worker_ips if ip not in ssh_ready]
+            if ssh_pending:
+                elapsed = time.time() - start
+                logging.info(f"SSH progress ({elapsed:.1f}s): {len(ssh_ready)}/{len(worker_ips)} nodes ready. Pending: {ssh_pending}")
+                return False
+            logging.info("All nodes are SSH accessible!")
+            return True
+        
+        wait_until(check_all_ssh, 1800, 10, err_msg="ssh didn't become available")
         self.update_hosts()
         logging.warning("updated hosts file")
-        wait_until(poll_all_nodes, 15 * 60, 2, err_msg="didn't finish cloudinit")
+        wait_until(poll_all_nodes, 20 * 60, 5, err_msg="didn't finish cloudinit")
         logging.info("cloudinit finished on all nodes")
 
     def tags_to_aws_format(tags):
