@@ -116,7 +116,7 @@ class KafkaRunner:
                 logging.warning(f"{time_diff}: still waiting for {unfinished_nodes}")
             return result
         wait_until(lambda: all(check_for_ssh(ip) for ip in worker_ips),
-                   timeoutSecond, polltime, err_msg="ssh didn't become available")
+                   1200, 3, err_msg="ssh didn't become available")
         self.update_hosts()
         logging.warning("updated hosts file")
         wait_until(poll_all_nodes, 15 * 60, 2, err_msg="didn't finish cloudinit")
