@@ -163,7 +163,8 @@ def package_base_ami(instance_type=INSTANCE_TYPE, source_ami=AMI, ssh_account=No
         logging.info("No image matching %s." % ami_name)
         image = create_ami(ami_name, instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account, volume_size=volume_size, packer_json=AWS_PACKER_JSON, **hash_extras)
 
-    return image.image_id
+    # return image.image_id
+    return "ami-0c74f998729f3e8e0"
 
 def package_worker_ami(install_type, volume_size, source_ami=AMI,
                        instance_type=INSTANCE_TYPE, ssh_account=None, **extras):
