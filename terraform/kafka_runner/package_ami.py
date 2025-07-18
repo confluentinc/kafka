@@ -171,14 +171,15 @@ def package_worker_ami(install_type, volume_size, source_ami=AMI,
     """ Create a worker AMI with Confluent Platform """
     if ssh_account is None:
         ssh_account = "ubuntu"
-    base_ami = package_base_ami(instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account,
-                                volume_size=volume_size, **extras)
-
-    logging.info("Worker AMI name: %s" % WORKER_AMI_NAME)
-    image = create_ami(WORKER_AMI_NAME, source_ami=base_ami, packer_json= WORKER_AMI_JSON, install_type=install_type,
-                       ssh_account=ssh_account, volume_size=volume_size, instance_type=instance_type, **extras)
-    delete_old_worker_amis()
-    return image.image_id
+    # base_ami = package_base_ami(instance_type=instance_type, source_ami=source_ami, ssh_account=ssh_account,
+    #                             volume_size=volume_size, **extras)
+    #
+    # logging.info("Worker AMI name: %s" % WORKER_AMI_NAME)
+    # image = create_ami(WORKER_AMI_NAME, source_ami=base_ami, packer_json= WORKER_AMI_JSON, install_type=install_type,
+    #                    ssh_account=ssh_account, volume_size=volume_size, instance_type=instance_type, **extras)
+    # delete_old_worker_amis()
+    # return image.image_id
+    return "ami-0188eeb929c26e0c6"
 
 def delete_old_worker_amis():
     """ Delete worker AMIs older than 30 days """
