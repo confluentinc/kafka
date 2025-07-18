@@ -33,7 +33,9 @@ WORKER_AMI_NAME = 'kafka-{}'.format(  # E.g. BUILD_TAG = semaphore-system-test-k
 
 AMI= os.environ.get('AMI_ID')
 INSTANCE_TYPE= os.environ.get('INSTANCE_TYPE')
-IPV4_SUBNET_ID= "subnet-0429253329fde0351"
+# todo souvik revert
+# IPV4_SUBNET_ID= "subnet-0429253329fde0351"
+IPV4_SUBNET_ID= "subnet-060343784120910af"
 IPV6_SUBNET_ID= "subnet-00c4999d6841fd454"
 
 VPC_NAME= "system-test-ducktape-infra"

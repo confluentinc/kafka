@@ -57,8 +57,8 @@ resource "aws_instance" "worker" {
   ami= var.worker_ami
   instance_type = var.instance_type
   key_name = "semaphore-muckrake"
-  subnet_id = var.subnet_id
-  vpc_security_group_ids = [var.security_group]
+  subnet_id = "subnet-060343784120910af"
+  vpc_security_group_ids = ["sg-03364f9fef903b17d", "sg-027071e4c09b6450d", "sg-0d7db3a00a4323239"]
   associate_public_ip_address = true
   iam_instance_profile = "semaphore-access"
   user_data = data.cloudinit_config.user_data.rendered
