@@ -65,7 +65,8 @@ def ssh(host, command, port=22, username='ubuntu', password=None, key_file = os.
         username=username,
         password=password,
         key_filename=key_file,
-        look_for_keys=False)
+        look_for_keys=False,
+        timeout=1500)
     _stdin, stdout, stderr = client.exec_command(command)
     code = stdout.channel.recv_exit_status()
     stdout = stdout.read()
