@@ -708,15 +708,9 @@ public class ClientTelemetryReporter implements MetricsReporter {
                 return Optional.empty();
             }
 
-            CompressionType compressionType = ClientTelemetryUtils.preferredCompressionType(localSubscription.acceptedCompressionTypes());
-            ByteBuffer compressedPayload;
-            try {
-                compressedPayload = ClientTelemetryUtils.compress(payload, compressionType);
-            } catch (Throwable e) {
-                log.debug("Failed to compress telemetry payload for compression: {}, sending uncompressed data", compressionType);
-                compressedPayload = ByteBuffer.wrap(payload);
-                compressionType = CompressionType.NONE;
-            }
+            Object[] compressionData = compressPayload(payload, localSubscription.acceptedCompressionTypes());
+            CompressionType compressionType = (CompressionType) compressionData[0];
+            ByteBuffer compressedPayload = (ByteBuffer) compressionData[1];
 
             AbstractRequest.Builder<?> requestBuilder = new PushTelemetryRequest.Builder(
                 new PushTelemetryRequestData()
@@ -727,6 +721,19 @@ public class ClientTelemetryReporter implements MetricsReporter {
                     .setMetrics(Utils.readBytes(compressedPayload)), true);
 
             return Optional.of(requestBuilder);
+        }
+
+        private Object[] compressPayload(byte[] payload, List<CompressionType> acceptedCompressionTypes) {
+            CompressionType compressionType = ClientTelemetryUtils.preferredCompressionType(acceptedCompressionTypes);
+            ByteBuffer compressedPayload;
+            try {
+                compressedPayload = ClientTelemetryUtils.compress(payload, compressionType);
+            } catch (Throwable e) {
+                log.debug("Failed to compress telemetry payload for compression: {}, sending uncompressed data", compressionType);
+                compressedPayload = ByteBuffer.wrap(payload);
+                compressionType = CompressionType.NONE;
+            }
+            return new Object[]{compressionType, compressedPayload};
         }
 
         /**
