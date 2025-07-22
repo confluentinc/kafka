@@ -16,5 +16,6 @@ users:
 
 runcmd:
   - bash /vagrant/vagrant/base.sh
+  - sudo chmod a+rwx /mnt
   - python3.11 -m pip install -U pip
   - python3.11 -m pip install -r /vagrant/resources/requirements.txt
