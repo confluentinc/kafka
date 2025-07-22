@@ -9,8 +9,7 @@
     "ssh_account": "ubuntu",
     "linux_distro": "ubuntu",
     "jdk_version": "8",
-    "jdk_arch": "x64",
-    "enable_ena_driver_install": "true"
+    "jdk_arch": "x64"
 
   },
   "builders": [{
@@ -39,8 +38,7 @@
       "volume_size": 60,
       "volume_type": "gp3",
       "delete_on_termination": true
-    }],
-    "ena_support": true
+    }]
   }],
   "provisioners": [
     {
