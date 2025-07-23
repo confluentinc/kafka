@@ -696,6 +696,10 @@ public class ClientTelemetryReporter implements MetricsReporter {
                 lock.writeLock().unlock();
             }
 
+            return createPushRequest(localSubscription, terminating);
+        }
+
+        private Optional<Builder<?>> createPushRequest(ClientTelemetrySubscription localSubscription, boolean terminating) {
             byte[] payload;
             try (MetricsEmitter emitter = new ClientTelemetryEmitter(localSubscription.selector(), localSubscription.deltaTemporality())) {
                 emitter.init();
