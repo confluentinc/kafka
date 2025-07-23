@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cffi
 virtualenv
+cffi
 pyasn1
 boto3
 pycrypto
