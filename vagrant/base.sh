@@ -174,7 +174,9 @@ chmod a+rw /opt/kafka-3.7.2
 if [ ! -e /mnt ]; then
     mkdir /mnt
 fi
-chmod a+rwx /mnt
+sudo chmod a+rwx /mnt
+echo "Provided access to /mnt directory"
+ls -ld /mnt
 
 # Run ntpdate once to sync to ntp servers
 # use -u option to avoid port collision in case ntp daemon is already running

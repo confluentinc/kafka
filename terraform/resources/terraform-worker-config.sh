@@ -1,6 +1,6 @@
 # Check AMI_ID present or not as env variable if not then set
 AMI_ID() {
-  echo "ami-29ebb519"
+  echo "ami-5189a661"
 }
 
 if [ -z "${AMI_ID}" ]; then
