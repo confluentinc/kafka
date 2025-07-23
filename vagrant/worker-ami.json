@@ -63,6 +63,7 @@
         "sudo ln -s /vagrant /opt/kafka",
         "sudo mkdir -p /mnt",
         "sudo chmod a+rwx /mnt",
+        "sudo ln -s /vagrant /opt/kafka",
         "sudo chmod a+rw /opt"
       ]
     },
