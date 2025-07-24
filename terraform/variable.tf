@@ -45,7 +45,7 @@ variable "subnet_id" {
   description = "subnet id"
 }
 
-variable "ipv6_address_count"{
+variable "ipv6_address_count" {
   type = number
   description = "number of ipv6 addresses"
 }
