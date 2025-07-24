@@ -23,7 +23,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-west-2"
+  region = var.ec2_region
   default_tags {
     tags = local.common_tags
   }
@@ -32,9 +32,9 @@ provider "aws" {
 data "template_file" "user_data" {
   template = file("./cloudinit.yml")
   vars = {
-    deployment = var.deployment
-    public_key = var.public_key
-    base_script      = data.local_file.base_script.content
+    deployment  = var.deployment
+    public_key  = var.public_key
+    base_script = data.local_file.base_script.content
   }
 }
 
@@ -70,8 +70,6 @@ resource "aws_instance" "worker" {
     "SemaphoreJobId": var.job_id
   }
 }
-
-output "cloudinit_content-spot" { value= data.cloudinit_config.user_data.rendered}
 
 output "worker-public-ips" { value = aws_instance.worker.*.public_ip }
 output "worker-ipv6s" { value = aws_instance.worker.*.ipv6_addresses }

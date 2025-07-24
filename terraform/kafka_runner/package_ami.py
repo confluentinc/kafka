@@ -82,7 +82,7 @@ def image_from(name=None, image_id=None, region_name=AWS_REGION):
 def create_ami(image_name, source_ami=AMI, region_name=AWS_REGION, volume_size=60,
                packer_json=AWS_PACKER_JSON, instance_type=INSTANCE_TYPE, **extras):
     """Create a new ami using packer!"""
-    previons_wd = os.getcwd()
+    previous_wd = os.getcwd()
     os.chdir(BASE_KAFKA_DIR)
     extras.setdefault('linux_distro', os.environ.get('LINUX_DISTRO', 'ubuntu'))
 
@@ -104,7 +104,7 @@ def create_ami(image_name, source_ami=AMI, region_name=AWS_REGION, volume_size=6
 
     image = image_from(name=image_name, region_name=region_name)
     assert image is not None, "Expected aws image %s to exist after running packer!" % image_name
-    os.chdir(previons_wd)
+    os.chdir(previous_wd)
 
     logging.info('Successfully created new image with id = %s', image.image_id)
 
