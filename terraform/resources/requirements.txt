@@ -60,7 +60,7 @@ urllib3==1.26.7
 websocket-client==1.2.1
 Werkzeug==2.2.3
 zstandard==0.15.2
-psutil==5.9.0
+psutil==7.0.0
 gnupg==2.3.1
 selenium==4.14.0
 distro==1.9.0
