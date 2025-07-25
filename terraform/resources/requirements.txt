@@ -38,7 +38,7 @@ opentelemetry-proto==1.19.0
 packaging==23.0
 paho-mqtt==1.5.1
 pluggy==1.0.0
-protobuf==4.24.4
+protobuf==4.25.8
 py==1.10.0
 pyasn1==0.4.8
 pycodestyle==2.7.0
