@@ -48,14 +48,27 @@
       "inline": ["while [ ! -f /var/lib/cloud/instance/boot-finished ]; do echo 'Waiting for cloud-init...'; sleep 1; done"]
     },
     {
-      "environment_vars": [
-        "JDK_MAJOR={{ user `jdk_version` }}",
-        "JDK_ARCH={{ user `jdk_arch` }}"
-      ],
-      "execute_command": "echo 'packer' | {{ .Vars }} sudo -E -S bash '{{ .Path }}'",
       "type": "shell",
       "scripts": [
-        "../vagrant/base.sh"
+        "../vagrant/install_ena.sh"
+      ],
+      "expect_disconnect": true,
+      "timeout": "30m"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo 'Waiting for cloud-init to complete after ENA reboot...'",
+        "while [ ! -f /var/lib/cloud/instance/boot-finished ]; do sleep 1; done",
+        "echo 'Cloud-init finished (post-ENA reboot).'"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo 'Verifying ENA driver status...'",
+        "sudo ethtool -i eth0 | grep driver",
+        "echo 'ENA setup verification complete. If \"driver: ena\" is not shown, there might be an issue.'"
       ]
     }
   ]
