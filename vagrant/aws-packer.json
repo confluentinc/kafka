@@ -34,7 +34,13 @@
       "role": "ce-kafka",
       "CreatedBy": "kafka-system-test",
       "cflt_managed_by": "iac",
-      "cflt_managed_id": "ce-kafka"
+      "cflt_managed_id": "kafka",
+      "cflt_service": "kafka-system-test"
+    },
+    "run_volume_tags": {
+      "cflt_managed_by": "iac",
+      "cflt_managed_id": "kafka",
+      "cflt_service": "kafka-system-test"
     },
     "launch_block_device_mappings": [{
       "device_name": "/dev/sda1",
