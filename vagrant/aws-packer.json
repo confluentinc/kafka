@@ -34,6 +34,19 @@
       "cflt_environment": "devel",
       "cflt_service": "ce-kafka"
     },
+    "run_tags": {
+      "type": "Base",
+      "cflt_managed_by": "iac",
+      "cflt_managed_id": "ce-kafka",
+      "cflt_environment": "devel",
+      "cflt_service": "ce-kafka"
+    },
+    "run_volume_tags": {
+      "cflt_managed_by": "iac",
+      "cflt_managed_id": "kafka",
+      "cflt_environment": "devel",
+      "cflt_service": "kafka"
+    },
     "launch_block_device_mappings": [{
       "device_name": "/dev/sda1",
       "volume_size": 60,
