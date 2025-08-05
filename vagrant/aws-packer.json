@@ -32,7 +32,20 @@
       "Service": "ce-kafka",
       "Type": "Base",
       "role": "ce-kafka",
-      "CreatedBy": "kafka-system-test"
+      "CreatedBy": "kafka-system-test",
+      "cflt_managed_by": "iac",
+      "cflt_managed_id": "kafka",
+      "cflt_environment": "devel",
+      "cflt_service": "kafka"
+    },
+    "volume_tags": {
+      "ducktape": "true",
+      "owner": "ce-kafka",
+      "cflt_managed_by": "iac",
+      "cflt_managed_id": "kafka",
+      "cflt_environment": "devel",
+      "cflt_partition": "operational-tools",
+      "cflt_service": "kafka"
     },
     "launch_block_device_mappings": [{
       "device_name": "/dev/sda1",
