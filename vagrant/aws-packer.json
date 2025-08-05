@@ -28,17 +28,7 @@
     },
     "security_group_id": "{{user `security_group_id`}}",
     "tags": {
-      "Owner": "ce-kafka",
-      "Service": "ce-kafka",
-      "Type": "Base",
-      "role": "ce-kafka",
-      "CreatedBy": "kafka-system-test",
-      "cflt_managed_by": "iac",
-      "cflt_managed_id": "kafka",
-      "cflt_environment": "devel",
-      "cflt_service": "kafka"
-    },
-    "run_volume_tags": {
+      "type": "Base",
       "cflt_managed_by": "iac",
       "cflt_managed_id": "kafka",
       "cflt_environment": "devel",
