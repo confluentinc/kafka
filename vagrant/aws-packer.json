@@ -30,9 +30,9 @@
     "tags": {
       "type": "Base",
       "cflt_managed_by": "iac",
-      "cflt_managed_id": "kafka",
+      "cflt_managed_id": "ce-kafka",
       "cflt_environment": "devel",
-      "cflt_service": "kafka"
+      "cflt_service": "ce-kafka"
     },
     "launch_block_device_mappings": [{
       "device_name": "/dev/sda1",

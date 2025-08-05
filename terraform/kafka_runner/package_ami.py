@@ -86,6 +86,12 @@ def create_ami(image_name, source_ami=AMI, region_name=AWS_REGION, volume_size=6
     os.chdir(BASE_KAFKA_DIR)
     extras.setdefault('linux_distro', os.environ.get('LINUX_DISTRO', 'ubuntu'))
 
+    tags = {
+        "cflt_managed_by": "iac",
+        "cflt_managed_id": "ce-kafka",
+        "cflt_environment": "devel",
+    }
+
     cmd = 'packer build'
     cmd += ' -var "region=%s"' % region_name
     cmd += ' -var "source_ami=%s"' % source_ami
@@ -95,6 +101,8 @@ def create_ami(image_name, source_ami=AMI, region_name=AWS_REGION, volume_size=6
     cmd += ' -var "vpc_id=%s"' % VPC_ID
     cmd += ' -var "subnet_id=%s"' % IPV4_SUBNET_ID
     cmd += ' -var "security_group_id=%s"' % ALLOW_ALL_SECURITY_GROUP_ID
+    for key, value in tags.items():
+        cmd += f' -var "tag_{key}={value}"'
     cmd += ''.join([' -var "{}={}"'.format(*v) for v in extras.items() if v[1] is not None])
     cmd += ' ' + packer_json
 
