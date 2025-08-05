@@ -111,7 +111,7 @@ def setup_virtualenv(venv_dir, args):
             allow_fail=False)
         logging.info("Installation of virtualenv succeeded")
 
-    run("python3.12 --version", print_output=True, allow_fail=True)
+    run("python3.13 --version", print_output=True, allow_fail=True)
     run("virtualenv --version", print_output=True, allow_fail=True)
 
     if not os.path.exists(venv_dir):
