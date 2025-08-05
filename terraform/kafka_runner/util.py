@@ -116,7 +116,8 @@ def setup_virtualenv(venv_dir, args):
 
     if not os.path.exists(venv_dir):
         logging.info("Setting up virtualenv...")
-        run(f"virtualenv -p {args.python} {venv_dir}", print_output=True, allow_fail=True)
+        # run(f"virtualenv -p {args.python} {venv_dir}", print_output=True, allow_fail=True)
+        run(f"python3.11 -m {args.python} {venv_dir}", print_output=True, allow_fail=True)
         run("pip install --upgrade pip setuptools", venv=True,print_output=True, allow_fail=False)
 
 def parse_args():
