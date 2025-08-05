@@ -69,6 +69,19 @@ resource "aws_instance" "worker" {
     "SemaphoreWorkflowUrl":var.build_url,
     "SemaphoreJobId": var.job_id
   }
+
+  volume_tags = {
+    Name = format("ccs-kafka-%d", count.index),
+    ducktape = "true"
+    owner = "ce-kafka"
+    SemaphoreBuildUrl = var.build_url
+    SemaphoreJobId = var.job_id
+    cflt_managed_by = "iac",
+    cflt_managed_id = "kafka",
+    cflt_environment = "devel"
+    cflt_partition = "operational-tools"
+    cflt_service = "kafka"
+  }
 }
 
 output "cloudinit_content-spot" { value= data.cloudinit_config.user_data.rendered}
