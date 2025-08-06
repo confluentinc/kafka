@@ -32,6 +32,16 @@
       "max_attempts": 60
     },
     "security_group_id": "{{user `security_group_id`}}",
+    "run_tags": {
+      "Owner": "ce-kafka",
+      "Service": "ce-kafka",
+      "CreatedBy": "kafka-system-test",
+      "distro": "{{user `linux_distro`}}",
+      "cflt_managed_by": "iac",
+      "cflt_managed_id": "kafka",
+      "cflt_service": "kafka-system-test",
+      "Name": "{{user `instance_name`}}"
+    },
     "tags": {
       "Owner": "ce-kafka",
       "Service": "ce-kafka",
