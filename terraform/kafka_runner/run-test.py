@@ -264,7 +264,9 @@ def main():
                     ssh_account=ssh_account,
                     instance_name=args.instance_name,
                     jdk_version=args.jdk_version,
-                    jdk_arch=args.jdk_arch
+                    jdk_arch=args.jdk_arch,
+                    JOB_ID=JOB_ID,
+                    enable_cloudwatch=args.enable_cloudwatch
                 )
             else:
                 logging.info(f"using existing ami: {args.existing_ami}")
