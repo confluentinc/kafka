@@ -17,10 +17,10 @@
 package org.apache.kafka.coordinator.group.modern.share;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
 import org.apache.kafka.coordinator.group.modern.TopicIds;
-import org.apache.kafka.image.MetadataImage;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,7 +41,7 @@ public class ShareGroupAssignmentBuilder {
     /**
      * The metadata image.
      */
-    private MetadataImage metadataImage = MetadataImage.EMPTY;
+    private CoordinatorMetadataImage metadataImage = CoordinatorMetadataImage.EMPTY;
 
     /**
      * The target assignment epoch.
@@ -75,7 +75,7 @@ public class ShareGroupAssignmentBuilder {
      * @return This object.
      */
     public ShareGroupAssignmentBuilder withMetadataImage(
-        MetadataImage metadataImage
+        CoordinatorMetadataImage metadataImage
     ) {
         this.metadataImage = metadataImage;
         return this;
@@ -145,7 +145,7 @@ public class ShareGroupAssignmentBuilder {
         Map<Uuid, Set<Integer>> partitions,
         Set<String> subscribedTopicNames
     ) {
-        TopicIds subscribedTopicIds = new TopicIds(member.subscribedTopicNames(), metadataImage.topics());
+        TopicIds subscribedTopicIds = new TopicIds(member.subscribedTopicNames(), metadataImage);
 
         // Reuse the original map if no topics need to be removed.
         Map<Uuid, Set<Integer>> filteredPartitions = partitions;

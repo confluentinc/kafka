@@ -19,11 +19,11 @@ package org.apache.kafka.coordinator.group.modern.consumer;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.FencedMemberEpochException;
 import org.apache.kafka.common.message.ConsumerGroupHeartbeatRequestData;
+import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
 import org.apache.kafka.coordinator.group.modern.TopicIds;
 import org.apache.kafka.coordinator.group.modern.UnionSet;
-import org.apache.kafka.image.MetadataImage;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -47,7 +47,7 @@ public class CurrentAssignmentBuilder {
     /**
      * The metadata image.
      */
-    private MetadataImage metadataImage = MetadataImage.EMPTY;
+    private CoordinatorMetadataImage metadataImage = CoordinatorMetadataImage.EMPTY;
 
     /**
      * The target assignment epoch.
@@ -98,7 +98,7 @@ public class CurrentAssignmentBuilder {
      * @return This object.
      */
     public CurrentAssignmentBuilder withMetadataImage(
-        MetadataImage metadataImage
+        CoordinatorMetadataImage metadataImage
     ) {
         this.metadataImage = metadataImage;
         return this;
@@ -471,15 +471,15 @@ public class CurrentAssignmentBuilder {
             ResolvedRegularExpression resolvedRegularExpression = resolvedRegularExpressions.get(subscribedTopicRegex);
             if (resolvedRegularExpression != null) {
                 if (subscriptions.isEmpty()) {
-                    subscriptions = resolvedRegularExpression.topics;
-                } else if (!resolvedRegularExpression.topics.isEmpty()) {
-                    subscriptions = new UnionSet<>(subscriptions, resolvedRegularExpression.topics);
+                    subscriptions = resolvedRegularExpression.topics();
+                } else if (!resolvedRegularExpression.topics().isEmpty()) {
+                    subscriptions = new UnionSet<>(subscriptions, resolvedRegularExpression.topics());
                 }
             } else {
                 // Treat an unresolved regex as matching no topics, to be conservative.
             }
         }
 
-        return new TopicIds(subscriptions, metadataImage.topics());
+        return new TopicIds(subscriptions, metadataImage);
     }
 }

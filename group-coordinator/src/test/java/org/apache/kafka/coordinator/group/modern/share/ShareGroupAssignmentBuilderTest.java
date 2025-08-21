@@ -17,10 +17,10 @@
 package org.apache.kafka.coordinator.group.modern.share;
 
 import org.apache.kafka.common.Uuid;
-import org.apache.kafka.coordinator.group.MetadataImageBuilder;
+import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
+import org.apache.kafka.coordinator.common.runtime.MetadataImageBuilder;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
-import org.apache.kafka.image.MetadataImage;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,10 +41,10 @@ public class ShareGroupAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ShareGroupMember member = new ShareGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -84,10 +84,10 @@ public class ShareGroupAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ShareGroupMember member = new ShareGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -136,10 +136,10 @@ public class ShareGroupAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ShareGroupMember member = new ShareGroupMember.Builder("member")
             .setState(MemberState.STABLE)

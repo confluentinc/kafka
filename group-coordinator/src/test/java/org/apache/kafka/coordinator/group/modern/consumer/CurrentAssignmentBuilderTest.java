@@ -19,10 +19,10 @@ package org.apache.kafka.coordinator.group.modern.consumer;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.errors.FencedMemberEpochException;
 import org.apache.kafka.common.message.ConsumerGroupHeartbeatRequestData;
-import org.apache.kafka.coordinator.group.MetadataImageBuilder;
+import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
+import org.apache.kafka.coordinator.common.runtime.MetadataImageBuilder;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
-import org.apache.kafka.image.MetadataImage;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -47,10 +47,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -91,10 +91,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -135,10 +135,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -182,10 +182,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -226,10 +226,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -273,10 +273,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNREVOKED_PARTITIONS)
@@ -327,10 +327,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNREVOKED_PARTITIONS)
@@ -397,10 +397,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNREVOKED_PARTITIONS)
@@ -454,10 +454,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNREVOKED_PARTITIONS)
@@ -505,10 +505,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNRELEASED_PARTITIONS)
@@ -549,10 +549,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNRELEASED_PARTITIONS)
@@ -593,10 +593,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNRELEASED_PARTITIONS)
@@ -626,10 +626,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNRELEASED_PARTITIONS)
@@ -673,10 +673,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNKNOWN)
@@ -742,10 +742,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -800,10 +800,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -853,10 +853,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid topicId1 = Uuid.randomUuid();
         Uuid topicId2 = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(topicId1, topic1, 10)
             .addTopic(topicId2, topic2, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.UNREVOKED_PARTITIONS)
@@ -910,10 +910,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid fooTopicId = Uuid.randomUuid();
         Uuid barTopicId = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(fooTopicId, fooTopic, 10)
             .addTopic(barTopicId, barTopic, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -966,10 +966,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid fooTopicId = Uuid.randomUuid();
         Uuid barTopicId = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(fooTopicId, fooTopic, 10)
             .addTopic(barTopicId, barTopic, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
@@ -1022,10 +1022,10 @@ public class CurrentAssignmentBuilderTest {
         Uuid fooTopicId = Uuid.randomUuid();
         Uuid barTopicId = Uuid.randomUuid();
 
-        MetadataImage metadataImage = new MetadataImageBuilder()
+        CoordinatorMetadataImage metadataImage = new MetadataImageBuilder()
             .addTopic(fooTopicId, fooTopic, 10)
             .addTopic(barTopicId, barTopic, 10)
-            .build();
+            .buildCoordinatorMetadataImage();
 
         ConsumerGroupMember member = new ConsumerGroupMember.Builder("member")
             .setState(MemberState.STABLE)
