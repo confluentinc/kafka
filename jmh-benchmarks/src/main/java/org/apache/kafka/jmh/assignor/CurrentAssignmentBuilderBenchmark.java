@@ -17,11 +17,11 @@
 package org.apache.kafka.jmh.assignor;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.modern.MemberState;
 import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupMember;
 import org.apache.kafka.coordinator.group.modern.consumer.CurrentAssignmentBuilder;
-import org.apache.kafka.image.MetadataImage;
 
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -64,7 +64,7 @@ public class CurrentAssignmentBuilderBenchmark {
 
     private List<Uuid> topicIds;
 
-    private MetadataImage metadataImage;
+    private CoordinatorMetadataImage metadataImage;
 
     private ConsumerGroupMember member;
 
@@ -85,7 +85,7 @@ public class CurrentAssignmentBuilderBenchmark {
         metadataImage = AssignorBenchmarkUtils.createMetadataImage(topicNames, partitionsPerTopic);
 
         for (String topicName : topicNames) {
-            Uuid topicId = metadataImage.topics().topicNameToIdView().get(topicName);
+            Uuid topicId = metadataImage.topicMetadata(topicName).get().id();
             topicIds.add(topicId);
         }
     }
