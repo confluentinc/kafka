@@ -137,7 +137,20 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     aws.ami = ec2_ami
     aws.security_groups = ec2_security_groups
     aws.subnet_id = ec2_subnet_id
-    aws.block_device_mapping = [{ 'DeviceName' => '/dev/sda1', 'Ebs.VolumeType' => ebs_volume_type, 'Ebs.VolumeSize' => ebs_volume_size }]
+    aws.block_device_mapping = [{ 
+      'DeviceName' => '/dev/sda1', 
+      'Ebs.VolumeType' => ebs_volume_type, 
+      'Ebs.VolumeSize' => ebs_volume_size,
+      'Ebs.TagSpecification' => [
+        {
+          'ResourceType' => 'volume',
+          'Tags' => [
+            {'Key' => 'cflt_managed_by', 'Value' => 'iac'},
+            {'Key' => 'cflt_managed_id', 'Value' => 'kafka'}
+          ]
+        }
+      ]
+    }]
     # If a subnet is specified, default to turning on a public IP unless the
     # user explicitly specifies the option. Without a public IP, Vagrant won't
     # be able to SSH into the hosts unless Vagrant is also running in the VPC.
@@ -159,7 +172,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   def name_node(node, name, ec2_instance_name_prefix)
     node.vm.hostname = name
     node.vm.provider :aws do |aws|
-      aws.tags = {
+      tags = {
         'Name' => ec2_instance_name_prefix + "-" + Socket.gethostname + "-" + name,
         'role' => 'ce-kafka',
         'Owner' => 'ce-kafka',
@@ -172,6 +185,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         'cflt_managed_id' => 'kafka',
         'cflt_service' => 'kafka'
       }
+      aws.tag_specifications = [
+        {
+          'ResourceType' => 'instance',
+          'Tags' => tags.map{|k,v| {'Key' => k.to_s, 'Value' => v.to_s}}
+        }
+      ]
     end
   end
 
