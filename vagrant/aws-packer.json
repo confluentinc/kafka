@@ -8,7 +8,7 @@
     "instance_type": "",
     "ssh_account": "ubuntu",
     "linux_distro": "ubuntu",
-    "jdk_version": "8",
+    "jdk_version": "17",
     "jdk_arch": "x64",
     "enable_ena_driver_install": "true"
 
