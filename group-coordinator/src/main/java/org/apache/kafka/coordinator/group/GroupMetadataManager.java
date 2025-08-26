@@ -2408,6 +2408,10 @@ public class GroupMetadataManager {
             );
         }
 
+        ConsumerGroupMember existingStaticMemberOrNull = group.staticMember(request.groupInstanceId());
+        boolean downgrade = existingStaticMemberOrNull != null &&
+            validateOnlineDowngradeWithReplacedMember(group, existingStaticMemberOrNull);
+
         int groupEpoch = group.groupEpoch();
         SubscriptionType subscriptionType = group.subscriptionType();
         final ConsumerProtocolSubscription subscription = deserializeSubscription(protocols);
@@ -2454,12 +2458,12 @@ public class GroupMetadataManager {
             subscriptionType = result.subscriptionType;
         }
 
-        // 2. Update the target assignment if the group epoch is larger than the target assignment epoch. The delta between
-        // the existing and the new target assignment is persisted to the partition.
+        // 2. Update the target assignment if the group epoch is larger than the target assignment epoch and no downgrade is triggered.
+        // The delta between the existing and the new target assignment is persisted to the partition.
         final int targetAssignmentEpoch;
         final Assignment targetAssignment;
 
-        if (groupEpoch > group.assignmentEpoch()) {
+        if (groupEpoch > group.assignmentEpoch() && !downgrade) {
             targetAssignment = updateTargetAssignment(
                 group,
                 groupEpoch,
@@ -2474,23 +2478,22 @@ public class GroupMetadataManager {
             targetAssignment = group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId());
         }
 
-        // 3. Reconcile the member's assignment with the target assignment if the member is not
-        // fully reconciled yet.
-        updatedMember = maybeReconcile(
-            groupId,
-            updatedMember,
-            group::currentPartitionEpoch,
-            targetAssignmentEpoch,
-            targetAssignment,
-            toTopicPartitions(subscription.ownedPartitions(), metadataImage),
-            records
-        );
+        // 3. If it's not a downgrade triggered by static member replacement with a different subscription,
+        // reconcile the member's assignment with the target assignment if the member is not fully reconciled yet.
+        if (!bumpGroupEpoch || !downgrade) {
+            updatedMember = maybeReconcile(
+                groupId,
+                updatedMember,
+                group::currentPartitionEpoch,
+                targetAssignmentEpoch,
+                targetAssignment,
+                toTopicPartitions(subscription.ownedPartitions(), metadataImage),
+                records
+            );
+        }
 
         // 4. Maybe downgrade the consumer group if the last static member using the
         // consumer protocol is replaced by the joining static member.
-        ConsumerGroupMember existingStaticMemberOrNull = group.staticMember(request.groupInstanceId());
-        boolean downgrade = existingStaticMemberOrNull != null &&
-            validateOnlineDowngradeWithReplacedMember(group, existingStaticMemberOrNull);
         if (downgrade) {
             convertToClassicGroup(
                 group,
