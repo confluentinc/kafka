@@ -58,7 +58,7 @@ toml==0.10.2
 twofish==0.3.0
 urllib3==1.26.7
 websocket-client==1.2.1
-Werkzeug==2.2.3
+Werkzeug==3.0.6
 zstandard==0.15.2
 psutil==5.9.0
 gnupg==2.3.1
