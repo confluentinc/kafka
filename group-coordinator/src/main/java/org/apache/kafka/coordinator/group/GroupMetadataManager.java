@@ -2458,29 +2458,52 @@ public class GroupMetadataManager {
             subscriptionType = result.subscriptionType;
         }
 
-        // 2. Update the target assignment if the group epoch is larger than the target assignment epoch and no downgrade is triggered.
-        // The delta between the existing and the new target assignment is persisted to the partition.
-        final int targetAssignmentEpoch;
-        final Assignment targetAssignment;
+        if (downgrade) {
+            // 2. If the static member subscription hasn't changed, reconcile the member's assignment with the existing
+            // assignment if the member is not fully reconciled yet. If the static member subscription has changed, a
+            // rebalance will be triggered during downgrade anyway so we can skip the reconciliation.
+            if (!bumpGroupEpoch) {
+                updatedMember = maybeReconcile(
+                    groupId,
+                    updatedMember,
+                    group::currentPartitionEpoch,
+                    group.assignmentEpoch(),
+                    group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId()),
+                    toTopicPartitions(subscription.ownedPartitions(), metadataImage),
+                    records
+                );
+            }
 
-        if (groupEpoch > group.assignmentEpoch() && !downgrade) {
-            targetAssignment = updateTargetAssignment(
+            // 3. Downgrade the consumer group.
+            convertToClassicGroup(
                 group,
-                groupEpoch,
-                member,
+                Set.of(),
                 updatedMember,
-                subscriptionType,
+                bumpGroupEpoch,
                 records
             );
-            targetAssignmentEpoch = groupEpoch;
         } else {
-            targetAssignmentEpoch = group.assignmentEpoch();
-            targetAssignment = group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId());
-        }
+            // 2. Update the target assignment if the group epoch is larger than the target assignment epoch and no downgrade is triggered.
+            // The delta between the existing and the new target assignment is persisted to the partition.
+            final int targetAssignmentEpoch;
+            final Assignment targetAssignment;
 
-        // 3. If it's not a downgrade triggered by static member replacement with a different subscription,
-        // reconcile the member's assignment with the target assignment if the member is not fully reconciled yet.
-        if (!bumpGroupEpoch || !downgrade) {
+            if (groupEpoch > group.assignmentEpoch()) {
+                targetAssignment = updateTargetAssignment(
+                    group,
+                    groupEpoch,
+                    member,
+                    updatedMember,
+                    subscriptionType,
+                    records
+                );
+                targetAssignmentEpoch = groupEpoch;
+            } else {
+                targetAssignmentEpoch = group.assignmentEpoch();
+                targetAssignment = group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId());
+            }
+
+            // 3. Reconcile the member's assignment with the target assignment if the member is not fully reconciled yet.
             updatedMember = maybeReconcile(
                 groupId,
                 updatedMember,
@@ -2488,18 +2511,6 @@ public class GroupMetadataManager {
                 targetAssignmentEpoch,
                 targetAssignment,
                 toTopicPartitions(subscription.ownedPartitions(), metadataImage),
-                records
-            );
-        }
-
-        // 4. Maybe downgrade the consumer group if the last static member using the
-        // consumer protocol is replaced by the joining static member.
-        if (downgrade) {
-            convertToClassicGroup(
-                group,
-                Set.of(),
-                updatedMember,
-                bumpGroupEpoch,
                 records
             );
         }
