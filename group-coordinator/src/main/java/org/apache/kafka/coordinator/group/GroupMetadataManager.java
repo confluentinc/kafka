@@ -2483,7 +2483,7 @@ public class GroupMetadataManager {
                 records
             );
         } else {
-            // 2. Update the target assignment if the group epoch is larger than the target assignment epoch and no downgrade is triggered.
+            // 2. Update the target assignment if the group epoch is larger than the target assignment epoch.
             // The delta between the existing and the new target assignment is persisted to the partition.
             final int targetAssignmentEpoch;
             final Assignment targetAssignment;
