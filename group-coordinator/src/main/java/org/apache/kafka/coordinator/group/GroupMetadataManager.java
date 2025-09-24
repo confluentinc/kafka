@@ -2249,10 +2249,6 @@ public class GroupMetadataManager {
             .setClassicMemberMetadata(null)
             .build();
 
-        // If the group is newly created, we must ensure that it moves away from
-        // epoch 0 and that it is fully initialized.
-        boolean bumpGroupEpoch = group.groupEpoch() == 0;
-
         boolean subscribedTopicNamesChanged = hasMemberSubscriptionChanged(
             groupId,
             member,
@@ -2270,15 +2266,20 @@ public class GroupMetadataManager {
         // The subscription has changed when either the subscribed topic names or subscribed topic
         // regex has changed.
         boolean hasSubscriptionChanged = subscribedTopicNamesChanged || updateRegularExpressionsResult.regexUpdated();
-        // Bumping the group epoch signals that the target assignment should be updated. We bump the
-        // group epoch when the member has changed its subscribed topic names or the member has
-        // changed its subscribed topic regex to a regex that is already resolved. We explicitly
-        // avoid bumping the group epoch when the new subscribed topic regex has not been resolved
-        // yet, since we will have to update the target assignment again later.
-        bumpGroupEpoch |= subscribedTopicNamesChanged || updateRegularExpressionsResult == UpdateRegularExpressionsResult.REGEX_UPDATED_AND_RESOLVED;
-
         int groupEpoch = group.groupEpoch();
         SubscriptionType subscriptionType = group.subscriptionType();
+
+        boolean bumpGroupEpoch =
+            // If the group is newly created, we must ensure that it moves away from
+            // epoch 0 and that it is fully initialized.
+            groupEpoch == 0 ||
+            // Bumping the group epoch signals that the target assignment should be updated. We bump
+            // the group epoch when the member has changed its subscribed topic names or the member
+            // has changed its subscribed topic regex to a regex that is already resolved. We avoid
+            // bumping the group epoch when the new subscribed topic regex has not been resolved
+            // yet, since we will have to update the target assignment again later.
+            subscribedTopicNamesChanged ||
+            updateRegularExpressionsResult == UpdateRegularExpressionsResult.REGEX_UPDATED_AND_RESOLVED;
 
         if (bumpGroupEpoch || group.hasMetadataExpired(currentTimeMs)) {
             // The subscription metadata is updated in two cases:
