@@ -3553,6 +3553,10 @@ public class GroupMetadataManager {
         List<ConsumerGroupHeartbeatRequestData.TopicPartitions> ownedTopicPartitions,
         List<CoordinatorRecord> records
     ) {
+        if (!hasSubscriptionChanged && member.isReconciledTo(targetAssignmentEpoch)) {
+            return member;
+        }
+
         ConsumerGroupMember updatedMember = new CurrentAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
             .withTargetAssignment(targetAssignmentEpoch, targetAssignment)
@@ -3611,6 +3615,10 @@ public class GroupMetadataManager {
         boolean hasSubscriptionChanged,
         List<CoordinatorRecord> records
     ) {
+        if (!hasSubscriptionChanged && member.isReconciledTo(targetAssignmentEpoch)) {
+            return member;
+        }
+
         ShareGroupMember updatedMember = new ShareGroupAssignmentBuilder(member)
             .withMetadataImage(metadataImage)
             .withTargetAssignment(targetAssignmentEpoch, targetAssignment)
