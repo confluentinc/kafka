@@ -2269,13 +2269,13 @@ public class GroupMetadataManager {
 
         // The subscription has changed when either the subscribed topic names or subscribed topic
         // regex has changed.
-        boolean hasSubscriptionChanged = subscribedTopicNamesChanged || updateRegularExpressionsResult.subscribedTopicRegexChanged;
+        boolean hasSubscriptionChanged = subscribedTopicNamesChanged || updateRegularExpressionsResult.regexUpdated();
         // Bumping the group epoch signals that the target assignment should be updated. We bump the
         // group epoch when the member has changed its subscribed topic names or the member has
         // changed its subscribed topic regex to a regex that is already resolved. We explicitly
         // avoid bumping the group epoch when the new subscribed topic regex has not been resolved
         // yet, since we will have to update the target assignment again later.
-        bumpGroupEpoch |= subscribedTopicNamesChanged || updateRegularExpressionsResult.bumpGroupEpoch;
+        bumpGroupEpoch |= subscribedTopicNamesChanged || updateRegularExpressionsResult == UpdateRegularExpressionsResult.REGEX_UPDATED_AND_RESOLVED;
 
         int groupEpoch = group.groupEpoch();
         SubscriptionType subscriptionType = group.subscriptionType();
@@ -3127,10 +3127,15 @@ public class GroupMetadataManager {
         return value != null && !value.isEmpty();
     }
 
-    private record UpdateRegularExpressionsResult(
-        boolean bumpGroupEpoch,
-        boolean subscribedTopicRegexChanged
-    ) { }
+    private enum UpdateRegularExpressionsResult {
+        NO_CHANGE,
+        REGEX_UPDATED,
+        REGEX_UPDATED_AND_RESOLVED;
+
+        public boolean regexUpdated() {
+            return this == REGEX_UPDATED || this == REGEX_UPDATED_AND_RESOLVED;
+        }
+    }
 
     /**
      * Check whether the member has updated its subscribed topic regular expression and
@@ -3158,14 +3163,16 @@ public class GroupMetadataManager {
         String oldSubscribedTopicRegex = member.subscribedTopicRegex();
         String newSubscribedTopicRegex = updatedMember.subscribedTopicRegex();
 
-        boolean bumpGroupEpoch = false;
         boolean requireRefresh = false;
+        UpdateRegularExpressionsResult updateRegularExpressionsResult = UpdateRegularExpressionsResult.NO_CHANGE;
 
         // Check whether the member has changed its subscribed regex.
         boolean subscribedTopicRegexChanged = !Objects.equals(oldSubscribedTopicRegex, newSubscribedTopicRegex);
         if (subscribedTopicRegexChanged) {
             log.debug("[GroupId {}] Member {} updated its subscribed regex to: {}.",
                 groupId, memberId, newSubscribedTopicRegex);
+
+            updateRegularExpressionsResult = UpdateRegularExpressionsResult.REGEX_UPDATED;
 
             if (isNotEmpty(oldSubscribedTopicRegex) && group.numSubscribedMembers(oldSubscribedTopicRegex) == 1) {
                 // If the member was the last one subscribed to the regex, we delete the
@@ -3185,7 +3192,9 @@ public class GroupMetadataManager {
                 } else {
                     // If the new regex is already resolved, we trigger a rebalance
                     // by bumping the group epoch.
-                    bumpGroupEpoch = group.resolvedRegularExpression(newSubscribedTopicRegex).isPresent();
+                    if (group.resolvedRegularExpression(newSubscribedTopicRegex).isPresent()) {
+                        updateRegularExpressionsResult = UpdateRegularExpressionsResult.REGEX_UPDATED_AND_RESOLVED;
+                    }
                 }
             }
         }
@@ -3201,20 +3210,20 @@ public class GroupMetadataManager {
         // 0. The group is subscribed to regular expressions. We also take the one
         //    that the current may have just introduced.
         if (!requireRefresh && group.subscribedRegularExpressions().isEmpty()) {
-            return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
+            return updateRegularExpressionsResult;
         }
 
         // 1. There is no ongoing refresh for the group.
         String key = group.groupId() + "-regex";
         if (executor.isScheduled(key)) {
-            return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
+            return updateRegularExpressionsResult;
         }
 
         // 2. The last refresh is older than 10s. If the group does not have any regular
         //    expressions but the current member just brought a new one, we should continue.
         long lastRefreshTimeMs = group.lastResolvedRegularExpressionRefreshTimeMs();
         if (currentTimeMs <= lastRefreshTimeMs + REGEX_BATCH_REFRESH_MIN_INTERVAL_MS) {
-            return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
+            return updateRegularExpressionsResult;
         }
 
         // 3.1 The group has unresolved regular expressions.
@@ -3243,7 +3252,7 @@ public class GroupMetadataManager {
             );
         }
 
-        return new UpdateRegularExpressionsResult(bumpGroupEpoch, subscribedTopicRegexChanged);
+        return updateRegularExpressionsResult;
     }
 
     /**
