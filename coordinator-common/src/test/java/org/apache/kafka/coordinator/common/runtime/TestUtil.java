@@ -51,6 +51,14 @@ public class TestUtil {
 
     public static MemoryRecords records(
         long timestamp,
+        Compression compression,
+        String... records
+    ) {
+        return records(timestamp, compression, Arrays.stream(records).toList());
+    }
+
+    public static MemoryRecords records(
+        long timestamp,
         List<String> records
     ) {
         if (records.isEmpty())
@@ -72,6 +80,45 @@ public class TestUtil {
             buffer,
             RecordVersion.current().value,
             Compression.NONE,
+            TimestampType.CREATE_TIME,
+            0L,
+            timestamp,
+            RecordBatch.NO_PRODUCER_ID,
+            RecordBatch.NO_PRODUCER_EPOCH,
+            0,
+            false,
+            RecordBatch.NO_PARTITION_LEADER_EPOCH
+        );
+
+        simpleRecords.forEach(builder::append);
+
+        return builder.build();
+    }
+
+    public static MemoryRecords records(
+        long timestamp,
+        Compression compression,
+        List<String> records
+    ) {
+        if (records.isEmpty())
+            return MemoryRecords.EMPTY;
+
+        List<SimpleRecord> simpleRecords = records.stream().map(record ->
+            new SimpleRecord(timestamp, record.getBytes(Charset.defaultCharset()))
+        ).toList();
+
+        int sizeEstimate = AbstractRecords.estimateSizeInBytes(
+            RecordVersion.current().value,
+            compression.type(),
+            simpleRecords
+        );
+
+        ByteBuffer buffer = ByteBuffer.allocate(sizeEstimate);
+
+        MemoryRecordsBuilder builder = MemoryRecords.builder(
+            buffer,
+            RecordVersion.current().value,
+            compression,
             TimestampType.CREATE_TIME,
             0L,
             timestamp,
