@@ -18,6 +18,7 @@ package org.apache.kafka.coordinator.common.runtime;
 
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.errors.NotCoordinatorException;
 import org.apache.kafka.common.errors.NotEnoughReplicasException;
@@ -4338,7 +4339,7 @@ public class CoordinatorRuntimeTest {
 
         // Write #1 with the small records, batch will be about half full
         long firstBatchTimestamp = timer.time().milliseconds();
-        CompletableFuture<String> write1 = runtime.scheduleWriteOperation("write#1", TP, EventOrigin.EXTERNAL, Duration.ofMillis(50),
+        CompletableFuture<String> write1 = runtime.scheduleWriteOperation("write#1", TP, Duration.ofMillis(50),
             state -> new CoordinatorResult<>(records, "response1")
         );
 
@@ -4356,7 +4357,7 @@ public class CoordinatorRuntimeTest {
         // previous batch and successfully allocate a new batch for this record. The new batch
         // will also trigger an immediate flush.
         long secondBatchTimestamp = timer.time().milliseconds();
-        CompletableFuture<String> write2 = runtime.scheduleWriteOperation("write#2", TP, EventOrigin.EXTERNAL, Duration.ofMillis(50),
+        CompletableFuture<String> write2 = runtime.scheduleWriteOperation("write#2", TP, Duration.ofMillis(50),
             state -> new CoordinatorResult<>(largeRecord, "response2")
         );
 
@@ -4427,7 +4428,7 @@ public class CoordinatorRuntimeTest {
 
         // Write #1 with the small records, batch will be about half full
         long firstBatchTimestamp = timer.time().milliseconds();
-        CompletableFuture<String> write1 = runtime.scheduleWriteOperation("write#1", TP, EventOrigin.EXTERNAL, Duration.ofMillis(50),
+        CompletableFuture<String> write1 = runtime.scheduleWriteOperation("write#1", TP, Duration.ofMillis(50),
             state -> new CoordinatorResult<>(records, "response1")
         );
 
@@ -4448,7 +4449,7 @@ public class CoordinatorRuntimeTest {
         // Write #2 with the large record. This record is too large to go into the previous batch
         // and is not compressible so it should be flushed. It is also too large to fit in a new batch
         // so the write will fail with RecordTooLargeException
-        CompletableFuture<String> write2 = runtime.scheduleWriteOperation("write#2", TP, EventOrigin.EXTERNAL, Duration.ofMillis(50),
+        CompletableFuture<String> write2 = runtime.scheduleWriteOperation("write#2", TP, Duration.ofMillis(50),
             state -> new CoordinatorResult<>(largeRecord, "response2")
         );
 
