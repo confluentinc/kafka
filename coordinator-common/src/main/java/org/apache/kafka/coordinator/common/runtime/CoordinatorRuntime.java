@@ -912,6 +912,27 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
         }
 
         /**
+         * Handles the case where append() is called with no records.
+         *
+         * @param event             The event that must be completed when the 
+         *                          records are written.
+         */
+        private void handleEmptyRecords(DeferredEvent event) {
+            // If the records are empty, it was a read operation after all. In this case,
+            // the response can be returned directly iff there are no pending write operations;
+            // otherwise, the read needs to wait on the last write operation to be completed.
+            if (currentBatch != null && currentBatch.builder.numRecords() > 0) {
+                currentBatch.deferredEvents.add(event);
+            } else {
+                if (coordinator.lastCommittedOffset() < coordinator.lastWrittenOffset()) {
+                    deferredEventQueue.add(coordinator.lastWrittenOffset(), DeferredEventCollection.of(log, event));
+                } else {
+                    event.complete(null);
+                }
+            }
+        }
+
+        /**
          * Appends records to the log and replay them to the state machine.
          *
          * @param producerId        The producer id.
@@ -939,18 +960,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
             }
 
             if (records.isEmpty()) {
-                // If the records are empty, it was a read operation after all. In this case,
-                // the response can be returned directly iff there are no pending write operations;
-                // otherwise, the read needs to wait on the last write operation to be completed.
-                if (currentBatch != null && currentBatch.builder.numRecords() > 0) {
-                    currentBatch.deferredEvents.add(event);
-                } else {
-                    if (coordinator.lastCommittedOffset() < coordinator.lastWrittenOffset()) {
-                        deferredEventQueue.add(coordinator.lastWrittenOffset(), DeferredEventCollection.of(log, event));
-                    } else {
-                        event.complete(null);
-                    }
-                }
+                handleEmptyRecords(event);
             } else {
                 // If the records are not empty, first, they are applied to the state machine,
                 // second, they are appended to the opened batch.
@@ -990,6 +1000,11 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                         compression.type(),
                         recordsToAppend
                     );
+                    int estimatedSizeUpperBound = AbstractRecords.estimateSizeInBytes(
+                        currentBatch.builder.magic(),
+                        Compression.none().build().type(),
+                        recordsToAppend
+                    );
 
                     // Check if the current batch has enough space. We check this before
                     // replaying the records in order to avoid having to revert back
@@ -1000,7 +1015,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                             "configured size of " + currentBatch.maxBatchSize + ".");
                     }
 
-                    if (!currentBatch.builder.hasRoomFor(estimatedSize)) {
+                    if (!currentBatch.builder.hasRoomFor(estimatedSizeUpperBound)) {
                         // Otherwise, we write the current batch, allocate a new one and re-verify
                         // whether the records fit in it.
                         // If flushing fails, we don't catch the exception in order to let
@@ -1075,11 +1090,15 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                 // Add the event to the list of pending events associated with the batch.
                 currentBatch.deferredEvents.add(event);
 
-                // Write the current batch if it is transactional or if the linger timeout
-                // has expired.
-                // If flushing fails, we don't catch the exception in order to let
-                // the caller fail the current operation.
-                maybeFlushCurrentBatch(currentTimeMs);
+                if (isAtomic && !currentBatch.builder.hasRoomFor(0)) {
+                    flushCurrentBatch();
+                } else {
+                    // Write the current batch if it is transactional or if the linger timeout
+                    // has expired.
+                    // If flushing fails, we don't catch the exception in order to let
+                    // the caller fail the current operation. 
+                    maybeFlushCurrentBatch(currentTimeMs);
+                }
             }
         }
 
