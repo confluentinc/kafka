@@ -913,7 +913,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
         }
 
         /**
-         * Handles the case where append() is called with no records.
+         * Completes the given event once all pending writes are completed. 
          *
          * @param event             The event that must be completed when the 
          *                          records are written.
