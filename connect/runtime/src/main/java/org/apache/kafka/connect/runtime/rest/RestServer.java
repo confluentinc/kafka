@@ -42,6 +42,7 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.Slf4jRequestLogWriter;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
 import org.eclipse.jetty.server.handler.DefaultHandler;
+import org.eclipse.jetty.server.handler.ErrorHandler;
 import org.eclipse.jetty.server.handler.RequestLogHandler;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
 import org.eclipse.jetty.servlet.FilterHolder;
@@ -194,6 +195,9 @@ public class RestServer {
         StatisticsHandler statsHandler = new StatisticsHandler();
         statsHandler.setHandler(handlers);
         jettyServer.setHandler(statsHandler);
+        jettyServer.setErrorHandler(new ErrorHandler() {{
+                setShowServlet(false);
+        }});
         jettyServer.setStopTimeout(GRACEFUL_SHUTDOWN_TIMEOUT_MS);
         jettyServer.setStopAtShutdown(true);
 
