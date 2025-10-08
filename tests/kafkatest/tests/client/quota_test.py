@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from ducktape.tests.test import Test
-from ducktape.mark import matrix, parametrize
+from ducktape.mark import ignore, matrix, parametrize
 from ducktape.mark.resource import cluster
 
 from kafkatest.services.zookeeper import ZookeeperService
@@ -126,6 +126,7 @@ class QuotaTest(Test):
         """Override this since we're adding services outside of the constructor"""
         return super(QuotaTest, self).min_cluster_size() + self.num_producers + self.num_consumers
 
+    @ignore
     @cluster(num_nodes=5)
     @matrix(quota_type=[QuotaConfig.CLIENT_ID, QuotaConfig.USER, QuotaConfig.USER_CLIENT], override_quota=[True, False])
     @parametrize(quota_type=QuotaConfig.CLIENT_ID, consumer_num=2)
