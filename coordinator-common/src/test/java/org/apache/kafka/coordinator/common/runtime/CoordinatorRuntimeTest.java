@@ -4297,10 +4297,7 @@ public class CoordinatorRuntimeTest {
     @Test
     public void testLargeCompressibleRecordTriggersFlushAndSucceeds() throws Exception {
         MockTimer timer = new MockTimer();
-
-        // Writer sleeps for 10ms before appending records.
-        MockPartitionWriter writer = new MockPartitionWriter(timer.time(), Integer.MAX_VALUE, false);
-        CoordinatorRuntimeMetrics runtimeMetrics = mock(CoordinatorRuntimeMetrics.class);
+        MockPartitionWriter writer = new MockPartitionWriter();
         Compression compression = Compression.gzip().build();
 
         CoordinatorRuntime<MockCoordinatorShard, String> runtime =
@@ -4312,7 +4309,7 @@ public class CoordinatorRuntimeTest {
                 .withEventProcessor(new DirectEventProcessor())
                 .withPartitionWriter(writer)
                 .withCoordinatorShardBuilderSupplier(new MockCoordinatorShardBuilderSupplier())
-                .withCoordinatorRuntimeMetrics(runtimeMetrics)
+                .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withCompression(compression)
                 .withSerializer(new StringSerializer())
@@ -4386,10 +4383,7 @@ public class CoordinatorRuntimeTest {
     @Test
     public void testLargeUncompressibleRecordTriggersFlushAndFails() throws Exception {
         MockTimer timer = new MockTimer();
-
-        // Writer sleeps for 10ms before appending records.
-        MockPartitionWriter writer = new MockPartitionWriter(timer.time(), Integer.MAX_VALUE, false);
-        CoordinatorRuntimeMetrics runtimeMetrics = mock(CoordinatorRuntimeMetrics.class);
+        MockPartitionWriter writer = new MockPartitionWriter();
         Compression compression = Compression.gzip().build();
 
         CoordinatorRuntime<MockCoordinatorShard, String> runtime =
@@ -4401,7 +4395,7 @@ public class CoordinatorRuntimeTest {
                 .withEventProcessor(new DirectEventProcessor())
                 .withPartitionWriter(writer)
                 .withCoordinatorShardBuilderSupplier(new MockCoordinatorShardBuilderSupplier())
-                .withCoordinatorRuntimeMetrics(runtimeMetrics)
+                .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withCompression(compression)
                 .withSerializer(new StringSerializer())
@@ -4448,10 +4442,13 @@ public class CoordinatorRuntimeTest {
 
         // Write #2 with the large record. This record is too large to go into the previous batch
         // and is not compressible so it should be flushed. It is also too large to fit in a new batch
-        // so the write will fail with RecordTooLargeException
+        // so the write should fail with RecordTooLargeException
         CompletableFuture<String> write2 = runtime.scheduleWriteOperation("write#2", TP, Duration.ofMillis(50),
             state -> new CoordinatorResult<>(largeRecord, "response2")
         );
+
+        // Check that write2 fails with RecordTooLargeException
+        assertFutureThrows(RecordTooLargeException.class, write2);
 
         // Verify the state. The first batch was flushed and the largeRecord
         // write failed.
