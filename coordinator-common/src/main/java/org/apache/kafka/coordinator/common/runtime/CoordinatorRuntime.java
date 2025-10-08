@@ -25,6 +25,7 @@ import org.apache.kafka.common.errors.RecordTooLargeException;
 import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.AbstractRecords;
+import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.EndTransactionMarker;
 import org.apache.kafka.common.record.MemoryRecords;
@@ -917,10 +918,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
          * @param event             The event that must be completed when the 
          *                          records are written.
          */
-        private void handleEmptyRecords(DeferredEvent event) {
-            // If the records are empty, it was a read operation after all. In this case,
-            // the response can be returned directly iff there are no pending write operations;
-            // otherwise, the read needs to wait on the last write operation to be completed.
+        private void waitForPendingWrites(DeferredEvent event) {
             if (currentBatch != null && currentBatch.builder.numRecords() > 0) {
                 currentBatch.deferredEvents.add(event);
             } else {
@@ -960,7 +958,9 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
             }
 
             if (records.isEmpty()) {
-                handleEmptyRecords(event);
+                // If the records are empty, it was a read operation after all. In this case,
+                // the response can be returned once any pending write operations complete.
+                waitForPendingWrites(event);
             } else {
                 // If the records are not empty, first, they are applied to the state machine,
                 // second, they are appended to the opened batch.
@@ -1002,13 +1002,12 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                     );
                     int estimatedSizeUpperBound = AbstractRecords.estimateSizeInBytes(
                         currentBatch.builder.magic(),
-                        Compression.none().build().type(),
+                        CompressionType.NONE,
                         recordsToAppend
                     );
 
-                    // Check if the current batch has enough space. We check this before
-                    // replaying the records in order to avoid having to revert back
-                    // changes if the records do not fit within a batch.
+                    // Fail immediately when the records are too large to fit in a single batch
+                    // even when assuming an optimistic compression ratio.
                     if (estimatedSize > currentBatch.builder.maxAllowedBytes()) {
                         throw new RecordTooLargeException("Message batch size is " + estimatedSize +
                             " bytes in append to partition " + tp + " which exceeds the maximum " +
@@ -1016,10 +1015,10 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                     }
 
                     if (!currentBatch.builder.hasRoomFor(estimatedSizeUpperBound)) {
-                        // Otherwise, we write the current batch, allocate a new one and re-verify
-                        // whether the records fit in it.
-                        // If flushing fails, we don't catch the exception in order to let
-                        // the caller fail the current operation.
+                        // Start a new batch when the total uncompressed data size would exceed
+                        // the max batch size. We still allow atomic writes with an uncompressed size
+                        // larger than the max batch size as long as they compress down to under the max
+                        // batch size. These large writes go into a batch by themselves.
                         flushCurrentBatch();
                         maybeAllocateNewBatch(
                             producerId,
@@ -1091,6 +1090,8 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                 currentBatch.deferredEvents.add(event);
 
                 if (isAtomic && !currentBatch.builder.hasRoomFor(0)) {
+                    // Flush the batch if its uncompressed size is larger than the max batch size.
+                    // It would get flushed on the next append() anyway.
                     flushCurrentBatch();
                 } else {
                     // Write the current batch if it is transactional or if the linger timeout
