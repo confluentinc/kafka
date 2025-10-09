@@ -915,8 +915,8 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
         /**
          * Completes the given event once all pending writes are completed. 
          *
-         * @param event             The event that must be completed when the 
-         *                          records are written.
+         * @param event             The event to complete once all pending 
+         *                          writes are completed.
          */
         private void waitForPendingWrites(DeferredEvent event) {
             if (currentBatch != null && currentBatch.builder.numRecords() > 0) {
