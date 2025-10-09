@@ -4294,7 +4294,8 @@ public class CoordinatorRuntimeTest {
         assertEquals("response3", write3.get(5, TimeUnit.SECONDS));
     }
 
-        public void testCompressibleRecordTriggersFlushAndSucceeds() throws Exception {
+    @Test
+    public void testCompressibleRecordTriggersFlushAndSucceeds() throws Exception {
         MockTimer timer = new MockTimer();
         MockPartitionWriter writer = new MockPartitionWriter();
         Compression compression = Compression.gzip().build();
@@ -4351,7 +4352,6 @@ public class CoordinatorRuntimeTest {
         // Write #2 with the large record. This record is too large to go into the previous batch
         // uncompressed but fits in a new buffer, so we should flush the previous batch and allocate
         // a new one. 
-        long secondBatchTimestamp = timer.time().milliseconds();
         CompletableFuture<String> write2 = runtime.scheduleWriteOperation("write#2", TP, Duration.ofMillis(50),
             state -> new CoordinatorResult<>(largeRecord, "response2")
         );
@@ -4365,9 +4365,11 @@ public class CoordinatorRuntimeTest {
             new MockCoordinatorShard.RecordAndMetadata(2, largeRecord.get(0))
         ), ctx.coordinator.coordinator().fullRecords());
         assertEquals(List.of(
-            records(firstBatchTimestamp, compression, records),
-            records(secondBatchTimestamp, compression, largeRecord)
+            records(firstBatchTimestamp, compression, records)
         ), writer.entries(TP));
+
+        // Advance past the linger time
+        timer.advanceClock(11);
 
         // Commit and verify that the second batch is completed
         writer.commit(TP);
