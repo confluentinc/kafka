@@ -23,6 +23,7 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Rate;
+import org.apache.kafka.common.metrics.stats.WindowedCount;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRuntime.CoordinatorState;
 
 import java.util.Arrays;
@@ -117,9 +118,9 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
     private final Sensor eventPurgatoryTimeSensor;
 
     /**
-     * Sensor to measure the flush time.
+     * Sensor to measure the flush time and rate.
      */
-    private final Sensor flushTimeSensor;
+    private final Sensor flushSensor;
 
     public CoordinatorRuntimeMetricsImpl(Metrics metrics, String metricsGroup) {
         this.metrics = Objects.requireNonNull(metrics);
@@ -205,8 +206,14 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
                 "The " + suffix + " flush time in milliseconds"
             )
         );
-        this.flushTimeSensor = metrics.sensor(this.metricsGroup + "-FlushTime");
-        this.flushTimeSensor.add(flushTimeHistogram);
+        this.flushSensor = metrics.sensor(this.metricsGroup + "-Flush");
+        this.flushSensor.add(flushTimeHistogram);
+        this.flushSensor.add(
+            metrics.metricName(
+                "batch-flush-rate",
+                this.metricsGroup,
+                "The flushes per second."),
+            new Rate(TimeUnit.SECONDS, new WindowedCount()));
     }
 
     /**
@@ -234,7 +241,7 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
         metrics.removeSensor(eventQueueTimeSensor.name());
         metrics.removeSensor(eventProcessingTimeSensor.name());
         metrics.removeSensor(eventPurgatoryTimeSensor.name());
-        metrics.removeSensor(flushTimeSensor.name());
+        metrics.removeSensor(flushSensor.name());
     }
 
     /**
@@ -296,7 +303,7 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
 
     @Override
     public void recordFlushTime(long durationMs) {
-        flushTimeSensor.record(durationMs);
+        flushSensor.record(durationMs);
     }
 
     @Override
