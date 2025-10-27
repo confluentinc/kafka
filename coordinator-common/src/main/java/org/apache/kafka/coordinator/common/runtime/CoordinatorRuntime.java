@@ -227,7 +227,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
             if (compression == null)
                 compression = Compression.NONE;
             if (appendLingerMs == null)
-                appendLingerMs = OptionalInt.of(0);
+                appendLingerMs = OptionalInt.empty();
             if (appendLingerMs.isPresent() && appendLingerMs.getAsInt() < -1)
                 throw new IllegalArgumentException("AppendLinger must be empty or >= 0");
             if (executorService == null)

@@ -2615,6 +2615,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
+                .withAppendLingerMs(0)
                 .withExecutorService(mock(ExecutorService.class))
                 .build();
 
@@ -2766,6 +2767,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
+                .withAppendLingerMs(0)
                 .withExecutorService(mock(ExecutorService.class))
                 .build();
 
@@ -4576,6 +4578,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
+                .withAppendLingerMs(0)
                 .withExecutorService(mock(ExecutorService.class))
                 .build();
 
@@ -4662,6 +4665,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
+                .withAppendLingerMs(0)
                 .withExecutorService(mock(ExecutorService.class))
                 .build();
 
@@ -4807,6 +4811,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
+                .withAppendLingerMs(0)
                 .withExecutorService(executorService)
                 .build();
 
