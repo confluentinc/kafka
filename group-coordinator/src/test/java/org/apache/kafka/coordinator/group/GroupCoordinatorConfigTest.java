@@ -326,6 +326,18 @@ public class GroupCoordinatorConfigTest {
             assertThrows(IllegalArgumentException.class, () -> createConfig(configs)).getMessage());
     }
 
+    @Test
+    public void testAppendLingerMs() {
+        GroupCoordinatorConfig config = createConfig(Map.of(GroupCoordinatorConfig.GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG, -1));
+        assertEquals(OptionalInt.empty(), config.appendLingerMs());
+
+        config = createConfig(Map.of(GroupCoordinatorConfig.GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG, 0));
+        assertEquals(OptionalInt.of(0), config.appendLingerMs());
+
+        config = createConfig(Map.of(GroupCoordinatorConfig.GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG, 5));
+        assertEquals(OptionalInt.of(5), config.appendLingerMs());
+    }
+
     public static GroupCoordinatorConfig createGroupCoordinatorConfig(
         int offsetMetadataMaxSize,
         long offsetsRetentionCheckIntervalMs,
