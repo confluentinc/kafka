@@ -37,6 +37,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -218,7 +219,7 @@ public class GroupCoordinatorConfigTest {
         assertEquals(Duration.ofMinutes(24 * 60 * 60 * 1000L).toMillis(), config.offsetsRetentionMs());
         assertEquals(5000, config.offsetCommitTimeoutMs());
         assertEquals(CompressionType.GZIP, config.offsetTopicCompressionType());
-        assertEquals(10, config.appendLingerMs());
+        assertEquals(OptionalInt.of(10), config.appendLingerMs());
         assertEquals(555, config.offsetsLoadBufferSize());
         assertEquals(111, config.offsetsTopicPartitions());
         assertEquals(11, config.offsetsTopicReplicationFactor());
