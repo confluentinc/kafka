@@ -185,11 +185,6 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
             return this;
         }
 
-        public Builder<S, U> withAppendLingerMs(int appendLingerMs) {
-            this.appendLingerMs = OptionalInt.of(appendLingerMs);
-            return this;
-        }
-
         public Builder<S, U> withAppendLingerMs(OptionalInt appendLingerMs) {
             this.appendLingerMs = appendLingerMs;
             return this;
