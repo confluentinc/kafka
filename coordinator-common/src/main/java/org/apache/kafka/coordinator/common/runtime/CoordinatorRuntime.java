@@ -717,7 +717,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                             }
                         } catch (Throwable ex) {
                             log.error("Failed to load metadata from {} with epoch {} due to {}.",
-                                tp, epoch, ex.toString(), ex);
+                                tp, epoch, ex.getMessage(), ex);
                             context.transitionTo(CoordinatorState.FAILED);
                         }
                     } else {
@@ -2446,7 +2446,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                             // It's very unlikely that we will ever see an exception here, since we
                             // already make an effort to catch exceptions in the unload method.
                             log.error("Failed to unload metadata for {} with epoch {} due to {}.",
-                                tp, partitionEpoch, ex.toString(), ex);
+                                tp, partitionEpoch, ex.getMessage(), ex);
                         } finally {
                             // Always remove the coordinator context, otherwise the coordinator
                             // shard could be permanently stuck.
