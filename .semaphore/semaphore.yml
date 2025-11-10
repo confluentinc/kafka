@@ -109,7 +109,7 @@ blocks:
               echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
               echo "Current time: $(date +%s%3N)"
               echo $(( ($(date +%s%3N) - $SEMAPHORE_JOB_CREATION_TIME * 1000) )) > duration.txt
-              artifact push workflow duration.txt --destination $SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID || true
+              artifact push workflow duration.txt --destination $SEMAPHORE_JOB_INDEX-test-duration-$SEMAPHORE_WORKFLOW_ID
 after_pipeline:
   task:
     agent:
@@ -121,7 +121,7 @@ after_pipeline:
           - emit-ci-metrics -p -a test-results
       - name: Publish Test Results
         commands:
-          - test-results gen-pipeline-report
+          - test-results gen-pipeline-report || true
       - name: SonarQube
         commands:
           - checkout
