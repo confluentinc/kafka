@@ -91,11 +91,10 @@ blocks:
       jobs:
         - name: Unit tests and Integration tests
           commands:
-            - 'export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx1g -Xms512m -XX:MaxMetaspaceSize=256m"'
             - './gradlew 
-                unitTest integrationTest --no-daemon --stacktrace --continue 
+                unitTest integrationTest --no-daemon --max-workers=1 --stacktrace --continue
                 -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
-                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 -max-workers=1'
+                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
           execution_time_limit:
             minutes: 120
       epilogue:
