@@ -121,7 +121,7 @@ after_pipeline:
           - emit-ci-metrics -p -a test-results
       - name: Publish Test Results
         commands:
-          - test-results gen-pipeline-report || true
+          - test-results gen-pipeline-report
       - name: SonarQube
         commands:
           - checkout
