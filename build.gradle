@@ -173,8 +173,14 @@ allprojects {
           libs.nettyHandler,
           libs.nettyTransportNativeEpoll,
 	  // be explicit about the reload4j version instead of relying on the transitive versions
-	  libs.log4j
+	  libs.log4j,
+          // be explicit about the commonsLang version instead of relying on the transitive versions
+          libs.commonsLang
         )
+        // CVE-2025-48924: Replace vulnerable commons-lang 2.x with commons-lang3 3.18.0
+        dependencySubstitution {
+          substitute module('commons-lang:commons-lang') using module('org.apache.commons:commons-lang3:3.18.0')
+        }
       }
     }
   }
