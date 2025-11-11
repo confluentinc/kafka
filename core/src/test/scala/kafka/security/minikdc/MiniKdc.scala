@@ -28,7 +28,7 @@ import java.util.{Locale, Properties, UUID}
 import kafka.utils.{CoreUtils, Exit, Logging}
 
 import scala.jdk.CollectionConverters._
-import org.apache.commons.lang3.text.StrSubstitutor
+import org.apache.commons.lang.text.StrSubstitutor
 import org.apache.directory.api.ldap.model.entry.{DefaultEntry, Entry}
 import org.apache.directory.api.ldap.model.ldif.LdifReader
 import org.apache.directory.api.ldap.model.name.Dn
