@@ -64,6 +64,7 @@ versions += [
   checkstyle: "8.36.2",
   commonsCli: "1.4",
   commonsIo: "2.16.0", // ZooKeeper dependency. Do not use, this is going away.
+  commonsLang: "3.18.0",
   dropwizardMetrics: "4.1.12.1",
   gradle: "8.0.2",
   grgit: "4.1.1",
@@ -149,6 +150,7 @@ libs += [
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
   commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
   commonsIo: "commons-io:commons-io:$versions.commonsIo",
+  commonsLang: "org.apache.commons:commons-lang3:$versions.commonsLang",
   easymock: "org.easymock:easymock:$versions.easymock",
   jacksonAnnotations: "com.fasterxml.jackson.core:jackson-annotations:$versions.jackson",
   jacksonDatabind: "com.fasterxml.jackson.core:jackson-databind:$versions.jacksonDatabind",
