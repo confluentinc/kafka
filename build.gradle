@@ -190,11 +190,6 @@ allprojects {
           // be explicit about the commonsLang version instead of relying on the transitive versions
           libs.commonsLang
         )
-        // CVE-2025-48924: Replace vulnerable commons-lang 2.x with commons-lang3 3.18.0
-        // commons-lang 2.x is EOL and has no fix, so we substitute it with commons-lang3
-        dependencySubstitution {
-          substitute module('commons-lang:commons-lang') using module('org.apache.commons:commons-lang3:3.18.0')
-        }
       }
     }
   }
