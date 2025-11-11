@@ -95,10 +95,23 @@ blocks:
       jobs:
         - name: Unit tests and Integration tests
           commands:
-            - './gradlew 
-                unitTest integrationTest --no-daemon --stacktrace --continue 
-                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
-                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
+            - |
+              # Stop the script if any command fails
+              set -euo pipefail
+              
+              ./gradlew \
+                unitTest integrationTest --no-daemon --stacktrace --continue \
+                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 \
+                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
+              gradle_exit=$?
+              
+              # Check and exit accordingly
+              if [ "$gradle_exit" -ne 0 ]; then
+                echo "❌ Gradle exited with code $gradle_exit — failing the job."
+                exit "$gradle_exit"
+              else
+                echo "✅ Gradle completed successfully (exit code 0)."
+              fi
           execution_time_limit:
             minutes: 120
       epilogue:
