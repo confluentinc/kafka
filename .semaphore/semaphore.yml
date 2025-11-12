@@ -45,6 +45,11 @@ global_job_config:
       - checkout
       - sem-version java 11
       - sem-version go 1.16.15
+      - sem-version python 3.11
+      - python --version
+      - python -m venv junitparser
+      - source junitparser/bin/activate
+      - pip install junitparser
       - git config --global url."git@github.com:".insteadOf "https://github.com/"
       - export SEMAPHORE_CACHE_DIR=/home/semaphore
       - source scripts/set_env_vars.sh
