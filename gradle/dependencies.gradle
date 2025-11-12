@@ -100,6 +100,7 @@ versions += [
   commonsBeanutils: "1.11.0",
   commonsCli: "1.4",
   commonsIo: "2.16.0", // ZooKeeper dependency. Do not use, this is going away.
+  commonsLang: "3.18.0",
   commonsValidator: "1.7",
   dropwizardMetrics: "4.1.12.1",
   gradle: "8.6",
@@ -188,6 +189,7 @@ libs += [
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
   commonsIo: "commons-io:commons-io:$versions.commonsIo",
   commonsBeanutils: "commons-beanutils:commons-beanutils:$versions.commonsBeanutils",
+  commonsLang: "org.apache.commons:commons-lang3:$versions.commonsLang",
   commonsValidator: "commons-validator:commons-validator:$versions.commonsValidator",
   commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
   easymock: "org.easymock:easymock:$easymockVersion",
