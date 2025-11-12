@@ -45,6 +45,11 @@ global_job_config:
       - checkout
       - sem-version java 11
       - sem-version go 1.16.15
+      - sem-version python 3.11
+      - python --version
+      - python -m venv junitparser
+      - source junitparser/bin/activate
+      - pip install junitparser
       - git config --global url."git@github.com:".insteadOf "https://github.com/"
       - export SEMAPHORE_CACHE_DIR=/home/semaphore
       - source scripts/set_env_vars.sh
@@ -95,16 +100,37 @@ blocks:
       jobs:
         - name: Unit tests and Integration tests
           commands:
-            - './gradlew 
-                unitTest integrationTest --no-daemon --stacktrace --continue 
-                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
-                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
+            - |
+              ./gradlew \
+                unitTest integrationTest --no-daemon --stacktrace --continue \
+                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 \
+                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
+              gradle_exit=$?
+              
+              # Check and gradle exit accordingly
+              if [ "$gradle_exit" -ne 0 ]; then
+                echo "❌ Gradle exited with code $gradle_exit — failing the job."
+                exit "$gradle_exit"
+              else
+                echo "✅ Gradle completed successfully (exit code 0)."
+              fi
+              
+              shopt -s globstar
+              python scripts/check_test_failures.py **/build/test-results/**/TEST-*.xml
+              check_exit=$?
+
+              test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml || true
+
+              # Check if check_test_failures.py returned non-zero exit code
+              if [ "$check_exit" -ne 0 ]; then
+                echo "❌ check_test_failures.py returned $check_exit"
+                exit "$check_exit"
+              fi
           execution_time_limit:
             minutes: 120
       epilogue:
         always:
           commands:
-            - shopt -s globstar && test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
             - |
               echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
               echo "Current time: $(date +%s%3N)"
