@@ -103,7 +103,7 @@ blocks:
                 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
               gradle_exit=$?
               
-              # Check and gradle exit accordingly
+              # Check Gradle exit code and fail the job if non-zero
               if [ "$gradle_exit" -ne 0 ]; then
                 echo "❌ Gradle exited with code $gradle_exit — failing the job."
                 exit "$gradle_exit"
