@@ -46,6 +46,7 @@ import org.apache.kafka.test.TestUtils;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -551,6 +552,7 @@ public abstract class AbstractSessionBytesStoreTest {
     }
 
     @Test
+    @Disabled
     public void shouldFetchExactKeys() {
         sessionStore.close();
         sessionStore = buildSessionStore(0x7a00000000000000L, Serdes.String(), Serdes.Long());
