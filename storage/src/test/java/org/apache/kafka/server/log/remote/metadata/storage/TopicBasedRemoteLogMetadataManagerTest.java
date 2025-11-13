@@ -36,7 +36,6 @@ import org.apache.kafka.server.log.remote.storage.RemoteStorageException;
 import org.apache.kafka.test.TestUtils;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 
 import java.io.IOException;
 import java.util.List;
@@ -62,7 +61,6 @@ import static org.mockito.Mockito.when;
 
 @SuppressWarnings("resource")
 @ClusterTestDefaults(brokers = 3)
-@Disabled("test")
 public class TopicBasedRemoteLogMetadataManagerTest {
     private static final int SEG_SIZE = 1048576;
     private final ClusterInstance clusterInstance;

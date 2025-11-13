@@ -23,7 +23,6 @@ import org.apache.kafka.common.utils.ChunkedBytesStream;
 
 import net.jpountz.xxhash.XXHashFactory;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -54,7 +53,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Disabled("test")
 public class Lz4CompressionTest {
 
     private static final Random RANDOM = new Random(0);

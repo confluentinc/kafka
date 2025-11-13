@@ -115,7 +115,7 @@ blocks:
               python scripts/check_test_failures.py **/build/test-results/**/TEST-*.xml
               check_exit=$?
 
-              test-results publish --name Test-Suite --omit-output-for-passed **/build/test-results/**/TEST-*.xml || true
+              test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml || true
 
               # Check if check_test_failures.py returned non-zero exit code
               if [ "$check_exit" -ne 0 ]; then
