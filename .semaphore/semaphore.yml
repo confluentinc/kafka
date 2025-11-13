@@ -17,7 +17,7 @@ version: v1.0
 name: build-test-release
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-arm64-4
+    type: s1-prod-ubuntu24-04-arm64-3
 fail_fast:
   cancel:
     when: "true"
@@ -98,7 +98,32 @@ blocks:
           commands:
             - |
               ./gradlew \
-                unitTest integrationTest --no-daemon --stacktrace --continue \
+                clients:unitTest clients:integrationTest \
+                clients:clients-integration-tests:unitTest clients:clients-integration-tests:integrationTest \
+                connect:unitTest connect:integrationTest \
+                connect:api:unitTest connect:api:integrationTest \
+                connect:basic-auth-extension:unitTest connect:basic-auth-extension:integrationTest \
+                connect:file:unitTest connect:file:integrationTest \
+                connect:json:unitTest connect:json:integrationTest \
+                connect:mirror:unitTest connect:mirror:integrationTest \
+                connect:mirror-client:unitTest connect:mirror-client:integrationTest \
+                connect:runtime:unitTest connect:runtime:integrationTest \
+                connect:test-plugins:unitTest connect:test-plugins:integrationTest \
+                connect:transforms:unitTest connect:transforms:integrationTest \
+                coordinator-common:unitTest coordinator-common:integrationTest \
+                core:unitTest core:integrationTest \
+                examples:unitTest examples:integrationTest \
+                generator:unitTest generator:integrationTest \
+                group-coordinator:unitTest group-coordinator:integrationTest \
+                group-coordinator:group-coordinator-api:unitTest group-coordinator:group-coordinator-api:integrationTest \
+                jmh-benchmarks:unitTest jmh-benchmarks:integrationTest \
+                metadata:unitTest metadata:integrationTest \ 
+                raft:unitTest raft:integrationTest \
+                server:unitTest server:integrationTest \
+                server-common:unitTest server-common:integrationTest \
+                share-coordinator:integrationTest \
+                shell:unitTest shell:integrationTest \              
+                --no-daemon --stacktrace --continue \
                 -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 \
                 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
               gradle_exit=$?
