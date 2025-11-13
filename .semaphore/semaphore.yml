@@ -99,7 +99,7 @@ blocks:
             - |
               ./gradlew \
                 unitTest integrationTest --no-daemon --stacktrace --continue \
-                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=3 \
+                -PmaxParallelForks=4 \
                 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
               gradle_exit=$?
               
