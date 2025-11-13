@@ -98,7 +98,7 @@ blocks:
           commands:
             - |
               ./gradlew \
-                unitTest integrationTest --no-daemon --stacktrace --continue \
+                test --no-daemon --stacktrace --continue \
                 -PmaxParallelForks=4 \
                 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
               gradle_exit=$?
