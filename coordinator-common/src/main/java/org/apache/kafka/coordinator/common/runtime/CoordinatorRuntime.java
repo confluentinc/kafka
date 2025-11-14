@@ -794,6 +794,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                     }
 
                     long flushStartMs = time.milliseconds();
+                    runtimeMetrics.recordLingerTime(flushStartMs - currentBatch.appendTimeMs);
                     // Write the records to the log and update the last written offset.
                     long offset = partitionWriter.append(
                         tp,
