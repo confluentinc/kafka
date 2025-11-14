@@ -37,6 +37,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -219,7 +220,7 @@ public class GroupCoordinatorConfigTest {
         assertEquals(Duration.ofMinutes(24 * 60 * 60 * 1000L).toMillis(), config.offsetsRetentionMs());
         assertEquals(5000, config.offsetCommitTimeoutMs());
         assertEquals(CompressionType.GZIP, config.offsetTopicCompressionType());
-        assertEquals(10, config.appendLingerMs());
+        assertEquals(OptionalInt.of(10), config.appendLingerMs());
         assertEquals(555, config.offsetsLoadBufferSize());
         assertEquals(111, config.offsetsTopicPartitions());
         assertEquals(11, config.offsetsTopicReplicationFactor());
@@ -330,6 +331,18 @@ public class GroupCoordinatorConfigTest {
         configs.put(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, -1);
         assertEquals("Invalid value -1 for configuration group.streams.initial.rebalance.delay.ms: Value must be at least 0",
             assertThrows(ConfigException.class, () -> createConfig(configs)).getMessage());
+    }
+
+    @Test
+    public void testAppendLingerMs() {
+        GroupCoordinatorConfig config = createConfig(Map.of(GroupCoordinatorConfig.GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG, -1));
+        assertEquals(OptionalInt.empty(), config.appendLingerMs());
+
+        config = createConfig(Map.of(GroupCoordinatorConfig.GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG, 0));
+        assertEquals(OptionalInt.of(0), config.appendLingerMs());
+
+        config = createConfig(Map.of(GroupCoordinatorConfig.GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG, 5));
+        assertEquals(OptionalInt.of(5), config.appendLingerMs());
     }
 
     public static GroupCoordinatorConfig createGroupCoordinatorConfig(
