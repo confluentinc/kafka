@@ -931,7 +931,7 @@ public class StreamsGroup implements Group {
      *
      * @param assignment    The assignment.
      * @param expectedProcessId The expected process ID.
-     * @throws IllegalStateException if the process ID does not match the expected one. package-private for testing.
+     * @throws IllegalStateException if the process ID does not exist. package-private for testing.
      */
     private void removeTaskProcessIds(
         Map<String, Map<Integer, Integer>> assignment,
@@ -944,7 +944,7 @@ public class StreamsGroup implements Group {
                     assignedPartitions.keySet().forEach(partitionId -> {
                         String prevValue = partitionsOrNull.remove(partitionId);
                         if (!Objects.equals(prevValue, expectedProcessId)) {
-                            throw new IllegalStateException(
+                            log.warn(
                                 String.format("Cannot remove the process ID %s from task %s_%s because the partition is " +
                                     "still owned at a different process ID %s", expectedProcessId, subtopologyId, partitionId, prevValue));
                         }
@@ -968,7 +968,7 @@ public class StreamsGroup implements Group {
      *
      * @param assignment    The assignment.
      * @param processIdToRemove The expected process ID.
-     * @throws IllegalStateException if the process ID does not match the expected one. package-private for testing.
+     * @throws IllegalStateException if the process ID does not exist. package-private for testing.
      */
     private void removeTaskProcessIdsFromSet(
         Map<String, Set<Integer>> assignment,
@@ -980,7 +980,7 @@ public class StreamsGroup implements Group {
                 if (partitionsOrNull != null) {
                     assignedPartitions.forEach(partitionId -> {
                         if (!partitionsOrNull.get(partitionId).remove(processIdToRemove)) {
-                            throw new IllegalStateException(
+                            log.warn(
                                 String.format("Cannot remove the process ID %s from task %s_%s because the task is " +
                                     "not owned by this process ID", processIdToRemove, subtopologyId, partitionId));
                         }

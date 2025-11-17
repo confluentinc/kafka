@@ -48,6 +48,8 @@ import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
 import org.apache.kafka.timeline.TimelineInteger;
 import org.apache.kafka.timeline.TimelineObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -77,6 +79,8 @@ import static org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupMe
  * records in the __consumer_offsets partitions.
  */
 public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
+
+    private static final Logger log = LoggerFactory.getLogger(ConsumerGroup.class);
 
     public enum ConsumerGroupState {
         EMPTY("Empty"),
@@ -1037,7 +1041,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
      *
      * @param assignment    The assignment.
      * @param expectedEpoch The expected epoch.
-     * @throws IllegalStateException if the epoch does not match the expected one.
+     * @throws IllegalStateException if the epoch does not exist.
      * package-private for testing.
      */
     void removePartitionEpochs(
@@ -1050,7 +1054,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                     assignedPartitions.forEach(partitionId -> {
                         Integer prevValue = partitionsOrNull.remove(partitionId);
                         if (prevValue != expectedEpoch) {
-                            throw new IllegalStateException(
+                            log.warn(
                                 String.format("Cannot remove the epoch %d from %s-%s because the partition is " +
                                     "still owned at a different epoch %d", expectedEpoch, topicId, partitionId, prevValue));
                         }
@@ -1074,7 +1078,6 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
      *
      * @param assignment    The assignment.
      * @param epoch         The new epoch.
-     * @throws IllegalStateException if the partition already has an epoch assigned.
      * package-private for testing.
      */
     void addPartitionEpochs(
@@ -1089,7 +1092,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                 for (Integer partitionId : assignedPartitions) {
                     Integer prevValue = partitionsOrNull.put(partitionId, epoch);
                     if (prevValue != null) {
-                        throw new IllegalStateException(
+                        log.warn(
                             String.format("Cannot set the epoch of %s-%s to %d because the partition is " +
                                 "still owned at epoch %d", topicId, partitionId, epoch, prevValue));
                     }
