@@ -892,8 +892,12 @@ public class ShareConsumerImpl<K, V> implements ShareConsumerDelegate<K, V> {
      */
     @Override
     public Optional<Integer> acquisitionLockTimeoutMs() {
-        // To be implemented
-        return Optional.empty();
+        acquireAndEnsureOpen();
+        try {
+            return currentFetch.acquisitionLockTimeoutMs();
+        } finally {
+            release();
+        }
     }
 
     /**
