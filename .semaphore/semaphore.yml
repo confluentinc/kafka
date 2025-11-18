@@ -17,7 +17,7 @@ version: v1.0
 name: build-test-release
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-arm64-3
+    type: s1-prod-ubuntu24-04-arm64-2
 fail_fast:
   cancel:
     when: "true"
@@ -99,8 +99,8 @@ blocks:
             - |
               ./gradlew \
                 unitTest integrationTest --no-daemon --stacktrace --continue \
-                -Dorg.gradle.jvmargs="-Xmx6g -Xss4m -XX:+UseParallelGC" \
-                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=2 \
+                -Dorg.gradle.jvmargs="-Xmx6g -Xss4m -XX:+UseParallelGC"
+                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=1 \
                 -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
               gradle_exit=$?
               
