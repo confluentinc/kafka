@@ -28,6 +28,7 @@ import org.apache.kafka.common.message.ConsumerProtocolAssignment;
 import org.apache.kafka.common.message.ConsumerProtocolSubscription;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.SchemaException;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
@@ -49,7 +50,6 @@ import org.apache.kafka.timeline.TimelineHashMap;
 import org.apache.kafka.timeline.TimelineInteger;
 import org.apache.kafka.timeline.TimelineObject;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -79,8 +79,6 @@ import static org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupMe
  * records in the __consumer_offsets partitions.
  */
 public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
-
-    private static final Logger log = LoggerFactory.getLogger(ConsumerGroup.class);
 
     public enum ConsumerGroupState {
         EMPTY("Empty"),
@@ -152,6 +150,29 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
 
     private final TimelineObject<Boolean> hasSubscriptionMetadataRecord;
 
+    private final LogContext logContext;
+
+    private final Logger log;
+
+    public ConsumerGroup(
+        LogContext logContext,
+        SnapshotRegistry snapshotRegistry,
+        String groupId
+    ) {
+        super(snapshotRegistry, groupId);
+        this.state = new TimelineObject<>(snapshotRegistry, EMPTY);
+        this.staticMembers = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.serverAssignors = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.numClassicProtocolMembers = new TimelineInteger(snapshotRegistry);
+        this.classicProtocolMembersSupportedProtocols = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.currentPartitionEpoch = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.subscribedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.resolvedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
+        this.hasSubscriptionMetadataRecord = new TimelineObject<>(snapshotRegistry, false);
+        this.logContext = logContext;
+        this.log = logContext.logger(ConsumerGroup.class);
+    }
+
     public ConsumerGroup(
         SnapshotRegistry snapshotRegistry,
         String groupId
@@ -166,6 +187,8 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         this.subscribedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
         this.resolvedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
         this.hasSubscriptionMetadataRecord = new TimelineObject<>(snapshotRegistry, false);
+        this.logContext = new LogContext("[Group Coordinator id=" + groupId + "]");
+        this.log = logContext.logger(ConsumerGroup.class);
     }
 
     /**
@@ -1052,11 +1075,13 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
             currentPartitionEpoch.compute(topicId, (__, partitionsOrNull) -> {
                 if (partitionsOrNull != null) {
                     assignedPartitions.forEach(partitionId -> {
-                        Integer prevValue = partitionsOrNull.remove(partitionId);
+                        Integer prevValue = partitionsOrNull.get(partitionId);
                         if (prevValue != expectedEpoch) {
                             log.warn(
                                 String.format("Cannot remove the epoch %d from %s-%s because the partition is " +
                                     "still owned at a different epoch %d", expectedEpoch, topicId, partitionId, prevValue));
+                        } else {
+                            partitionsOrNull.remove(partitionId);
                         }
                     });
                     if (partitionsOrNull.isEmpty()) {

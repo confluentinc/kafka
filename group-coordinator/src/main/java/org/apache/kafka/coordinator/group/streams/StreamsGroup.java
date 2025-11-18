@@ -942,11 +942,13 @@ public class StreamsGroup implements Group {
             currentTasksProcessId.compute(subtopologyId, (__, partitionsOrNull) -> {
                 if (partitionsOrNull != null) {
                     assignedPartitions.keySet().forEach(partitionId -> {
-                        String prevValue = partitionsOrNull.remove(partitionId);
+                        String prevValue = partitionsOrNull.get(partitionId);
                         if (!Objects.equals(prevValue, expectedProcessId)) {
                             log.warn(
                                 String.format("Cannot remove the process ID %s from task %s_%s because the partition is " +
                                     "still owned at a different process ID %s", expectedProcessId, subtopologyId, partitionId, prevValue));
+                        } else {
+                            partitionsOrNull.remove(partitionId);
                         }
                     });
                     if (partitionsOrNull.isEmpty()) {
