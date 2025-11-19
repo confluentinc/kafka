@@ -174,7 +174,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         SnapshotRegistry snapshotRegistry,
         String groupId
     ) {
-        ConsumerGroup(new LogContext("[Group Coordinator id=" + groupId + "]"), snapshotRegistry, groupId);
+        this(new LogContext("[Group Coordinator id=" + groupId + "]"), snapshotRegistry, groupId);
     }
 
     /**
