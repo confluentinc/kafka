@@ -106,6 +106,8 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         }
     }
 
+    private final Logger log;
+
     /**
      * The group state.
      */
@@ -150,16 +152,13 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
 
     private final TimelineObject<Boolean> hasSubscriptionMetadataRecord;
 
-    private final LogContext logContext;
-
-    private final Logger log;
-
     public ConsumerGroup(
         LogContext logContext,
         SnapshotRegistry snapshotRegistry,
         String groupId
     ) {
         super(snapshotRegistry, groupId);
+        this.log = logContext.logger(ConsumerGroup.class);
         this.state = new TimelineObject<>(snapshotRegistry, EMPTY);
         this.staticMembers = new TimelineHashMap<>(snapshotRegistry, 0);
         this.serverAssignors = new TimelineHashMap<>(snapshotRegistry, 0);
@@ -169,26 +168,6 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         this.subscribedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
         this.resolvedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
         this.hasSubscriptionMetadataRecord = new TimelineObject<>(snapshotRegistry, false);
-        this.logContext = logContext;
-        this.log = logContext.logger(ConsumerGroup.class);
-    }
-
-    public ConsumerGroup(
-        SnapshotRegistry snapshotRegistry,
-        String groupId
-    ) {
-        super(snapshotRegistry, groupId);
-        this.state = new TimelineObject<>(snapshotRegistry, EMPTY);
-        this.staticMembers = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.serverAssignors = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.numClassicProtocolMembers = new TimelineInteger(snapshotRegistry);
-        this.classicProtocolMembersSupportedProtocols = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.currentPartitionEpoch = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.subscribedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.resolvedRegularExpressions = new TimelineHashMap<>(snapshotRegistry, 0);
-        this.hasSubscriptionMetadataRecord = new TimelineObject<>(snapshotRegistry, false);
-        this.logContext = new LogContext("[Group Coordinator id=" + groupId + "]");
-        this.log = logContext.logger(ConsumerGroup.class);
     }
 
     /**
@@ -1168,7 +1147,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         CoordinatorMetadataImage metadataImage
     ) {
         String groupId = classicGroup.groupId();
-        ConsumerGroup consumerGroup = new ConsumerGroup(snapshotRegistry, groupId);
+        ConsumerGroup consumerGroup = new ConsumerGroup(new LogContext("[Group Coordinator id=" + groupId + "]"), snapshotRegistry, groupId);
         consumerGroup.setGroupEpoch(classicGroup.generationId());
         consumerGroup.setTargetAssignmentEpoch(classicGroup.generationId());
 
