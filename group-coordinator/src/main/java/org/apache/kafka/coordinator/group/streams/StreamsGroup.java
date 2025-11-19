@@ -957,9 +957,10 @@ public class StreamsGroup implements Group {
                         return partitionsOrNull;
                     }
                 } else {
-                    throw new IllegalStateException(
+                    log.warn(
                         String.format("Cannot remove the process ID %s from %s because it does not have any processId",
                             expectedProcessId, subtopologyId));
+                    return partitionsOrNull;
                 }
             });
         });

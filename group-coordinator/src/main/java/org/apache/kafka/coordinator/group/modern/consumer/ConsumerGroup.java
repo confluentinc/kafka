@@ -1050,7 +1050,6 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
      *
      * @param assignment    The assignment.
      * @param expectedEpoch The expected epoch.
-     * @throws IllegalStateException if the epoch does not exist.
      * package-private for testing.
      */
     void removePartitionEpochs(
@@ -1076,9 +1075,10 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                         return partitionsOrNull;
                     }
                 } else {
-                    throw new IllegalStateException(
+                    log.warn(
                         String.format("Cannot remove the epoch %d from %s because it does not have any epoch",
                             expectedEpoch, topicId));
+                    return partitionsOrNull;
                 }
             });
         });
