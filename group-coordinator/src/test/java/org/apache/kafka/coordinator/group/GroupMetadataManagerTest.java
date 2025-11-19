@@ -24705,4 +24705,157 @@ public class GroupMetadataManagerTest {
         // Use the same default value as GroupCoordinatorConfig.STREAMS_GROUP_NUM_STANDBY_REPLICAS_DEFAULT
         return Map.of("num.standby.replicas", String.valueOf(GroupCoordinatorConfig.STREAMS_GROUP_NUM_STANDBY_REPLICAS_DEFAULT));
     }
+
+    @Test
+    public void testStreamsGroupResolvesWithConcurrentCompactionAndUnassignment() {
+        String groupId = "fooup";
+        String memberIdA = "memberA";
+        String memberIdB = "memberB";
+
+        String subtopologyFoo = "subtopology";
+        String subtopologyBar = "subtopologyBar";
+        String fooTopicName = "foo";
+        Uuid fooTopicId = Uuid.randomUuid();
+        String barTopicName = "bar";
+        Uuid barTopicId = Uuid.randomUuid();
+        Topology topology = new Topology().setSubtopologies(List.of(
+            new Subtopology().setSubtopologyId(subtopologyFoo).setSourceTopics(List.of(fooTopicName)),
+            new Subtopology().setSubtopologyId(subtopologyBar).setSourceTopics(List.of(barTopicName))
+        ));
+
+        MockTaskAssignor assignor = new MockTaskAssignor("sticky");
+        GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withStreamsGroupTaskAssignors(List.of(assignor))
+            .withMetadataImage(new MetadataImageBuilder()
+                .addTopic(fooTopicId, fooTopicName, 3)
+                .addTopic(barTopicId, barTopicName, 3)
+                .buildCoordinatorMetadataImage())
+            .build();
+        assignor.prepareGroupAssignment(Map.of(memberIdA, TasksTuple.EMPTY));
+
+        StreamsGroupMember memberA = streamsGroupMemberBuilderWithDefaults(memberIdA)
+            .setMemberEpoch(11)
+            .setPreviousMemberEpoch(10)
+            .build();
+
+        StreamsGroupMember memberB = streamsGroupMemberBuilderWithDefaults(memberIdB)
+            .setMemberEpoch(11)
+            .setPreviousMemberEpoch(10)
+            .build();
+
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMemberRecord(groupId, memberA));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMemberRecord(groupId, memberB));
+
+        // Assign task foo-0 to member A
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMetadataRecord(groupId, 11, 0, 0));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTopologyRecord(groupId, topology));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord(groupId, memberIdA,
+            TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+            TaskAssignmentTestUtil.mkTasks(subtopologyFoo, 0)
+        )));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentEpochRecord(groupId, 12));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, memberA));
+
+        // Unassign task foo-0 from member A.
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMetadataRecord(groupId, 12, 0, 0));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTopologyRecord(groupId, topology));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentEpochRecord(groupId, 12));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, new StreamsGroupMember.Builder(memberA)
+            .setMemberEpoch(12)
+            .setPreviousMemberEpoch(11)
+            .setTasksPendingRevocation(
+                TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+                TaskAssignmentTestUtil.mkTasks(subtopologyFoo, 0))
+            )
+            .build()));
+
+        CoordinatorResult<StreamsGroupHeartbeatResult, CoordinatorRecord> result = context.streamsGroupHeartbeat(
+            new StreamsGroupHeartbeatRequestData()
+                .setGroupId(groupId)
+                .setMemberId(memberIdA)
+                .setMemberEpoch(12)
+                .setRebalanceTimeoutMs(1500)
+                .setActiveTasks(List.of(new StreamsGroupHeartbeatRequestData.TaskIds()
+                    .setSubtopologyId(subtopologyFoo)
+                    .setPartitions(List.of()),
+                    new StreamsGroupHeartbeatRequestData.TaskIds()
+                    .setSubtopologyId(subtopologyBar)
+                    .setPartitions(List.of())))
+                .setStandbyTasks(List.of())
+                .setWarmupTasks(List.of()));
+        
+        assertResponseEquals(
+            new StreamsGroupHeartbeatResponseData()
+                .setMemberId(memberIdA)
+                .setMemberEpoch(14)
+                .setHeartbeatIntervalMs(5000)
+                .setActiveTasks(List.of(
+                    new StreamsGroupHeartbeatResponseData.TaskIds()
+                        .setSubtopologyId(subtopologyFoo)
+                        .setPartitions(List.of(0, 1))
+                ))
+                .setStandbyTasks(List.of())
+                .setWarmupTasks(List.of()),
+            result.response().data());
+
+        // // Assign task foo-0 to member B. This logs a warning and does not change the assignment.
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMetadataRecord(groupId, 11, 0, 0));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTopologyRecord(groupId, topology));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord(groupId, memberIdB,
+        //     TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+        //     TaskAssignmentTestUtil.mkTasks(subtopologyFoo, 0)
+        // )));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentEpochRecord(groupId, 12));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, memberB));
+
+        // // Unassign task foo-0 from member B.
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMetadataRecord(groupId, 11, 0, 0));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTopologyRecord(groupId, topology));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentEpochRecord(groupId, 11));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, new StreamsGroupMember.Builder(memberB)
+        //     .setMemberEpoch(11)
+        //     .setPreviousMemberEpoch(10)
+        //     .setTasksPendingRevocation(
+        //         TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+        //         TaskAssignmentTestUtil.mkTasks(subtopologyFoo, 0))
+        //     )
+        //     .build()));
+
+        // // Then assign task bar-0 to member A. 
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMetadataRecord(groupId, 13, 0, 0));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTopologyRecord(groupId, topology));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord(groupId, memberIdA,
+        //     TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+        //     TaskAssignmentTestUtil.mkTasks(subtopologyBar, 0)
+        // )));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentEpochRecord(groupId, 14));
+        // context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, memberA));
+
+        // // Verify member A has ownership of task bar-0
+        // CoordinatorResult<StreamsGroupHeartbeatResult, CoordinatorRecord> result = context.streamsGroupHeartbeat(
+        //     new StreamsGroupHeartbeatRequestData()
+        //         .setGroupId(groupId)
+        //         .setMemberId(memberIdA)
+        //         .setMemberEpoch(11)
+        //         .setRebalanceTimeoutMs(1500)
+        //         .setActiveTasks(List.of(new StreamsGroupHeartbeatRequestData.TaskIds()
+        //             .setSubtopologyId(subtopologyBar)
+        //             .setPartitions(List.of(0))))
+        //         .setStandbyTasks(List.of())
+        //         .setWarmupTasks(List.of()));
+        
+        // assertResponseEquals(
+        //     new StreamsGroupHeartbeatResponseData()
+        //         .setMemberId(memberIdA)
+        //         .setMemberEpoch(14)
+        //         .setHeartbeatIntervalMs(5000)
+        //         .setActiveTasks(List.of(
+        //             new StreamsGroupHeartbeatResponseData.TaskIds()
+        //                 .setSubtopologyId(subtopologyBar)
+        //                 .setPartitions(List.of(0))
+        //         ))
+        //         .setStandbyTasks(List.of())
+        //         .setWarmupTasks(List.of()),
+        //     result.response().data());
+    }
 }
