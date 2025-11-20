@@ -931,7 +931,7 @@ public class StreamsGroup implements Group {
      *
      * @param assignment    The assignment.
      * @param expectedProcessId The expected process ID.
-     * @throws IllegalStateException if the process ID does not exist. package-private for testing.
+     * package-private for testing.
      */
     private void removeTaskProcessIds(
         Map<String, Map<Integer, Integer>> assignment,
@@ -971,7 +971,7 @@ public class StreamsGroup implements Group {
      *
      * @param assignment    The assignment.
      * @param processIdToRemove The expected process ID.
-     * @throws IllegalStateException if the process ID does not exist. package-private for testing.
+     * package-private for testing.
      */
     private void removeTaskProcessIdsFromSet(
         Map<String, Set<Integer>> assignment,
@@ -994,9 +994,10 @@ public class StreamsGroup implements Group {
                         return partitionsOrNull;
                     }
                 } else {
-                    throw new IllegalStateException(
+                    log.warn(
                         String.format("Cannot remove the process ID %s from %s because it does not have any process ID",
                             processIdToRemove, subtopologyId));
+                    return partitionsOrNull;
                 }
             });
         });
