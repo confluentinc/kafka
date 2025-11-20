@@ -1138,6 +1138,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
     /**
      * Create a new consumer group according to the given classic group.
      *
+     * @param logContext        The LogContext.
      * @param snapshotRegistry  The SnapshotRegistry.
      * @param classicGroup      The converted classic group.
      * @param topicHashCache    The cache for topic hashes.
@@ -1148,13 +1149,14 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
      * @throws UnsupportedVersionException if userData from a custom assignor would be lost.
      */
     public static ConsumerGroup fromClassicGroup(
+        LogContext logContext,
         SnapshotRegistry snapshotRegistry,
         ClassicGroup classicGroup,
         Map<String, Long> topicHashCache,
         CoordinatorMetadataImage metadataImage
     ) {
         String groupId = classicGroup.groupId();
-        ConsumerGroup consumerGroup = new ConsumerGroup(new LogContext("[Group Coordinator id=" + groupId + "]"), snapshotRegistry, groupId);
+        ConsumerGroup consumerGroup = new ConsumerGroup(logContext, snapshotRegistry, groupId);
         consumerGroup.setGroupEpoch(classicGroup.generationId());
         consumerGroup.setTargetAssignmentEpoch(classicGroup.generationId());
 

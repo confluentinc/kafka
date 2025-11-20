@@ -1290,6 +1290,7 @@ public class ConsumerGroupTest {
         classicGroup.add(member);
 
         ConsumerGroup consumerGroup = ConsumerGroup.fromClassicGroup(
+            logContext,
             new SnapshotRegistry(logContext),
             classicGroup,
             new HashMap<>(),
