@@ -170,13 +170,6 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         this.hasSubscriptionMetadataRecord = new TimelineObject<>(snapshotRegistry, false);
     }
 
-    public ConsumerGroup(
-        SnapshotRegistry snapshotRegistry,
-        String groupId
-    ) {
-        this(new LogContext("[Group Coordinator id=" + groupId + "]"), snapshotRegistry, groupId);
-    }
-
     /**
      * @return The group type (Consumer).
      */
