@@ -297,7 +297,7 @@ class OffsetValidationTest(VerifiableConsumerTest):
         producer = self.setup_producer(self.TOPIC)
 
         producer.start()
-        self.await_produced_messages(producer)
+        self.await_produced_messages(producer, timeout_sec=120)
 
         consumer = self.setup_consumer(self.TOPIC, static_membership=True, group_protocol=group_protocol)
 
@@ -324,6 +324,15 @@ class OffsetValidationTest(VerifiableConsumerTest):
                 # Consumer protocol: Existing members should remain active and new conflicting ones should not be able to join.
                 self.await_consumed_messages(consumer)
                 assert num_rebalances == consumer.num_rebalances(), "Static consumers attempt to join with instance id in use should not cause a rebalance"
+                self.logger.debug("Members status - Joined [%d/%d]: %s, Not joined: %s",
+                                  len(consumer.joined_nodes()),
+                                  len(consumer.nodes),
+                                  " ".join(str(node.account) for node in consumer.joined_nodes()),
+                                  " ".join(set(str(node.account) for node in consumer.nodes) - set(consumer.joined_nodes())))
+
+                if len(consumer.joined_nodes()) != len(consumer.nodes):
+                    self.logger.debug("All members not in group %s. Describe output is %s", self.group_id, " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
+
                 assert len(consumer.joined_nodes()) == len(consumer.nodes)
                 assert len(conflict_consumer.joined_nodes()) == 0
                 
