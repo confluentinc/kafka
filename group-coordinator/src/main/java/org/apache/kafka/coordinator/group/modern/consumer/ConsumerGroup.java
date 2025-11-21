@@ -159,7 +159,8 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         String groupId
     ) {
         super(snapshotRegistry, groupId);
-        this.log = logContext.logger(ConsumerGroup.class);
+        // Add the GroupId to the log prefix for context.
+        this.log = new LogContext(String.format("%s [Group %s]: ", logContext.logPrefix(), groupId)).logger(ConsumerGroup.class);
         this.state = new TimelineObject<>(snapshotRegistry, EMPTY);
         this.staticMembers = new TimelineHashMap<>(snapshotRegistry, 0);
         this.serverAssignors = new TimelineHashMap<>(snapshotRegistry, 0);

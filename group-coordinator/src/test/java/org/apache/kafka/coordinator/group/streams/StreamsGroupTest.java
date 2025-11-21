@@ -375,12 +375,6 @@ public class StreamsGroupTest {
         String fooSubtopologyId = "foo-sub";
         StreamsGroup streamsGroup = createStreamsGroup("foo");
 
-        // Removing should fail because there is no epoch set.
-        assertThrows(IllegalStateException.class, () -> streamsGroup.removeTaskProcessIds(
-            TaskAssignmentTestUtil.mkTasksTupleWithCommonEpoch(taskRole, 10, mkTasks(fooSubtopologyId, 1)),
-            "process"
-        ));
-
         StreamsGroupMember m1 = new StreamsGroupMember.Builder("m1")
             .setProcessId("process")
             .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithCommonEpoch(taskRole, 10, mkTasks(fooSubtopologyId, 1)))
@@ -388,11 +382,13 @@ public class StreamsGroupTest {
 
         streamsGroup.updateMember(m1);
 
-        // Removing should fail because the expected epoch is incorrect.
-        assertThrows(IllegalStateException.class, () -> streamsGroup.removeTaskProcessIds(
+        // Removing with incorrect epoch should fail. 
+        // A debug message is logged but no exception is thrown.
+        streamsGroup.removeTaskProcessIds(
             TaskAssignmentTestUtil.mkTasksTupleWithCommonEpoch(taskRole, 10, mkTasks(fooSubtopologyId, 1)),
             "process1"
-        ));
+        );
+        assertEquals(streamsGroup.getMemberOrThrow("m1").assignedTasks(), m1.assignedTasks());
     }
 
     @Test

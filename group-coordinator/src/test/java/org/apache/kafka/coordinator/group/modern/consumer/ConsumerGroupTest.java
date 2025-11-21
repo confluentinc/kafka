@@ -289,21 +289,16 @@ public class ConsumerGroupTest {
 
         // m2 should not be able to acquire foo-1 because the partition is
         // still owned by another member.
-        assertThrows(IllegalStateException.class, () -> consumerGroup.updateMember(m2));
+        consumerGroup.updateMember(m2);
+        assertEquals(mkAssignment(mkTopicAssignment(fooTopicId, 1)), 
+            consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions()
+        );
     }
 
     @Test
     public void testRemovePartitionEpochs() {
         Uuid fooTopicId = Uuid.randomUuid();
         ConsumerGroup consumerGroup = createConsumerGroup("foo");
-
-        // Removing should fail because there is no epoch set.
-        assertThrows(IllegalStateException.class, () -> consumerGroup.removePartitionEpochs(
-            mkAssignment(
-                mkTopicAssignment(fooTopicId, 1)
-            ),
-            10
-        ));
 
         ConsumerGroupMember m1 = new ConsumerGroupMember.Builder("m1")
             .setMemberEpoch(10)
@@ -313,13 +308,18 @@ public class ConsumerGroupTest {
 
         consumerGroup.updateMember(m1);
 
-        // Removing should fail because the expected epoch is incorrect.
-        assertThrows(IllegalStateException.class, () -> consumerGroup.removePartitionEpochs(
+        // Removing with incorrect epoch should fail. 
+        // A debug message is logged but no exception is thrown.
+        consumerGroup.removePartitionEpochs(
             mkAssignment(
                 mkTopicAssignment(fooTopicId, 1)
             ),
             11
-        ));
+        );
+        assertEquals(
+            consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions(), 
+            m1.assignedPartitions()
+        );
     }
 
     @Test
@@ -336,12 +336,14 @@ public class ConsumerGroupTest {
 
         // Changing the epoch should fail because the owner of the partition
         // should remove it first.
-        assertThrows(IllegalStateException.class, () -> consumerGroup.addPartitionEpochs(
+        // A debug message is logged but no exception is thrown.
+        consumerGroup.addPartitionEpochs(
             mkAssignment(
                 mkTopicAssignment(fooTopicId, 1)
             ),
             11
-        ));
+        );
+        assertEquals(11, consumerGroup.currentPartitionEpoch(fooTopicId, 1));
     }
 
     @Test
