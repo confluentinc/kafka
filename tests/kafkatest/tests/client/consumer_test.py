@@ -342,6 +342,10 @@ class OffsetValidationTest(VerifiableConsumerTest):
                            timeout_sec=60,
                            err_msg="Timed out waiting for the consumer to shutdown")
                 conflict_consumer.start()
+
+                if len(consumer.joined_nodes()) != num_conflict_consumers:
+                    self.logger.debug("All conflict members not in group %s. Describe output is %s", self.group_id, " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
+
                 self.await_members(conflict_consumer, num_conflict_consumers)
 
             
