@@ -944,7 +944,7 @@ public class StreamsGroup implements Group {
                     assignedPartitions.keySet().forEach(partitionId -> {
                         String prevValue = partitionsOrNull.get(partitionId);
                         if (!Objects.equals(prevValue, expectedProcessId)) {
-                            log.warn(
+                            log.debug(
                                 String.format("Cannot remove the process ID %s from task %s_%s because the partition is " +
                                     "still owned at a different process ID %s", expectedProcessId, subtopologyId, partitionId, prevValue));
                         } else {
@@ -957,7 +957,7 @@ public class StreamsGroup implements Group {
                         return partitionsOrNull;
                     }
                 } else {
-                    log.warn(
+                    log.debug(
                         String.format("Cannot remove the process ID %s from %s because it does not have any processId",
                             expectedProcessId, subtopologyId));
                     return partitionsOrNull;
@@ -983,7 +983,7 @@ public class StreamsGroup implements Group {
                 if (partitionsOrNull != null) {
                     assignedPartitions.forEach(partitionId -> {
                         if (!partitionsOrNull.get(partitionId).remove(processIdToRemove)) {
-                            log.warn(
+                            log.debug(
                                 String.format("Cannot remove the process ID %s from task %s_%s because the task is " +
                                     "not owned by this process ID", processIdToRemove, subtopologyId, partitionId));
                         }
@@ -994,7 +994,7 @@ public class StreamsGroup implements Group {
                         return partitionsOrNull;
                     }
                 } else {
-                    log.warn(
+                    log.debug(
                         String.format("Cannot remove the process ID %s from %s because it does not have any process ID",
                             processIdToRemove, subtopologyId));
                     return partitionsOrNull;

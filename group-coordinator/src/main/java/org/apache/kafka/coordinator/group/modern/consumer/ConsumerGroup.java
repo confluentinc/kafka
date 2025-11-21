@@ -28,8 +28,8 @@ import org.apache.kafka.common.message.ConsumerProtocolAssignment;
 import org.apache.kafka.common.message.ConsumerProtocolSubscription;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.SchemaException;
-import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.requests.JoinGroupRequest;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
 import org.apache.kafka.coordinator.group.CommitPartitionValidator;
@@ -49,6 +49,7 @@ import org.apache.kafka.timeline.SnapshotRegistry;
 import org.apache.kafka.timeline.TimelineHashMap;
 import org.apache.kafka.timeline.TimelineInteger;
 import org.apache.kafka.timeline.TimelineObject;
+
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
@@ -1055,7 +1056,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                     assignedPartitions.forEach(partitionId -> {
                         Integer prevValue = partitionsOrNull.get(partitionId);
                         if (prevValue != expectedEpoch) {
-                            log.warn(
+                            log.debug(
                                 String.format("Cannot remove the epoch %d from %s-%s because the partition is " +
                                     "still owned at a different epoch %d", expectedEpoch, topicId, partitionId, prevValue));
                         } else {
@@ -1068,7 +1069,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                         return partitionsOrNull;
                     }
                 } else {
-                    log.warn(
+                    log.debug(
                         String.format("Cannot remove the epoch %d from %s because it does not have any epoch",
                             expectedEpoch, topicId));
                     return partitionsOrNull;
@@ -1096,7 +1097,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                 for (Integer partitionId : assignedPartitions) {
                     Integer prevValue = partitionsOrNull.put(partitionId, epoch);
                     if (prevValue != null) {
-                        log.warn(
+                        log.debug(
                             String.format("Cannot set the epoch of %s-%s to %d because the partition is " +
                                 "still owned at epoch %d", topicId, partitionId, epoch, prevValue));
                     }
