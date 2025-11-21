@@ -327,7 +327,7 @@ class OffsetValidationTest(VerifiableConsumerTest):
                 self.logger.debug("Members status - Joined [%d/%d]: %s, Not joined: %s",
                                   len(consumer.joined_nodes()),
                                   len(consumer.nodes),
-                                  " ".join(consumer.joined_nodes()),
+                                  " ".join(str(node.account) for node in consumer.joined_nodes()),
                                   " ".join(set(str(node.account) for node in consumer.nodes) - set(consumer.joined_nodes())))
 
                 if len(consumer.joined_nodes()) != len(consumer.nodes):
