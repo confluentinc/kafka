@@ -107,6 +107,9 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         }
     }
 
+    /**
+     * The logger.
+     */
     private final Logger log;
 
     /**
@@ -1084,6 +1087,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
      *
      * @param assignment    The assignment.
      * @param epoch         The new epoch.
+     * @throws IllegalStateException if updating a partition with a smaller or equal epoch.
      * package-private for testing.
      */
     void addPartitionEpochs(
@@ -1096,12 +1100,16 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                     partitionsOrNull = new TimelineHashMap<>(snapshotRegistry, assignedPartitions.size());
                 }
                 for (Integer partitionId : assignedPartitions) {
-                    Integer prevValue = partitionsOrNull.put(partitionId, epoch);
+                    Integer prevValue = partitionsOrNull.get(partitionId);
                     if (prevValue != null) {
-                        log.debug(
-                            String.format("Cannot set the epoch of %s-%s to %d because the partition is " +
-                                "still owned at epoch %d", topicId, partitionId, epoch, prevValue));
+                        if (prevValue > epoch) {
+                            throw new IllegalStateException(
+                                String.format("Cannot set the epoch of %s-%s to %d because the partition is " +
+                                    "still owned at epoch %d", topicId, partitionId, epoch, prevValue));
+                        }
                     }
+                    // Update if previous epoch does not exist or the new epoch is larger.
+                    partitionsOrNull.put(partitionId, epoch);
                 }
                 return partitionsOrNull;
             });
@@ -1133,7 +1141,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
     /**
      * Create a new consumer group according to the given classic group.
      *
-     * @param logContext        The LogContext.
+     * @param logContext        The log context.
      * @param snapshotRegistry  The SnapshotRegistry.
      * @param classicGroup      The converted classic group.
      * @param topicHashCache    The cache for topic hashes.

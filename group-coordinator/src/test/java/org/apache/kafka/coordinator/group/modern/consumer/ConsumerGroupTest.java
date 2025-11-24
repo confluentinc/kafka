@@ -320,6 +320,7 @@ public class ConsumerGroupTest {
             consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions(), 
             m1.assignedPartitions()
         );
+        assertEquals(10, consumerGroup.currentPartitionEpoch(fooTopicId, 1));
     }
 
     @Test
@@ -334,9 +335,7 @@ public class ConsumerGroupTest {
             10
         );
 
-        // Changing the epoch should fail because the owner of the partition
-        // should remove it first.
-        // A debug message is logged but no exception is thrown.
+        // Updating to a larger epoch should succeed.
         consumerGroup.addPartitionEpochs(
             mkAssignment(
                 mkTopicAssignment(fooTopicId, 1)
@@ -344,6 +343,16 @@ public class ConsumerGroupTest {
             11
         );
         assertEquals(11, consumerGroup.currentPartitionEpoch(fooTopicId, 1));
+
+        // Updating to a smaller epoch should fail.
+        assertThrows(IllegalStateException.class, () -> {
+            consumerGroup.addPartitionEpochs(
+                mkAssignment(
+                    mkTopicAssignment(fooTopicId, 1)
+                ),
+                10
+            );
+        });
     }
 
     @Test
