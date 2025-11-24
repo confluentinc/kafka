@@ -68,7 +68,7 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
             "collect_default": True}
     }
 
-    def __init__(self, context, num_nodes, kafka, files, startup_timeout_sec=60,
+    def __init__(self, context, num_nodes, kafka, files, startup_timeout_sec=300,
                  include_filestream_connectors=False):
         super(ConnectServiceBase, self).__init__(context, num_nodes)
         self.kafka = kafka
