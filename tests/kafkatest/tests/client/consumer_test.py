@@ -21,6 +21,7 @@ from kafkatest.tests.verifiable_consumer_test import VerifiableConsumerTest
 from kafkatest.services.kafka import TopicPartition, quorum, consumer_group
 
 import signal
+import time
 
 
 class OffsetValidationTest(VerifiableConsumerTest):
@@ -299,7 +300,7 @@ class OffsetValidationTest(VerifiableConsumerTest):
         producer.start()
         self.await_produced_messages(producer, timeout_sec=120)
 
-        consumer = self.setup_consumer(self.TOPIC, static_membership=True, group_protocol=group_protocol)
+        consumer = self.setup_consumer(self.TOPIC, static_membership=True,  session_timeout_ms=10000, group_protocol=group_protocol)
 
         self.num_consumers = num_conflict_consumers
         conflict_consumer = self.setup_consumer(self.TOPIC, static_membership=True, group_protocol=group_protocol)
