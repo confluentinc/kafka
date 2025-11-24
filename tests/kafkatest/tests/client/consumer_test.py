@@ -300,7 +300,7 @@ class OffsetValidationTest(VerifiableConsumerTest):
         producer.start()
         self.await_produced_messages(producer, timeout_sec=120)
 
-        consumer = self.setup_consumer(self.TOPIC, static_membership=True,  session_timeout_sec=10000, group_protocol=group_protocol)
+        consumer = self.setup_consumer(self.TOPIC, static_membership=True, group_protocol=group_protocol)
 
         self.num_consumers = num_conflict_consumers
         conflict_consumer = self.setup_consumer(self.TOPIC, static_membership=True, group_protocol=group_protocol)
@@ -353,7 +353,7 @@ class OffsetValidationTest(VerifiableConsumerTest):
                 wait_until(lambda: self.group_id in self.kafka.list_consumer_groups(state="empty"),
                                timeout_sec=60,
                                err_msg="Timed out waiting for the consumers to be removed from the group Describe output is %s." % " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
-
+                time.sleep(10)
                 conflict_consumer.start()
                 try:
                     self.await_members(conflict_consumer, num_conflict_consumers)
