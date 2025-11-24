@@ -18,10 +18,10 @@ from ducktape.utils.util import wait_until
 from ducktape.mark.resource import cluster
 
 from kafkatest.tests.verifiable_consumer_test import VerifiableConsumerTest
+from kafkatest.services.verifiable_consumer import VerifiableConsumer
 from kafkatest.services.kafka import TopicPartition, quorum, consumer_group
 
 import signal
-import time
 
 
 class OffsetValidationTest(VerifiableConsumerTest):
@@ -74,6 +74,14 @@ class OffsetValidationTest(VerifiableConsumerTest):
         consumer = super(OffsetValidationTest, self).setup_consumer(topic, **kwargs)
         self.mark_for_collect(consumer, 'verifiable_consumer_stdout')
         return consumer
+
+    def await_conflict_consumers_fenced(self, conflict_consumer):
+        # Rely on explicit shutdown_complete events from the verifiable consumer to guarantee each conflict member
+        # reached the fenced path rather than remaining in the default DEAD state prior to startup.
+        wait_until(lambda: len(conflict_consumer.shutdown_complete_nodes()) == len(conflict_consumer.nodes) and
+                           len(conflict_consumer.dead_nodes()) == len(conflict_consumer.nodes),
+                   timeout_sec=60,
+                   err_msg="Timed out waiting for conflict consumers to report shutdown completion after fencing")
 
     @cluster(num_nodes=7)
     @matrix(
