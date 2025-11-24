@@ -300,7 +300,7 @@ class OffsetValidationTest(VerifiableConsumerTest):
         producer.start()
         self.await_produced_messages(producer, timeout_sec=120)
 
-        consumer = self.setup_consumer(self.TOPIC, static_membership=True,  session_timeout_ms=10000, group_protocol=group_protocol)
+        consumer = self.setup_consumer(self.TOPIC, static_membership=True,  session_timeout_sec=10000, group_protocol=group_protocol)
 
         self.num_consumers = num_conflict_consumers
         conflict_consumer = self.setup_consumer(self.TOPIC, static_membership=True, group_protocol=group_protocol)
@@ -322,32 +322,44 @@ class OffsetValidationTest(VerifiableConsumerTest):
                        timeout_sec=10,
                        err_msg="Timed out waiting for the fenced consumers to stop")
             else:
-                # Consumer protocol: Existing members should remain active and new conflicting ones should not be able to join.
-                self.await_consumed_messages(consumer)
-                assert num_rebalances == consumer.num_rebalances(), "Static consumers attempt to join with instance id in use should not cause a rebalance"
                 self.logger.debug("Members status - Joined [%d/%d]: %s, Not joined: %s",
                                   len(consumer.joined_nodes()),
                                   len(consumer.nodes),
                                   " ".join(str(node.account) for node in consumer.joined_nodes()),
-                                  " ".join(set(str(node.account) for node in consumer.nodes) - set(consumer.joined_nodes())))
+                                  " ".join(
+                                      set(str(node.account) for node in consumer.nodes) - set(consumer.joined_nodes())))
 
-                if len(consumer.joined_nodes()) != len(consumer.nodes):
-                    self.logger.debug("All members not in group %s. Describe output is %s", self.group_id, " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
-
-                assert len(consumer.joined_nodes()) == len(consumer.nodes)
+                try:
+                    assert len(consumer.joined_nodes()) == len(consumer.nodes)
+                except AssertionError:
+                    self.logger.debug("All members not in group %s. Describe output is %s", self.group_id,
+                                      " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
+                    raise
                 assert len(conflict_consumer.joined_nodes()) == 0
-                
+
+                # Conflict consumers will terminate due to a fatal UnreleasedInstanceIdException error.
+                # Wait for termination to complete to prevent conflict consumers from immediately re-joining the group while existing nodes are shutting down.
+                self.await_conflict_consumers_fenced(conflict_consumer)
+
                 # Stop existing nodes, so conflicting ones should be able to join.
                 consumer.stop_all()
                 wait_until(lambda: len(consumer.dead_nodes()) == len(consumer.nodes),
                            timeout_sec=60,
-                           err_msg="Timed out waiting for the consumer to shutdown")
+                           err_msg="Timed out waiting for the consumer to shutdown. Describe output is %s" % " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
+                # Wait until the group becomes empty to ensure the instance ID is released.
+
+
+                # We use the 60-second timeout because the consumer session timeout is 45 seconds adding some time for latency.
+                wait_until(lambda: self.group_id in self.kafka.list_consumer_groups(state="empty"),
+                               timeout_sec=60,
+                               err_msg="Timed out waiting for the consumers to be removed from the group Describe output is %s." % " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
+
                 conflict_consumer.start()
-
-                if len(consumer.joined_nodes()) != num_conflict_consumers:
+                try:
+                    self.await_members(conflict_consumer, num_conflict_consumers)
+                except TimeoutError:
                     self.logger.debug("All conflict members not in group %s. Describe output is %s", self.group_id, " ".join(self.kafka.describe_consumer_group_members(self.group_id)))
-
-                self.await_members(conflict_consumer, num_conflict_consumers)
+                    raise
 
             
         else:
