@@ -162,8 +162,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
         String groupId
     ) {
         super(snapshotRegistry, groupId);
-        // Add the GroupId to the log prefix for context.
-        this.log = new LogContext(String.format("%s [Group %s]: ", logContext.logPrefix(), groupId)).logger(ConsumerGroup.class);
+        this.log = logContext.logger(ConsumerGroup.class);
         this.state = new TimelineObject<>(snapshotRegistry, EMPTY);
         this.staticMembers = new TimelineHashMap<>(snapshotRegistry, 0);
         this.serverAssignors = new TimelineHashMap<>(snapshotRegistry, 0);
@@ -1059,12 +1058,13 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                 if (partitionsOrNull != null) {
                     assignedPartitions.forEach(partitionId -> {
                         Integer prevValue = partitionsOrNull.get(partitionId);
-                        if (prevValue != expectedEpoch) {
-                            log.debug(
-                                String.format("Cannot remove the epoch %d from %s-%s because the partition is " +
-                                    "still owned at a different epoch %d", expectedEpoch, topicId, partitionId, prevValue));
-                        } else {
+                        if (prevValue != null && prevValue == expectedEpoch) {
                             partitionsOrNull.remove(partitionId);
+                        } else {
+                            // GroupId added for context. 
+                            log.debug(
+                                String.format("[Group %s]: Cannot remove the epoch %d from %s-%s because the partition is " +
+                                    "still owned at a different epoch %d", groupId, expectedEpoch, topicId, partitionId, prevValue));
                         }
                     });
                     if (partitionsOrNull.isEmpty()) {
@@ -1074,8 +1074,8 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                     }
                 } else {
                     log.debug(
-                        String.format("Cannot remove the epoch %d from %s because it does not have any epoch",
-                            expectedEpoch, topicId));
+                        String.format("[Group %s]: Cannot remove the epoch %d from %s because it does not have any epoch",
+                            groupId, expectedEpoch, topicId));
                     return partitionsOrNull;
                 }
             });
@@ -1087,7 +1087,7 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
      *
      * @param assignment    The assignment.
      * @param epoch         The new epoch.
-     * @throws IllegalStateException if updating a partition with a smaller or equal epoch.
+     * @throws IllegalStateException if updating a partition with a smaller epoch.
      * package-private for testing.
      */
     void addPartitionEpochs(
@@ -1101,15 +1101,13 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                 }
                 for (Integer partitionId : assignedPartitions) {
                     Integer prevValue = partitionsOrNull.get(partitionId);
-                    if (prevValue != null) {
-                        if (prevValue > epoch) {
-                            throw new IllegalStateException(
-                                String.format("Cannot set the epoch of %s-%s to %d because the partition is " +
-                                    "still owned at epoch %d", topicId, partitionId, epoch, prevValue));
-                        }
+                    if (prevValue == null || prevValue <= epoch) {
+                        partitionsOrNull.put(partitionId, epoch);
+                    } else {
+                        throw new IllegalStateException(
+                            String.format("Cannot set the epoch of %s-%s to %d because the partition is " +
+                                "still owned at epoch %d", topicId, partitionId, epoch, prevValue));
                     }
-                    // Update if previous epoch does not exist or the new epoch is larger.
-                    partitionsOrNull.put(partitionId, epoch);
                 }
                 return partitionsOrNull;
             });

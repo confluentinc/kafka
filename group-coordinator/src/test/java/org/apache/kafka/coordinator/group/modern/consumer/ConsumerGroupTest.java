@@ -317,8 +317,8 @@ public class ConsumerGroupTest {
             11
         );
         assertEquals(
-            consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions(), 
-            m1.assignedPartitions()
+            mkAssignment(mkTopicAssignment(fooTopicId, 1)),
+            consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions()
         );
         assertEquals(10, consumerGroup.currentPartitionEpoch(fooTopicId, 1));
     }

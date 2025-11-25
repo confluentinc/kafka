@@ -388,7 +388,7 @@ public class StreamsGroupTest {
             TaskAssignmentTestUtil.mkTasksTupleWithCommonEpoch(taskRole, 10, mkTasks(fooSubtopologyId, 1)),
             "process1"
         );
-        assertEquals(streamsGroup.getMemberOrThrow("m1").assignedTasks(), m1.assignedTasks());
+        assertEquals(m1.assignedTasks(), streamsGroup.getMemberOrThrow("m1").assignedTasks());
     }
 
     @Test

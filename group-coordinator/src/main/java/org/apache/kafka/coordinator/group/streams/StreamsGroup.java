@@ -943,12 +943,13 @@ public class StreamsGroup implements Group {
                 if (partitionsOrNull != null) {
                     assignedPartitions.keySet().forEach(partitionId -> {
                         String prevValue = partitionsOrNull.get(partitionId);
-                        if (!Objects.equals(prevValue, expectedProcessId)) {
-                            log.debug(
-                                String.format("Cannot remove the process ID %s from task %s_%s because the partition is " +
-                                    "still owned at a different process ID %s", expectedProcessId, subtopologyId, partitionId, prevValue));
-                        } else {
+                        if (Objects.equals(prevValue, expectedProcessId)) {
                             partitionsOrNull.remove(partitionId);
+                        } else {
+                            // Include the GroupId in the log message for context.
+                            log.debug(
+                                String.format("[Group %s]: Cannot remove the process ID %s from task %s_%s because the partition is " +
+                                    "still owned at a different process ID %s", groupId, expectedProcessId, subtopologyId, partitionId, prevValue));
                         }
                     });
                     if (partitionsOrNull.isEmpty()) {
@@ -958,8 +959,8 @@ public class StreamsGroup implements Group {
                     }
                 } else {
                     log.debug(
-                        String.format("Cannot remove the process ID %s from %s because it does not have any processId",
-                            expectedProcessId, subtopologyId));
+                        String.format("[Group %s]: Cannot remove the process ID %s from %s because it does not have any processId",
+                            groupId, expectedProcessId, subtopologyId));
                     return partitionsOrNull;
                 }
             });
@@ -984,8 +985,8 @@ public class StreamsGroup implements Group {
                     assignedPartitions.forEach(partitionId -> {
                         if (!partitionsOrNull.get(partitionId).remove(processIdToRemove)) {
                             log.debug(
-                                String.format("Cannot remove the process ID %s from task %s_%s because the task is " +
-                                    "not owned by this process ID", processIdToRemove, subtopologyId, partitionId));
+                                String.format("[Group %s]: Cannot remove the process ID %s from task %s_%s because the task is " +
+                                    "not owned by this process ID", groupId, processIdToRemove, subtopologyId, partitionId));
                         }
                     });
                     if (partitionsOrNull.isEmpty()) {
@@ -995,8 +996,8 @@ public class StreamsGroup implements Group {
                     }
                 } else {
                     log.debug(
-                        String.format("Cannot remove the process ID %s from %s because it does not have any process ID",
-                            processIdToRemove, subtopologyId));
+                        String.format("[Group %s]: Cannot remove the process ID %s from %s because it does not have any process ID",
+                            groupId, processIdToRemove, subtopologyId));
                     return partitionsOrNull;
                 }
             });
