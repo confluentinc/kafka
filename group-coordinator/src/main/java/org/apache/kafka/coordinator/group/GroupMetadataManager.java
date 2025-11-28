@@ -2044,8 +2044,7 @@ public class GroupMetadataManager {
         }
 
         // Schedule initial rebalance delay for new streams groups to coalesce joins.
-        boolean isInitialRebalance = (group.groupEpoch() == 0);
-        if (isInitialRebalance) {
+        if (group.isEmpty()) {
             int initialDelayMs = streamsGroupInitialRebalanceDelayMs(groupId);
             if (initialDelayMs > 0) {
                 timer.scheduleIfAbsent(
@@ -2065,9 +2064,9 @@ public class GroupMetadataManager {
         TasksTuple targetAssignment;
         if (groupEpoch > group.assignmentEpoch()) {
             boolean initialDelayActive = timer.isScheduled(streamsInitialRebalanceKey(groupId));
-            if (initialDelayActive && group.assignmentEpoch() == 0) {
+            if (initialDelayActive) {
                 // During initial rebalance delay, return empty assignment to first joining members.
-                targetAssignmentEpoch = 1;
+                targetAssignmentEpoch = Math.max(1, group.assignmentEpoch());
                 targetAssignment = TasksTuple.EMPTY;
 
                 returnedStatus.add(
