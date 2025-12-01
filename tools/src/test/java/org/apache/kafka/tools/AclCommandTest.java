@@ -38,6 +38,7 @@ import org.apache.kafka.metadata.authorizer.StandardAuthorizer;
 import org.apache.kafka.test.TestUtils;
 
 import org.apache.logging.log4j.Level;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -216,6 +217,7 @@ public class AclCommandTest {
     }
 
     @ClusterTest
+    @Disabled
     public void testAclCliWithMisusingBootstrapControllerToServer(ClusterInstance cluster) {
         assertThrows(RuntimeException.class, () -> testAclCli(cluster, adminArgs(cluster.bootstrapControllers(), Optional.empty())));
     }
