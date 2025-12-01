@@ -287,18 +287,37 @@ public class ConsumerGroupTest {
                 mkTopicAssignment(fooTopicId, 1)))
             .build();
 
-        // m2 should not be able to acquire foo-1 because the partition is
-        // still owned by another member.
+        // m2 can acquire foo-1 because the epoch is at least as large as m1's epoch.
         consumerGroup.updateMember(m2);
         assertEquals(mkAssignment(mkTopicAssignment(fooTopicId, 1)), 
             consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions()
         );
+
+        ConsumerGroupMember m3 = new ConsumerGroupMember.Builder("m3")
+            .setMemberEpoch(9)
+            .setAssignedPartitions(mkAssignment(
+                mkTopicAssignment(fooTopicId, 1)))
+            .build();
+
+        // m3 should not be able to acquire foo-1 because the epoch is smaller 
+        // than the current partition epoch (10).
+        assertThrows(IllegalStateException.class, () -> {
+            consumerGroup.updateMember(m3);
+        });
     }
 
     @Test
     public void testRemovePartitionEpochs() {
         Uuid fooTopicId = Uuid.randomUuid();
         ConsumerGroup consumerGroup = createConsumerGroup("foo");
+
+        // Removing should be a no-op when there is no epoch set.
+        consumerGroup.removePartitionEpochs(
+            mkAssignment(
+                mkTopicAssignment(fooTopicId, 1)
+            ),
+            10
+        );
 
         ConsumerGroupMember m1 = new ConsumerGroupMember.Builder("m1")
             .setMemberEpoch(10)
@@ -308,8 +327,8 @@ public class ConsumerGroupTest {
 
         consumerGroup.updateMember(m1);
 
-        // Removing with incorrect epoch should fail. 
-        // A debug message is logged but no exception is thrown.
+        // Removing with incorrect epoch should do nothing. 
+        // A debug message is logged, no exception is thrown.
         consumerGroup.removePartitionEpochs(
             mkAssignment(
                 mkTopicAssignment(fooTopicId, 1)

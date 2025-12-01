@@ -1061,10 +1061,8 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                         if (prevValue != null && prevValue == expectedEpoch) {
                             partitionsOrNull.remove(partitionId);
                         } else {
-                            // GroupId added for context. 
-                            log.debug(
-                                String.format("[Group %s]: Cannot remove the epoch %d from %s-%s because the partition is " +
-                                    "still owned at a different epoch %d", groupId, expectedEpoch, topicId, partitionId, prevValue));
+                            log.debug("[GroupId {}] Cannot remove the epoch {} from {}-{} because the partition is " +
+                                    "still owned at a different epoch {}", groupId, expectedEpoch, topicId, partitionId, prevValue);
                         }
                     });
                     if (partitionsOrNull.isEmpty()) {
@@ -1073,9 +1071,8 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
                         return partitionsOrNull;
                     }
                 } else {
-                    log.debug(
-                        String.format("[Group %s]: Cannot remove the epoch %d from %s because it does not have any epoch",
-                            groupId, expectedEpoch, topicId));
+                    log.debug("[GroupId {}] Cannot remove the epoch {} from {} because it does not have any epoch",
+                            groupId, expectedEpoch, topicId);
                     return partitionsOrNull;
                 }
             });
