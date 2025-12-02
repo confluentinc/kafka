@@ -24390,16 +24390,16 @@ public class GroupMetadataManagerTest {
     @Test
     public void testReplayConsumerGroupCurrentMemberAssignmentWithCompaction() {
         String groupId = "fooup";
-        String memberA = "memberA";
-        String memberB = "memberB";
+        String memberIdA = "memberIdA";
+        String memberIdB = "memberIdB";
 
         Uuid topicId = Uuid.randomUuid();
         String topicName = "foo";
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withMetadataImage(new MetadataImageBuilder()
-            .addTopic(topicId, topicName, 2)
-            .buildCoordinatorMetadataImage())
+                .addTopic(topicId, topicName, 2)
+                .buildCoordinatorMetadataImage())
             .build();
 
         // This test enacts the following scenario:
@@ -24411,7 +24411,7 @@ public class GroupMetadataManagerTest {
         // unassignment records are removed. We would like to not fail in these cases.
         // Therefore we will allow assignments to owned partitions as long as the epoch is larger. 
 
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberA)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdA)
             .setState(MemberState.STABLE)
             .setMemberEpoch(11)
             .setPreviousMemberEpoch(10)
@@ -24419,15 +24419,15 @@ public class GroupMetadataManagerTest {
             .build()));
 
         // Partition 0's owner is replaced by member B at epoch 12.
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberB)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdB)
             .setState(MemberState.STABLE)
             .setMemberEpoch(12)
             .setPreviousMemberEpoch(11)
             .setAssignedPartitions(mkAssignment(mkTopicAssignment(topicId, 0)))
             .build()));
 
-        // Partition 0 must remain with member B at epoch 12 even though member A just been unassigned partition 0.
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberA)
+        // Partition 0 must remain with member B at epoch 12 even though member A has just been unassigned partition 0.
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdA)
             .setState(MemberState.STABLE)
             .setMemberEpoch(13)
             .setPreviousMemberEpoch(12)
@@ -24443,8 +24443,8 @@ public class GroupMetadataManagerTest {
     @Test
     public void testReplayConsumerGroupUnassignmentRecordSkippedWithCompaction() {
         String groupId = "fooup";
-        String memberA = "memberA";
-        String memberB = "memberB";
+        String memberIdA = "memberIdA";
+        String memberIdB = "memberIdB";
 
         Uuid fooTopicId = Uuid.randomUuid();
         String fooTopicName = "foo";
@@ -24453,9 +24453,9 @@ public class GroupMetadataManagerTest {
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withMetadataImage(new MetadataImageBuilder()
-            .addTopic(fooTopicId, fooTopicName, 3)
-            .addTopic(barTopicId, barTopicName, 1)
-            .buildCoordinatorMetadataImage())
+                .addTopic(fooTopicId, fooTopicName, 1)
+                .addTopic(barTopicId, barTopicName, 1)
+                .buildCoordinatorMetadataImage())
             .build();
 
         // This test enacts the following scenario:
@@ -24465,30 +24465,30 @@ public class GroupMetadataManagerTest {
         // 4. Member B is unassigned partition foo-1. 
         // 5. Member A is assigned partition bar-0. 
         // This is a legitimate set of assignments but with compaction the unassignment record can be skipped.
-        // We would like to not fail in these cases and allow both the assignment of member B to foo-1 and 
-        // member A to bar-0 to succeed because the epochs are larger. 
+        // This can lead to conflicts from updating an owned partition in step 3 and attempting to remove
+        // nonexistent ownership in step 5. We want to ensure both assignments are allowed.  
 
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberA)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdA)
             .setState(MemberState.STABLE)
             .setMemberEpoch(11)
             .setPreviousMemberEpoch(10)
-            .setAssignedPartitions(mkAssignment(mkTopicAssignment(fooTopicId, 0, 1)))
+            .setAssignedPartitions(mkAssignment(mkTopicAssignment(fooTopicId, 0)))
             .build()));
 
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberB)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdB)
             .setState(MemberState.STABLE)
             .setMemberEpoch(12)
             .setPreviousMemberEpoch(11)
-            .setAssignedPartitions(mkAssignment(mkTopicAssignment(fooTopicId, 1, 2)))
+            .setAssignedPartitions(mkAssignment(mkTopicAssignment(fooTopicId, 0)))
             .build()));
 
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberB)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdB)
             .setState(MemberState.STABLE)
             .setMemberEpoch(13)
             .setPreviousMemberEpoch(12)
             .build()));
 
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberA)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdA)
             .setState(MemberState.STABLE)
             .setMemberEpoch(14)
             .setPreviousMemberEpoch(13)
@@ -24497,15 +24497,15 @@ public class GroupMetadataManagerTest {
 
         // Verify member A only has ownership of partition bar-0. Member B has no partitions.
         ConsumerGroup group = context.groupMetadataManager.consumerGroup(groupId);
-        assertEquals(mkAssignment(mkTopicAssignment(barTopicId, 0)), group.members().get(memberA).assignedPartitions());
+        assertEquals(mkAssignment(mkTopicAssignment(barTopicId, 0)), group.members().get(memberIdA).assignedPartitions());
         assertEquals(14, group.currentPartitionEpoch(barTopicId, 0));
     }
 
     @Test
     public void testReplayConsumerGroupCurrentMemberAssignmentSameEpochWithCompaction() {
         String groupId = "fooup";
-        String memberA = "memberA";
-        String memberB = "memberB";
+        String memberIdA = "memberIdA";
+        String memberIdB = "memberIdB";
 
         Uuid fooTopicId = Uuid.randomUuid();
         String fooTopicName = "foo";
@@ -24514,9 +24514,9 @@ public class GroupMetadataManagerTest {
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withMetadataImage(new MetadataImageBuilder()
-            .addTopic(fooTopicId, fooTopicName, 1)
-            .addTopic(barTopicId, barTopicName, 1)
-            .buildCoordinatorMetadataImage())
+                .addTopic(fooTopicId, fooTopicName, 1)
+                .addTopic(barTopicId, barTopicName, 1)
+                .buildCoordinatorMetadataImage())
             .build();
 
         // This test enacts the following scenario:
@@ -24527,7 +24527,7 @@ public class GroupMetadataManagerTest {
         // 5. Member B is assigned topic foo. Member B { epoch: 11, assigned partitions: [foo], pending revocations: [] }
         // When record 4 is dropped by compaction, we want member B's assignment to be accepted with the same epoch. 
 
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberA)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdA)
             .setState(MemberState.STABLE)
             .setMemberEpoch(10)
             .setPreviousMemberEpoch(9)
@@ -24536,7 +24536,7 @@ public class GroupMetadataManagerTest {
             .build()));
 
         // Member A yields bar at epoch 11.
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberA)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdA)
             .setState(MemberState.STABLE)
             .setMemberEpoch(11)
             .setPreviousMemberEpoch(10)
@@ -24545,7 +24545,7 @@ public class GroupMetadataManagerTest {
 
         // Member A yields foo. [record removed by compaction]
         // Member B is assigned foo at epoch 11.
-        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberB)
+        context.replay(GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, new ConsumerGroupMember.Builder(memberIdB)
             .setState(MemberState.STABLE)
             .setMemberEpoch(11)
             .setPreviousMemberEpoch(10)
@@ -24554,25 +24554,29 @@ public class GroupMetadataManagerTest {
 
         // Verify partition foo-0 is assigned to member B at epoch 11.
         ConsumerGroup group = context.groupMetadataManager.consumerGroup(groupId);
-        assertEquals(mkAssignment(mkTopicAssignment(fooTopicId, 0)), group.members().get(memberB).assignedPartitions());
+        assertEquals(mkAssignment(mkTopicAssignment(fooTopicId, 0)), group.members().get(memberIdB).assignedPartitions());
         assertEquals(11, group.currentPartitionEpoch(fooTopicId, 0));
     }
 
     @Test
     public void testReplayStreamsGroupCurrentMemberAssignmentWithCompaction() {
         String groupId = "fooup";
-        String memberA = "memberA";
-        String memberB = "memberB";
+        String memberIdA = "memberIdA";
+        String memberIdB = "memberIdB";
+        String processIdA = "processIdA";
+        String processIdB = "processIdB";
 
-        String subtopology = "subtopology";
-        String topicName = "foo";
-        Uuid topicId = Uuid.randomUuid();
+        String subtopologyId = "subtopology";
 
-        GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withMetadataImage(new MetadataImageBuilder()
-                .addTopic(topicId, topicName, 2)
-                .buildCoordinatorMetadataImage())
-            .build();
+        GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder().build();
+
+        // Initialize members with process Ids.
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMemberRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdA)
+            .setProcessId(processIdA)
+            .build()));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMemberRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdB)
+            .setProcessId(processIdB)
+            .build()));
 
         // This test enacts the following scenario:
         // 1. Member A is assigned task 0.
@@ -24581,59 +24585,59 @@ public class GroupMetadataManagerTest {
         // 4. Member A is assigned task 1. 
         // If record 2 is processed, there are no issues, however with compaction it is possible that 
         // unassignment records are removed. We would like to not fail in these cases.
-        // Therefore we will allow assignments to owned tasks as long as the epoch is larger. 
+        // Therefore we will allow assignments to owned tasks as long as the epoch is larger.
 
-        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberA)
+        // Assign task 0 to member A.
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdA)
             .setState(org.apache.kafka.coordinator.group.streams.MemberState.STABLE)
             .setMemberEpoch(11)
             .setPreviousMemberEpoch(10)
             .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-                    TaskAssignmentTestUtil.mkTasksWithEpochs(subtopology, Map.of(0, 11))))
+                    TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyId, Map.of(0, 11))))
             .build()));
 
         // Task 0's owner is replaced by member B at epoch 12.
-        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberB)
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdB)
             .setMemberEpoch(12)
             .setPreviousMemberEpoch(11)
             .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-                    TaskAssignmentTestUtil.mkTasksWithEpochs(subtopology, Map.of(0, 12))))
+                    TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyId, Map.of(0, 12))))
             .build()));
 
-        // Task 0 must remain with member B at epoch 12 even though member A just been unassigned task 0.
-        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberA)
+        // Task 0 must remain with member B at epoch 12 even though member A has just been unassigned task 1.
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdA)
             .setMemberEpoch(13)
             .setPreviousMemberEpoch(12)
             .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-                    TaskAssignmentTestUtil.mkTasksWithEpochs(subtopology, Map.of(1, 13))))
+                    TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyId, Map.of(1, 13))))
             .build()));
 
         // Check task 1 is assigned to member A and task 0 to member B.
         StreamsGroup group = context.groupMetadataManager.streamsGroup(groupId);
-        assertEquals(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-            TaskAssignmentTestUtil.mkTasksWithEpochs(subtopology, Map.of(1, 13))), group.members().get(memberA).assignedTasks());
-        assertEquals(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-            TaskAssignmentTestUtil.mkTasksWithEpochs(subtopology, Map.of(0, 12))), group.members().get(memberB).assignedTasks());
+        assertEquals(processIdA, group.currentActiveTaskProcessId(subtopologyId, 1));
+        assertEquals(processIdB, group.currentActiveTaskProcessId(subtopologyId, 0));
     }
 
     @Test
     public void testReplayStreamsGroupUnassignmentRecordSkippedWithCompaction() {
         String groupId = "fooup";
-        String memberA = "memberA";
-        String memberB = "memberB";
+        String memberIdA = "memberIdA";
+        String memberIdB = "memberIdB";
+        String processIdA = "processIdA";
+        String processIdB = "processIdB";
 
         String subtopologyFoo = "subtopologyFoo";
-        String fooTopicName = "foo";
-        Uuid fooTopicId = Uuid.randomUuid();
         String subtopologyBar = "subtopologyBar";
-        String barTopicName = "bar";
-        Uuid barTopicId = Uuid.randomUuid();
 
-        GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withMetadataImage(new MetadataImageBuilder()
-                .addTopic(fooTopicId, fooTopicName, 2)
-                .addTopic(barTopicId, barTopicName, 1)
-                .buildCoordinatorMetadataImage())
-            .build();
+        GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder().build();
+
+        // Initialize members with process Ids.
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMemberRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdA)
+            .setProcessId(processIdA)
+            .build()));
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupMemberRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdB)
+            .setProcessId(processIdB)
+            .build()));
 
         // This test enacts the following scenario:
         // 1. Member A is assigned task foo-1.
@@ -24645,7 +24649,7 @@ public class GroupMetadataManagerTest {
         // We would like to not fail in these cases and allow both the assignment of member B to foo-1 and 
         // member A to bar-0 to succeed because the epochs are larger. 
 
-        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberA)
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdA)
             .setState(org.apache.kafka.coordinator.group.streams.MemberState.STABLE)
             .setMemberEpoch(11)
             .setPreviousMemberEpoch(10)
@@ -24653,30 +24657,30 @@ public class GroupMetadataManagerTest {
                 TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyFoo, Map.of(0, 11, 1, 11))))
             .build()));
 
-        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberB)
-            .setMemberEpoch(11)
-            .setPreviousMemberEpoch(10)
-            .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-                TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyFoo, Map.of(0, 11))))
-            .build()));
-
-        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberB)
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdB)
             .setMemberEpoch(12)
             .setPreviousMemberEpoch(11)
+            .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
+                TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyFoo, Map.of(0, 12))))
             .build()));
 
-        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberA)
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdB)
             .setMemberEpoch(13)
             .setPreviousMemberEpoch(12)
+            .build()));
+
+        context.replay(StreamsCoordinatorRecordHelpers.newStreamsGroupCurrentAssignmentRecord(groupId, streamsGroupMemberBuilderWithDefaults(memberIdA)
+            .setMemberEpoch(14)
+            .setPreviousMemberEpoch(13)
             .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-                TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyBar, Map.of(0, 13))))
+                TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyBar, Map.of(0, 14))))
             .build()));
 
         // Check task bar-0 is assigned to member A. Member B has no tasks.
         StreamsGroup group = context.groupMetadataManager.streamsGroup(groupId);
-        assertEquals(TaskAssignmentTestUtil.mkTasksTupleWithEpochs(TaskRole.ACTIVE, 
-            TaskAssignmentTestUtil.mkTasksWithEpochs(subtopologyBar, Map.of(0, 13))), group.members().get(memberA).assignedTasks());
+        assertEquals(processIdA, group.currentActiveTaskProcessId(subtopologyBar, 0));
     }
+
     private record PendingAssignmentCase(
         String description,
         String groupId,

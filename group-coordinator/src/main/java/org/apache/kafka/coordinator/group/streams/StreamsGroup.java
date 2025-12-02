@@ -1004,7 +1004,7 @@ public class StreamsGroup implements Group {
      *
      * @param tasks     The assigned tasks.
      * @param processId The process ID.
-     * @throws IllegalStateException if the partition already has an epoch assigned. package-private for testing.
+     * @throws IllegalStateException if the existing partition has larger epoch than the new one. package-private for testing.
      */
     void addTaskProcessId(
         TasksTupleWithEpochs tasks,
@@ -1027,12 +1027,28 @@ public class StreamsGroup implements Group {
                 if (partitionsOrNull == null) {
                     partitionsOrNull = new TimelineHashMap<>(snapshotRegistry, assignedTaskPartitionsWithEpochs.size());
                 }
-                for (Integer partitionId : assignedTaskPartitionsWithEpochs.keySet()) {
-                    String prevValue = partitionsOrNull.put(partitionId, processId);
-                    if (prevValue != null) {
-                        throw new IllegalStateException(
-                            String.format("Cannot set the process ID of %s-%s to %s because the partition is " +
-                                "still owned by process ID %s", subtopologyId, partitionId, processId, prevValue));
+                for (Map.Entry<Integer, Integer> partitionEntry : assignedTaskPartitionsWithEpochs.entrySet()) {
+                    Integer partitionId = partitionEntry.getKey();
+                    String prevValue = partitionsOrNull.get(partitionId);
+                    
+                    if (prevValue == null) {
+                        partitionsOrNull.put(partitionId, processId);
+                    } else {
+                        String memberId = null;
+                        for (Map.Entry<String, StreamsGroupMember> memberEntry : members.entrySet()) {
+                            if (memberEntry.getValue().processId().equals(prevValue)) {
+                                memberId = memberEntry.getKey();
+                                break;
+                            }
+                        }
+                        if (memberId != null && 
+                            members.get(memberId).assignedTasks().activeTasksWithEpochs().get(subtopologyId).get(partitionId) <= partitionEntry.getValue()) {
+                            partitionsOrNull.put(partitionId, processId);
+                        } else {
+                            throw new IllegalStateException(
+                                String.format("[GroupId {}] Cannot set the process ID of {}-{} to {} because the partition is " +
+                                "still owned by process ID {}", groupId, subtopologyId, partitionId, processId, prevValue));
+                        }
                     }
                 }
                 return partitionsOrNull;
