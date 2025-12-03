@@ -3313,6 +3313,8 @@ public class GroupMetadataManager {
                         updateRegularExpressionsResult = UpdateRegularExpressionsResult.REGEX_UPDATED_AND_RESOLVED;
                     }
                 }
+            } else if (isNotEmpty(oldSubscribedTopicRegex)) {
+                updateRegularExpressionsResult = UpdateRegularExpressionsResult.REGEX_UPDATED_AND_RESOLVED;
             }
         }
 
