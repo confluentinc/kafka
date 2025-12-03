@@ -1027,28 +1027,11 @@ public class StreamsGroup implements Group {
                 if (partitionsOrNull == null) {
                     partitionsOrNull = new TimelineHashMap<>(snapshotRegistry, assignedTaskPartitionsWithEpochs.size());
                 }
-                for (Map.Entry<Integer, Integer> partitionEntry : assignedTaskPartitionsWithEpochs.entrySet()) {
-                    Integer partitionId = partitionEntry.getKey();
-                    String prevValue = partitionsOrNull.get(partitionId);
-                    
-                    if (prevValue == null) {
-                        partitionsOrNull.put(partitionId, processId);
-                    } else {
-                        String memberId = null;
-                        for (Map.Entry<String, StreamsGroupMember> memberEntry : members.entrySet()) {
-                            if (memberEntry.getValue().processId().equals(prevValue)) {
-                                memberId = memberEntry.getKey();
-                                break;
-                            }
-                        }
-                        if (memberId != null && 
-                            members.get(memberId).assignedTasks().activeTasksWithEpochs().get(subtopologyId).get(partitionId) <= partitionEntry.getValue()) {
-                            partitionsOrNull.put(partitionId, processId);
-                        } else {
-                            throw new IllegalStateException(
-                                String.format("[GroupId {}] Cannot set the process ID of {}-{} to {} because the partition is " +
-                                "still owned by process ID {}", groupId, subtopologyId, partitionId, processId, prevValue));
-                        }
+                for (Integer partitionId: assignedTaskPartitionsWithEpochs.keySet()) {
+                    String prevValue = partitionsOrNull.put(partitionId, processId);
+                    if (prevValue != null) {
+                        log.debug("[GroupId {}] Cannot set the process ID of {}-{} to {} because the partition is " +
+                            "still owned by process ID {}", groupId, subtopologyId, partitionId, processId, prevValue);
                     }
                 }
                 return partitionsOrNull;

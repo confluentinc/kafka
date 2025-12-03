@@ -288,10 +288,8 @@ public class ConsumerGroupTest {
             .build();
 
         // m2 can acquire foo-1 because the epoch is at least as large as m1's epoch.
+        // This should not throw IllegalStateException.
         consumerGroup.updateMember(m2);
-        assertEquals(mkAssignment(mkTopicAssignment(fooTopicId, 1)), 
-            consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions()
-        );
 
         ConsumerGroupMember m3 = new ConsumerGroupMember.Builder("m3")
             .setMemberEpoch(9)
