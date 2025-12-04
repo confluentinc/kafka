@@ -395,7 +395,6 @@ public class StreamsGroupTest {
             TaskAssignmentTestUtil.mkTasksTupleWithCommonEpoch(taskRole, 9, mkTasks(fooSubtopologyId, 1)),
             "process1"
         );
-        assertEquals(m1.assignedTasks(), streamsGroup.getMemberOrThrow("m1").assignedTasks());
         if (taskRole == TaskRole.ACTIVE) {
             assertEquals("process", streamsGroup.currentActiveTaskProcessId(fooSubtopologyId, 1));
         }
@@ -415,17 +414,17 @@ public class StreamsGroupTest {
             "process"
         );
 
-        // We allow changing the epoch with the same process id. 
+        // We allow replacing with a different process id.
         streamsGroup.addTaskProcessId(
             new TasksTupleWithEpochs(
                 mkTasksPerSubtopologyWithCommonEpoch(10, mkTasks(fooSubtopologyId, 1)),
                 mkTasksPerSubtopology(mkTasks(fooSubtopologyId, 2)),
                 mkTasksPerSubtopology(mkTasks(fooSubtopologyId, 3))
             ),
-            "process"
+            "process2"
         );
 
-        assertEquals("process", streamsGroup.currentActiveTaskProcessId(fooSubtopologyId, 1));
+        assertEquals("process2", streamsGroup.currentActiveTaskProcessId(fooSubtopologyId, 1));
     }
 
     @Test

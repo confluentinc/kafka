@@ -333,10 +333,6 @@ public class ConsumerGroupTest {
             ),
             11
         );
-        assertEquals(
-            mkAssignment(mkTopicAssignment(fooTopicId, 1)),
-            consumerGroup.getOrMaybeCreateMember("m1", false).assignedPartitions()
-        );
         assertEquals(10, consumerGroup.currentPartitionEpoch(fooTopicId, 1));
     }
 

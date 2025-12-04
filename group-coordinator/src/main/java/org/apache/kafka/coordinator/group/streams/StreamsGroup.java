@@ -1004,7 +1004,7 @@ public class StreamsGroup implements Group {
      *
      * @param tasks     The assigned tasks.
      * @param processId The process ID.
-     * @throws IllegalStateException if the existing partition has larger epoch than the new one. package-private for testing.
+     * package-private for testing.
      */
     void addTaskProcessId(
         TasksTupleWithEpochs tasks,
@@ -1027,10 +1027,10 @@ public class StreamsGroup implements Group {
                 if (partitionsOrNull == null) {
                     partitionsOrNull = new TimelineHashMap<>(snapshotRegistry, assignedTaskPartitionsWithEpochs.size());
                 }
-                for (Integer partitionId: assignedTaskPartitionsWithEpochs.keySet()) {
+                for (Integer partitionId : assignedTaskPartitionsWithEpochs.keySet()) {
                     String prevValue = partitionsOrNull.put(partitionId, processId);
                     if (prevValue != null) {
-                        log.debug("[GroupId {}] Cannot set the process ID of {}-{} to {} because the partition is " +
+                        log.debug("[GroupId {}]Setting the process ID of {}-{} to {} even though the partition is " +
                             "still owned by process ID {}", groupId, subtopologyId, partitionId, processId, prevValue);
                     }
                 }
