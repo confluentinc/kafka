@@ -240,7 +240,7 @@ License Version 2.0:
 - log4j-core-2.24.3
 - log4j-slf4j-impl-2.24.3
 - log4j-1.2-api-2.24.3
-- lz4-java-1.8.0
+- lz4-java-1.10.1
 - maven-artifact-3.9.6
 - metrics-core-2.2.0
 - opentelemetry-proto-1.0.0-alpha
