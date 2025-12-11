@@ -2069,6 +2069,12 @@ public class GroupMetadataManager {
                 // During initial rebalance delay, return empty assignment to first joining members.
                 targetAssignmentEpoch = 1;
                 targetAssignment = TasksTuple.EMPTY;
+
+                returnedStatus.add(
+                    new Status()
+                        .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
+                        .setStatusDetail("Assignment delayed due to the configured initial rebalance delay.")
+                );
             } else {
                 targetAssignment = updateStreamsTargetAssignment(
                     group,
@@ -2156,6 +2162,7 @@ public class GroupMetadataManager {
         ));
 
         response.setStatus(returnedStatus);
+
         return new CoordinatorResult<>(records, new StreamsGroupHeartbeatResult(response, internalTopicsToBeCreated));
     }
 
