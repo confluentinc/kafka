@@ -75,6 +75,7 @@ import static org.apache.kafka.common.utils.Utils.union;
 import static org.apache.kafka.streams.internals.StreamsConfigUtils.ProcessingMode.EXACTLY_ONCE_V2;
 import static org.apache.kafka.streams.processor.internals.StateManagerUtil.parseTaskDirectoryName;
 
+@SuppressWarnings("checkstyle:ClassFanOutComplexity")
 public class TaskManager {
 
     private static final String BUG_ERROR_MESSAGE = "This indicates a bug. " +
