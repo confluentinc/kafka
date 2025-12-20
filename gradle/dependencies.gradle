@@ -91,14 +91,16 @@ versions += [
   apacheda: "1.0.2",
   apacheds: "2.0.0-M24",
   argparse4j: "0.7.0",
-  bcpkix: "1.75",
+  bcpkix: "1.77",
   caffeine: "2.9.3", // 3.x supports JDK 11 and above
   // when updating checkstyle, check whether the exclusion of
   // CVE-2023-2976 and CVE-2020-8908 can be dropped from
   // gradle/resources/dependencycheck-suppressions.xml
   checkstyle: "8.36.2",
+  commonsBeanutils: "1.11.0",
   commonsCli: "1.4",
-  commonsIo: "2.14.0", // ZooKeeper dependency. Do not use, this is going away.
+  commonsIo: "2.16.0", // ZooKeeper dependency. Do not use, this is going away.
+  commonsLang: "3.18.0",
   commonsValidator: "1.7",
   dropwizardMetrics: "4.1.12.1",
   gradle: "8.6",
@@ -107,7 +109,7 @@ versions += [
   jackson: "2.16.2",
   jacoco: "0.8.10",
   javassist: "3.29.2-GA",
-  jetty: "9.4.56.v20240826",
+  jetty: "9.4.58.v20250814",
   jersey: "2.39.1",
   jline: "3.25.1",
   jmh: "1.37",
@@ -146,11 +148,12 @@ versions += [
   lz4: "1.8.0",
   mavenArtifact: "3.8.8",
   metrics: "2.2.0",
-  netty: "4.1.115.Final",
+  netty: "4.1.125.Final",
   opentelemetryProto: "1.0.0-alpha",
   protobuf: "3.25.5", // a dependency of opentelemetryProto
   pcollections: "4.0.1",
   powermock: "2.0.9",
+  protobuf: "3.25.5",
   reflections: "0.10.2",
   reload4j: "1.2.25",
   rocksDB: "7.9.2",
@@ -185,7 +188,10 @@ libs += [
   caffeine: "com.github.ben-manes.caffeine:caffeine:$versions.caffeine",
   commonsCli: "commons-cli:commons-cli:$versions.commonsCli",
   commonsIo: "commons-io:commons-io:$versions.commonsIo",
+  commonsBeanutils: "commons-beanutils:commons-beanutils:$versions.commonsBeanutils",
+  commonsLang: "org.apache.commons:commons-lang3:$versions.commonsLang",
   commonsValidator: "commons-validator:commons-validator:$versions.commonsValidator",
+  commonsCodec: "commons-codec:commons-codec:$versions.commonsCodec",
   easymock: "org.easymock:easymock:$easymockVersion",
   jacksonAnnotations: "com.fasterxml.jackson.core:jackson-annotations:$versions.jackson",
   jacksonDatabind: "com.fasterxml.jackson.core:jackson-databind:$versions.jackson",
@@ -265,5 +271,6 @@ libs += [
   jfreechart: "jfreechart:jfreechart:$versions.jfreechart",
   mavenArtifact: "org.apache.maven:maven-artifact:$versions.mavenArtifact",
   zstd: "com.github.luben:zstd-jni:$versions.zstd",
-  httpclient: "org.apache.httpcomponents:httpclient:$versions.httpclient"
+  httpclient: "org.apache.httpcomponents:httpclient:$versions.httpclient",
+  protobuf: "com.google.protobuf:protobuf-java:$versions.protobuf",
 ]
