@@ -39,6 +39,8 @@ fetch_jdk_tgz() {
 JDK_MAJOR="${JDK_MAJOR:-8}"
 JDK_FULL="${JDK_FULL:-8u202-linux-x64}"
 
+echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH"
+export DEBIAN_FRONTEND=noninteractive
 if [ -z `which javac` ]; then
     apt-get -y update
     apt-get install -y software-properties-common python-software-properties binutils java-common
@@ -172,7 +174,7 @@ chmod a+rw /opt/kafka-3.7.2
 if [ ! -e /mnt ]; then
     mkdir /mnt
 fi
-chmod a+rwx /mnt
+sudo chmod a+rwx /mnt
 
 # Run ntpdate once to sync to ntp servers
 # use -u option to avoid port collision in case ntp daemon is already running
