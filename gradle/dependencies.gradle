@@ -147,7 +147,7 @@ versions += [
   kafka_36: "3.6.2",
   kafka_37: "3.7.2",
   // When updating lz4 make sure the compression levels in org.apache.kafka.common.record.CompressionType are still valid
-  lz4: "1.8.1",
+  lz4: "1.10.2",
   mavenArtifact: "3.9.6",
   metrics: "2.2.0",
   netty: "4.1.125.Final",
