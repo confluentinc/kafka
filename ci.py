@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 
-from confluent.ci.scripts.ci_utils import run_cmd, regex_replace, replace
+from ci_tools.utils import run_cmd, regex_replace, replace
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 log = logging.getLogger(__name__)
 

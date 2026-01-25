@@ -25,11 +25,10 @@ import org.apache.kafka.common.message.TxnOffsetCommitResponseData;
 import org.apache.kafka.common.message.TxnOffsetCommitResponseData.TxnOffsetCommitResponsePartition;
 import org.apache.kafka.common.message.TxnOffsetCommitResponseData.TxnOffsetCommitResponseTopic;
 import org.apache.kafka.common.protocol.ApiKeys;
-import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.protocol.Readable;
 import org.apache.kafka.common.record.RecordBatch;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -97,7 +96,7 @@ public class TxnOffsetCommitRequest extends AbstractRequest {
         public TxnOffsetCommitRequest build(short version) {
             if (version < 3 && groupMetadataSet()) {
                 throw new UnsupportedVersionException("Broker doesn't support group metadata commit API on version " + version
-                + ", minimum supported request version is 3 which requires brokers to be on version 2.5 or above.");
+                    + ", minimum supported request version is 3 which requires brokers to be on version 2.5 or above.");
             }
             if (!isTransactionV2Enabled) {
                 version = (short) Math.min(version, LAST_STABLE_VERSION_BEFORE_TRANSACTION_V2);
@@ -217,9 +216,9 @@ public class TxnOffsetCommitRequest extends AbstractRequest {
         return response;
     }
 
-    public static TxnOffsetCommitRequest parse(ByteBuffer buffer, short version) {
+    public static TxnOffsetCommitRequest parse(Readable readable, short version) {
         return new TxnOffsetCommitRequest(new TxnOffsetCommitRequestData(
-            new ByteBufferAccessor(buffer), version), version);
+            readable, version), version);
     }
 
     public static class CommittedOffset {

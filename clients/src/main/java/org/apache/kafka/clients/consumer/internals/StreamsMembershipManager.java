@@ -16,9 +16,13 @@
  */
 package org.apache.kafka.clients.consumer.internals;
 
+import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.StreamsOnAllTasksLostCallbackCompletedEvent;
+import org.apache.kafka.clients.consumer.internals.events.StreamsOnAllTasksLostCallbackNeededEvent;
 import org.apache.kafka.clients.consumer.internals.events.StreamsOnTasksAssignedCallbackCompletedEvent;
+import org.apache.kafka.clients.consumer.internals.events.StreamsOnTasksAssignedCallbackNeededEvent;
 import org.apache.kafka.clients.consumer.internals.events.StreamsOnTasksRevokedCallbackCompletedEvent;
+import org.apache.kafka.clients.consumer.internals.events.StreamsOnTasksRevokedCallbackNeededEvent;
 import org.apache.kafka.clients.consumer.internals.metrics.ConsumerRebalanceMetricsManager;
 import org.apache.kafka.clients.consumer.internals.metrics.RebalanceMetricsManager;
 import org.apache.kafka.common.KafkaException;
@@ -48,6 +52,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.util.Collections.unmodifiableList;
+
 /**
  * Tracks the state of a single member in relationship to a group:
  * <p/>
@@ -74,22 +80,26 @@ public class StreamsMembershipManager implements RequestManager {
             NONE_EPOCH,
             Collections.emptyMap(),
             Collections.emptyMap(),
-            Collections.emptyMap()
+            Collections.emptyMap(),
+            false
         );
 
         public final long localEpoch;
         public final Map<String, SortedSet<Integer>> activeTasks;
         public final Map<String, SortedSet<Integer>> standbyTasks;
         public final Map<String, SortedSet<Integer>> warmupTasks;
+        public final boolean isGroupReady;
 
         public LocalAssignment(final long localEpoch,
                                final Map<String, SortedSet<Integer>> activeTasks,
                                final Map<String, SortedSet<Integer>> standbyTasks,
-                               final Map<String, SortedSet<Integer>> warmupTasks) {
+                               final Map<String, SortedSet<Integer>> warmupTasks,
+                               final boolean isGroupReady) {
             this.localEpoch = localEpoch;
             this.activeTasks = activeTasks;
             this.standbyTasks = standbyTasks;
             this.warmupTasks = warmupTasks;
+            this.isGroupReady = isGroupReady;
             if (localEpoch == NONE_EPOCH &&
                     (!activeTasks.isEmpty() || !standbyTasks.isEmpty() || !warmupTasks.isEmpty())) {
                 throw new IllegalArgumentException("Local epoch must be set if tasks are assigned.");
@@ -98,16 +108,19 @@ public class StreamsMembershipManager implements RequestManager {
 
         Optional<LocalAssignment> updateWith(final Map<String, SortedSet<Integer>> activeTasks,
                                              final Map<String, SortedSet<Integer>> standbyTasks,
-                                             final Map<String, SortedSet<Integer>> warmupTasks) {
+                                             final Map<String, SortedSet<Integer>> warmupTasks,
+                                             final boolean isGroupReady) {
             if (localEpoch != NONE_EPOCH &&
                     activeTasks.equals(this.activeTasks) &&
                     standbyTasks.equals(this.standbyTasks) &&
-                    warmupTasks.equals(this.warmupTasks)) {
+                    warmupTasks.equals(this.warmupTasks) &&
+                    isGroupReady == this.isGroupReady
+            ) {
                 return Optional.empty();
             }
 
             long nextLocalEpoch = localEpoch + 1;
-            return Optional.of(new LocalAssignment(nextLocalEpoch, activeTasks, standbyTasks, warmupTasks));
+            return Optional.of(new LocalAssignment(nextLocalEpoch, activeTasks, standbyTasks, warmupTasks, isGroupReady));
         }
 
         @Override
@@ -117,6 +130,7 @@ public class StreamsMembershipManager implements RequestManager {
                 ", activeTasks=" + activeTasks +
                 ", standbyTasks=" + standbyTasks +
                 ", warmupTasks=" + warmupTasks +
+                ", isGroupReady=" + isGroupReady +
                 '}';
         }
 
@@ -128,12 +142,13 @@ public class StreamsMembershipManager implements RequestManager {
             return localEpoch == that.localEpoch &&
                 Objects.equals(activeTasks, that.activeTasks) &&
                 Objects.equals(standbyTasks, that.standbyTasks) &&
-                Objects.equals(warmupTasks, that.warmupTasks);
+                Objects.equals(warmupTasks, that.warmupTasks) &&
+                isGroupReady == that.isGroupReady;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(localEpoch, activeTasks, standbyTasks, warmupTasks);
+            return Objects.hash(localEpoch, activeTasks, standbyTasks, warmupTasks, isGroupReady);
         }
     }
 
@@ -145,10 +160,10 @@ public class StreamsMembershipManager implements RequestManager {
     private final Logger log;
 
     /**
-     * The processor that handles events of the Streams rebalance protocol.
+     * The processor that handles events from the background thread (a.k.a. ConsumerNetworkThread).
      * For example, requests for invocation of assignment/revocation callbacks.
      */
-    private final StreamsRebalanceEventsProcessor streamsRebalanceEventsProcessor;
+    private final BackgroundEventHandler backgroundEventHandler;
 
     /**
      * Data needed to participate in the Streams rebalance protocol.
@@ -167,7 +182,7 @@ public class StreamsMembershipManager implements RequestManager {
     private MemberState state;
 
     /**
-     * Group ID of the Streams group the member will be part of, provided when creating the current
+     * Group ID of the streams group the member will be part of, provided when creating the current
      * membership manager.
      */
     private final String groupId;
@@ -269,29 +284,28 @@ public class StreamsMembershipManager implements RequestManager {
     /**
      * Constructs the Streams membership manager.
      *
-     * @param groupId                           The ID of the group.
-     * @param streamsRebalanceEventsProcessor   The processor that handles Streams rebalance events like requests for
-     *                                          invocation of assignment/revocation callbacks.
-     * @param streamsRebalanceData              Data needed to participate in the Streams rebalance protocol.
-     * @param subscriptionState                 The subscription state of the member.
-     * @param logContext                        The log context.
-     * @param time                              The time.
-     * @param metrics                           The metrics.
+     * @param groupId                The ID of the group.
+     * @param streamsRebalanceData   Data needed to participate in the Streams rebalance protocol.
+     * @param subscriptionState      The subscription state of the member.
+     * @param backgroundEventHandler The handler that handles events from the background thread.
+     * @param logContext             The log context.
+     * @param time                   The time.
+     * @param metrics                The metrics.
      */
     public StreamsMembershipManager(final String groupId,
-                                    final StreamsRebalanceEventsProcessor streamsRebalanceEventsProcessor,
                                     final StreamsRebalanceData streamsRebalanceData,
                                     final SubscriptionState subscriptionState,
+                                    final BackgroundEventHandler backgroundEventHandler,
                                     final LogContext logContext,
                                     final Time time,
                                     final Metrics metrics) {
         log = logContext.logger(StreamsMembershipManager.class);
         this.state = MemberState.UNSUBSCRIBED;
         this.groupId = groupId;
-        this.streamsRebalanceEventsProcessor = streamsRebalanceEventsProcessor;
+        this.backgroundEventHandler = backgroundEventHandler;
         this.streamsRebalanceData = streamsRebalanceData;
         this.subscriptionState = subscriptionState;
-        metricsManager = new ConsumerRebalanceMetricsManager(metrics);
+        metricsManager = new ConsumerRebalanceMetricsManager(metrics, subscriptionState);
         this.time = time;
     }
 
@@ -448,9 +462,8 @@ public class StreamsMembershipManager implements RequestManager {
     private void transitionToStale() {
         transitionTo(MemberState.STALE);
 
-        final CompletableFuture<Void> onAllTasksLostCallbackExecution =
-            streamsRebalanceEventsProcessor.requestOnAllTasksLostCallbackInvocation();
-        staleMemberAssignmentRelease = onAllTasksLostCallbackExecution.whenComplete((result, error) -> {
+        final CompletableFuture<Void> onAllTasksLostCallbackExecuted = requestOnAllTasksLostCallbackInvocation();
+        staleMemberAssignmentRelease = onAllTasksLostCallbackExecuted.whenComplete((result, error) -> {
             if (error != null) {
                 log.error("Task revocation callback invocation failed " +
                     "after member left group due to expired poll timer.", error);
@@ -487,7 +500,7 @@ public class StreamsMembershipManager implements RequestManager {
             return;
         }
 
-        CompletableFuture<Void> onAllTasksLostCallbackExecuted = streamsRebalanceEventsProcessor.requestOnAllTasksLostCallbackInvocation();
+        CompletableFuture<Void> onAllTasksLostCallbackExecuted = requestOnAllTasksLostCallbackInvocation();
         onAllTasksLostCallbackExecuted.whenComplete((result, error) -> {
             if (error != null) {
                 log.error("onAllTasksLost callback invocation failed while releasing assignment " +
@@ -591,7 +604,7 @@ public class StreamsMembershipManager implements RequestManager {
      * @return True if the member should send heartbeat to the coordinator without waiting for
      * the interval.
      */
-    public boolean shouldHeartbeatNow() {
+    public boolean shouldNotWaitForHeartbeatInterval() {
         return state == MemberState.ACKNOWLEDGING || state == MemberState.LEAVING || state == MemberState.JOINING;
     }
 
@@ -659,7 +672,7 @@ public class StreamsMembershipManager implements RequestManager {
                 "already leaving the group.", memberId, memberEpoch);
             return;
         }
-        if (state == MemberState.UNSUBSCRIBED && maybeCompleteLeaveInProgress()) {
+        if (state == MemberState.UNSUBSCRIBED && responseData.memberEpoch() < 0 && maybeCompleteLeaveInProgress()) {
             log.debug("Member {} with epoch {} received a successful response to the heartbeat " +
                 "to leave the group and completed the leave operation. ", memberId, memberEpoch);
             return;
@@ -669,15 +682,22 @@ public class StreamsMembershipManager implements RequestManager {
                 " so it's not a member of the group. ", memberId, state);
             return;
         }
+        if (responseData.memberEpoch() < 0) {
+            log.debug("Ignoring heartbeat response received from broker. Member {} with epoch {} " +
+                "is in {} state and the member epoch is invalid: {}. ", memberId, memberEpoch, state,
+                responseData.memberEpoch());
+            maybeCompleteLeaveInProgress();
+            return;
+        }
         
         updateMemberEpoch(responseData.memberEpoch());
 
         final List<StreamsGroupHeartbeatResponseData.TaskIds> activeTasks = responseData.activeTasks();
         final List<StreamsGroupHeartbeatResponseData.TaskIds> standbyTasks = responseData.standbyTasks();
         final List<StreamsGroupHeartbeatResponseData.TaskIds> warmupTasks = responseData.warmupTasks();
+        final boolean isGroupReady = isGroupReady(responseData.status());
 
         if (activeTasks != null && standbyTasks != null && warmupTasks != null) {
-
             if (!state.canHandleNewAssignment()) {
                 log.debug("Ignoring new assignment: active tasks {}, standby tasks {}, and warm-up tasks {} received " +
                         "from server because member is in {} state.",
@@ -688,28 +708,57 @@ public class StreamsMembershipManager implements RequestManager {
             processAssignmentReceived(
                 toTasksAssignment(activeTasks),
                 toTasksAssignment(standbyTasks),
-                toTasksAssignment(warmupTasks)
+                toTasksAssignment(warmupTasks),
+                isGroupReady
             );
-        } else {
-            if (responseData.activeTasks() != null ||
-                responseData.standbyTasks() != null ||
-                responseData.warmupTasks() != null) {
-
-                throw new IllegalStateException("Invalid response data, task collections must be all null or all non-null: "
-                    + responseData);
-            }
+        } else if (responseData.activeTasks() != null || responseData.standbyTasks() != null || responseData.warmupTasks() != null) {
+            throw new IllegalStateException("Invalid response data, task collections must be all null or all non-null: "
+                + responseData);
+        } else if (isGroupReady != targetAssignment.isGroupReady) {
+            // If the client did not provide a new assignment, but the group is now ready or not ready anymore, so
+            // update the target assignment and reconcile it.
+            processAssignmentReceived(
+                targetAssignment.activeTasks,
+                targetAssignment.standbyTasks,
+                targetAssignment.warmupTasks,
+                isGroupReady
+            );
         }
     }
 
-    /**
-     * Notify the member that an error heartbeat response was received.
-     *
-     * @param retriable True if the request failed with a retriable error.
-     */
-    public void onHeartbeatFailure(boolean retriable) {
-        if (!retriable) {
-            metricsManager.maybeRecordRebalanceFailed();
+    private boolean isGroupReady(List<StreamsGroupHeartbeatResponseData.Status> statuses) {
+        if (statuses != null) {
+            for (final StreamsGroupHeartbeatResponseData.Status status : statuses) {
+                switch (StreamsGroupHeartbeatResponse.Status.fromCode(status.statusCode())) {
+                    case MISSING_SOURCE_TOPICS:
+                    case MISSING_INTERNAL_TOPICS:
+                    case INCORRECTLY_PARTITIONED_TOPICS:
+                    case ASSIGNMENT_DELAYED:
+                        return false;
+                    default:
+                        // continue checking other statuses
+                }
+            }
         }
+        return true;
+    }
+
+    /**
+     * Notify the member that a retriable error heartbeat response was received.
+     */
+    public void onRetriableHeartbeatFailure() {
+        onHeartbeatFailure();
+    }
+
+    /**
+     * Notify the member that a fatal error heartbeat response was received.
+     */
+    public void onFatalHeartbeatFailure() {
+        metricsManager.maybeRecordRebalanceFailed();
+        onHeartbeatFailure();
+    }
+
+    private void onHeartbeatFailure() {
         // The leave group request is sent out once (not retried), so we should complete the leave
         // operation once the request completes, regardless of the response.
         if (state == MemberState.UNSUBSCRIBED && maybeCompleteLeaveInProgress()) {
@@ -756,8 +805,8 @@ public class StreamsMembershipManager implements RequestManager {
         log.debug("Member {} with epoch {} transitioned to {} state. It will release its " +
             "assignment and rejoin the group.", memberId, memberEpoch, MemberState.FENCED);
 
-        CompletableFuture<Void> callbackResult = streamsRebalanceEventsProcessor.requestOnAllTasksLostCallbackInvocation();
-        callbackResult.whenComplete((result, error) -> {
+        CompletableFuture<Void> onAllTasksLostCallbackExecuted = requestOnAllTasksLostCallbackInvocation();
+        onAllTasksLostCallbackExecuted.whenComplete((result, error) -> {
             if (error != null) {
                 log.error("onAllTasksLost callback invocation failed while releasing assignment" +
                     " after member got fenced. Member will rejoin the group anyways.", error);
@@ -934,11 +983,13 @@ public class StreamsMembershipManager implements RequestManager {
      * @param activeTasks Target active tasks assignment received from the broker.
      * @param standbyTasks Target standby tasks assignment received from the broker.
      * @param warmupTasks Target warm-up tasks assignment received from the broker.
+     * @param isGroupReady True if the group is ready, false otherwise.
      */
     private void processAssignmentReceived(Map<String, SortedSet<Integer>> activeTasks,
                                            Map<String, SortedSet<Integer>> standbyTasks,
-                                           Map<String, SortedSet<Integer>> warmupTasks) {
-        replaceTargetAssignmentWithNewAssignment(activeTasks, standbyTasks, warmupTasks);
+                                           Map<String, SortedSet<Integer>> warmupTasks,
+                                           boolean isGroupReady) {
+        replaceTargetAssignmentWithNewAssignment(activeTasks, standbyTasks, warmupTasks, isGroupReady);
         if (!targetAssignmentReconciled()) {
             transitionTo(MemberState.RECONCILING);
         } else {
@@ -957,8 +1008,9 @@ public class StreamsMembershipManager implements RequestManager {
 
     private void replaceTargetAssignmentWithNewAssignment(Map<String, SortedSet<Integer>> activeTasks,
                                                           Map<String, SortedSet<Integer>> standbyTasks,
-                                                          Map<String, SortedSet<Integer>> warmupTasks) {
-        targetAssignment.updateWith(activeTasks, standbyTasks, warmupTasks)
+                                                          Map<String, SortedSet<Integer>> warmupTasks,
+                                                          boolean isGroupReady) {
+        targetAssignment.updateWith(activeTasks, standbyTasks, warmupTasks, isGroupReady)
             .ifPresent(updatedAssignment -> {
                 log.debug("Target assignment updated from {} to {}. Member will reconcile it on the next poll.",
                     targetAssignment, updatedAssignment);
@@ -992,8 +1044,8 @@ public class StreamsMembershipManager implements RequestManager {
             return;
         }
         if (reconciliationInProgress) {
-            log.trace("Ignoring reconciliation attempt. Another reconciliation is already in progress. Assignment " +
-                targetAssignment + " will be handled in the next reconciliation loop.");
+            log.trace("Ignoring reconciliation attempt. Another reconciliation is already in progress. Assignment {}" +
+                " will be handled in the next reconciliation loop.", targetAssignment);
             return;
         }
 
@@ -1007,8 +1059,9 @@ public class StreamsMembershipManager implements RequestManager {
         SortedSet<StreamsRebalanceData.TaskId> ownedStandbyTasks = toTaskIdSet(currentAssignment.standbyTasks);
         SortedSet<StreamsRebalanceData.TaskId> assignedWarmupTasks = toTaskIdSet(targetAssignment.warmupTasks);
         SortedSet<StreamsRebalanceData.TaskId> ownedWarmupTasks = toTaskIdSet(currentAssignment.warmupTasks);
+        boolean isGroupReady = targetAssignment.isGroupReady;
 
-        log.info("Assigned tasks with local epoch {}\n" +
+        log.info("Assigned tasks with local epoch {} and group {}\n" +
                 "\tMember:                        {}\n" +
                 "\tAssigned active tasks:         {}\n" +
                 "\tOwned active tasks:            {}\n" +
@@ -1018,6 +1071,7 @@ public class StreamsMembershipManager implements RequestManager {
                 "\tAssigned warm-up tasks:        {}\n" +
                 "\tOwned warm-up tasks:           {}\n",
             targetAssignment.localEpoch,
+            isGroupReady ? "is ready" : "is not ready",
             memberId,
             assignedActiveTasks,
             ownedActiveTasks,
@@ -1046,7 +1100,7 @@ public class StreamsMembershipManager implements RequestManager {
 
         final CompletableFuture<Void> tasksRevokedAndAssigned = tasksRevoked.thenCompose(__ -> {
             if (!maybeAbortReconciliation()) {
-                return assignTasks(assignedActiveTasks, ownedActiveTasks, assignedStandbyTasks, assignedWarmupTasks);
+                return assignTasks(assignedActiveTasks, ownedActiveTasks, assignedStandbyTasks, assignedWarmupTasks, isGroupReady);
             }
             return CompletableFuture.completedFuture(null);
         });
@@ -1083,8 +1137,7 @@ public class StreamsMembershipManager implements RequestManager {
         subscriptionState.markPendingRevocation(partitionsToRevoke);
 
         CompletableFuture<Void> tasksRevoked = new CompletableFuture<>();
-        CompletableFuture<Void> onTasksRevokedCallbackExecuted =
-            streamsRebalanceEventsProcessor.requestOnTasksRevokedCallbackInvocation(activeTasksToRevoke);
+        CompletableFuture<Void> onTasksRevokedCallbackExecuted = requestOnTasksRevokedCallbackInvocation(activeTasksToRevoke);
         onTasksRevokedCallbackExecuted.whenComplete((__, callbackError) -> {
             if (callbackError != null) {
                 log.error("onTasksRevoked callback invocation failed for tasks {}",
@@ -1100,7 +1153,8 @@ public class StreamsMembershipManager implements RequestManager {
     private CompletableFuture<Void> assignTasks(final SortedSet<StreamsRebalanceData.TaskId> activeTasksToAssign,
                                                 final SortedSet<StreamsRebalanceData.TaskId> ownedActiveTasks,
                                                 final SortedSet<StreamsRebalanceData.TaskId> standbyTasksToAssign,
-                                                final SortedSet<StreamsRebalanceData.TaskId> warmupTasksToAssign) {
+                                                final SortedSet<StreamsRebalanceData.TaskId> warmupTasksToAssign,
+                                                final boolean isGroupReady) {
         log.info("Assigning active tasks {{}}, standby tasks {{}}, and warm-up tasks {{}} to the member.",
             activeTasksToAssign.stream()
                 .map(StreamsRebalanceData.TaskId::toString)
@@ -1114,31 +1168,32 @@ public class StreamsMembershipManager implements RequestManager {
         );
 
         final SortedSet<TopicPartition> partitionsToAssign = topicPartitionsForActiveTasks(activeTasksToAssign);
-        final SortedSet<TopicPartition> partitionsToAssigneNotPreviouslyOwned =
+        final SortedSet<TopicPartition> partitionsToAssignNotPreviouslyOwned =
             partitionsToAssignNotPreviouslyOwned(partitionsToAssign, topicPartitionsForActiveTasks(ownedActiveTasks));
 
         subscriptionState.assignFromSubscribedAwaitingCallback(
             partitionsToAssign,
-            partitionsToAssigneNotPreviouslyOwned
+            partitionsToAssignNotPreviouslyOwned
         );
         notifyAssignmentChange(partitionsToAssign);
 
         CompletableFuture<Void> onTasksAssignedCallbackExecuted =
-            streamsRebalanceEventsProcessor.requestOnTasksAssignedCallbackInvocation(
+            requestOnTasksAssignedCallbackInvocation(
                 new StreamsRebalanceData.Assignment(
                     activeTasksToAssign,
                     standbyTasksToAssign,
-                    warmupTasksToAssign
+                    warmupTasksToAssign,
+                    isGroupReady
                 )
             );
         onTasksAssignedCallbackExecuted.whenComplete((__, callbackError) -> {
             if (callbackError == null) {
                 subscriptionState.enablePartitionsAwaitingCallback(partitionsToAssign);
             } else {
-                if (!partitionsToAssigneNotPreviouslyOwned.isEmpty()) {
+                if (!partitionsToAssignNotPreviouslyOwned.isEmpty()) {
                     log.warn("Leaving newly assigned partitions {} marked as non-fetchable and not " +
                             "requiring initializing positions after onTasksAssigned callback failed.",
-                        partitionsToAssigneNotPreviouslyOwned, callbackError);
+                        partitionsToAssignNotPreviouslyOwned, callbackError);
                 }
             }
         });
@@ -1156,7 +1211,7 @@ public class StreamsMembershipManager implements RequestManager {
         log.debug("Marking lost partitions pending for revocation: {}", partitionsToRelease);
         subscriptionState.markPendingRevocation(partitionsToRelease);
 
-        return streamsRebalanceEventsProcessor.requestOnAllTasksLostCallbackInvocation();
+        return requestOnAllTasksLostCallbackInvocation();
     }
 
     private SortedSet<TopicPartition> partitionsToAssignNotPreviouslyOwned(final SortedSet<TopicPartition> assignedTopicPartitions,
@@ -1188,9 +1243,9 @@ public class StreamsMembershipManager implements RequestManager {
             Stream.concat(
                 streamsRebalanceData.subtopologies().get(task.subtopologyId()).sourceTopics().stream(),
                 streamsRebalanceData.subtopologies().get(task.subtopologyId()).repartitionSourceTopics().keySet().stream()
-            ).forEach(topic -> {
-                topicPartitions.add(new TopicPartition(topic, task.partitionId()));
-            })
+            ).forEach(topic ->
+                topicPartitions.add(new TopicPartition(topic, task.partitionId()))
+            )
         );
         return topicPartitions;
     }
@@ -1206,7 +1261,7 @@ public class StreamsMembershipManager implements RequestManager {
             String reason = rejoinedWhileReconciliationInProgress ?
                 "the member has re-joined the group" :
                 "the member already transitioned out of the reconciling state into " + state;
-            log.info("Interrupting reconciliation that is not relevant anymore because " + reason);
+            log.info("Interrupting reconciliation that is not relevant anymore because {}", reason);
             markReconciliationCompleted();
         }
         return shouldAbort;
@@ -1215,6 +1270,24 @@ public class StreamsMembershipManager implements RequestManager {
     private void markReconciliationInProgress() {
         reconciliationInProgress = true;
         rejoinedWhileReconciliationInProgress = false;
+    }
+
+    private CompletableFuture<Void> requestOnTasksAssignedCallbackInvocation(final StreamsRebalanceData.Assignment assignment) {
+        final StreamsOnTasksAssignedCallbackNeededEvent onTasksAssignedCallbackNeededEvent = new StreamsOnTasksAssignedCallbackNeededEvent(assignment);
+        backgroundEventHandler.add(onTasksAssignedCallbackNeededEvent);
+        return onTasksAssignedCallbackNeededEvent.future();
+    }
+
+    private CompletableFuture<Void> requestOnAllTasksLostCallbackInvocation() {
+        final StreamsOnAllTasksLostCallbackNeededEvent onAllTasksLostCallbackNeededEvent = new StreamsOnAllTasksLostCallbackNeededEvent();
+        backgroundEventHandler.add(onAllTasksLostCallbackNeededEvent);
+        return onAllTasksLostCallbackNeededEvent.future();
+    }
+
+    public CompletableFuture<Void> requestOnTasksRevokedCallbackInvocation(final Set<StreamsRebalanceData.TaskId> activeTasksToRevoke) {
+        final StreamsOnTasksRevokedCallbackNeededEvent onTasksRevokedCallbackNeededEvent = new StreamsOnTasksRevokedCallbackNeededEvent(activeTasksToRevoke);
+        backgroundEventHandler.add(onTasksRevokedCallbackNeededEvent);
+        return onTasksRevokedCallbackNeededEvent.future();
     }
 
     /**
@@ -1278,5 +1351,10 @@ public class StreamsMembershipManager implements RequestManager {
             log.debug("The onAllTasksLost callback completed successfully; signaling to continue to the next phase of rebalance");
             future.complete(null);
         }
+    }
+
+    // visible for testing
+    List<MemberStateListener> stateListeners() {
+        return unmodifiableList(stateUpdatesListeners);
     }
 }

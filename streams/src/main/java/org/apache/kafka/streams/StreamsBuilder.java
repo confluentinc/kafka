@@ -75,7 +75,7 @@ public class StreamsBuilder {
     public StreamsBuilder() {
         topology = new Topology();
         internalTopologyBuilder = topology.internalTopologyBuilder;
-        internalStreamsBuilder = new InternalStreamsBuilder(internalTopologyBuilder);
+        internalStreamsBuilder = new InternalStreamsBuilder(internalTopologyBuilder, false);
     }
 
     /**
@@ -87,7 +87,14 @@ public class StreamsBuilder {
     public StreamsBuilder(final TopologyConfig topologyConfigs) {
         topology = newTopology(topologyConfigs);
         internalTopologyBuilder = topology.internalTopologyBuilder;
-        internalStreamsBuilder = new InternalStreamsBuilder(internalTopologyBuilder);
+        internalStreamsBuilder = new InternalStreamsBuilder(
+            internalTopologyBuilder,
+            TopologyConfig.InternalConfig.getBoolean(
+                topologyConfigs.originals(),
+                TopologyConfig.InternalConfig.ENABLE_PROCESS_PROCESSVALUE_FIX,
+                false
+            )
+        );
     }
 
     protected Topology newTopology(final TopologyConfig topologyConfigs) {
@@ -384,7 +391,7 @@ public class StreamsBuilder {
 
         final MaterializedInternal<K, V, KeyValueStore<Bytes, byte[]>> materializedInternal =
             new MaterializedInternal<>(
-                Materialized.with(consumedInternal.keySerde(), consumedInternal.valueSerde()),
+                Materialized.<K, V, KeyValueStore<Bytes, byte[]>>with(consumedInternal.keySerde(), consumedInternal.valueSerde()).withLoggingDisabled(),
                 internalStreamsBuilder,
                 topic + "-",
                 true /* force materializing global tables */);
@@ -457,7 +464,7 @@ public class StreamsBuilder {
         Objects.requireNonNull(materialized, "materialized can't be null");
         final ConsumedInternal<K, V> consumedInternal = new ConsumedInternal<>(consumed);
         // always use the serdes from consumed
-        materialized.withKeySerde(consumedInternal.keySerde()).withValueSerde(consumedInternal.valueSerde());
+        materialized.withKeySerde(consumedInternal.keySerde()).withValueSerde(consumedInternal.valueSerde()).withLoggingDisabled();
 
         final MaterializedInternal<K, V, KeyValueStore<Bytes, byte[]>> materializedInternal =
             new MaterializedInternal<>(materialized, internalStreamsBuilder, topic + "-");

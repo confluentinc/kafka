@@ -17,6 +17,7 @@
 package org.apache.kafka.connect.runtime;
 
 import org.apache.kafka.common.internals.Plugin;
+import org.apache.kafka.connect.runtime.isolation.TestPlugins;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.transforms.Transformation;
 import org.apache.kafka.connect.transforms.predicates.Predicate;
@@ -25,7 +26,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-import static java.util.Collections.singletonMap;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -35,8 +37,8 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 public class TransformationStageTest {
 
-    private final SourceRecord initial = new SourceRecord(singletonMap("initial", 1), null, null, null, null);
-    private final SourceRecord transformed = new SourceRecord(singletonMap("transformed", 2), null, null, null, null);
+    private final SourceRecord initial = new SourceRecord(Map.of("initial", 1), null, null, null, null);
+    private final SourceRecord transformed = new SourceRecord(Map.of("transformed", 2), null, null, null, null);
 
     @Test
     public void apply() throws Exception {
@@ -60,8 +62,14 @@ public class TransformationStageTest {
         }
         TransformationStage<SourceRecord> stage = new TransformationStage<>(
                 predicatePlugin,
+                "testPredicate",
+                null,
                 negate,
-                transformationPlugin);
+                transformationPlugin,
+                "testTransformation",
+                null,
+                TestPlugins.noOpLoaderSwap()
+        );
 
         assertEquals(expectedResult, stage.apply(initial));
 

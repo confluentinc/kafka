@@ -19,7 +19,7 @@ package org.apache.kafka.clients.consumer;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.MockClient;
 import org.apache.kafka.clients.consumer.internals.AutoOffsetResetStrategy;
-import org.apache.kafka.clients.consumer.internals.ConsumerMetadata;
+import org.apache.kafka.clients.consumer.internals.ShareConsumerMetadata;
 import org.apache.kafka.clients.consumer.internals.SubscriptionState;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicIdPartition;
@@ -45,7 +45,6 @@ import org.apache.kafka.common.requests.ShareGroupHeartbeatRequest;
 import org.apache.kafka.common.requests.ShareGroupHeartbeatResponse;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.test.api.Flaky;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
@@ -56,6 +55,7 @@ import org.junit.jupiter.api.Timeout;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -90,7 +90,7 @@ public class KafkaShareConsumerTest {
 
     @Test
     public void testVerifyHeartbeats() throws InterruptedException {
-        ConsumerMetadata metadata = new ConsumerMetadata(0, 0, Long.MAX_VALUE, false, false,
+        ShareConsumerMetadata metadata = new ShareConsumerMetadata(0, 0, Long.MAX_VALUE, false,
             subscription, new LogContext(), new ClusterResourceListeners());
         MockClient client = new MockClient(time, metadata);
 
@@ -140,10 +140,9 @@ public class KafkaShareConsumerTest {
         }
     }
 
-    @Flaky("KAFKA-18488")
     @Test
-    public void testVerifyFetchAndCommitSyncImplicit() throws InterruptedException {
-        ConsumerMetadata metadata = new ConsumerMetadata(0, 0, Long.MAX_VALUE, false, false,
+    public void testVerifyFetchAndCommitSyncImplicit() {
+        ShareConsumerMetadata metadata = new ShareConsumerMetadata(0, 0, Long.MAX_VALUE, false,
             subscription, new LogContext(), new ClusterResourceListeners());
         MockClient client = new MockClient(time, metadata);
 
@@ -163,9 +162,9 @@ public class KafkaShareConsumerTest {
                 return request.data().groupId().equals(groupId) &&
                     request.data().shareSessionEpoch() == 0 &&
                     request.data().batchSize() == batchSize &&
-                    request.data().topics().get(0).topicId().equals(topicId1) &&
-                    request.data().topics().get(0).partitions().size() == 1 &&
-                    request.data().topics().get(0).partitions().get(0).acknowledgementBatches().isEmpty();
+                    request.data().topics().stream().findFirst().get().topicId().equals(topicId1) &&
+                    request.data().topics().stream().findFirst().get().partitions().size() == 1 &&
+                    request.data().topics().stream().findFirst().get().partitions().stream().findFirst().get().acknowledgementBatches().isEmpty();
             } else {
                 return false;
             }
@@ -177,10 +176,10 @@ public class KafkaShareConsumerTest {
                 ShareAcknowledgeRequest request = (ShareAcknowledgeRequest) body;
                 return request.data().groupId().equals(groupId) &&
                     request.data().shareSessionEpoch() == 1 &&
-                    request.data().topics().get(0).partitions().get(0).acknowledgementBatches().get(0).firstOffset() == 0 &&
-                    request.data().topics().get(0).partitions().get(0).acknowledgementBatches().get(0).lastOffset() == 1 &&
-                    request.data().topics().get(0).partitions().get(0).acknowledgementBatches().get(0).acknowledgeTypes().size() == 1 &&
-                    request.data().topics().get(0).partitions().get(0).acknowledgementBatches().get(0).acknowledgeTypes().get(0) == (byte) 1;
+                    request.data().topics().stream().findFirst().get().partitions().stream().findFirst().get().acknowledgementBatches().get(0).firstOffset() == 0 &&
+                    request.data().topics().stream().findFirst().get().partitions().stream().findFirst().get().acknowledgementBatches().get(0).lastOffset() == 1 &&
+                    request.data().topics().stream().findFirst().get().partitions().stream().findFirst().get().acknowledgementBatches().get(0).acknowledgeTypes().size() == 1 &&
+                    request.data().topics().stream().findFirst().get().partitions().stream().findFirst().get().acknowledgementBatches().get(0).acknowledgeTypes().get(0) == (byte) 1;
             } else {
                 return false;
             }
@@ -216,8 +215,8 @@ public class KafkaShareConsumerTest {
     }
 
     @Test
-    public void testVerifyFetchAndCloseImplicit() throws InterruptedException {
-        ConsumerMetadata metadata = new ConsumerMetadata(0, 0, Long.MAX_VALUE, false, false,
+    public void testVerifyFetchAndCloseImplicit() {
+        ShareConsumerMetadata metadata = new ShareConsumerMetadata(0, 0, Long.MAX_VALUE, false,
             subscription, new LogContext(), new ClusterResourceListeners());
         MockClient client = new MockClient(time, metadata);
 
@@ -237,9 +236,9 @@ public class KafkaShareConsumerTest {
                 return request.data().groupId().equals(groupId) &&
                     request.data().shareSessionEpoch() == 0 &&
                     request.data().batchSize() == batchSize &&
-                    request.data().topics().get(0).topicId().equals(topicId1) &&
-                    request.data().topics().get(0).partitions().size() == 1 &&
-                    request.data().topics().get(0).partitions().get(0).acknowledgementBatches().isEmpty();
+                    request.data().topics().stream().findFirst().get().topicId().equals(topicId1) &&
+                    request.data().topics().stream().findFirst().get().partitions().size() == 1 &&
+                    request.data().topics().stream().findFirst().get().partitions().stream().findFirst().get().acknowledgementBatches().isEmpty();
             } else {
                 return false;
             }
@@ -273,12 +272,12 @@ public class KafkaShareConsumerTest {
     }
 
     private KafkaShareConsumer<String, String> newShareConsumer(String clientId,
-                                                                ConsumerMetadata metadata,
+                                                                ShareConsumerMetadata metadata,
                                                                 KafkaClient client) {
         LogContext logContext = new LogContext();
         Deserializer<String> keyDeserializer = new StringDeserializer();
         Deserializer<String> valueDeserializer = new StringDeserializer();
-        ConsumerConfig config = newConsumerConfig(clientId);
+        ShareConsumerConfig config = newConsumerConfig(clientId);
 
         return new KafkaShareConsumer<>(
             logContext,
@@ -294,14 +293,15 @@ public class KafkaShareConsumerTest {
         );
     }
 
-    private ConsumerConfig newConsumerConfig(String clientId) {
+    private ShareConsumerConfig newConsumerConfig(String clientId) {
         Map<String, Object> configs = new HashMap<>();
         configs.put(ConsumerConfig.CLIENT_ID_CONFIG, clientId);
         configs.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         configs.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, batchSize);
-        return new ConsumerConfig(configs);
+        configs.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        return new ShareConsumerConfig(configs);
     }
 
     private void initMetadata(MockClient client, Map<String, Integer> partitions) {
@@ -387,13 +387,7 @@ public class KafkaShareConsumerTest {
             .setPartitionIndex(tip.partition())
             .setRecords(records)
             .setAcquiredRecords(List.of(new ShareFetchResponseData.AcquiredRecords().setFirstOffset(0).setLastOffset(count - 1).setDeliveryCount((short) 1)));
-        ShareFetchResponseData.ShareFetchableTopicResponse topicResponse = new ShareFetchResponseData.ShareFetchableTopicResponse()
-            .setTopicId(tip.topicId())
-            .setPartitions(List.of(partData));
-        return new ShareFetchResponse(
-            new ShareFetchResponseData()
-                .setResponses(List.of(topicResponse))
-        );
+        return ShareFetchResponse.of(Errors.NONE, 0, new LinkedHashMap<>(Map.of(tip, partData)), List.of(), 0);
     }
 
     private ShareAcknowledgeResponse shareAcknowledgeResponse() {
@@ -411,7 +405,7 @@ public class KafkaShareConsumerTest {
             .setPartitions(List.of(partData));
         return new ShareAcknowledgeResponse(
             new ShareAcknowledgeResponseData()
-                .setResponses(List.of(topicResponse))
+                .setResponses(new ShareAcknowledgeResponseData.ShareAcknowledgeTopicResponseCollection(List.of(topicResponse).iterator()))
         );
     }
 }

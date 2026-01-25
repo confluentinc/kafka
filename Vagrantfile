@@ -31,6 +31,8 @@ num_workers = 0 # Generic workers that get the code, but don't start any service
 ram_megabytes = 1280
 base_box = "ubuntu/trusty64"
 
+semaphore_job_id = ENV['SEMAPHORE_JOB_ID']
+
 # EC2
 ec2_access_key = ENV['AWS_ACCESS_KEY']
 ec2_secret_key = ENV['AWS_SECRET_KEY']
@@ -50,7 +52,7 @@ ec2_subnet_id = nil
 # Only override this by setting it to false if you're running in a VPC and you
 # are running Vagrant from within that VPC as well.
 ec2_associate_public_ip = nil
-ec2_iam_instance_profile_name = nil
+ec2_iam_instance_profile_name = "semaphore-access"
 
 ebs_volume_type = 'gp3'
 
@@ -219,6 +221,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       name_node(worker, name, ec2_instance_name_prefix)
       ip_address = "192.168.50." + (100 + i).to_s
       assign_local_ip(worker, ip_address)
+      worker.vm.provision "file", source: "vagrant/cloudwatch-agent-configuration.json", destination: "/tmp/cloudwatch-agent-configuration.json"
+      worker.vm.provision "shell", path: "vagrant/cloudwatch-agent-setup.sh", env: {"SEMAPHORE_JOB_ID" => semaphore_job_id}
       worker.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
     end
   }

@@ -61,7 +61,6 @@ import java.io.PrintStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -84,13 +83,13 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
     private final ObjectMapper mapper = new ObjectMapper();
     private final PrintStream out;
     private final KafkaShareConsumer<String, String> consumer;
+    private final Admin adminClient;
     private final String topic;
     private final AcknowledgementMode acknowledgementMode;
     private final String offsetResetStrategy;
     private final Boolean verbose;
     private final int maxMessages;
     private Integer totalAcknowledged = 0;
-    private final String brokerHostandPort;
     private final String groupId;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
 
@@ -317,22 +316,22 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
     }
 
     public VerifiableShareConsumer(KafkaShareConsumer<String, String> consumer,
+                                   Admin adminClient,
                                    PrintStream out,
                                    Integer maxMessages,
                                    String topic,
                                    AcknowledgementMode acknowledgementMode,
                                    String offsetResetStrategy,
-                                   String brokerHostandPort,
                                    String groupId,
                                    Boolean verbose) {
         this.out = out;
         this.consumer = consumer;
+        this.adminClient = adminClient;
         this.topic = topic;
         this.acknowledgementMode = acknowledgementMode;
         this.offsetResetStrategy = offsetResetStrategy;
         this.verbose = verbose;
         this.maxMessages = maxMessages;
-        this.brokerHostandPort = brokerHostandPort;
         this.groupId = groupId;
         addKafkaSerializerModule();
     }
@@ -407,11 +406,6 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
                 ShareGroupAutoOffsetResetStrategy offsetResetStrategy =
                     ShareGroupAutoOffsetResetStrategy.fromString(this.offsetResetStrategy);
 
-                Properties adminClientProps = new Properties();
-                adminClientProps.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, brokerHostandPort);
-
-                Admin adminClient = Admin.create(adminClientProps);
-
                 ConfigResource configResource = new ConfigResource(ConfigResource.Type.GROUP, groupId);
                 Map<ConfigResource, Collection<AlterConfigOp>> alterEntries = new HashMap<>();
                 alterEntries.put(configResource, List.of(new AlterConfigOp(new ConfigEntry(
@@ -426,7 +420,7 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
                 printJson(new OffsetResetStrategySet(offsetResetStrategy.type().toString()));
             }
 
-            consumer.subscribe(Collections.singleton(this.topic));
+            consumer.subscribe(Set.of(this.topic));
             consumer.setAcknowledgementCommitCallback(this);
             while (!(maxMessages >= 0 && totalAcknowledged >= maxMessages)) {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(5000));
@@ -505,8 +499,8 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
             .action(store())
             .required(true)
             .type(String.class)
-            .metavar("HOST1:PORT1[,HOST2:PORT2[...]]")
             .dest("bootstrapServer")
+            .metavar("HOST1:PORT1[,HOST2:PORT2[...]]")
             .help("The server(s) to connect to. Comma-separated list of Kafka brokers in the form HOST1:PORT1,HOST2:PORT2,...");
 
         parser.addArgument("--topic")
@@ -520,17 +514,17 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
             .action(store())
             .required(true)
             .type(String.class)
-            .metavar("GROUP_ID")
             .dest("groupId")
-            .help("The groupId shared among members of the share group");
+            .metavar("GROUP-ID")
+            .help("The group id of the share group");
 
         parser.addArgument("--max-messages")
             .action(store())
             .required(false)
             .type(Integer.class)
             .setDefault(-1)
-            .metavar("MAX-MESSAGES")
             .dest("maxMessages")
+            .metavar("MAX-MESSAGES")
             .help("Consume this many messages. If -1 (the default), the share consumers will consume until the process is killed externally");
 
         parser.addArgument("--verbose")
@@ -545,6 +539,7 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
             .setDefault("auto")
             .type(String.class)
             .dest("acknowledgementMode")
+            .metavar("ACKNOWLEDGEMENT-MODE")
             .help("Acknowledgement mode for the share consumers (must be either 'auto', 'sync' or 'async')");
 
         parser.addArgument("--offset-reset-strategy")
@@ -553,14 +548,16 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
             .setDefault("")
             .type(String.class)
             .dest("offsetResetStrategy")
-            .help("Set share group reset strategy (must be either 'earliest' or 'latest')");
+            .metavar("OFFSET-RESET-STRATEGY")
+            .help("Share group offset reset strategy (must be either 'earliest' or 'latest')");
 
-        parser.addArgument("--consumer.config")
+        parser.addArgument("--command-config")
             .action(store())
             .required(false)
             .type(String.class)
-            .metavar("CONFIG_FILE")
-            .help("Consumer config properties file (config options shared with command line parameters will be overridden).");
+            .dest("commandConfig")
+            .metavar("CONFIG-FILE")
+            .help("Config properties file (config options shared with command line parameters will be overridden).");
 
         return parser;
     }
@@ -571,8 +568,8 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
         AcknowledgementMode acknowledgementMode =
             AcknowledgementMode.valueOf(res.getString("acknowledgementMode").toUpperCase(Locale.ROOT));
         String offsetResetStrategy = res.getString("offsetResetStrategy").toLowerCase(Locale.ROOT);
-        String configFile = res.getString("consumer.config");
-        String brokerHostandPort = res.getString("bootstrapServer");
+        String configFile = res.getString("commandConfig");
+        String brokerHostAndPort = res.getString("bootstrapServer");
 
         Properties consumerProps = new Properties();
         if (configFile != null) {
@@ -587,7 +584,7 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
 
         consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
 
-        consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerHostandPort);
+        consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerHostAndPort);
 
         String topic = res.getString("topic");
         int maxMessages = res.getInt("maxMessages");
@@ -596,14 +593,26 @@ public class VerifiableShareConsumer implements Closeable, AcknowledgementCommit
         StringDeserializer deserializer = new StringDeserializer();
         KafkaShareConsumer<String, String> consumer = new KafkaShareConsumer<>(consumerProps, deserializer, deserializer);
 
+        Properties adminClientProps = new Properties();
+        if (configFile != null) {
+            try {
+                adminClientProps.putAll(Utils.loadProps(configFile));
+            } catch (IOException e) {
+                throw new ArgumentParserException(e.getMessage(), parser);
+            }
+        }
+
+        adminClientProps.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, brokerHostAndPort);
+        Admin adminClient = Admin.create(adminClientProps);
+
         return new VerifiableShareConsumer(
             consumer,
+            adminClient,
             System.out,
             maxMessages,
             topic,
             acknowledgementMode,
             offsetResetStrategy,
-            brokerHostandPort,
             groupId,
             verbose);
     }

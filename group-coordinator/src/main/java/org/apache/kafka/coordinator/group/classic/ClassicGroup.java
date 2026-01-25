@@ -33,20 +33,20 @@ import org.apache.kafka.common.protocol.types.SchemaException;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
+import org.apache.kafka.coordinator.group.CommitPartitionValidator;
 import org.apache.kafka.coordinator.group.Group;
 import org.apache.kafka.coordinator.group.GroupCoordinatorRecordHelpers;
 import org.apache.kafka.coordinator.group.OffsetExpirationCondition;
 import org.apache.kafka.coordinator.group.OffsetExpirationConditionImpl;
 import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroup;
 import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupMember;
-import org.apache.kafka.image.MetadataImage;
 
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -344,6 +344,14 @@ public class ClassicGroup implements Group {
     }
 
     /**
+     * Requests a metadata refresh.
+     */
+    @Override
+    public void requestMetadataRefresh() {
+        // This does not apply to classic groups.
+    }
+
+    /**
      * Used to identify whether the given member is the leader of this group.
      *
      * @param memberId the member id.
@@ -551,7 +559,7 @@ public class ClassicGroup implements Group {
 
         // Fence potential duplicate member immediately if someone awaits join/sync future.
         JoinGroupResponseData joinGroupResponse = new JoinGroupResponseData()
-            .setMembers(Collections.emptyList())
+            .setMembers(List.of())
             .setMemberId(oldMemberId)
             .setProtocolName(null)
             .setProtocolType(null)
@@ -817,14 +825,15 @@ public class ClassicGroup implements Group {
      * @param generationId      The generation id.
      * @param isTransactional   Whether the offset commit is transactional or not.
      * @param apiVersion        The api version.
+     * @return A validator for per-partition validation.
      */
     @Override
-    public void validateOffsetCommit(
+    public CommitPartitionValidator validateOffsetCommit(
         String memberId,
         String groupInstanceId,
         int generationId,
         boolean isTransactional,
-        short apiVersion
+        int apiVersion
     ) throws CoordinatorNotAvailableException, UnknownMemberIdException, IllegalGenerationException, FencedInstanceIdException {
         if (isInState(DEAD)) {
             throw Errors.COORDINATOR_NOT_AVAILABLE.exception();
@@ -834,7 +843,7 @@ public class ClassicGroup implements Group {
             // When the generation id is -1, the request comes from either the admin client
             // or a consumer which does not use the group management facility. In this case,
             // the request can commit offsets if the group is empty.
-            return;
+            return CommitPartitionValidator.NO_OP;
         }
 
         if (generationId >= 0 || !memberId.isEmpty() || groupInstanceId != null) {
@@ -860,6 +869,8 @@ public class ClassicGroup implements Group {
             // is not enforced for those.
             throw Errors.REBALANCE_IN_PROGRESS.exception();
         }
+
+        return CommitPartitionValidator.NO_OP;
     }
 
     /**
@@ -1150,7 +1161,7 @@ public class ClassicGroup implements Group {
             return Optional.empty();
         }
         if (members.isEmpty()) {
-            return Optional.of(Collections.emptySet());
+            return Optional.of(Set.of());
         }
 
         if (protocolName.isPresent()) {
@@ -1168,9 +1179,8 @@ public class ClassicGroup implements Group {
                 });
                 return Optional.of(allSubscribedTopics);
             } catch (SchemaException e) {
-                log.warn("Failed to parse Consumer Protocol " + ConsumerProtocol.PROTOCOL_TYPE + ":" +
-                    protocolName.get() + " of group " + groupId + ". " +
-                    "Consumer group coordinator is not aware of the subscribed topics.", e);
+                log.warn("Failed to parse Consumer Protocol {}:{} of group {}. Consumer group coordinator is not aware of the subscribed topics.",
+                        ConsumerProtocol.PROTOCOL_TYPE, protocolName.get(), groupId, e);
             }
         }
 
@@ -1310,7 +1320,7 @@ public class ClassicGroup implements Group {
                 .setMemberId(member.memberId())
                 .setGroupInstanceId(member.groupInstanceId().orElse(null))
                 .setMetadata(member.metadata(protocolName.orElse(null))))
-            .collect(Collectors.toList());
+            .toList();
     }
 
     /**
@@ -1336,14 +1346,14 @@ public class ClassicGroup implements Group {
     /**
      * Convert the given ConsumerGroup to a corresponding ClassicGroup.
      *
-     * @param consumerGroup                 The converted ConsumerGroup.
-     * @param leavingMembers                The members that will not be converted in the ClassicGroup.
-     * @param joiningMember                 The member that needs to be converted and added to the ClassicGroup.
-     *                                      When not null, must have an instanceId that matches an existing member.
-     * @param logContext                    The logContext to create the ClassicGroup.
-     * @param time                          The time to create the ClassicGroup.
-     * @param metadataImage                 The MetadataImage.
-     * @return  The created ClassicGroup.
+     * @param consumerGroup  The converted ConsumerGroup.
+     * @param leavingMembers The members that will not be converted in the ClassicGroup.
+     * @param joiningMember  The member that needs to be converted and added to the ClassicGroup.
+     *                       When not null, must have an instanceId that matches an existing member.
+     * @param logContext     The logContext to create the ClassicGroup.
+     * @param time           The time to create the ClassicGroup.
+     * @param image          The MetadataImage.
+     * @return The created ClassicGroup.
      */
     public static ClassicGroup fromConsumerGroup(
         ConsumerGroup consumerGroup,
@@ -1351,7 +1361,7 @@ public class ClassicGroup implements Group {
         ConsumerGroupMember joiningMember,
         LogContext logContext,
         Time time,
-        MetadataImage metadataImage
+        CoordinatorMetadataImage image
     ) {
         ClassicGroup classicGroup = new ClassicGroup(
             logContext,
@@ -1420,7 +1430,7 @@ public class ClassicGroup implements Group {
             byte[] assignment = Utils.toArray(ConsumerProtocol.serializeAssignment(
                 toConsumerProtocolAssignment(
                     consumerGroup.targetAssignment().get(memberId).partitions(),
-                    metadataImage.topics()
+                    image
                 ),
                 ConsumerProtocol.deserializeVersion(
                     ByteBuffer.wrap(classicGroupMember.metadata(classicGroup.protocolName().orElse("")))

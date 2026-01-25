@@ -17,8 +17,10 @@
 package org.apache.kafka.coordinator.group.streams;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
-import org.apache.kafka.coordinator.group.MetadataImageBuilder;
+import org.apache.kafka.coordinator.common.runtime.KRaftCoordinatorMetadataImage;
+import org.apache.kafka.coordinator.common.runtime.MetadataImageBuilder;
 import org.apache.kafka.coordinator.group.generated.StreamsGroupMemberMetadataValue;
 import org.apache.kafka.coordinator.group.streams.TaskAssignmentTestUtil.TaskRole;
 import org.apache.kafka.coordinator.group.streams.assignor.AssignmentMemberSpec;
@@ -33,7 +35,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +46,6 @@ import java.util.TreeMap;
 import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
 import static org.apache.kafka.coordinator.group.Assertions.assertUnorderedRecordsEquals;
-import static org.apache.kafka.coordinator.group.GroupCoordinatorRecordHelpersTest.mkMapOfPartitionRacks;
 import static org.apache.kafka.coordinator.group.streams.StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentEpochRecord;
 import static org.apache.kafka.coordinator.group.streams.StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord;
 import static org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.createAssignmentMemberSpec;
@@ -75,12 +75,12 @@ public class TargetAssignmentBuilderTest {
 
         TargetAssignmentBuilder.TargetAssignmentResult result = builder.build();
 
-        List<CoordinatorRecord> expectedRecords = Collections.singletonList(
+        List<CoordinatorRecord> expectedRecords = List.of(
             StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentEpochRecord(groupId, groupEpoch)
         );
 
         assertEquals(expectedRecords, result.records());
-        assertEquals(Collections.emptyMap(), result.targetAssignment());
+        assertEquals(Map.of(), result.targetAssignment());
     }
 
     @ParameterizedTest
@@ -144,8 +144,8 @@ public class TargetAssignmentBuilderTest {
             20
         );
 
-        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6, Map.of());
-        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6, Map.of());
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
 
         context.addGroupMember("member-1", mkTasksTuple(taskRole,
             mkTasks(fooSubtopologyId, 1, 2, 3),
@@ -196,8 +196,8 @@ public class TargetAssignmentBuilderTest {
             20
         );
 
-        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6, Map.of());
-        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6, Map.of());
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
 
         context.addGroupMember("member-1", mkTasksTuple(taskRole,
             mkTasks(fooSubtopologyId, 1, 2, 3),
@@ -261,8 +261,8 @@ public class TargetAssignmentBuilderTest {
             20
         );
 
-        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6, Map.of());
-        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6, Map.of());
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
 
         context.addGroupMember("member-1", mkTasksTuple(taskRole,
             mkTasks(fooSubtopologyId, 1, 2, 3),
@@ -341,8 +341,8 @@ public class TargetAssignmentBuilderTest {
             20
         );
 
-        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6, Map.of());
-        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6, Map.of());
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
 
         context.addGroupMember("member-1", mkTasksTuple(taskRole,
             mkTasks(fooSubtopologyId, 1, 2, 3),
@@ -429,8 +429,8 @@ public class TargetAssignmentBuilderTest {
             20
         );
 
-        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6, mkMapOfPartitionRacks(6));
-        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6, mkMapOfPartitionRacks(6));
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
 
         context.addGroupMember("member-1", mkTasksTuple(taskRole,
             mkTasks(fooSubtopologyId, 1, 2),
@@ -509,8 +509,8 @@ public class TargetAssignmentBuilderTest {
             20
         );
 
-        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6, Map.of());
-        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6, Map.of());
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
 
         context.addGroupMember("member-1", mkTasksTuple(taskRole,
             mkTasks(fooSubtopologyId, 1, 2),
@@ -581,8 +581,8 @@ public class TargetAssignmentBuilderTest {
             20
         );
 
-        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6, Map.of());
-        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6, Map.of());
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
 
         context.addGroupMember("member-1", "instance-member-1", mkTasksTuple(taskRole,
             mkTasks(fooSubtopologyId, 1, 2),
@@ -661,7 +661,7 @@ public class TargetAssignmentBuilderTest {
         private final int groupEpoch;
         private final TaskAssignor assignor = mock(TaskAssignor.class);
         private final SortedMap<String, ConfiguredSubtopology> subtopologies = new TreeMap<>();
-        private final ConfiguredTopology topology = new ConfiguredTopology(0, Optional.of(subtopologies), new HashMap<>(),
+        private final ConfiguredTopology topology = new ConfiguredTopology(0, 0, Optional.of(subtopologies), new HashMap<>(),
             Optional.empty());
         private final Map<String, StreamsGroupMember> members = new HashMap<>();
         private final Map<String, org.apache.kafka.coordinator.group.streams.TopicMetadata> subscriptionMetadata = new HashMap<>();
@@ -709,19 +709,12 @@ public class TargetAssignmentBuilderTest {
 
         public String addSubtopologyWithSingleSourceTopic(
             String topicName,
-            int numTasks,
-            Map<Integer, Set<String>> partitionRacks
+            int numTasks
         ) {
             String subtopologyId = Uuid.randomUuid().toString();
             Uuid topicId = Uuid.randomUuid();
-            subscriptionMetadata.put(topicName, new org.apache.kafka.coordinator.group.streams.TopicMetadata(
-                topicId,
-                topicName,
-                numTasks,
-                partitionRacks
-            ));
             topicsImageBuilder = topicsImageBuilder.addTopic(topicId, topicName, numTasks);
-            subtopologies.put(subtopologyId, new ConfiguredSubtopology(Set.of(topicId.toString()), Map.of(), Set.of(), Map.of()));
+            subtopologies.put(subtopologyId, new ConfiguredSubtopology(numTasks, Set.of(topicId.toString()), Map.of(), Set.of(), Map.of()));
 
             return subtopologyId;
         }
@@ -809,8 +802,10 @@ public class TargetAssignmentBuilderTest {
                 }
             });
 
+            CoordinatorMetadataImage metadataImage = new KRaftCoordinatorMetadataImage(topicsImageBuilder.build());
+
             // Prepare the expected topology metadata.
-            TopologyMetadata topologyMetadata = new TopologyMetadata(subscriptionMetadata, subtopologies);
+            TopologyMetadata topologyMetadata = new TopologyMetadata(metadataImage, subtopologies);
 
             // Prepare the expected assignment spec.
             GroupSpecImpl groupSpec = new GroupSpecImpl(memberSpecs, new HashMap<>());
@@ -826,7 +821,7 @@ public class TargetAssignmentBuilderTest {
                 .withMembers(members)
                 .withTopology(topology)
                 .withStaticMembers(staticMembers)
-                .withPartitionMetadata(subscriptionMetadata)
+                .withMetadataImage(metadataImage)
                 .withTargetAssignment(targetAssignment);
 
             // Add the updated members or delete the deleted members.

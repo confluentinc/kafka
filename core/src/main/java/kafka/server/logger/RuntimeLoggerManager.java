@@ -17,8 +17,6 @@
 
 package kafka.server.logger;
 
-import kafka.utils.LoggingController;
-
 import org.apache.kafka.clients.admin.AlterConfigOp.OpType;
 import org.apache.kafka.common.config.LogLevelConfig;
 import org.apache.kafka.common.errors.ClusterAuthorizationException;
@@ -27,6 +25,7 @@ import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.message.IncrementalAlterConfigsRequestData.AlterConfigsResource;
 import org.apache.kafka.common.message.IncrementalAlterConfigsRequestData.AlterableConfig;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.server.logger.LoggingController;
 
 import org.slf4j.Logger;
 
@@ -106,7 +105,7 @@ public class RuntimeLoggerManager {
         }
         if (requestId != nodeId) {
             throw new InvalidRequestException("Unexpected node id. Expected " + nodeId +
-                ", but received " + nodeId);
+                ", but received " + requestId);
         }
     }
 
@@ -131,9 +130,9 @@ public class RuntimeLoggerManager {
                     break;
                 case DELETE:
                     validateLoggerNameExists(loggerName);
-                    if (loggerName.equals(LoggingController.ROOT_LOGGER())) {
+                    if (loggerName.equals(LoggingController.ROOT_LOGGER)) {
                         throw new InvalidRequestException("Removing the log level of the " +
-                            LoggingController.ROOT_LOGGER() + " logger is not allowed");
+                            LoggingController.ROOT_LOGGER + " logger is not allowed");
                     }
                     break;
                 case APPEND:

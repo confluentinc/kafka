@@ -20,6 +20,7 @@ import org.apache.kafka.common.internals.Plugin;
 import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.runtime.distributed.ExtendedAssignment;
 import org.apache.kafka.connect.runtime.errors.RetryWithToleranceOperator;
+import org.apache.kafka.connect.runtime.isolation.TestPlugins;
 import org.apache.kafka.connect.storage.AppliedConnectorConfig;
 import org.apache.kafka.connect.storage.ClusterConfigState;
 import org.apache.kafka.connect.transforms.Transformation;
@@ -30,10 +31,10 @@ import org.mockito.Mockito;
 import org.mockito.stubbing.OngoingStubbing;
 
 import java.util.AbstractMap.SimpleEntry;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -61,11 +62,11 @@ public class WorkerTestUtils {
                 connectorConfigs,
                 connectorTargetStates(1, connectorNum, TargetState.STARTED),
                 taskConfigs(0, connectorNum, connectorNum * taskNum),
-                Collections.emptyMap(),
-                Collections.emptyMap(),
+                Map.of(),
+                Map.of(),
                 appliedConnectorConfigs,
-                Collections.emptySet(),
-                Collections.emptySet());
+                Set.of(),
+                Set.of());
     }
 
     public static Map<String, Integer> connectorTaskCounts(int start,
@@ -167,6 +168,7 @@ public class WorkerTestUtils {
                 "Wrong rebalance delay in " + assignment);
     }
 
+    @SuppressWarnings("unchecked")
     public static <T, R extends ConnectRecord<R>> TransformationChain<T, R> getTransformationChain(
             RetryWithToleranceOperator<T> toleranceOperator,
             List<Object> results) {
@@ -194,10 +196,14 @@ public class WorkerTestUtils {
         when(transformationPlugin.get()).thenReturn(transformation);
         TransformationStage<R> stage = new TransformationStage<>(
                 predicatePlugin,
+                "testPredicate",
+                null,
                 false,
-                transformationPlugin);
-        TransformationChain<T, R> realTransformationChainRetriableException = new TransformationChain(List.of(stage), toleranceOperator);
-        TransformationChain<T, R> transformationChainRetriableException = Mockito.spy(realTransformationChainRetriableException);
-        return transformationChainRetriableException;
+                transformationPlugin,
+                "testTransformation",
+                null,
+                TestPlugins.noOpLoaderSwap());
+        TransformationChain<T, R> realTransformationChainRetriableException = new TransformationChain<>(List.of(stage), toleranceOperator);
+        return Mockito.spy(realTransformationChainRetriableException);
     }
 }

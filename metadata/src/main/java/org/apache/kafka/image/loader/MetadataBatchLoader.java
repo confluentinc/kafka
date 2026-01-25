@@ -100,7 +100,7 @@ public class MetadataBatchLoader {
      */
     public final void resetToImage(MetadataImage image) {
         this.image = image;
-        this.hasSeenRecord = true;
+        this.hasSeenRecord = !image.isEmpty();
         this.delta = new MetadataDelta.Builder().setImage(image).build();
         this.transactionState = TransactionState.NO_TRANSACTION;
         this.lastOffset = image.provenance().lastContainedOffset();
@@ -116,7 +116,7 @@ public class MetadataBatchLoader {
      * translate between batch offsets and record offsets, and track the number of bytes we
      * have read. Additionally, there is the chance that one of the records is a metadata
      * version change which needs to be handled differently.
-     * </p>
+     * <p>
      * If this batch starts a transaction, any records preceding the transaction in this
      * batch will be implicitly added to the transaction.
      *

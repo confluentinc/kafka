@@ -24,6 +24,8 @@ import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.internals.Topic;
 import org.apache.kafka.common.message.DeleteShareGroupStateRequestData;
 import org.apache.kafka.common.message.DeleteShareGroupStateResponseData;
+import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
+import org.apache.kafka.common.message.InitializeShareGroupStateResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateSummaryRequestData;
@@ -32,10 +34,12 @@ import org.apache.kafka.common.message.WriteShareGroupStateRequestData;
 import org.apache.kafka.common.message.WriteShareGroupStateResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.DeleteShareGroupStateResponse;
+import org.apache.kafka.common.requests.InitializeShareGroupStateResponse;
 import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
 import org.apache.kafka.common.requests.ReadShareGroupStateSummaryResponse;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
+import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
@@ -45,13 +49,17 @@ import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRuntime;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetrics;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorShardBuilderSupplier;
+import org.apache.kafka.coordinator.common.runtime.KRaftCoordinatorMetadataDelta;
+import org.apache.kafka.coordinator.common.runtime.KRaftCoordinatorMetadataImage;
 import org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor;
 import org.apache.kafka.coordinator.common.runtime.PartitionWriter;
 import org.apache.kafka.coordinator.share.metrics.ShareCoordinatorMetrics;
 import org.apache.kafka.image.MetadataDelta;
 import org.apache.kafka.image.MetadataImage;
+import org.apache.kafka.server.common.ShareVersion;
 import org.apache.kafka.server.record.BrokerCompressionType;
 import org.apache.kafka.server.share.SharePartitionKey;
+import org.apache.kafka.server.util.FutureUtils;
 import org.apache.kafka.server.util.timer.Timer;
 import org.apache.kafka.server.util.timer.TimerTask;
 
@@ -59,21 +67,24 @@ import org.slf4j.Logger;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
-import java.util.stream.Collectors;
+import java.util.function.Supplier;
 
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorOperationExceptionHelper.handleOperationException;
 
+@SuppressWarnings({"ClassDataAbstractionCoupling", "ClassFanOutComplexity"})
 public class ShareCoordinatorService implements ShareCoordinator {
     private final ShareCoordinatorConfig config;
     private final Logger log;
@@ -85,6 +96,8 @@ public class ShareCoordinatorService implements ShareCoordinator {
     private final Timer timer;
     private final PartitionWriter writer;
     private final Map<TopicPartition, Long> lastPrunedOffsets;
+    private final Supplier<Boolean> shareGroupConfigEnabledSupplier;
+    private volatile boolean shouldRunPeriodicJob;
 
     public static class Builder {
         private final int nodeId;
@@ -93,7 +106,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
         private CoordinatorLoader<CoordinatorRecord> loader;
         private Time time;
         private Timer timer;
-
+        private Supplier<Boolean> shareGroupConfigEnabledSupplier;
         private ShareCoordinatorMetrics coordinatorMetrics;
         private CoordinatorRuntimeMetrics coordinatorRuntimeMetrics;
 
@@ -132,6 +145,11 @@ public class ShareCoordinatorService implements ShareCoordinator {
             return this;
         }
 
+        public Builder withShareGroupEnabledConfigSupplier(Supplier<Boolean> shareGroupConfigEnabledSupplier) {
+            this.shareGroupConfigEnabledSupplier = shareGroupConfigEnabledSupplier;
+            return this;
+        }
+
         public ShareCoordinatorService build() {
             if (config == null) {
                 throw new IllegalArgumentException("Config must be set.");
@@ -153,6 +171,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
             }
             if (coordinatorRuntimeMetrics == null) {
                 throw new IllegalArgumentException("Coordinator runtime metrics must be set.");
+            }
+            if (shareGroupConfigEnabledSupplier == null) {
+                throw new IllegalArgumentException("Share group enabled config enabled supplier must be set.");
             }
 
             String logPrefix = String.format("ShareCoordinator id=%d", nodeId);
@@ -180,13 +201,14 @@ public class ShareCoordinatorService implements ShareCoordinator {
                     .withLoader(loader)
                     .withCoordinatorShardBuilderSupplier(supplier)
                     .withTime(time)
-                    .withDefaultWriteTimeOut(Duration.ofMillis(config.shareCoordinatorWriteTimeoutMs()))
+                    .withWriteTimeout(Duration.ofMillis(config.shareCoordinatorWriteTimeoutMs()))
                     .withCoordinatorRuntimeMetrics(coordinatorRuntimeMetrics)
                     .withCoordinatorMetrics(coordinatorMetrics)
                     .withSerializer(new ShareCoordinatorRecordSerde())
                     .withCompression(Compression.of(config.shareCoordinatorStateTopicCompressionType()).build())
                     .withAppendLingerMs(config.shareCoordinatorAppendLingerMs())
                     .withExecutorService(Executors.newSingleThreadExecutor())
+                    .withCachedBufferMaxBytesSupplier(config::shareCoordinatorCachedBufferMaxBytes)
                     .build();
 
             return new ShareCoordinatorService(
@@ -196,7 +218,8 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 coordinatorMetrics,
                 time,
                 timer,
-                writer
+                writer,
+                shareGroupConfigEnabledSupplier
             );
         }
     }
@@ -208,7 +231,8 @@ public class ShareCoordinatorService implements ShareCoordinator {
         ShareCoordinatorMetrics shareCoordinatorMetrics,
         Time time,
         Timer timer,
-        PartitionWriter writer
+        PartitionWriter writer,
+        Supplier<Boolean> shareGroupConfigEnabledSupplier
     ) {
         this.log = logContext.logger(ShareCoordinatorService.class);
         this.config = config;
@@ -218,6 +242,7 @@ public class ShareCoordinatorService implements ShareCoordinator {
         this.timer = timer;
         this.writer = writer;
         this.lastPrunedOffsets = new ConcurrentHashMap<>();
+        this.shareGroupConfigEnabledSupplier = shareGroupConfigEnabledSupplier;
     }
 
     @Override
@@ -232,9 +257,12 @@ public class ShareCoordinatorService implements ShareCoordinator {
     @Override
     public Properties shareGroupStateTopicConfigs() {
         Properties properties = new Properties();
-        properties.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE); // as defined in KIP-932
+        // As defined in KIP-932.
+        properties.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE);
         properties.put(TopicConfig.COMPRESSION_TYPE_CONFIG, BrokerCompressionType.PRODUCER.name);
         properties.put(TopicConfig.SEGMENT_BYTES_CONFIG, config.shareCoordinatorStateTopicSegmentBytes());
+        properties.put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, config.shareCoordinatorStateTopicMinIsr());
+        properties.put(TopicConfig.RETENTION_MS_CONFIG, -1);
         return properties;
     }
 
@@ -258,19 +286,27 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
         log.info("Starting up.");
         numPartitions = shareGroupTopicPartitionCount.getAsInt();
-        setupRecordPruning();
         log.info("Startup complete.");
     }
 
-    private void setupRecordPruning() {
-        log.info("Scheduling share-group state topic prune job.");
+    private void setupPeriodicJobs() {
+        setupRecordPruning();
+        setupSnapshotColdPartitions();
+    }
+
+    // Visibility for tests
+    void setupRecordPruning() {
+        log.debug("Scheduling share-group state topic prune job.");
         timer.add(new TimerTask(config.shareCoordinatorTopicPruneIntervalMs()) {
             @Override
             public void run() {
+                if (!shouldRunPeriodicJob) {
+                    return;
+                }
                 List<CompletableFuture<Void>> futures = new ArrayList<>();
-                runtime.activeTopicPartitions().forEach(tp -> futures.add(performRecordPruning(tp)));
+                runtime.activeCoordinators().forEach(tp -> futures.add(performRecordPruning(tp)));
 
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[]{}))
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[]{}))
                     .whenComplete((res, exp) -> {
                         if (exp != null) {
                             log.error("Received error in share-group state topic prune.", exp);
@@ -283,13 +319,11 @@ public class ShareCoordinatorService implements ShareCoordinator {
     }
 
     private CompletableFuture<Void> performRecordPruning(TopicPartition tp) {
-        // This future will always be completed normally, exception or not.
         CompletableFuture<Void> fut = new CompletableFuture<>();
 
         runtime.scheduleWriteOperation(
             "write-state-record-prune",
             tp,
-            Duration.ofMillis(config.shareCoordinatorWriteTimeoutMs()),
             ShareCoordinatorShard::lastRedundantOffset
         ).whenComplete((result, exception) -> {
             if (exception != null) {
@@ -314,11 +348,11 @@ public class ShareCoordinatorService implements ShareCoordinator {
                     return;
                 }
 
-                log.info("Pruning records in {} till offset {}.", tp, off);
+                log.debug("Pruning records in {} till offset {}.", tp, off);
                 writer.deleteRecords(tp, off)
                     .whenComplete((res, exp) -> {
                         if (exp != null) {
-                            log.debug("Exception while deleting records in {} till offset {}.", tp, off, exp);
+                            log.error("Exception while deleting records in {} till offset {}.", tp, off, exp);
                             fut.completeExceptionally(exp);
                             return;
                         }
@@ -336,6 +370,31 @@ public class ShareCoordinatorService implements ShareCoordinator {
             }
         });
         return fut;
+    }
+
+    // Visibility for tests
+    void setupSnapshotColdPartitions() {
+        log.debug("Scheduling cold share-partition snapshotting.");
+        timer.add(new TimerTask(config.shareCoordinatorColdPartitionSnapshotIntervalMs()) {
+            @Override
+            public void run() {
+                if (!shouldRunPeriodicJob) {
+                    return;
+                }
+                List<CompletableFuture<Void>> futures = runtime.scheduleWriteAllOperation(
+                    "snapshot-cold-partitions",
+                    ShareCoordinatorShard::snapshotColdPartitions
+                );
+
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[]{}))
+                    .whenComplete((__, exp) -> {
+                        if (exp != null) {
+                            log.error("Received error while snapshotting cold partitions.", exp);
+                        }
+                        setupSnapshotColdPartitions();
+                    });
+            }
+        });
     }
 
     @Override
@@ -406,14 +465,14 @@ public class ShareCoordinatorService implements ShareCoordinator {
                     CompletableFuture<WriteShareGroupStateResponseData> future = runtime.scheduleWriteOperation(
                             "write-share-group-state",
                             topicPartitionFor(SharePartitionKey.getInstance(groupId, topicData.topicId(), partitionData.partition())),
-                            Duration.ofMillis(config.shareCoordinatorWriteTimeoutMs()),
                             coordinator -> coordinator.writeState(new WriteShareGroupStateRequestData()
                                 .setGroupId(groupId)
-                                .setTopics(Collections.singletonList(new WriteShareGroupStateRequestData.WriteStateData()
+                                .setTopics(List.of(new WriteShareGroupStateRequestData.WriteStateData()
                                     .setTopicId(topicData.topicId())
-                                    .setPartitions(Collections.singletonList(new WriteShareGroupStateRequestData.PartitionData()
+                                    .setPartitions(List.of(new WriteShareGroupStateRequestData.PartitionData()
                                         .setPartition(partitionData.partition())
                                         .setStartOffset(partitionData.startOffset())
+                                        .setDeliveryCompleteCount(partitionData.deliveryCompleteCount())
                                         .setLeaderEpoch(partitionData.leaderEpoch())
                                         .setStateEpoch(partitionData.stateEpoch())
                                         .setStateBatches(partitionData.stateBatches())))))))
@@ -527,9 +586,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
 
                 ReadShareGroupStateRequestData requestForCurrentPartition = new ReadShareGroupStateRequestData()
                     .setGroupId(groupId)
-                    .setTopics(Collections.singletonList(new ReadShareGroupStateRequestData.ReadStateData()
+                    .setTopics(List.of(new ReadShareGroupStateRequestData.ReadStateData()
                         .setTopicId(topicId)
-                        .setPartitions(Collections.singletonList(partitionData))));
+                        .setPartitions(List.of(partitionData))));
 
                 // We are issuing a scheduleWriteOperation even though the request is of read type since
                 // we might want to update the leader epoch, if it is the highest seen so far for the specific
@@ -539,7 +598,6 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 CompletableFuture<ReadShareGroupStateResponseData> readFuture = runtime.scheduleWriteOperation(
                     "read-update-leader-epoch-state",
                     topicPartitionFor(coordinatorKey),
-                    Duration.ofMillis(config.shareCoordinatorWriteTimeoutMs()),
                     coordinator -> coordinator.readStateAndMaybeUpdateLeaderEpoch(requestForCurrentPartition)
                 ).exceptionally(readException ->
                     handleOperationException(
@@ -649,7 +707,6 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 CompletableFuture<ReadShareGroupStateSummaryResponseData> readFuture = runtime.scheduleWriteOperation(
                     "read-share-group-state-summary",
                     topicPartitionFor(coordinatorKey),
-                    Duration.ofMillis(config.shareCoordinatorWriteTimeoutMs()),
                     coordinator -> coordinator.readStateSummary(requestForCurrentPartition)
                 ).exceptionally(readException ->
                     handleOperationException(
@@ -681,11 +738,11 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 (topicId, topicEntry) -> {
                     List<ReadShareGroupStateSummaryResponseData.PartitionResult> partitionResults = new ArrayList<>(topicEntry.size());
                     topicEntry.forEach(
-                        (partitionId, responseFuture) -> {
+                        (partitionId, responseFut) -> {
                             // ResponseFut would already be completed by now since we have used
                             // CompletableFuture::allOf to create a combined future from the future map.
                             partitionResults.add(
-                                responseFuture.getNow(null).results().get(0).partitions().get(0)
+                                responseFut.getNow(null).results().get(0).partitions().get(0)
                             );
                         }
                     );
@@ -759,7 +816,6 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 CompletableFuture<DeleteShareGroupStateResponseData> deleteFuture = runtime.scheduleWriteOperation(
                     "delete-share-group-state",
                     topicPartitionFor(coordinatorKey),
-                    Duration.ofMillis(config.shareCoordinatorWriteTimeoutMs()),
                     coordinator -> coordinator.deleteState(requestForCurrentPartition)
                 ).exceptionally(deleteException ->
                     handleOperationException(
@@ -791,11 +847,11 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 (topicId, topicEntry) -> {
                     List<DeleteShareGroupStateResponseData.PartitionResult> partitionResults = new ArrayList<>(topicEntry.size());
                     topicEntry.forEach(
-                        (partitionId, responseFuture) -> {
+                        (partitionId, responseFut) -> {
                             // ResponseFut would already be completed by now since we have used
                             // CompletableFuture::allOf to create a combined future from the future map.
                             partitionResults.add(
-                                responseFuture.getNow(null).results().get(0).partitions().get(0)
+                                responseFut.getNow(null).results().get(0).partitions().get(0)
                             );
                         }
                     );
@@ -804,6 +860,105 @@ public class ShareCoordinatorService implements ShareCoordinator {
             );
             return new DeleteShareGroupStateResponseData()
                 .setResults(deleteStateResult);
+        });
+    }
+
+    @Override
+    public CompletableFuture<InitializeShareGroupStateResponseData> initializeState(RequestContext context, InitializeShareGroupStateRequestData request) {
+        // Send an empty response if the coordinator is not active.
+        if (!isActive.get()) {
+            return CompletableFuture.completedFuture(
+                generateErrorInitStateResponse(
+                    request,
+                    Errors.COORDINATOR_NOT_AVAILABLE,
+                    "Share coordinator is not available."
+                )
+            );
+        }
+
+        String groupId = request.groupId();
+        // Send an empty response if groupId is invalid.
+        if (isGroupIdEmpty(groupId)) {
+            log.error("Group id must be specified and non-empty: {}", request);
+            return CompletableFuture.completedFuture(
+                new InitializeShareGroupStateResponseData()
+            );
+        }
+
+        // Send an empty response if topic data is empty.
+        if (isEmpty(request.topics())) {
+            log.error("Topic Data is empty: {}", request);
+            return CompletableFuture.completedFuture(
+                new InitializeShareGroupStateResponseData()
+            );
+        }
+
+        // A map to store the futures for each topicId and partition.
+        Map<Uuid, Map<Integer, CompletableFuture<InitializeShareGroupStateResponseData>>> futureMap = new HashMap<>();
+
+        // The request received here could have multiple keys of structure group:topic:partition. However,
+        // the initializeState method in ShareCoordinatorShard expects a single key in the request. Hence, we will
+        // be looping over the keys below and constructing new InitializeShareGroupStateRequestData objects to pass
+        // onto the shard method.
+
+        for (InitializeShareGroupStateRequestData.InitializeStateData topicData : request.topics()) {
+            Uuid topicId = topicData.topicId();
+            for (InitializeShareGroupStateRequestData.PartitionData partitionData : topicData.partitions()) {
+                SharePartitionKey coordinatorKey = SharePartitionKey.getInstance(request.groupId(), topicId, partitionData.partition());
+
+                InitializeShareGroupStateRequestData requestForCurrentPartition = new InitializeShareGroupStateRequestData()
+                    .setGroupId(groupId)
+                    .setTopics(List.of(new InitializeShareGroupStateRequestData.InitializeStateData()
+                        .setTopicId(topicId)
+                        .setPartitions(List.of(partitionData))));
+
+                CompletableFuture<InitializeShareGroupStateResponseData> initializeFuture = runtime.scheduleWriteOperation(
+                    "initialize-share-group-state",
+                    topicPartitionFor(coordinatorKey),
+                    coordinator -> coordinator.initializeState(requestForCurrentPartition)
+                ).exceptionally(initializeException ->
+                    handleOperationException(
+                        "initialize-share-group-state",
+                        request,
+                        initializeException,
+                        (error, message) -> InitializeShareGroupStateResponse.toErrorResponseData(
+                            topicData.topicId(),
+                            partitionData.partition(),
+                            error,
+                            "Unable to initialize share group state: " + initializeException.getMessage()
+                        ),
+                        log
+                    ));
+
+                futureMap.computeIfAbsent(topicId, k -> new HashMap<>())
+                    .put(partitionData.partition(), initializeFuture);
+            }
+        }
+
+        // Combine all futures into a single CompletableFuture<Void>.
+        CompletableFuture<Void> combinedFuture = CompletableFuture.allOf(futureMap.values().stream()
+            .flatMap(map -> map.values().stream()).toArray(CompletableFuture[]::new));
+
+        // Transform the combined CompletableFuture<Void> into CompletableFuture<InitializeShareGroupStateResponseData>.
+        return combinedFuture.thenApply(v -> {
+            List<InitializeShareGroupStateResponseData.InitializeStateResult> initializeStateResult = new ArrayList<>(futureMap.size());
+            futureMap.forEach(
+                (topicId, topicEntry) -> {
+                    List<InitializeShareGroupStateResponseData.PartitionResult> partitionResults = new ArrayList<>(topicEntry.size());
+                    topicEntry.forEach(
+                        (partitionId, responseFut) -> {
+                            // ResponseFut would already be completed by now since we have used
+                            // CompletableFuture::allOf to create a combined future from the future map.
+                            partitionResults.add(
+                                responseFut.getNow(null).results().get(0).partitions().get(0)
+                            );
+                        }
+                    );
+                    initializeStateResult.add(InitializeShareGroupStateResponse.toResponseInitializeStateResult(topicId, partitionResults));
+                }
+            );
+            return new InitializeShareGroupStateResponseData()
+                .setResults(initializeStateResult);
         });
     }
 
@@ -819,9 +974,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 resultData.setPartitions(topicData.partitions().stream()
                     .map(partitionData -> ReadShareGroupStateResponse.toErrorResponsePartitionResult(
                         partitionData.partition(), error, errorMessage
-                    )).collect(Collectors.toList()));
+                    )).toList());
                 return resultData;
-            }).collect(Collectors.toList()));
+            }).toList());
     }
 
     private ReadShareGroupStateSummaryResponseData generateErrorReadStateSummaryResponse(
@@ -836,9 +991,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 resultData.setPartitions(topicData.partitions().stream()
                     .map(partitionData -> ReadShareGroupStateSummaryResponse.toErrorResponsePartitionResult(
                         partitionData.partition(), error, errorMessage
-                    )).collect(Collectors.toList()));
+                    )).toList());
                 return resultData;
-            }).collect(Collectors.toList()));
+            }).toList());
     }
 
     private WriteShareGroupStateResponseData generateErrorWriteStateResponse(
@@ -854,9 +1009,9 @@ public class ShareCoordinatorService implements ShareCoordinator {
                     resultData.setPartitions(topicData.partitions().stream()
                         .map(partitionData -> WriteShareGroupStateResponse.toErrorResponsePartitionResult(
                             partitionData.partition(), error, errorMessage
-                        )).collect(Collectors.toList()));
+                        )).toList());
                     return resultData;
-                }).collect(Collectors.toList()));
+                }).toList());
     }
 
     private DeleteShareGroupStateResponseData generateErrorDeleteStateResponse(
@@ -871,9 +1026,26 @@ public class ShareCoordinatorService implements ShareCoordinator {
                 resultData.setPartitions(topicData.partitions().stream()
                     .map(partitionData -> DeleteShareGroupStateResponse.toErrorResponsePartitionResult(
                         partitionData.partition(), error, errorMessage
-                    )).collect(Collectors.toList()));
+                    )).toList());
                 return resultData;
-            }).collect(Collectors.toList()));
+            }).toList());
+    }
+
+    private InitializeShareGroupStateResponseData generateErrorInitStateResponse(
+        InitializeShareGroupStateRequestData request,
+        Errors error,
+        String errorMessage
+    ) {
+        return new InitializeShareGroupStateResponseData().setResults(request.topics().stream()
+            .map(topicData -> {
+                InitializeShareGroupStateResponseData.InitializeStateResult resultData = new InitializeShareGroupStateResponseData.InitializeStateResult();
+                resultData.setTopicId(topicData.topicId());
+                resultData.setPartitions(topicData.partitions().stream()
+                    .map(partitionData -> InitializeShareGroupStateResponse.toErrorResponsePartitionResult(
+                        partitionData.partition(), error, errorMessage
+                    )).toList());
+                return resultData;
+            }).toList());
     }
 
     private static boolean isGroupIdEmpty(String groupId) {
@@ -901,9 +1073,44 @@ public class ShareCoordinatorService implements ShareCoordinator {
     }
 
     @Override
-    public void onNewMetadataImage(MetadataImage newImage, MetadataDelta delta) {
+    public void onTopicsDeleted(Set<Uuid> deletedTopicIds, BufferSupplier bufferSupplier) throws ExecutionException, InterruptedException {
         throwIfNotActive();
-        this.runtime.onNewMetadataImage(newImage, delta);
+        if (deletedTopicIds.isEmpty()) {
+            return;
+        }
+        CompletableFuture.allOf(
+            FutureUtils.mapExceptionally(
+                runtime.scheduleWriteAllOperation(
+                    "on-topics-deleted",
+                    coordinator -> coordinator.maybeCleanupShareState(deletedTopicIds)
+                ),
+                exception -> {
+                    log.error("Received error while trying to cleanup deleted topics.", exception);
+                    return null;
+                }
+            ).toArray(new CompletableFuture<?>[0])
+        ).get();
+    }
+
+    @Override
+    public void onMetadataUpdate(MetadataDelta delta, MetadataImage newImage) {
+        throwIfNotActive();
+        this.runtime.onMetadataUpdate(
+            new KRaftCoordinatorMetadataDelta(Objects.requireNonNull(delta, "delta must be provided")),
+            new KRaftCoordinatorMetadataImage(Objects.requireNonNull(newImage, "newImage must be provided"))
+        );
+        boolean enabled = isShareGroupsEnabled(newImage);
+        // enabled    shouldRunJob         result (XOR)
+        // 0            0               no op on flag, do not call jobs
+        // 0            1               disable flag, do not call jobs                      => action
+        // 1            0               enable flag, call jobs as they are not recursing    => action
+        // 1            1               no op on flag, do not call jobs
+        if (enabled ^ shouldRunPeriodicJob) {
+            shouldRunPeriodicJob = enabled;
+            if (enabled) {
+                setupPeriodicJobs();
+            }
+        }
     }
 
     TopicPartition topicPartitionFor(SharePartitionKey key) {
@@ -918,5 +1125,16 @@ public class ShareCoordinatorService implements ShareCoordinator {
         if (!isActive.get()) {
             throw Errors.COORDINATOR_NOT_AVAILABLE.exception();
         }
+    }
+
+    private boolean isShareGroupsEnabled(MetadataImage image) {
+        return shareGroupConfigEnabledSupplier.get() || ShareVersion.fromFeatureLevel(
+            image.features().finalizedVersions().getOrDefault(ShareVersion.FEATURE_NAME, (short) 0)
+        ).supportsShareGroups();
+    }
+
+    // Visibility for tests
+    boolean shouldRunPeriodicJob() {
+        return shouldRunPeriodicJob;
     }
 }

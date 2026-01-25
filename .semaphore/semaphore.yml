@@ -17,7 +17,7 @@ version: v1.0
 name: build-test-release
 agent:
   machine:
-    type: s1-prod-ubuntu20-04-arm64-1
+    type: s1-prod-ubuntu24-04-arm64-3
 fail_fast:
   cancel:
     when: "true"
@@ -45,6 +45,11 @@ global_job_config:
       - checkout
       - sem-version java 21
       - sem-version go 1.16.15
+      - sem-version python 3.11
+      - python --version
+      - python -m venv junitparser
+      - source junitparser/bin/activate
+      - pip install junitparser
       - git config --global url."git@github.com:".insteadOf "https://github.com/"
       - export SEMAPHORE_CACHE_DIR=/home/semaphore
       - source scripts/set_env_vars.sh
@@ -91,16 +96,38 @@ blocks:
       jobs:
         - name: Unit tests and Integration tests
           commands:
-            - './gradlew 
-                unitTest integrationTest --no-daemon --stacktrace --continue 
-                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4 
-                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5'
+            - |
+              ./gradlew \
+                unitTest integrationTest --no-daemon --stacktrace --continue \
+                -Dorg.gradle.jvmargs="-Xmx6g -Xss4m -XX:+UseParallelGC" \
+                -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=2 \
+                -PignoreFailures=true -PmaxTestRetries=1 -PmaxTestRetryFailures=5 
+              gradle_exit=$?
+              
+              # Check Gradle exit code and fail the job if non-zero
+              if [ "$gradle_exit" -ne 0 ]; then
+                echo "❌ Gradle exited with code $gradle_exit — failing the job."
+                exit "$gradle_exit"
+              else
+                echo "✅ Gradle completed successfully (exit code 0)."
+              fi
+              
+              shopt -s globstar
+              python scripts/check_test_failures.py **/build/test-results/**/TEST-*.xml
+              check_exit=$?
+
+              test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml || true
+
+              # Check if check_test_failures.py returned non-zero exit code
+              if [ "$check_exit" -ne 0 ]; then
+                echo "❌ check_test_failures.py returned $check_exit"
+                exit "$check_exit"
+              fi
           execution_time_limit:
             minutes: 120
       epilogue:
         always:
           commands:
-            - shopt -s globstar && test-results publish --name Test-Suite --trim-output-to 1024 --omit-output-for-passed **/build/test-results/**/TEST-*.xml
             - |
               echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
               echo "Current time: $(date +%s%3N)"
@@ -110,7 +137,7 @@ after_pipeline:
   task:
     agent:
       machine:
-        type: s1-prod-ubuntu20-04-arm64-0
+        type: s1-prod-ubuntu24-04-arm64-0
     jobs:
       - name: Metrics
         commands:
@@ -123,3 +150,17 @@ after_pipeline:
           - checkout
           - sem-version java 11
           - emit-sonarqube-data -a test-results
+      - name: Trigger cp-jar-build to verify CP packaging
+        commands:
+          - |
+            if [[ -z "$SEMAPHORE_GIT_PR_BRANCH" ]] && [[ "$SEMAPHORE_GIT_BRANCH" == "master" ]]; then \
+              echo "Commit to master (not a PR), triggering cp-jar-build task to verify CP packaging"; \
+              sem-trigger -p packaging \
+              -t cp-jar-build-on-commit \
+              -d "|" -i "UPSTREAM_COMPONENT|$SEMAPHORE_PROJECT_NAME" \
+              -i "UPSTREAM_GIT_SHA|$SEMAPHORE_GIT_SHA" \
+              -i "UPSTREAM_WORKFLOW_LINK|https://semaphore.ci.confluent.io/workflows/${SEMAPHORE_WORKFLOW_ID}" \
+              -b $SEMAPHORE_GIT_BRANCH; \
+            else \
+              echo "Skipping: either it's a PR or not a commit to master branch"; \
+            fi;

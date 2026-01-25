@@ -68,11 +68,9 @@ public class ActiveTaskCreatorTest {
     private InternalTopologyBuilder builder;
     @Mock
     private StateDirectory stateDirectory;
-    @Mock
-    private ChangelogReader changeLogReader;
 
     private final MockClientSupplier mockClientSupplier = new MockClientSupplier();
-    private final StreamsMetricsImpl streamsMetrics = new StreamsMetricsImpl(new Metrics(), "clientId", "processId", new MockTime());
+    private final StreamsMetricsImpl streamsMetrics = new StreamsMetricsImpl(new Metrics(), "clientId", new MockTime());
     private final Map<String, Object> properties = mkMap(
         mkEntry(StreamsConfig.APPLICATION_ID_CONFIG, "appId"),
         mkEntry(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "dummy:1234")
@@ -190,21 +188,24 @@ public class ActiveTaskCreatorTest {
 
         activeTaskCreator.close();
 
-        assertThat(activeTaskCreator.streamsProducer().isClosed(), is(true));
+        assertThat(activeTaskCreator.isClosed(), is(true));
         assertThat(mockClientSupplier.producers.get(0).closed(), is(true));
     }
 
     @Test
-    public void shouldNotReInitializeProducerOnClose() {
+    public void shouldNotResetProducerAfterDisableRest() {
         properties.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE_V2);
         mockClientSupplier.setApplicationIdForProducer("appId");
         createTasks();
-
-        activeTaskCreator.streamsProducer().close();
-        activeTaskCreator.reInitializeProducer();
-        // If streamsProducer is not closed, clientSupplier will recreate a producer,
-        // resulting in more than one producer being created.
         assertThat(mockClientSupplier.producers.size(), is(1));
+
+        activeTaskCreator.close();
+        activeTaskCreator.reInitializeProducer();
+        // Verifies that disableReset() prevents reInitializeProducer() from creating a new producer instance
+        // Without disabling reset, the producers collection would contain more than one producer
+        assertThat("Producer should not be recreated after disabling reset",
+            mockClientSupplier.producers.size(),
+            is(1));
     }
 
     // error handling
@@ -269,15 +270,13 @@ public class ActiveTaskCreatorTest {
             config,
             streamsMetrics,
             stateDirectory,
-            changeLogReader,
             new ThreadCache(new LogContext(), 0L, streamsMetrics),
             new MockTime(),
             mockClientSupplier,
             "clientId-StreamThread-0",
             0,
             uuid,
-            new LogContext().logger(ActiveTaskCreator.class),
-            false,
+            new LogContext(),
             false);
 
         assertThat(

@@ -27,7 +27,7 @@ set BASE_DIR=%CD%
 popd
 
 IF ["%SCALA_VERSION%"] EQU [""] (
-  set SCALA_VERSION=2.13.15
+  set SCALA_VERSION=2.13.18
 )
 
 IF ["%SCALA_BINARY_VERSION%"] EQU [""] (
@@ -122,9 +122,9 @@ IF ["%LOG_DIR%"] EQU [""] (
 rem Log4j settings
 IF ["%KAFKA_LOG4J_OPTS%"] EQU [""] (
 	if exist %~dp0../../etc/kafka/tools-log4j2.yaml (
-		set KAFKA_LOG4J_OPTS=-Dlog4j2.configuration=file:%~dp0../../etc/kafka/tools-log4j2.yaml
+		set KAFKA_LOG4J_OPTS=-Dlog4j2.configurationFile=%~dp0../../etc/kafka/tools-log4j2.yaml
 	) else (
-		set KAFKA_LOG4J_OPTS=-Dlog4j2.configuration=file:%BASE_DIR%/config/tools-log4j2.yaml
+		set KAFKA_LOG4J_OPTS=-Dlog4j2.configurationFile=%BASE_DIR%/config/tools-log4j2.yaml
 	)
 ) ELSE (
     rem Check if Log4j 1.x configuration options are present in KAFKA_LOG4J_OPTS
@@ -186,7 +186,7 @@ IF ["%KAFKA_HEAP_OPTS%"] EQU [""] (
 
 rem JVM performance options
 IF ["%KAFKA_JVM_PERFORMANCE_OPTS%"] EQU [""] (
-	set KAFKA_JVM_PERFORMANCE_OPTS=-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+ExplicitGCInvokesConcurrent -Djava.awt.headless=true
+	set KAFKA_JVM_PERFORMANCE_OPTS=-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+ExplicitGCInvokesConcurrent
 )
 
 IF not defined CLASSPATH (

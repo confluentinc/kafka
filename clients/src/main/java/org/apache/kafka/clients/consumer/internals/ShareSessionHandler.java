@@ -17,6 +17,7 @@
 
 package org.apache.kafka.clients.consumer.internals;
 
+import org.apache.kafka.clients.consumer.AcknowledgeType;
 import org.apache.kafka.common.TopicIdPartition;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
@@ -53,6 +54,7 @@ import java.util.stream.Collectors;
  * <p>ShareSessionHandler tracks the partitions which are in the session. It also determines
  * which partitions need to be included in each ShareFetch/ShareAcknowledge request.
  */
+@SuppressWarnings({"NPathComplexity", "CyclomaticComplexity"})
 public class ShareSessionHandler {
     private final Logger log;
     private final int node;
@@ -107,7 +109,11 @@ public class ShareSessionHandler {
         nextAcknowledgements.put(topicIdPartition, partitionAcknowledgements);
     }
 
-    public ShareFetchRequest.Builder newShareFetchBuilder(String groupId, FetchConfig fetchConfig) {
+    public boolean isNewSession() {
+        return nextMetadata.isNewSession();
+    }
+
+    public ShareFetchRequest.Builder newShareFetchBuilder(String groupId, ShareFetchConfig shareFetchConfig, boolean canSkipIfRequestEmpty) {
         List<TopicIdPartition> added = new ArrayList<>();
         List<TopicIdPartition> removed = new ArrayList<>();
         List<TopicIdPartition> replaced = new ArrayList<>();
@@ -153,33 +159,66 @@ public class ShareSessionHandler {
             }
         }
 
-        if (log.isDebugEnabled()) {
-            log.debug("Build ShareFetch {} for node {}. Added {}, removed {}, replaced {} out of {}",
-                    nextMetadata, node,
-                    topicIdPartitionsToLogString(added),
-                    topicIdPartitionsToLogString(removed),
-                    topicIdPartitionsToLogString(replaced),
-                    topicIdPartitionsToLogString(sessionPartitions.values()));
-        }
-
         // The replaced topic-partitions need to be removed, and their replacements are already added
         removed.addAll(replaced);
 
+        boolean hasRenewAcknowledgements = false;
         Map<TopicIdPartition, List<ShareFetchRequestData.AcknowledgementBatch>> acknowledgementBatches = new HashMap<>();
-        nextAcknowledgements.forEach((partition, acknowledgements) -> acknowledgementBatches.put(partition, acknowledgements.getAcknowledgementBatches()
-                .stream().map(AcknowledgementBatch::toShareFetchRequest)
-                .collect(Collectors.toList())));
+        if (!nextAcknowledgements.isEmpty()) {
+            for (Map.Entry<TopicIdPartition, Acknowledgements> partitionsAcks : nextAcknowledgements.entrySet()) {
+                List<AcknowledgementBatch> partitionAckBatches = partitionsAcks.getValue().getAcknowledgementBatches();
+                for (AcknowledgementBatch ackBatch : partitionAckBatches) {
+                    if (ackBatch.acknowledgeTypes().contains(AcknowledgeType.RENEW.id)) {
+                        hasRenewAcknowledgements = true;
+                    }
+                    acknowledgementBatches.computeIfAbsent(partitionsAcks.getKey(), k -> new ArrayList<>()).add(ackBatch.toShareFetchRequest());
+                }
+            }
+        }
 
         nextPartitions = new LinkedHashMap<>();
         nextAcknowledgements = new LinkedHashMap<>();
 
-        return ShareFetchRequest.Builder.forConsumer(
-                groupId, nextMetadata, fetchConfig.maxWaitMs,
-                fetchConfig.minBytes, fetchConfig.maxBytes, fetchConfig.fetchSize, fetchConfig.maxPollRecords,
+        if (canSkipIfRequestEmpty && added.isEmpty() && removed.isEmpty() && acknowledgementBatches.isEmpty()) {
+            return null;
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Build ShareFetch {} for node {}. Added {}, removed {}, replaced {} out of {}",
+                nextMetadata, node,
+                topicIdPartitionsToLogString(added),
+                topicIdPartitionsToLogString(removed),
+                topicIdPartitionsToLogString(replaced),
+                topicIdPartitionsToLogString(sessionPartitions.values()));
+        }
+
+        if (hasRenewAcknowledgements) {
+            // If the request has renew acknowledgements, the ShareFetch is only used to send the acknowledgements
+            // and potentially update the share session. The parameters for wait time, number of bytes and number of
+            // records are all zero.
+            return ShareFetchRequest.Builder.forConsumer(
+                groupId, nextMetadata, 0,
+                0, 0, 0,
+                0, shareFetchConfig.shareAcquireMode.id, true,
                 added, removed, acknowledgementBatches);
+        } else if (canSkipIfRequestEmpty) {
+            // The request contains changes to the share session or acknowledgements only. The parameters for wait time,
+            // number of bytes and number of records are all zero.
+            return ShareFetchRequest.Builder.forConsumer(
+                groupId, nextMetadata, 0,
+                0, 0, 0,
+                0, shareFetchConfig.shareAcquireMode.id, false,
+                added, removed, acknowledgementBatches);
+        } else {
+            return ShareFetchRequest.Builder.forConsumer(
+                groupId, nextMetadata, shareFetchConfig.maxWaitMs,
+                shareFetchConfig.minBytes, shareFetchConfig.maxBytes, shareFetchConfig.maxPollRecords,
+                shareFetchConfig.maxPollRecords, shareFetchConfig.shareAcquireMode.id, false,
+                added, removed, acknowledgementBatches);
+        }
     }
 
-    public ShareAcknowledgeRequest.Builder newShareAcknowledgeBuilder(String groupId, FetchConfig fetchConfig) {
+    public ShareAcknowledgeRequest.Builder newShareAcknowledgeBuilder(String groupId, ShareFetchConfig shareFetchConfig) {
         if (nextMetadata.isNewSession()) {
             // A share session cannot be started with a ShareAcknowledge request
             nextPartitions.clear();
@@ -187,15 +226,23 @@ public class ShareSessionHandler {
             return null;
         }
 
+        boolean hasRenewAcknowledgements = false;
         Map<TopicIdPartition, List<ShareAcknowledgeRequestData.AcknowledgementBatch>> acknowledgementBatches = new HashMap<>();
-        nextAcknowledgements.forEach((partition, acknowledgements) ->
-                acknowledgementBatches.put(partition, acknowledgements.getAcknowledgementBatches()
-                        .stream().map(AcknowledgementBatch::toShareAcknowledgeRequest)
-                        .collect(Collectors.toList())));
+        if (!nextAcknowledgements.isEmpty()) {
+            for (Map.Entry<TopicIdPartition, Acknowledgements> partitionsAcks : nextAcknowledgements.entrySet()) {
+                List<AcknowledgementBatch> partitionAckBatches = partitionsAcks.getValue().getAcknowledgementBatches();
+                for (AcknowledgementBatch ackBatch : partitionAckBatches) {
+                    if (ackBatch.acknowledgeTypes().contains(AcknowledgeType.RENEW.id)) {
+                        hasRenewAcknowledgements = true;
+                    }
+                    acknowledgementBatches.computeIfAbsent(partitionsAcks.getKey(), k -> new ArrayList<>()).add(ackBatch.toShareAcknowledgeRequest());
+                }
+            }
+        }
 
         nextAcknowledgements = new LinkedHashMap<>();
 
-        return ShareAcknowledgeRequest.Builder.forConsumer(groupId, nextMetadata, acknowledgementBatches);
+        return ShareAcknowledgeRequest.Builder.forConsumer(groupId, nextMetadata, hasRenewAcknowledgements, acknowledgementBatches);
     }
 
     private String topicIdPartitionsToLogString(Collection<TopicIdPartition> partitions) {
@@ -215,7 +262,8 @@ public class ShareSessionHandler {
      */
     public boolean handleResponse(ShareFetchResponse response, short version) {
         if ((response.error() == Errors.SHARE_SESSION_NOT_FOUND) ||
-                (response.error() == Errors.INVALID_SHARE_SESSION_EPOCH)) {
+                (response.error() == Errors.INVALID_SHARE_SESSION_EPOCH) ||
+                (response.error() == Errors.SHARE_SESSION_LIMIT_REACHED)) {
             log.info("Node {} was unable to process the ShareFetch request with {}: {}.",
                     node, nextMetadata, response.error());
             nextMetadata = nextMetadata.nextCloseExistingAttemptNew();

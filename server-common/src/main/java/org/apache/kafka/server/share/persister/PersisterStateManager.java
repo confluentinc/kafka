@@ -29,6 +29,8 @@ import org.apache.kafka.common.message.DeleteShareGroupStateRequestData;
 import org.apache.kafka.common.message.DeleteShareGroupStateResponseData;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
+import org.apache.kafka.common.message.InitializeShareGroupStateRequestData;
+import org.apache.kafka.common.message.InitializeShareGroupStateResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateRequestData;
 import org.apache.kafka.common.message.ReadShareGroupStateResponseData;
 import org.apache.kafka.common.message.ReadShareGroupStateSummaryRequestData;
@@ -43,13 +45,15 @@ import org.apache.kafka.common.requests.DeleteShareGroupStateRequest;
 import org.apache.kafka.common.requests.DeleteShareGroupStateResponse;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
+import org.apache.kafka.common.requests.InitializeShareGroupStateRequest;
+import org.apache.kafka.common.requests.InitializeShareGroupStateResponse;
 import org.apache.kafka.common.requests.ReadShareGroupStateRequest;
 import org.apache.kafka.common.requests.ReadShareGroupStateResponse;
 import org.apache.kafka.common.requests.ReadShareGroupStateSummaryRequest;
 import org.apache.kafka.common.requests.ReadShareGroupStateSummaryResponse;
 import org.apache.kafka.common.requests.WriteShareGroupStateRequest;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
-import org.apache.kafka.common.utils.ExponentialBackoff;
+import org.apache.kafka.common.utils.ExponentialBackoffManager;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.server.share.SharePartitionKey;
@@ -63,7 +67,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -75,7 +78,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -92,6 +94,8 @@ public class PersisterStateManager {
     public static final long REQUEST_BACKOFF_MS = 1_000L;
     public static final long REQUEST_BACKOFF_MAX_MS = 30_000L;
     private static final int MAX_FIND_COORD_ATTEMPTS = 5;
+    private static final int RETRY_BACKOFF_EXP_BASE = CommonClientConfigs.RETRY_BACKOFF_EXP_BASE;
+    private static final double RETRY_BACKOFF_JITTER = CommonClientConfigs.RETRY_BACKOFF_JITTER;
     private final Time time;
     private final Timer timer;
     private final ShareCoordinatorMetadataCacheHelper cacheHelper;
@@ -114,39 +118,8 @@ public class PersisterStateManager {
     // when generateRequests is called.
     private Runnable generateCallback;
 
-    private static class BackoffManager {
-        private final int maxAttempts;
-        private int attempts;
-        private final ExponentialBackoff backoff;
-
-        BackoffManager(int maxAttempts, long initialBackoffMs, long maxBackoffMs) {
-            this.maxAttempts = maxAttempts;
-            this.backoff = new ExponentialBackoff(
-                initialBackoffMs,
-                CommonClientConfigs.RETRY_BACKOFF_EXP_BASE,
-                maxBackoffMs,
-                CommonClientConfigs.RETRY_BACKOFF_JITTER
-            );
-        }
-
-        void incrementAttempt() {
-            attempts++;
-        }
-
-        void resetAttempts() {
-            attempts = 0;
-        }
-
-        boolean canAttempt() {
-            return attempts < maxAttempts;
-        }
-
-        long backOff() {
-            return this.backoff.backoff(attempts);
-        }
-    }
-
     public enum RPCType {
+        INITIALIZE,
         READ,
         WRITE,
         DELETE,
@@ -216,8 +189,7 @@ public class PersisterStateManager {
      */
     public abstract class PersisterStateManagerHandler implements RequestCompletionHandler {
         protected Node coordinatorNode;
-        private final BackoffManager findCoordBackoff;
-        protected final Logger log = LoggerFactory.getLogger(getClass());
+        private final ExponentialBackoffManager findCoordBackoff;
         private Consumer<ClientResponse> onCompleteCallback;
         protected final SharePartitionKey partitionKey;
 
@@ -229,11 +201,24 @@ public class PersisterStateManager {
             long backoffMaxMs,
             int maxRPCRetryAttempts
         ) {
-            this.findCoordBackoff = new BackoffManager(maxRPCRetryAttempts, backoffMs, backoffMaxMs);
+            this.findCoordBackoff = new ExponentialBackoffManager(
+                maxRPCRetryAttempts,
+                backoffMs,
+                RETRY_BACKOFF_EXP_BASE,
+                backoffMaxMs,
+                RETRY_BACKOFF_JITTER);
             this.onCompleteCallback = response -> {
             }; // noop
             partitionKey = SharePartitionKey.getInstance(groupId, topicId, partition);
         }
+
+        /**
+         * Child classes must provide their own static logger instance. This avoids unnecessary resource usage
+         * caused by creating a large number of logger instances.
+         *
+         * @return child class logger
+         */
+        protected abstract Logger log();
 
         /**
          * Child class must create appropriate builder object for the handled RPC
@@ -331,10 +316,10 @@ public class PersisterStateManager {
                 return false;
             }
             if (cacheHelper.containsTopic(Topic.SHARE_GROUP_STATE_TOPIC_NAME)) {
-                log.debug("{} internal topic already exists.", Topic.SHARE_GROUP_STATE_TOPIC_NAME);
+                log().debug("{} internal topic already exists.", Topic.SHARE_GROUP_STATE_TOPIC_NAME);
                 Node node = cacheHelper.getShareCoordinator(partitionKey(), Topic.SHARE_GROUP_STATE_TOPIC_NAME);
                 if (node != Node.noNode()) {
-                    log.debug("Found coordinator node in cache: {}", node);
+                    log().debug("Found coordinator node in cache: {}", node);
                     coordinatorNode = node;
                     addRequestToNodeMap(node, this);
                     return false;
@@ -370,41 +355,41 @@ public class PersisterStateManager {
 
             // We don't know if FIND_COORD or actual REQUEST. Let's err on side of request.
             if (response == null) {
-                requestErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new NetworkException("Did not receive any response"));
+                requestErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new NetworkException("Did not receive any response (response = null)"));
                 sender.wakeup();
                 return;
             }
 
             if (isFindCoordinatorResponse(response)) {
-                Optional<Errors> err = checkNetworkError(response, this::findCoordinatorErrorResponse);
-                if (err.isEmpty()) {
-                    handleFindCoordinatorResponse(response);
-                }
+                handleFindCoordinatorResponse(response);
             } else if (isResponseForRequest(response)) {
-                Optional<Errors> err = checkNetworkError(response, this::requestErrorResponse);
-                if (err.isEmpty()) {
-                    handleRequestResponse(response);
-                }
+                handleRequestResponse(response);
             }
             sender.wakeup();
         }
 
         // Visibility for testing
-        Optional<Errors> checkNetworkError(ClientResponse response, BiConsumer<Errors, Exception> errorConsumer) {
+        Optional<Errors> checkResponseError(ClientResponse response) {
             if (response.hasResponse()) {
                 return Optional.empty();
             }
 
-            log.error("Response for RPC {} with key {} is invalid - {}.", name(), this.partitionKey, response);
+            log().debug("Response for RPC {} with key {} is invalid - {}", name(), this.partitionKey, response);
 
-            if (response.wasDisconnected()) {
-                errorConsumer.accept(Errors.NETWORK_EXCEPTION, null);
+            if (response.authenticationException() != null) {
+                log().error("Authentication exception", response.authenticationException());
+                Errors error = Errors.forException(response.authenticationException());
+                return Optional.of(error);
+            } else if (response.versionMismatch() != null) {
+                log().error("Version mismatch exception", response.versionMismatch());
+                Errors error = Errors.forException(response.versionMismatch());
+                return Optional.of(error);
+            } else if (response.wasDisconnected()) {    // Retriable
                 return Optional.of(Errors.NETWORK_EXCEPTION);
-            } else if (response.wasTimedOut()) {
-                errorConsumer.accept(Errors.REQUEST_TIMED_OUT, null);
+            } else if (response.wasTimedOut()) {    // Retriable
+                log().debug("Response for RPC {} with key {} timed out - {}.", name(), this.partitionKey, response);
                 return Optional.of(Errors.REQUEST_TIMED_OUT);
             } else {
-                errorConsumer.accept(Errors.UNKNOWN_SERVER_ERROR, new NetworkException("Did not receive any response"));
                 return Optional.of(Errors.UNKNOWN_SERVER_ERROR);
             }
         }
@@ -419,40 +404,67 @@ public class PersisterStateManager {
          * @param response - Client response for find coordinator RPC
          */
         protected void handleFindCoordinatorResponse(ClientResponse response) {
-            log.debug("Find coordinator response received - {}", response);
+            log().debug("Find coordinator response received - {}", response);
 
             // Incrementing the number of find coordinator attempts
             findCoordBackoff.incrementAttempt();
-            List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
-            if (coordinators.size() != 1) {
-                log.error("Find coordinator response for {} is invalid", partitionKey());
-                findCoordinatorErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new IllegalStateException("Invalid response with multiple coordinators."));
-                return;
-            }
+            Errors clientResponseError = checkResponseError(response).orElse(Errors.NONE);
+            String clientResponseErrorMessage = clientResponseError.message();
 
-            FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
-            Errors error = Errors.forCode(coordinatorData.errorCode());
-
-            switch (error) {
+            switch (clientResponseError) {
                 case NONE:
-                    log.debug("Find coordinator response valid. Enqueuing actual request.");
-                    findCoordBackoff.resetAttempts();
-                    coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
-                    // now we want the actual share state RPC call to happen
-                    if (this.isBatchable()) {
-                        addRequestToNodeMap(coordinatorNode, this);
-                    } else {
-                        enqueue(this);
+                    List<FindCoordinatorResponseData.Coordinator> coordinators = ((FindCoordinatorResponse) response.responseBody()).coordinators();
+                    if (coordinators.size() != 1) {
+                        log().error("Find coordinator response for {} is invalid. Number of coordinators = {}", partitionKey(), coordinators.size());
+                        findCoordinatorErrorResponse(Errors.UNKNOWN_SERVER_ERROR, new IllegalStateException("Invalid response with multiple coordinators."));
+                        return;
                     }
-                    break;
 
-                case COORDINATOR_NOT_AVAILABLE: // retriable error codes
-                case COORDINATOR_LOAD_IN_PROGRESS:
-                case NOT_COORDINATOR:
-                    log.warn("Received retriable error in find coordinator for {} using key {}: {}", name(), partitionKey(), error.message());
+                    FindCoordinatorResponseData.Coordinator coordinatorData = coordinators.get(0);
+                    Errors error = Errors.forCode(coordinatorData.errorCode());
+                    String errorMessage = coordinatorData.errorMessage();
+                    if (errorMessage == null || errorMessage.isEmpty()) {
+                        errorMessage = error.message();
+                    }
+                    switch (error) {
+                        case NONE:
+                            log().trace("Find coordinator response valid. Enqueuing actual request.");
+                            findCoordBackoff.resetAttempts();
+                            coordinatorNode = new Node(coordinatorData.nodeId(), coordinatorData.host(), coordinatorData.port());
+                            // now we want the actual share state RPC call to happen
+                            if (this.isBatchable()) {
+                                addRequestToNodeMap(coordinatorNode, this);
+                            } else {
+                                enqueue(this);
+                            }
+                            break;
+
+                        case COORDINATOR_NOT_AVAILABLE: // retriable error codes
+                        case COORDINATOR_LOAD_IN_PROGRESS:
+                        case NOT_COORDINATOR:
+                        case UNKNOWN_TOPIC_OR_PARTITION:
+                            log().debug("Received retriable error in find coordinator for {} using key {}: {}", name(), partitionKey(), errorMessage);
+                            if (!findCoordBackoff.canAttempt()) {
+                                log().error("Exhausted max retries to find coordinator for {} using key {} without success.", name(), partitionKey());
+                                findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
+                                break;
+                            }
+                            resetCoordinatorNode();
+                            timer.add(new PersisterTimerTask(findCoordBackoff.backOff(), this));
+                            break;
+
+                        default:
+                            log().error("Unable to find coordinator for {} using key {}: {}.", name(), partitionKey(), errorMessage);
+                            findCoordinatorErrorResponse(error, new Exception(errorMessage));
+                    }
+                    return;
+
+                case NETWORK_EXCEPTION: // Retriable client response error codes.
+                case REQUEST_TIMED_OUT:
+                    log().debug("Received retriable error in find coordinator client response for {} using key {} due to {}.", name(), partitionKey(), clientResponseErrorMessage);
                     if (!findCoordBackoff.canAttempt()) {
-                        log.error("Exhausted max retries to find coordinator for {} using key {} without success.", name(), partitionKey());
-                        findCoordinatorErrorResponse(error, new Exception("Exhausted max retries to find coordinator without success."));
+                        log().error("Exhausted max retries to find coordinator due to error in client response for {} using key {}.", name(), partitionKey());
+                        findCoordinatorErrorResponse(clientResponseError, new Exception("Exhausted max retries to find coordinator without success."));
                         break;
                     }
                     resetCoordinatorNode();
@@ -460,8 +472,8 @@ public class PersisterStateManager {
                     break;
 
                 default:
-                    log.error("Unable to find coordinator for {} using key {}.", name(), partitionKey());
-                    findCoordinatorErrorResponse(error, null);
+                    log().error("Unable to find coordinator due to error in client response for {} using key {}: {}", name(), partitionKey(), clientResponseError.code());
+                    findCoordinatorErrorResponse(clientResponseError, new Exception(clientResponseErrorMessage));
             }
         }
 
@@ -483,13 +495,204 @@ public class PersisterStateManager {
         }
     }
 
+    public class InitializeStateHandler extends PersisterStateManagerHandler {
+
+        private static final Logger LOG = LoggerFactory.getLogger(InitializeStateHandler.class);
+
+        private final int stateEpoch;
+        private final long startOffset;
+        private final CompletableFuture<InitializeShareGroupStateResponse> result;
+        private final ExponentialBackoffManager initializeStateBackoff;
+
+        public InitializeStateHandler(
+            String groupId,
+            Uuid topicId,
+            int partition,
+            int stateEpoch,
+            long startOffset,
+            CompletableFuture<InitializeShareGroupStateResponse> result,
+            long backoffMs,
+            long backoffMaxMs,
+            int maxRPCRetryAttempts
+        ) {
+            super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxRPCRetryAttempts);
+            this.stateEpoch = stateEpoch;
+            this.startOffset = startOffset;
+            this.result = result;
+            this.initializeStateBackoff = new ExponentialBackoffManager(
+                maxRPCRetryAttempts,
+                backoffMs,
+                RETRY_BACKOFF_EXP_BASE,
+                backoffMaxMs,
+                RETRY_BACKOFF_JITTER);
+        }
+
+        public InitializeStateHandler(
+            String groupId,
+            Uuid topicId,
+            int partition,
+            int stateEpoch,
+            long startOffset,
+            CompletableFuture<InitializeShareGroupStateResponse> result,
+            Consumer<ClientResponse> onCompleteCallback
+        ) {
+            this(
+                groupId,
+                topicId,
+                partition,
+                stateEpoch,
+                startOffset,
+                result,
+                REQUEST_BACKOFF_MS,
+                REQUEST_BACKOFF_MAX_MS,
+                MAX_FIND_COORD_ATTEMPTS
+            );
+        }
+
+        @Override
+        protected Logger log() {
+            return LOG;
+        }
+
+        @Override
+        protected String name() {
+            return "InitializeStateHandler";
+        }
+
+        @Override
+        protected AbstractRequest.Builder<? extends AbstractRequest> requestBuilder() {
+            throw new RuntimeException("Initialize requests are batchable, hence individual requests not needed.");
+        }
+
+        @Override
+        protected boolean isResponseForRequest(ClientResponse response) {
+            return response.requestHeader().apiKey() == ApiKeys.INITIALIZE_SHARE_GROUP_STATE;
+        }
+
+        @Override
+        protected void handleRequestResponse(ClientResponse response) {
+            log().debug("Initialize state response received - {}", response);
+            initializeStateBackoff.incrementAttempt();
+            Errors clientResponseError = checkResponseError(response).orElse(Errors.NONE);
+            String clientResponseErrorMessage = clientResponseError.message();
+
+            switch (clientResponseError) {
+                case NONE:
+                    // response can be a combined one for large number of requests
+                    // we need to deconstruct it
+                    InitializeShareGroupStateResponse combinedResponse = (InitializeShareGroupStateResponse) response.responseBody();
+
+                    for (InitializeShareGroupStateResponseData.InitializeStateResult initializeStateResult : combinedResponse.data().results()) {
+                        if (initializeStateResult.topicId().equals(partitionKey().topicId())) {
+                            Optional<InitializeShareGroupStateResponseData.PartitionResult> partitionStateData =
+                                initializeStateResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
+                                    .findFirst();
+
+                            if (partitionStateData.isPresent()) {
+                                Errors error = Errors.forCode(partitionStateData.get().errorCode());
+                                String errorMessage = partitionStateData.get().errorMessage();
+                                if (errorMessage == null || errorMessage.isEmpty()) {
+                                    errorMessage = error.message();
+                                }
+
+                                switch (error) {
+                                    case NONE:
+                                        initializeStateBackoff.resetAttempts();
+                                        InitializeShareGroupStateResponseData.InitializeStateResult result = InitializeShareGroupStateResponse.toResponseInitializeStateResult(
+                                            partitionKey().topicId(),
+                                            List.of(partitionStateData.get())
+                                        );
+                                        this.result.complete(new InitializeShareGroupStateResponse(
+                                            new InitializeShareGroupStateResponseData().setResults(List.of(result))));
+                                        return;
+
+                                    // check retriable errors
+                                    case COORDINATOR_NOT_AVAILABLE:
+                                    case COORDINATOR_LOAD_IN_PROGRESS:
+                                    case NOT_COORDINATOR:
+                                    case UNKNOWN_TOPIC_OR_PARTITION:
+                                        log().debug("Received retriable error in initialize state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        if (!initializeStateBackoff.canAttempt()) {
+                                            log().error("Exhausted max retries for initialize state RPC for key {} without success.", partitionKey());
+                                            requestErrorResponse(error, new Exception("Exhausted max retries to complete initialize state RPC without success."));
+                                            return;
+                                        }
+                                        super.resetCoordinatorNode();
+                                        timer.add(new PersisterTimerTask(initializeStateBackoff.backOff(), this));
+                                        return;
+
+                                    default:
+                                        log().error("Unable to perform initialize state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        requestErrorResponse(error, new Exception(errorMessage));
+                                        return;
+                                }
+                            }
+                        }
+                    }
+
+                    // no response found specific topic partition
+                    IllegalStateException exception = new IllegalStateException(
+                        "Failed to initialize state for share partition: " + partitionKey()
+                    );
+                    requestErrorResponse(Errors.forException(exception), exception);
+                    return;
+
+                case NETWORK_EXCEPTION: // Retriable client response error codes.
+                case REQUEST_TIMED_OUT:
+                    log().debug("Received retriable error in initialize state RPC client response for key {}: {}", partitionKey(), clientResponseErrorMessage);
+                    if (!initializeStateBackoff.canAttempt()) {
+                        log().error("Exhausted max retries for initialize state RPC due to error in client response for key {}.", partitionKey());
+                        requestErrorResponse(clientResponseError, new Exception("Exhausted max retries to complete initialize state RPC without success."));
+                        return;
+                    }
+                    super.resetCoordinatorNode();
+                    timer.add(new PersisterTimerTask(initializeStateBackoff.backOff(), this));
+                    return;
+
+                default:
+                    log().error("Unable to perform initialize state RPC due to error in client response for key {}: {}", partitionKey(), clientResponseError.code());
+                    requestErrorResponse(clientResponseError, new Exception(clientResponseErrorMessage));
+            }
+        }
+
+        @Override
+        public void requestErrorResponse(Errors error, Exception exception) {
+            this.result.complete(new InitializeShareGroupStateResponse(
+                InitializeShareGroupStateResponse.toErrorResponseData(partitionKey().topicId(), partitionKey().partition(), error, "Error in initialize state RPC. " +
+                    (exception == null ? error.message() : exception.getMessage()))));
+        }
+
+        @Override
+        protected void findCoordinatorErrorResponse(Errors error, Exception exception) {
+            this.result.complete(new InitializeShareGroupStateResponse(
+                InitializeShareGroupStateResponse.toErrorResponseData(partitionKey().topicId(), partitionKey().partition(), error, "Error in find coordinator. " +
+                    (exception == null ? error.message() : exception.getMessage()))));
+        }
+
+        protected CompletableFuture<InitializeShareGroupStateResponse> result() {
+            return result;
+        }
+
+        @Override
+        protected boolean isBatchable() {
+            return true;
+        }
+
+        @Override
+        protected RPCType rpcType() {
+            return RPCType.INITIALIZE;
+        }
+    }
+
     public class WriteStateHandler extends PersisterStateManagerHandler {
+        private static final Logger LOG = LoggerFactory.getLogger(WriteStateHandler.class);
         private final int stateEpoch;
         private final int leaderEpoch;
         private final long startOffset;
+        private final int deliveryCompleteCount;
         private final List<PersisterStateBatch> batches;
         private final CompletableFuture<WriteShareGroupStateResponse> result;
-        private final BackoffManager writeStateBackoff;
+        private final ExponentialBackoffManager writeStateBackoff;
 
         public WriteStateHandler(
             String groupId,
@@ -498,6 +701,7 @@ public class PersisterStateManager {
             int stateEpoch,
             int leaderEpoch,
             long startOffset,
+            int deliveryCompleteCount,
             List<PersisterStateBatch> batches,
             CompletableFuture<WriteShareGroupStateResponse> result,
             long backoffMs,
@@ -508,9 +712,15 @@ public class PersisterStateManager {
             this.stateEpoch = stateEpoch;
             this.leaderEpoch = leaderEpoch;
             this.startOffset = startOffset;
+            this.deliveryCompleteCount = deliveryCompleteCount;
             this.batches = batches;
             this.result = result;
-            this.writeStateBackoff = new BackoffManager(maxRPCRetryAttempts, backoffMs, backoffMaxMs);
+            this.writeStateBackoff = new ExponentialBackoffManager(
+                maxRPCRetryAttempts,
+                backoffMs,
+                RETRY_BACKOFF_EXP_BASE,
+                backoffMaxMs,
+                RETRY_BACKOFF_JITTER);
         }
 
         public WriteStateHandler(
@@ -520,6 +730,7 @@ public class PersisterStateManager {
             int stateEpoch,
             int leaderEpoch,
             long startOffset,
+            int deliveryCompleteCount,
             List<PersisterStateBatch> batches,
             CompletableFuture<WriteShareGroupStateResponse> result,
             Consumer<ClientResponse> onCompleteCallback
@@ -531,12 +742,18 @@ public class PersisterStateManager {
                 stateEpoch,
                 leaderEpoch,
                 startOffset,
+                deliveryCompleteCount,
                 batches,
                 result,
                 REQUEST_BACKOFF_MS,
                 REQUEST_BACKOFF_MAX_MS,
                 MAX_FIND_COORD_ATTEMPTS
             );
+        }
+
+        @Override
+        protected Logger log() {
+            return LOG;
         }
 
         @Override
@@ -556,60 +773,87 @@ public class PersisterStateManager {
 
         @Override
         protected void handleRequestResponse(ClientResponse response) {
-            log.debug("Write state response received - {}", response);
+            log().debug("Write state response received - {}", response);
             writeStateBackoff.incrementAttempt();
+            Errors clientResponseError = checkResponseError(response).orElse(Errors.NONE);
+            String clientResponseErrorMessage = clientResponseError.message();
+            switch (clientResponseError) {
+                case NONE:
+                    // response can be a combined one for large number of requests
+                    // we need to deconstruct it
+                    WriteShareGroupStateResponse combinedResponse = (WriteShareGroupStateResponse) response.responseBody();
 
-            // response can be a combined one for large number of requests
-            // we need to deconstruct it
-            WriteShareGroupStateResponse combinedResponse = (WriteShareGroupStateResponse) response.responseBody();
+                    for (WriteShareGroupStateResponseData.WriteStateResult writeStateResult : combinedResponse.data().results()) {
+                        if (writeStateResult.topicId().equals(partitionKey().topicId())) {
+                            Optional<WriteShareGroupStateResponseData.PartitionResult> partitionStateData =
+                                writeStateResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
+                                    .findFirst();
 
-            for (WriteShareGroupStateResponseData.WriteStateResult writeStateResult : combinedResponse.data().results()) {
-                if (writeStateResult.topicId().equals(partitionKey().topicId())) {
-                    Optional<WriteShareGroupStateResponseData.PartitionResult> partitionStateData =
-                        writeStateResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
-                            .findFirst();
-
-                    if (partitionStateData.isPresent()) {
-                        Errors error = Errors.forCode(partitionStateData.get().errorCode());
-                        switch (error) {
-                            case NONE:
-                                writeStateBackoff.resetAttempts();
-                                WriteShareGroupStateResponseData.WriteStateResult result = WriteShareGroupStateResponse.toResponseWriteStateResult(
-                                    partitionKey().topicId(),
-                                    Collections.singletonList(partitionStateData.get())
-                                );
-                                this.result.complete(new WriteShareGroupStateResponse(
-                                    new WriteShareGroupStateResponseData().setResults(Collections.singletonList(result))));
-                                return;
-
-                            // check retriable errors
-                            case COORDINATOR_NOT_AVAILABLE:
-                            case COORDINATOR_LOAD_IN_PROGRESS:
-                            case NOT_COORDINATOR:
-                                log.warn("Received retriable error in write state RPC for key {}: {}", partitionKey(), error.message());
-                                if (!writeStateBackoff.canAttempt()) {
-                                    log.error("Exhausted max retries for write state RPC for key {} without success.", partitionKey());
-                                    requestErrorResponse(error, new Exception("Exhausted max retries to complete write state RPC without success."));
-                                    return;
+                            if (partitionStateData.isPresent()) {
+                                Errors error = Errors.forCode(partitionStateData.get().errorCode());
+                                String errorMessage = partitionStateData.get().errorMessage();
+                                if (errorMessage == null || errorMessage.isEmpty()) {
+                                    errorMessage = error.message();
                                 }
-                                super.resetCoordinatorNode();
-                                timer.add(new PersisterTimerTask(writeStateBackoff.backOff(), this));
-                                return;
 
-                            default:
-                                log.error("Unable to perform write state RPC for key {}: {}", partitionKey(), error.message());
-                                requestErrorResponse(error, null);
-                                return;
+                                switch (error) {
+                                    case NONE:
+                                        writeStateBackoff.resetAttempts();
+                                        WriteShareGroupStateResponseData.WriteStateResult result = WriteShareGroupStateResponse.toResponseWriteStateResult(
+                                            partitionKey().topicId(),
+                                            List.of(partitionStateData.get())
+                                        );
+                                        this.result.complete(new WriteShareGroupStateResponse(
+                                            new WriteShareGroupStateResponseData().setResults(List.of(result))));
+                                        return;
+
+                                    // check retriable errors
+                                    case COORDINATOR_NOT_AVAILABLE:
+                                    case COORDINATOR_LOAD_IN_PROGRESS:
+                                    case NOT_COORDINATOR:
+                                    case UNKNOWN_TOPIC_OR_PARTITION:
+                                        log().debug("Received retriable error in write state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        if (!writeStateBackoff.canAttempt()) {
+                                            log().error("Exhausted max retries for write state RPC for key {} without success.", partitionKey());
+                                            requestErrorResponse(error, new Exception("Exhausted max retries to complete write state RPC without success."));
+                                            return;
+                                        }
+                                        super.resetCoordinatorNode();
+                                        timer.add(new PersisterTimerTask(writeStateBackoff.backOff(), this));
+                                        return;
+
+                                    default:
+                                        log().error("Unable to perform write state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        requestErrorResponse(error, new Exception(errorMessage));
+                                        return;
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // no response found specific topic partition
-            IllegalStateException exception = new IllegalStateException(
-                "Failed to write state for share partition: " + partitionKey()
-            );
-            requestErrorResponse(Errors.forException(exception), exception);
+                    // no response found specific topic partition
+                    IllegalStateException exception = new IllegalStateException(
+                        "Failed to write state for share partition: " + partitionKey()
+                    );
+                    requestErrorResponse(Errors.forException(exception), exception);
+                    return;
+
+                case NETWORK_EXCEPTION: // Retriable client response error codes.
+                case REQUEST_TIMED_OUT:
+                    log().debug("Received retriable error in write state RPC client response for key {}: {}", partitionKey(), clientResponseErrorMessage);
+                    if (!writeStateBackoff.canAttempt()) {
+                        log().error("Exhausted max retries for write state RPC due to error in client response for key {}.", partitionKey());
+                        requestErrorResponse(clientResponseError, new Exception("Exhausted max retries to complete write state RPC without success."));
+                        return;
+                    }
+                    super.resetCoordinatorNode();
+                    timer.add(new PersisterTimerTask(writeStateBackoff.backOff(), this));
+                    return;
+
+                default:
+                    log().error("Unable to perform write state RPC due to error in client response for key {}: {}", partitionKey(), clientResponseError.code());
+                    requestErrorResponse(clientResponseError, new Exception(clientResponseErrorMessage));
+            }
         }
 
         @Override
@@ -642,9 +886,10 @@ public class PersisterStateManager {
     }
 
     public class ReadStateHandler extends PersisterStateManagerHandler {
+        private static final Logger LOG = LoggerFactory.getLogger(ReadStateHandler.class);
         private final int leaderEpoch;
         private final CompletableFuture<ReadShareGroupStateResponse> result;
-        private final BackoffManager readStateBackoff;
+        private final ExponentialBackoffManager readStateBackoff;
 
         public ReadStateHandler(
             String groupId,
@@ -660,7 +905,12 @@ public class PersisterStateManager {
             super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxRPCRetryAttempts);
             this.leaderEpoch = leaderEpoch;
             this.result = result;
-            this.readStateBackoff = new BackoffManager(maxRPCRetryAttempts, backoffMs, backoffMaxMs);
+            this.readStateBackoff = new ExponentialBackoffManager(
+                maxRPCRetryAttempts,
+                backoffMs,
+                RETRY_BACKOFF_EXP_BASE,
+                backoffMaxMs,
+                RETRY_BACKOFF_JITTER);
         }
 
         public ReadStateHandler(
@@ -685,6 +935,11 @@ public class PersisterStateManager {
         }
 
         @Override
+        protected Logger log() {
+            return LOG;
+        }
+
+        @Override
         protected String name() {
             return "ReadStateHandler";
         }
@@ -701,57 +956,85 @@ public class PersisterStateManager {
 
         @Override
         protected void handleRequestResponse(ClientResponse response) {
-            log.debug("Read state response received - {}", response);
+            log().debug("Read state response received - {}", response);
             readStateBackoff.incrementAttempt();
+            Errors clientResponseError = checkResponseError(response).orElse(Errors.NONE);
+            String clientResponseErrorMessage = clientResponseError.message();
 
-            ReadShareGroupStateResponse combinedResponse = (ReadShareGroupStateResponse) response.responseBody();
-            for (ReadShareGroupStateResponseData.ReadStateResult readStateResult : combinedResponse.data().results()) {
-                if (readStateResult.topicId().equals(partitionKey().topicId())) {
-                    Optional<ReadShareGroupStateResponseData.PartitionResult> partitionStateData =
-                        readStateResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
-                            .findFirst();
+            switch (clientResponseError) {
+                case NONE:
+                    ReadShareGroupStateResponse combinedResponse = (ReadShareGroupStateResponse) response.responseBody();
+                    for (ReadShareGroupStateResponseData.ReadStateResult readStateResult : combinedResponse.data().results()) {
+                        if (readStateResult.topicId().equals(partitionKey().topicId())) {
+                            Optional<ReadShareGroupStateResponseData.PartitionResult> partitionStateData =
+                                readStateResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
+                                    .findFirst();
 
-                    if (partitionStateData.isPresent()) {
-                        Errors error = Errors.forCode(partitionStateData.get().errorCode());
-                        switch (error) {
-                            case NONE:
-                                readStateBackoff.resetAttempts();
-                                ReadShareGroupStateResponseData.ReadStateResult result = ReadShareGroupStateResponse.toResponseReadStateResult(
-                                    partitionKey().topicId(),
-                                    Collections.singletonList(partitionStateData.get())
-                                );
-                                this.result.complete(new ReadShareGroupStateResponse(new ReadShareGroupStateResponseData()
-                                    .setResults(Collections.singletonList(result))));
-                                return;
-
-                            // check retriable errors
-                            case COORDINATOR_NOT_AVAILABLE:
-                            case COORDINATOR_LOAD_IN_PROGRESS:
-                            case NOT_COORDINATOR:
-                                log.warn("Received retriable error in read state RPC for key {}: {}", partitionKey(), error.message());
-                                if (!readStateBackoff.canAttempt()) {
-                                    log.error("Exhausted max retries for read state RPC for key {} without success.", partitionKey());
-                                    requestErrorResponse(error, new Exception("Exhausted max retries to complete read state RPC without success."));
-                                    return;
+                            if (partitionStateData.isPresent()) {
+                                Errors error = Errors.forCode(partitionStateData.get().errorCode());
+                                String errorMessage = partitionStateData.get().errorMessage();
+                                if (errorMessage == null || errorMessage.isEmpty()) {
+                                    errorMessage = error.message();
                                 }
-                                super.resetCoordinatorNode();
-                                timer.add(new PersisterTimerTask(readStateBackoff.backOff(), this));
-                                return;
 
-                            default:
-                                log.error("Unable to perform read state RPC for key {}: {}", partitionKey(), error.message());
-                                requestErrorResponse(error, null);
-                                return;
+                                switch (error) {
+                                    case NONE:
+                                        readStateBackoff.resetAttempts();
+                                        ReadShareGroupStateResponseData.ReadStateResult result = ReadShareGroupStateResponse.toResponseReadStateResult(
+                                            partitionKey().topicId(),
+                                            List.of(partitionStateData.get())
+                                        );
+                                        this.result.complete(new ReadShareGroupStateResponse(new ReadShareGroupStateResponseData()
+                                            .setResults(List.of(result))));
+                                        return;
+
+                                    // check retriable errors
+                                    case COORDINATOR_NOT_AVAILABLE:
+                                    case COORDINATOR_LOAD_IN_PROGRESS:
+                                    case NOT_COORDINATOR:
+                                    case UNKNOWN_TOPIC_OR_PARTITION:
+                                        log().debug("Received retriable error in read state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        if (!readStateBackoff.canAttempt()) {
+                                            log().error("Exhausted max retries for read state RPC for key {} without success.", partitionKey());
+                                            requestErrorResponse(error, new Exception("Exhausted max retries to complete read state RPC without success."));
+                                            return;
+                                        }
+                                        super.resetCoordinatorNode();
+                                        timer.add(new PersisterTimerTask(readStateBackoff.backOff(), this));
+                                        return;
+
+                                    default:
+                                        log().error("Unable to perform read state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        requestErrorResponse(error, new Exception(errorMessage));
+                                        return;
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // no response found specific topic partition
-            IllegalStateException exception = new IllegalStateException(
-                "Failed to read state for share partition " + partitionKey()
-            );
-            requestErrorResponse(Errors.forException(exception), exception);
+                    // no response found specific topic partition
+                    IllegalStateException exception = new IllegalStateException(
+                        "Failed to read state for share partition " + partitionKey()
+                    );
+                    requestErrorResponse(Errors.forException(exception), exception);
+                    return;
+
+                case NETWORK_EXCEPTION: // Retriable client response error codes.
+                case REQUEST_TIMED_OUT:
+                    log().debug("Received retriable error in read state RPC client response for key {}: {}", partitionKey(), clientResponseErrorMessage);
+                    if (!readStateBackoff.canAttempt()) {
+                        log().error("Exhausted max retries for read state RPC due to error in client response for key {}.", partitionKey());
+                        requestErrorResponse(clientResponseError, new Exception("Exhausted max retries to complete read state RPC without success."));
+                        return;
+                    }
+                    super.resetCoordinatorNode();
+                    timer.add(new PersisterTimerTask(readStateBackoff.backOff(), this));
+                    return;
+
+                default:
+                    log().error("Unable to perform read state RPC due to error in client response for key {}: {}", partitionKey(), clientResponseError.code());
+                    requestErrorResponse(clientResponseError, new Exception(clientResponseErrorMessage));
+            }
         }
 
         @Override
@@ -784,9 +1067,10 @@ public class PersisterStateManager {
     }
 
     public class ReadStateSummaryHandler extends PersisterStateManagerHandler {
+        private static final Logger LOG = LoggerFactory.getLogger(ReadStateSummaryHandler.class);
         private final int leaderEpoch;
         private final CompletableFuture<ReadShareGroupStateSummaryResponse> result;
-        private final BackoffManager readStateSummaryBackoff;
+        private final ExponentialBackoffManager readStateSummaryBackoff;
 
         public ReadStateSummaryHandler(
             String groupId,
@@ -802,7 +1086,12 @@ public class PersisterStateManager {
             super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxRPCRetryAttempts);
             this.leaderEpoch = leaderEpoch;
             this.result = result;
-            this.readStateSummaryBackoff = new BackoffManager(maxRPCRetryAttempts, backoffMs, backoffMaxMs);
+            this.readStateSummaryBackoff = new ExponentialBackoffManager(
+                maxRPCRetryAttempts,
+                backoffMs,
+                RETRY_BACKOFF_EXP_BASE,
+                backoffMaxMs,
+                RETRY_BACKOFF_JITTER);
         }
 
         public ReadStateSummaryHandler(
@@ -827,6 +1116,11 @@ public class PersisterStateManager {
         }
 
         @Override
+        protected Logger log() {
+            return LOG;
+        }
+
+        @Override
         protected String name() {
             return "ReadStateSummaryHandler";
         }
@@ -843,57 +1137,85 @@ public class PersisterStateManager {
 
         @Override
         protected void handleRequestResponse(ClientResponse response) {
-            log.debug("Read state summary response received - {}", response);
+            log().debug("Read state summary response received - {}", response);
             readStateSummaryBackoff.incrementAttempt();
+            Errors clientResponseError = checkResponseError(response).orElse(Errors.NONE);
+            String clientResponseErrorMessage = clientResponseError.message();
 
-            ReadShareGroupStateSummaryResponse combinedResponse = (ReadShareGroupStateSummaryResponse) response.responseBody();
-            for (ReadShareGroupStateSummaryResponseData.ReadStateSummaryResult readStateSummaryResult : combinedResponse.data().results()) {
-                if (readStateSummaryResult.topicId().equals(partitionKey().topicId())) {
-                    Optional<ReadShareGroupStateSummaryResponseData.PartitionResult> partitionStateData =
-                        readStateSummaryResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
-                            .findFirst();
+            switch (clientResponseError) {
+                case NONE:
+                    ReadShareGroupStateSummaryResponse combinedResponse = (ReadShareGroupStateSummaryResponse) response.responseBody();
+                    for (ReadShareGroupStateSummaryResponseData.ReadStateSummaryResult readStateSummaryResult : combinedResponse.data().results()) {
+                        if (readStateSummaryResult.topicId().equals(partitionKey().topicId())) {
+                            Optional<ReadShareGroupStateSummaryResponseData.PartitionResult> partitionStateData =
+                                readStateSummaryResult.partitions().stream().filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
+                                    .findFirst();
 
-                    if (partitionStateData.isPresent()) {
-                        Errors error = Errors.forCode(partitionStateData.get().errorCode());
-                        switch (error) {
-                            case NONE:
-                                readStateSummaryBackoff.resetAttempts();
-                                ReadShareGroupStateSummaryResponseData.ReadStateSummaryResult result = ReadShareGroupStateSummaryResponse.toResponseReadStateSummaryResult(
-                                    partitionKey().topicId(),
-                                    Collections.singletonList(partitionStateData.get())
-                                );
-                                this.result.complete(new ReadShareGroupStateSummaryResponse(new ReadShareGroupStateSummaryResponseData()
-                                    .setResults(Collections.singletonList(result))));
-                                return;
-
-                            // check retriable errors
-                            case COORDINATOR_NOT_AVAILABLE:
-                            case COORDINATOR_LOAD_IN_PROGRESS:
-                            case NOT_COORDINATOR:
-                                log.warn("Received retriable error in read state summary RPC for key {}: {}", partitionKey(), error.message());
-                                if (!readStateSummaryBackoff.canAttempt()) {
-                                    log.error("Exhausted max retries for read state summary RPC for key {} without success.", partitionKey());
-                                    requestErrorResponse(error, new Exception("Exhausted max retries to complete read state summary RPC without success."));
-                                    return;
+                            if (partitionStateData.isPresent()) {
+                                Errors error = Errors.forCode(partitionStateData.get().errorCode());
+                                String errorMessage = partitionStateData.get().errorMessage();
+                                if (errorMessage == null || errorMessage.isEmpty()) {
+                                    errorMessage = error.message();
                                 }
-                                super.resetCoordinatorNode();
-                                timer.add(new PersisterTimerTask(readStateSummaryBackoff.backOff(), this));
-                                return;
 
-                            default:
-                                log.error("Unable to perform read state summary RPC for key {}: {}", partitionKey(), error.message());
-                                requestErrorResponse(error, null);
-                                return;
+                                switch (error) {
+                                    case NONE:
+                                        readStateSummaryBackoff.resetAttempts();
+                                        ReadShareGroupStateSummaryResponseData.ReadStateSummaryResult result = ReadShareGroupStateSummaryResponse.toResponseReadStateSummaryResult(
+                                            partitionKey().topicId(),
+                                            List.of(partitionStateData.get())
+                                        );
+                                        this.result.complete(new ReadShareGroupStateSummaryResponse(new ReadShareGroupStateSummaryResponseData()
+                                            .setResults(List.of(result))));
+                                        return;
+
+                                    // check retriable errors
+                                    case COORDINATOR_NOT_AVAILABLE:
+                                    case COORDINATOR_LOAD_IN_PROGRESS:
+                                    case NOT_COORDINATOR:
+                                    case UNKNOWN_TOPIC_OR_PARTITION:
+                                        log().debug("Received retriable error in read state summary RPC for key {}: {}", partitionKey(), errorMessage);
+                                        if (!readStateSummaryBackoff.canAttempt()) {
+                                            log().error("Exhausted max retries for read state summary RPC for key {} without success.", partitionKey());
+                                            requestErrorResponse(error, new Exception("Exhausted max retries to complete read state summary RPC without success."));
+                                            return;
+                                        }
+                                        super.resetCoordinatorNode();
+                                        timer.add(new PersisterTimerTask(readStateSummaryBackoff.backOff(), this));
+                                        return;
+
+                                    default:
+                                        log().error("Unable to perform read state summary RPC for key {}: {}", partitionKey(), errorMessage);
+                                        requestErrorResponse(error, new Exception(errorMessage));
+                                        return;
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // no response found specific topic partition
-            IllegalStateException exception = new IllegalStateException(
-                "Failed to read state summary for share partition " + partitionKey()
-            );
-            requestErrorResponse(Errors.forException(exception), exception);
+                    // no response found specific topic partition
+                    IllegalStateException exception = new IllegalStateException(
+                        "Failed to read state summary for share partition " + partitionKey()
+                    );
+                    requestErrorResponse(Errors.forException(exception), exception);
+                    return;
+
+                case NETWORK_EXCEPTION: // Retriable client response error codes.
+                case REQUEST_TIMED_OUT:
+                    log().debug("Received retriable error in read state summary RPC client response for key {}: {}", partitionKey(), clientResponseErrorMessage);
+                    if (!readStateSummaryBackoff.canAttempt()) {
+                        log().error("Exhausted max retries for read state summary RPC due to error in client response for key {}.", partitionKey());
+                        requestErrorResponse(clientResponseError, new Exception("Exhausted max retries to complete read state summary RPC without success."));
+                        return;
+                    }
+                    super.resetCoordinatorNode();
+                    timer.add(new PersisterTimerTask(readStateSummaryBackoff.backOff(), this));
+                    return;
+
+                default:
+                    log().error("Unable to perform read state summary RPC due to error in client response for key {}: {}", partitionKey(), clientResponseError.code());
+                    requestErrorResponse(clientResponseError, new Exception(clientResponseErrorMessage));
+            }
         }
 
         @Override
@@ -926,8 +1248,9 @@ public class PersisterStateManager {
     }
 
     public class DeleteStateHandler extends PersisterStateManagerHandler {
+        private static final Logger LOG = LoggerFactory.getLogger(DeleteStateHandler.class);
         private final CompletableFuture<DeleteShareGroupStateResponse> result;
-        private final BackoffManager deleteStateBackoff;
+        private final ExponentialBackoffManager deleteStateBackoff;
 
         public DeleteStateHandler(
             String groupId,
@@ -940,7 +1263,12 @@ public class PersisterStateManager {
         ) {
             super(groupId, topicId, partition, backoffMs, backoffMaxMs, maxRPCRetryAttempts);
             this.result = result;
-            this.deleteStateBackoff = new BackoffManager(maxRPCRetryAttempts, backoffMs, backoffMaxMs);
+            this.deleteStateBackoff = new ExponentialBackoffManager(
+                maxRPCRetryAttempts,
+                backoffMs,
+                RETRY_BACKOFF_EXP_BASE,
+                backoffMaxMs,
+                RETRY_BACKOFF_JITTER);
         }
 
         public DeleteStateHandler(
@@ -962,6 +1290,11 @@ public class PersisterStateManager {
         }
 
         @Override
+        protected Logger log() {
+            return LOG;
+        }
+
+        @Override
         protected String name() {
             return "DeleteStateHandler";
         }
@@ -978,61 +1311,89 @@ public class PersisterStateManager {
 
         @Override
         protected void handleRequestResponse(ClientResponse response) {
-            log.debug("Delete state response received - {}", response);
+            log().debug("Delete state response received - {}", response);
             deleteStateBackoff.incrementAttempt();
+            Errors clientResponseError = checkResponseError(response).orElse(Errors.NONE);
+            String clientResponseErrorMessage = clientResponseError.message();
 
-            // response can be a combined one for large number of requests
-            // we need to deconstruct it
-            DeleteShareGroupStateResponse combinedResponse = (DeleteShareGroupStateResponse) response.responseBody();
+            switch (clientResponseError) {
+                case NONE:
+                    // response can be a combined one for large number of requests
+                    // we need to deconstruct it
+                    DeleteShareGroupStateResponse combinedResponse = (DeleteShareGroupStateResponse) response.responseBody();
 
-            for (DeleteShareGroupStateResponseData.DeleteStateResult deleteStateResult : combinedResponse.data().results()) {
-                if (deleteStateResult.topicId().equals(partitionKey().topicId())) {
-                    Optional<DeleteShareGroupStateResponseData.PartitionResult> partitionStateData =
-                        deleteStateResult.partitions().stream()
-                            .filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
-                            .findFirst();
+                    for (DeleteShareGroupStateResponseData.DeleteStateResult deleteStateResult : combinedResponse.data().results()) {
+                        if (deleteStateResult.topicId().equals(partitionKey().topicId())) {
+                            Optional<DeleteShareGroupStateResponseData.PartitionResult> partitionStateData =
+                                deleteStateResult.partitions().stream()
+                                    .filter(partitionResult -> partitionResult.partition() == partitionKey().partition())
+                                    .findFirst();
 
-                    if (partitionStateData.isPresent()) {
-                        Errors error = Errors.forCode(partitionStateData.get().errorCode());
-                        switch (error) {
-                            case NONE:
-                                deleteStateBackoff.resetAttempts();
-                                DeleteShareGroupStateResponseData.DeleteStateResult result = DeleteShareGroupStateResponse.toResponseDeleteStateResult(
-                                    partitionKey().topicId(),
-                                    List.of(partitionStateData.get())
-                                );
-                                this.result.complete(new DeleteShareGroupStateResponse(
-                                    new DeleteShareGroupStateResponseData().setResults(List.of(result))));
-                                return;
-
-                            // check retriable errors
-                            case COORDINATOR_NOT_AVAILABLE:
-                            case COORDINATOR_LOAD_IN_PROGRESS:
-                            case NOT_COORDINATOR:
-                                log.warn("Received retriable error in delete state RPC for key {}: {}", partitionKey(), error.message());
-                                if (!deleteStateBackoff.canAttempt()) {
-                                    log.error("Exhausted max retries for delete state RPC for key {} without success.", partitionKey());
-                                    requestErrorResponse(error, new Exception("Exhausted max retries to complete delete state RPC without success."));
-                                    return;
+                            if (partitionStateData.isPresent()) {
+                                Errors error = Errors.forCode(partitionStateData.get().errorCode());
+                                String errorMessage = partitionStateData.get().errorMessage();
+                                if (errorMessage == null || errorMessage.isEmpty()) {
+                                    errorMessage = error.message();
                                 }
-                                super.resetCoordinatorNode();
-                                timer.add(new PersisterTimerTask(deleteStateBackoff.backOff(), this));
-                                return;
 
-                            default:
-                                log.error("Unable to perform delete state RPC for key {}: {}", partitionKey(), error.message());
-                                requestErrorResponse(error, null);
-                                return;
+                                switch (error) {
+                                    case NONE:
+                                        deleteStateBackoff.resetAttempts();
+                                        DeleteShareGroupStateResponseData.DeleteStateResult result = DeleteShareGroupStateResponse.toResponseDeleteStateResult(
+                                            partitionKey().topicId(),
+                                            List.of(partitionStateData.get())
+                                        );
+                                        this.result.complete(new DeleteShareGroupStateResponse(
+                                            new DeleteShareGroupStateResponseData().setResults(List.of(result))));
+                                        return;
+
+                                    // check retriable errors
+                                    case COORDINATOR_NOT_AVAILABLE:
+                                    case COORDINATOR_LOAD_IN_PROGRESS:
+                                    case NOT_COORDINATOR:
+                                    case UNKNOWN_TOPIC_OR_PARTITION:
+                                        log().debug("Received retriable error in delete state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        if (!deleteStateBackoff.canAttempt()) {
+                                            log().error("Exhausted max retries for delete state RPC for key {} without success.", partitionKey());
+                                            requestErrorResponse(error, new Exception("Exhausted max retries to complete delete state RPC without success."));
+                                            return;
+                                        }
+                                        super.resetCoordinatorNode();
+                                        timer.add(new PersisterTimerTask(deleteStateBackoff.backOff(), this));
+                                        return;
+
+                                    default:
+                                        log().error("Unable to perform delete state RPC for key {}: {}", partitionKey(), errorMessage);
+                                        requestErrorResponse(error, new Exception(errorMessage));
+                                        return;
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // no response found specific topic partition
-            IllegalStateException exception = new IllegalStateException(
-                "Failed to delete state for share partition: " + partitionKey()
-            );
-            requestErrorResponse(Errors.forException(exception), exception);
+                    // no response found specific topic partition
+                    IllegalStateException exception = new IllegalStateException(
+                        "Failed to delete state for share partition: " + partitionKey()
+                    );
+                    requestErrorResponse(Errors.forException(exception), exception);
+                    return;
+
+                case NETWORK_EXCEPTION: // Retriable client response error codes.
+                case REQUEST_TIMED_OUT:
+                    log().debug("Received retriable error in delete state RPC client response for key {}: {}", partitionKey(), clientResponseErrorMessage);
+                    if (!deleteStateBackoff.canAttempt()) {
+                        log().error("Exhausted max retries for delete state RPC due to error in client response for key {}.", partitionKey());
+                        requestErrorResponse(clientResponseError, new Exception("Exhausted max retries to complete delete state RPC without success."));
+                        return;
+                    }
+                    super.resetCoordinatorNode();
+                    timer.add(new PersisterTimerTask(deleteStateBackoff.backOff(), this));
+                    return;
+
+                default:
+                    log().error("Unable to perform delete state RPC due to error in client response for key {}: {}", partitionKey(), clientResponseError.code());
+                    requestErrorResponse(clientResponseError, new Exception(clientResponseErrorMessage));
+            }
         }
 
         @Override
@@ -1123,10 +1484,10 @@ public class PersisterStateManager {
                         // fatal failure, cannot retry or progress
                         // fail the RPC
                         handler.findCoordinatorErrorResponse(Errors.COORDINATOR_NOT_AVAILABLE, Errors.COORDINATOR_NOT_AVAILABLE.exception());
-                        return Collections.emptyList();
+                        return List.of();
                     }
                     log.debug("Sending find coordinator RPC");
-                    return Collections.singletonList(new RequestAndCompletionHandler(
+                    return List.of(new RequestAndCompletionHandler(
                         time.milliseconds(),
                         randomNode,
                         handler.findShareCoordinatorBuilder(),
@@ -1151,7 +1512,7 @@ public class PersisterStateManager {
             //      write: [w1, w2],
             //      read: [r1, r2],
             //      delete: [d1],
-            //      summary: [s1]
+            //      summary: [s1],
             //   }
             //   group2: {
             //      write: [w3, w4]
@@ -1241,18 +1602,14 @@ public class PersisterStateManager {
      */
     private static class RequestCoalescerHelper {
         public static AbstractRequest.Builder<? extends AbstractRequest> coalesceRequests(String groupId, RPCType rpcType, List<? extends PersisterStateManagerHandler> handlers) {
-            switch (rpcType) {
-                case WRITE:
-                    return coalesceWrites(groupId, handlers);
-                case READ:
-                    return coalesceReads(groupId, handlers);
-                case SUMMARY:
-                    return coalesceReadSummaries(groupId, handlers);
-                case DELETE:
-                    return coalesceDeletes(groupId, handlers);
-                default:
-                    throw new RuntimeException("Unknown rpc type: " + rpcType);
-            }
+            return switch (rpcType) {
+                case WRITE -> coalesceWrites(groupId, handlers);
+                case READ -> coalesceReads(groupId, handlers);
+                case SUMMARY -> coalesceReadSummaries(groupId, handlers);
+                case DELETE -> coalesceDeletes(groupId, handlers);
+                case INITIALIZE -> coalesceInitializations(groupId, handlers);
+                default -> throw new RuntimeException("Unknown rpc type: " + rpcType);
+            };
         }
 
         private static AbstractRequest.Builder<? extends AbstractRequest> coalesceWrites(String groupId, List<? extends PersisterStateManagerHandler> handlers) {
@@ -1267,6 +1624,7 @@ public class PersisterStateManager {
                             .setStateEpoch(handler.stateEpoch)
                             .setLeaderEpoch(handler.leaderEpoch)
                             .setStartOffset(handler.startOffset)
+                            .setDeliveryCompleteCount(handler.deliveryCompleteCount)
                             .setStateBatches(handler.batches.stream()
                                 .map(batch -> new WriteShareGroupStateRequestData.StateBatch()
                                     .setFirstOffset(batch.firstOffset())
@@ -1327,8 +1685,7 @@ public class PersisterStateManager {
                     .map(entry -> new ReadShareGroupStateSummaryRequestData.ReadStateSummaryData()
                         .setTopicId(entry.getKey())
                         .setPartitions(entry.getValue()))
-                    .collect(Collectors.toList())),
-                true
+                    .collect(Collectors.toList()))
             );
         }
 
@@ -1348,6 +1705,29 @@ public class PersisterStateManager {
                 .setGroupId(groupId)
                 .setTopics(partitionData.entrySet().stream()
                     .map(entry -> new DeleteShareGroupStateRequestData.DeleteStateData()
+                        .setTopicId(entry.getKey())
+                        .setPartitions(entry.getValue()))
+                    .toList()));
+        }
+
+        private static AbstractRequest.Builder<? extends AbstractRequest> coalesceInitializations(String groupId, List<? extends PersisterStateManagerHandler> handlers) {
+            Map<Uuid, List<InitializeShareGroupStateRequestData.PartitionData>> partitionData = new HashMap<>();
+            handlers.forEach(persHandler -> {
+                assert persHandler instanceof InitializeStateHandler;
+                InitializeStateHandler handler = (InitializeStateHandler) persHandler;
+                partitionData.computeIfAbsent(handler.partitionKey().topicId(), topicId -> new LinkedList<>())
+                    .add(
+                        new InitializeShareGroupStateRequestData.PartitionData()
+                            .setPartition(handler.partitionKey().partition())
+                            .setStateEpoch(handler.stateEpoch)
+                            .setStartOffset(handler.startOffset)
+                    );
+            });
+
+            return new InitializeShareGroupStateRequest.Builder(new InitializeShareGroupStateRequestData()
+                .setGroupId(groupId)
+                .setTopics(partitionData.entrySet().stream()
+                    .map(entry -> new InitializeShareGroupStateRequestData.InitializeStateData()
                         .setTopicId(entry.getKey())
                         .setPartitions(entry.getValue()))
                     .toList()));

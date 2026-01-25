@@ -20,6 +20,7 @@ import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.internals.NetworkClientDelegate.PollResult;
 import org.apache.kafka.clients.consumer.internals.events.ApplicationEventProcessor;
+import org.apache.kafka.clients.consumer.internals.events.AsyncPollEvent;
 import org.apache.kafka.clients.consumer.internals.events.BackgroundEventHandler;
 import org.apache.kafka.clients.consumer.internals.events.ErrorEvent;
 import org.apache.kafka.clients.consumer.internals.metrics.HeartbeatMetricsManager;
@@ -36,6 +37,7 @@ import org.slf4j.Logger;
 import java.util.Collections;
 
 import static org.apache.kafka.clients.consumer.internals.NetworkClientDelegate.PollResult.EMPTY;
+import static org.apache.kafka.clients.consumer.internals.RequestState.RETRY_BACKOFF_JITTER;
 
 /**
  * <p>Manages the request creation and response handling for the heartbeat. The module creates a
@@ -51,7 +53,7 @@ import static org.apache.kafka.clients.consumer.internals.NetworkClientDelegate.
  * <p>If the member got kicked out of a group, it will try to give up the current assignment by invoking {@code
  * OnPartitionsLost} before attempting to join again with a zero epoch.
  *
- * <p>If the coordinator not is not found, we will skip sending the heartbeat and try to find a coordinator first.
+ * <p>If the coordinator is not found, we will skip sending the heartbeat and try to find a coordinator first.
  *
  * <p>When the member completes the assignment reconciliation, the {@link HeartbeatRequestState} will be reset so
  * that a heartbeat will be sent in the next event loop.
@@ -63,8 +65,9 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
     protected final Logger logger;
 
     /**
-     * Time that the group coordinator will wait on member to revoke its partitions. This is provided by the group
-     * coordinator in the heartbeat
+     * Max time allowed between invocations of poll, defined in the {@link ConsumerConfig#MAX_POLL_INTERVAL_MS_CONFIG} config.
+     * This is sent to the coordinator in the first heartbeat to join a group, to be used as rebalance timeout.
+     * Also, the consumer will proactively rejoin the group on a call to poll if this time has expired.
      */
     protected final int maxPollIntervalMs;
 
@@ -112,7 +115,7 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
         long retryBackoffMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
         long retryBackoffMaxMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MAX_MS_CONFIG);
         this.heartbeatRequestState = new HeartbeatRequestState(logContext, time, 0, retryBackoffMs,
-                retryBackoffMaxMs, maxPollIntervalMs);
+                retryBackoffMaxMs, RETRY_BACKOFF_JITTER);
         this.pollTimer = time.timer(maxPollIntervalMs);
         this.metricsManager = metricsManager;
     }
@@ -178,11 +181,12 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
             // We can ignore the leave response because we can join before or after receiving the response.
             heartbeatRequestState.reset();
             resetHeartbeatState();
-            return new NetworkClientDelegate.PollResult(heartbeatRequestState.heartbeatIntervalMs, Collections.singletonList(leaveHeartbeat));
+            return new NetworkClientDelegate.PollResult(heartbeatRequestState.heartbeatIntervalMs(), Collections.singletonList(leaveHeartbeat));
         }
 
-        // Case 1: The member is leaving
-        boolean heartbeatNow = membershipManager().state() == MemberState.LEAVING ||
+        // Case 1: The member state is LEAVING - if the member is a share consumer, we should immediately send leave;
+        // if the member is an async consumer, this will also depend on leavingGroupOperation.
+        boolean heartbeatNow = shouldSendLeaveHeartbeatNow() ||
             // Case 2: The member state indicates it should send a heartbeat without waiting for the interval,
             // and there is no heartbeat request currently in-flight
             (membershipManager().shouldHeartbeatNow() && !heartbeatRequestState.requestInFlight());
@@ -192,7 +196,7 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
         }
 
         NetworkClientDelegate.UnsentRequest request = makeHeartbeatRequest(currentTimeMs, false);
-        return new NetworkClientDelegate.PollResult(heartbeatRequestState.heartbeatIntervalMs, Collections.singletonList(request));
+        return new NetworkClientDelegate.PollResult(heartbeatRequestState.heartbeatIntervalMs(), Collections.singletonList(request));
     }
 
     /**
@@ -200,6 +204,11 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
      * This is provided so that the {@link ApplicationEventProcessor} can access the state for querying or updating.
      */
     public abstract AbstractMembershipManager<R> membershipManager();
+
+    /**
+     * @return the member should send leave heartbeat immediately or not
+     */
+    protected abstract boolean shouldSendLeaveHeartbeatNow();
 
     /**
      * Generate a heartbeat request to leave the group if the state is still LEAVING when this is
@@ -222,7 +231,7 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
     public PollResult pollOnClose(long currentTimeMs) {
         if (membershipManager().isLeavingGroup()) {
             NetworkClientDelegate.UnsentRequest request = makeHeartbeatRequest(currentTimeMs, true);
-            return new NetworkClientDelegate.PollResult(heartbeatRequestState.heartbeatIntervalMs, Collections.singletonList(request));
+            return new NetworkClientDelegate.PollResult(heartbeatRequestState.heartbeatIntervalMs(), Collections.singletonList(request));
         }
         return EMPTY;
     }
@@ -233,7 +242,7 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
      * are sent, so blocking for longer than the heartbeat interval might mean the application thread is not
      * responsive to changes.
      *
-     * <p>Similarly, we may have to unblock the application thread to send a `PollApplicationEvent` to make sure
+     * <p>Similarly, we may have to unblock the application thread to send a {@link AsyncPollEvent} to make sure
      * our poll timer will not expire while we are polling.
      *
      * <p>In the event that heartbeats are currently being skipped, this still returns the next heartbeat
@@ -384,6 +393,14 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
                 handleFatalFailure(error.exception(exception.getMessage()));
                 break;
 
+            case TOPIC_AUTHORIZATION_FAILED:
+                logger.error("{} failed for member {} with state {} due to {}: {}", heartbeatRequestName(),
+                        membershipManager().memberId, membershipManager().state, error, errorMessage);
+                // Propagate auth error received in HB so that it's returned on poll.
+                // Member should stay in its current state so it can recover if ever the missing ACLs are added.
+                backgroundEventHandler.add(new ErrorEvent(error.exception()));
+                break;
+
             case INVALID_REQUEST:
             case GROUP_MAX_SIZE_REACHED:
             case UNSUPPORTED_ASSIGNOR:
@@ -413,6 +430,22 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
                 logger.error("{} failed due to {}: {}", heartbeatRequestName(), error, errorMessage);
                 handleFatalFailure(error.exception("Invalid RE2J SubscriptionPattern provided in the call to " +
                     "subscribe. " + errorMessage));
+                break;
+
+            case GROUP_ID_NOT_FOUND:
+                // If the group doesn't exist (e.g., member never joined due to InvalidTopicException),
+                // GROUP_ID_NOT_FOUND should be ignored - the leave is effectively complete.
+                // When a leave heartbeat (epoch=-1) is sent, the state transitions synchronously
+                // from LEAVING to UNSUBSCRIBED in onHeartbeatRequestGenerated() before the request is sent.
+                if (membershipManager().state() == MemberState.UNSUBSCRIBED) {
+                    logger.info("{} received GROUP_ID_NOT_FOUND for group {} while unsubscribed. ",
+                            heartbeatRequestName(), membershipManager().groupId());
+                    membershipManager().onHeartbeatRequestSkipped();
+                } else {
+                    // Else, this is a fatal error, we should throw it and transition to fatal state.
+                    logger.error("{} failed due to unexpected error {}: {}", heartbeatRequestName(), error, errorMessage);
+                    handleFatalFailure(error.exception(errorMessage));
+                }
                 break;
 
             default:
@@ -504,85 +537,4 @@ public abstract class AbstractHeartbeatRequestManager<R extends AbstractResponse
      * @return The heartbeat interval
      */
     public abstract long heartbeatIntervalForResponse(R response);
-
-    /**
-     * Represents the state of a heartbeat request, including logic for timing, retries, and exponential backoff. The
-     * object extends {@link RequestState} to enable exponential backoff and duplicated request handling. The two fields
-     * that it holds are:
-     */
-    static class HeartbeatRequestState extends RequestState {
-        /**
-         *  heartbeatTimer tracks the time since the last heartbeat was sent
-         */
-        private final Timer heartbeatTimer;
-
-        /**
-         * The heartbeat interval which is acquired/updated through the heartbeat request
-         */
-        private long heartbeatIntervalMs;
-
-        HeartbeatRequestState(
-                final LogContext logContext,
-                final Time time,
-                final long heartbeatIntervalMs,
-                final long retryBackoffMs,
-                final long retryBackoffMaxMs,
-                final double jitter) {
-            super(logContext, HeartbeatRequestState.class.getName(), retryBackoffMs, 2, retryBackoffMaxMs, jitter);
-            this.heartbeatIntervalMs = heartbeatIntervalMs;
-            this.heartbeatTimer = time.timer(heartbeatIntervalMs);
-        }
-
-        private void update(final long currentTimeMs) {
-            this.heartbeatTimer.update(currentTimeMs);
-        }
-
-        void resetTimer() {
-            this.heartbeatTimer.reset(heartbeatIntervalMs);
-        }
-
-        @Override
-        public String toStringBase() {
-            return super.toStringBase() +
-                ", remainingMs=" + heartbeatTimer.remainingMs() +
-                ", heartbeatIntervalMs=" + heartbeatIntervalMs;
-        }
-
-        /**
-         * Check if a heartbeat request should be sent on the current time. A heartbeat should be
-         * sent if the heartbeat timer has expired, backoff has expired, and there is no request
-         * in-flight.
-         */
-        @Override
-        public boolean canSendRequest(final long currentTimeMs) {
-            update(currentTimeMs);
-            return heartbeatTimer.isExpired() && super.canSendRequest(currentTimeMs);
-        }
-
-        long timeToNextHeartbeatMs(final long currentTimeMs) {
-            if (heartbeatTimer.isExpired()) {
-                return this.remainingBackoffMs(currentTimeMs);
-            }
-            return heartbeatTimer.remainingMs();
-        }
-
-        @Override
-        public void onFailedAttempt(final long currentTimeMs) {
-            // Reset timer to allow sending HB after a failure without waiting for the interval.
-            // After a failure, a next HB may be needed with backoff (ex. errors that lead to
-            // retries, like coordinator load error), or immediately (ex. errors that lead to
-            // rejoining, like fencing errors).
-            heartbeatTimer.reset(0);
-            super.onFailedAttempt(currentTimeMs);
-        }
-
-        private void updateHeartbeatIntervalMs(final long heartbeatIntervalMs) {
-            if (this.heartbeatIntervalMs == heartbeatIntervalMs) {
-                // no need to update the timer if the interval hasn't changed
-                return;
-            }
-            this.heartbeatIntervalMs = heartbeatIntervalMs;
-            this.heartbeatTimer.updateAndReset(heartbeatIntervalMs);
-        }
-    }
 }

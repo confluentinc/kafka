@@ -20,10 +20,12 @@ package org.apache.kafka.common.security.oauthbearer.internals.secured;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.ConnectionMode;
 import org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule;
 import org.apache.kafka.common.security.ssl.DefaultSslEngineFactory;
 import org.apache.kafka.common.security.ssl.SslFactory;
+import org.apache.kafka.common.utils.Utils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +54,10 @@ public class JaasOptionsUtils {
         this.options = options;
     }
 
+    public JaasOptionsUtils(String saslMechanism, List<AppConfigurationEntry> jaasConfigEntries) {
+        this.options = getOptions(saslMechanism, jaasConfigEntries);
+    }
+
     public static Map<String, Object> getOptions(String saslMechanism, List<AppConfigurationEntry> jaasConfigEntries) {
         validateOAuthMechanismAndNonNullJaasConfig(saslMechanism, jaasConfigEntries);
         return Collections.unmodifiableMap(jaasConfigEntries.get(0).getOptions());
@@ -75,6 +81,10 @@ public class JaasOptionsUtils {
         }
     }
 
+    public boolean containsKey(String name) {
+        return options.containsKey(name);
+    }
+
     public boolean shouldCreateSSLSocketFactory(URL url) {
         return url.getProtocol().equalsIgnoreCase("https");
     }
@@ -95,30 +105,29 @@ public class JaasOptionsUtils {
         return socketFactory;
     }
 
-    public String validateString(String name) throws ValidateException {
+    public String validatePassword(String name) {
+        Password value = (Password) options.get(name);
+
+        if (value == null || Utils.isBlank(value.value()))
+            throw new ConfigException(String.format("The OAuth configuration option %s value is required", name));
+
+        return value.value().trim();
+    }
+
+    public String validateString(String name) {
         return validateString(name, true);
     }
 
-    public String validateString(String name, boolean isRequired) throws ValidateException {
+    public String validateString(String name, boolean isRequired) {
         String value = (String) options.get(name);
 
-        if (value == null) {
+        if (Utils.isBlank(value)) {
             if (isRequired)
-                throw new ConfigException(String.format("The OAuth configuration option %s value must be non-null", name));
+                throw new ConfigException(String.format("The OAuth configuration option %s value is required", name));
             else
                 return null;
         }
 
-        value = value.trim();
-
-        if (value.isEmpty()) {
-            if (isRequired)
-                throw new ConfigException(String.format("The OAuth configuration option %s value must not contain only whitespace", name));
-            else
-                return null;
-        }
-
-        return value;
+        return value.trim();
     }
-
 }
