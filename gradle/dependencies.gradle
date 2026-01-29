@@ -144,7 +144,7 @@ versions += [
   lz4: "1.10.1",
   mavenArtifact: "3.9.6",
   metrics: "2.2.0",
-  netty: "4.1.125.Final",
+  netty: "4.1.130.Final",
   opentelemetryProto: "1.0.0-alpha",
   protobuf: "3.25.5", // a dependency of opentelemetryProto
   pcollections: "4.0.1",
