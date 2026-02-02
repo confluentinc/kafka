@@ -25,30 +25,6 @@ path_to_jdk_cache() {
   echo "/tmp/jdk-${jdk_version}.tar.gz"
 }
 
-get_jdk_full_version() {
-  local major=$1
-  local arch=$2
-
-  # Always use simple format: {major}-linux-{arch}
-  echo "${major}-linux-${arch}"
-}
-
-get_jdk_s3_filename() {
-  local jdk_major=$1
-  local jdk_arch=$2
-
-  # Map major version to actual S3 filename for newer JDKs
-  case $jdk_major in
-    25)
-      echo "25.0.2-linux-${jdk_arch}"
-      ;;
-    *)
-      # For older versions, use simple format
-      echo "${jdk_major}-linux-${jdk_arch}"
-      ;;
-  esac
-}
-
 fetch_jdk_tgz() {
   jdk_version=$1
   jdk_major=$2
@@ -58,38 +34,21 @@ fetch_jdk_tgz() {
 
   if [ ! -e $path ]; then
     mkdir -p $(dirname $path)
-    echo "Fetching JDK version $jdk_version (major: $jdk_major) to $path"
 
-    # Map to actual S3 filename
-    s3_filename=$(get_jdk_s3_filename $jdk_major $jdk_arch)
-    echo "Mapped JDK version $jdk_version to S3 filename: $s3_filename"
-
-    # JDK 25+ uses the new path structure with /jdk/ prefix
-    if [ "$jdk_major" -ge 25 ] 2>/dev/null; then
-      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-${s3_filename}.tar.gz"
+    # JDK 25+ uses new path structure with /jdk/ prefix and full version
+    if [ "$jdk_major" = "25" ]; then
+      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-25.0.2-linux-${jdk_arch}.tar.gz"
     else
-      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${s3_filename}.tar.gz"
+      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${jdk_version}.tar.gz"
     fi
 
-    echo "Downloading from: $s3_url"
-    if ! curl --retry 5 -f -s -L "$s3_url" -o $path; then
-      echo "ERROR: Failed to download JDK from $s3_url"
-      echo "Please verify the file exists at the specified location."
-      rm -f $path
-      exit 1
-    fi
-    echo "Successfully downloaded JDK to $path"
+    curl --retry 5 -s -L "$s3_url" -o $path
   fi
 }
 
 JDK_MAJOR="${JDK_MAJOR:-17}"
 JDK_ARCH="${JDK_ARCH:-x64}"
-
-# Construct JDK_FULL if not already set
-if [ -z "${JDK_FULL}" ]; then
-    JDK_FULL=$(get_jdk_full_version $JDK_MAJOR $JDK_ARCH)
-fi
-echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH JDK_FULL=$JDK_FULL"
+JDK_FULL="${JDK_FULL:-${JDK_MAJOR}-linux-${JDK_ARCH}}"
 export DEBIAN_FRONTEND=noninteractive
 
 if [ -z `which javac` ]; then
