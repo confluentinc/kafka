@@ -32,20 +32,35 @@ fetch_jdk_tgz() {
 
   if [ ! -e $path ]; then
     mkdir -p $(dirname $path)
-    curl --retry 5 -s -L "https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${jdk_version}.tar.gz" -o $path
+    # Extract major version to determine S3 path structure
+    jdk_major=$(echo $jdk_version | cut -d'-' -f1)
+
+    # JDK 24+ uses the new path structure with /jdk/ prefix
+    if [ "$jdk_major" -ge 24 ] 2>/dev/null; then
+      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-${jdk_version}.tar.gz"
+    else
+      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${jdk_version}.tar.gz"
+    fi
+
+    curl --retry 5 -s -L "$s3_url" -o $path
   fi
 }
 
 JDK_MAJOR="${JDK_MAJOR:-17}"
-JDK_FULL="${JDK_FULL:-17-linux-x64}"
-echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH"
+JDK_ARCH="${JDK_ARCH:-x64}"
+
+# Construct JDK_FULL if not already set
+if [ -z "${JDK_FULL}" ]; then
+    JDK_FULL="${JDK_MAJOR}-linux-${JDK_ARCH}"
+fi
+echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH JDK_FULL=$JDK_FULL"
 export DEBIAN_FRONTEND=noninteractive
 
 if [ -z `which javac` ]; then
     apt-get -y update
     apt-get install -y software-properties-common python-software-properties binutils java-common
 
-    echo "===> Installing JDK..." 
+    echo "===> Installing JDK..."
 
     mkdir -p /opt/jdk
     cd /opt/jdk
@@ -54,7 +69,7 @@ if [ -z `which javac` ]; then
     cd $JDK_MAJOR
     fetch_jdk_tgz $JDK_FULL
     tar x --strip-components=1 -zf $(path_to_jdk_cache $JDK_FULL)
-    for bin in /opt/jdk/$JDK_MAJOR/bin/* ; do 
+    for bin in /opt/jdk/$JDK_MAJOR/bin/* ; do
       name=$(basename $bin)
       update-alternatives --install /usr/bin/$name $name $bin 1081 && update-alternatives --set $name $bin
     done
