@@ -29,34 +29,46 @@ get_jdk_full_version() {
   local major=$1
   local arch=$2
 
-  # Map major version to full version for newer JDKs
-  case $major in
+  # Always use simple format: {major}-linux-{arch}
+  echo "${major}-linux-${arch}"
+}
+
+get_jdk_s3_filename() {
+  local jdk_major=$1
+  local jdk_arch=$2
+
+  # Map major version to actual S3 filename for newer JDKs
+  case $jdk_major in
     25)
-      echo "25.0.2-linux-${arch}"
+      echo "25.0.2-linux-${jdk_arch}"
       ;;
     *)
-      # For older versions, use major version as-is
-      echo "${major}-linux-${arch}"
+      # For older versions, use simple format
+      echo "${jdk_major}-linux-${jdk_arch}"
       ;;
   esac
 }
 
 fetch_jdk_tgz() {
   jdk_version=$1
+  jdk_major=$2
+  jdk_arch=$3
 
   path=$(path_to_jdk_cache $jdk_version)
 
   if [ ! -e $path ]; then
     mkdir -p $(dirname $path)
-    # Extract major version to determine S3 path structure
-    jdk_major=$(echo $jdk_version | cut -d'-' -f1)
     echo "Fetching JDK version $jdk_version (major: $jdk_major) to $path"
+
+    # Map to actual S3 filename
+    s3_filename=$(get_jdk_s3_filename $jdk_major $jdk_arch)
+    echo "Mapped JDK version $jdk_version to S3 filename: $s3_filename"
 
     # JDK 25+ uses the new path structure with /jdk/ prefix
     if [ "$jdk_major" -ge 25 ] 2>/dev/null; then
-      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-${jdk_version}.tar.gz"
+      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-${s3_filename}.tar.gz"
     else
-      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${jdk_version}.tar.gz"
+      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${s3_filename}.tar.gz"
     fi
 
     echo "Downloading from: $s3_url"
@@ -91,7 +103,7 @@ if [ -z `which javac` ]; then
     rm -rf $JDK_MAJOR
     mkdir -p $JDK_MAJOR
     cd $JDK_MAJOR
-    fetch_jdk_tgz $JDK_FULL
+    fetch_jdk_tgz $JDK_FULL $JDK_MAJOR $JDK_ARCH
     tar x --strip-components=1 -zf $(path_to_jdk_cache $JDK_FULL)
     for bin in /opt/jdk/$JDK_MAJOR/bin/* ; do
       name=$(basename $bin)
