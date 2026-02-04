@@ -50,7 +50,7 @@ fetch_jdk_tgz() {
 }
 
 # JDK_VERSION: Full version string (e.g., "17", "25.0.2", "8u202")
-# Following Oracle Runtime.Version naming: https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Runtime.Version.html
+# Follows Oracle Runtime.Version naming for feature-only ("17") and feature.interim.update ("25.0.2") formats
 # Supports both JDK_VERSION (new) and JDK_MAJOR (legacy) for backward compatibility
 JDK_VERSION="${JDK_VERSION:-${JDK_MAJOR:-17}}"
 JDK_ARCH="${JDK_ARCH:-x64}"
