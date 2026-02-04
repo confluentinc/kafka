@@ -25,6 +25,10 @@ path_to_jdk_cache() {
   echo "/tmp/jdk-${jdk_version}.tar.gz"
 }
 
+# Fetches JDK tarball from S3
+# Arguments:
+#   jdk_version - Full version string (e.g., "17", "25.0.2", "8u202")
+#   jdk_arch    - CPU architecture: "x64" or "aarch64"
 fetch_jdk_tgz() {
   jdk_version=$1
   jdk_arch=$2
@@ -52,6 +56,10 @@ JDK_VERSION="${JDK_VERSION:-${JDK_MAJOR:-17}}"
 JDK_ARCH="${JDK_ARCH:-x64}"
 # Extract major version for install directory (e.g., "25.0.2" -> "25", "8u202" -> "8")
 JDK_MAJOR=$(echo "$JDK_VERSION" | sed -E 's/^([0-9]+).*/\1/')
+if [ -z "$JDK_MAJOR" ]; then
+  echo "ERROR: Invalid JDK_VERSION format: ${JDK_VERSION}. Expected format: 17, 25.0.2, 8u202, etc."
+  exit 1
+fi
 export DEBIAN_FRONTEND=noninteractive
 
 echo "===> JDK Configuration: JDK_VERSION=${JDK_VERSION}, JDK_ARCH=${JDK_ARCH}, JDK_MAJOR=${JDK_MAJOR}"
