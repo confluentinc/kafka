@@ -52,11 +52,13 @@ fetch_jdk_tgz() {
 # JDK_VERSION: Full version string (e.g., "17", "25.0.2", "8u202")
 # Follows Oracle Runtime.Version naming for feature-only ("17") and feature.interim.update ("25.0.2") formats
 # Supports both JDK_VERSION (new) and JDK_MAJOR (legacy) for backward compatibility
-JDK_VERSION="${JDK_VERSION:-${JDK_MAJOR:-17}}"
+if [ -z "$JDK_VERSION" ]; then
+  JDK_VERSION="${JDK_MAJOR:-17}"
+fi
 JDK_ARCH="${JDK_ARCH:-x64}"
 # Extract major version for install directory (e.g., "25.0.2" -> "25", "8u202" -> "8")
-JDK_MAJOR=$(echo "$JDK_VERSION" | sed -E 's/^([0-9]+).*/\1/')
-if [ -z "$JDK_MAJOR" ]; then
+JDK_MAJOR=$(echo "$JDK_VERSION" | sed -nE 's/^([0-9]+).*/\1/p')
+if [ -z "$JDK_MAJOR" ] || ! [[ "$JDK_MAJOR" =~ ^[0-9]+$ ]]; then
   echo "ERROR: Invalid JDK_VERSION format: ${JDK_VERSION}. Expected format: 17, 25.0.2, 8u202, etc."
   exit 1
 fi
