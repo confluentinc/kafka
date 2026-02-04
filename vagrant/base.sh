@@ -27,29 +27,34 @@ path_to_jdk_cache() {
 
 fetch_jdk_tgz() {
   jdk_version=$1
-  jdk_major=$2
-  jdk_arch=$3
+  jdk_arch=$2
 
   path=$(path_to_jdk_cache $jdk_version)
 
   if [ ! -e $path ]; then
     mkdir -p $(dirname $path)
 
-    # JDK 25+ uses new path structure with /jdk/ prefix and full version
-    if [ "$jdk_major" = "25" ]; then
-      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-25.0.2-linux-${jdk_arch}.tar.gz"
-    else
-      s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${jdk_version}.tar.gz"
-    fi
+    # All JDKs use unified path: kafka-packages/jdk/jdk-{version}-linux-{arch}.tar.gz
+    # Version can be: "17", "25.0.2", "8u202", etc.
+    s3_url="https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-${jdk_version}-linux-${jdk_arch}.tar.gz"
 
+    echo "===> Downloading JDK from: ${s3_url}"
     curl --retry 5 -s -L "$s3_url" -o $path
+  else
+    echo "===> Using cached JDK: ${path}"
   fi
 }
 
-JDK_MAJOR="${JDK_MAJOR:-17}"
+# JDK_VERSION: Full version string (e.g., "17", "25.0.2", "8u202")
+# Following Oracle Runtime.Version naming: https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Runtime.Version.html
+# Supports both JDK_VERSION (new) and JDK_MAJOR (legacy) for backward compatibility
+JDK_VERSION="${JDK_VERSION:-${JDK_MAJOR:-17}}"
 JDK_ARCH="${JDK_ARCH:-x64}"
-JDK_FULL="${JDK_FULL:-${JDK_MAJOR}-linux-${JDK_ARCH}}"
+# Extract major version for install directory (e.g., "25.0.2" -> "25", "8u202" -> "8")
+JDK_MAJOR=$(echo "$JDK_VERSION" | sed -E 's/^([0-9]+).*/\1/')
 export DEBIAN_FRONTEND=noninteractive
+
+echo "===> JDK Configuration: JDK_VERSION=${JDK_VERSION}, JDK_ARCH=${JDK_ARCH}, JDK_MAJOR=${JDK_MAJOR}"
 
 if [ -z `which javac` ]; then
     apt-get -y update
@@ -62,8 +67,8 @@ if [ -z `which javac` ]; then
     rm -rf $JDK_MAJOR
     mkdir -p $JDK_MAJOR
     cd $JDK_MAJOR
-    fetch_jdk_tgz $JDK_FULL $JDK_MAJOR $JDK_ARCH
-    tar x --strip-components=1 -zf $(path_to_jdk_cache $JDK_FULL)
+    fetch_jdk_tgz $JDK_VERSION $JDK_ARCH
+    tar x --strip-components=1 -zf $(path_to_jdk_cache $JDK_VERSION)
     for bin in /opt/jdk/$JDK_MAJOR/bin/* ; do
       name=$(basename $bin)
       update-alternatives --install /usr/bin/$name $name $bin 1081 && update-alternatives --set $name $bin
