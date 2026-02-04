@@ -75,8 +75,9 @@ if [ -z `which javac` ]; then
     rm -rf $JDK_MAJOR
     mkdir -p $JDK_MAJOR
     cd $JDK_MAJOR
+    JDK_CACHE_PATH=$(path_to_jdk_cache $JDK_VERSION)
     fetch_jdk_tgz $JDK_VERSION $JDK_ARCH
-    tar x --strip-components=1 -zf $(path_to_jdk_cache $JDK_VERSION)
+    tar x --strip-components=1 -zf $JDK_CACHE_PATH
     for bin in /opt/jdk/$JDK_MAJOR/bin/* ; do
       name=$(basename $bin)
       update-alternatives --install /usr/bin/$name $name $bin 1081 && update-alternatives --set $name $bin
