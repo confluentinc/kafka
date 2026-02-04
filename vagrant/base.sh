@@ -58,7 +58,7 @@ fi
 JDK_ARCH="${JDK_ARCH:-x64}"
 # Extract major version for install directory (e.g., "25.0.2" -> "25", "8u202" -> "8")
 JDK_MAJOR=$(echo "$JDK_VERSION" | sed -nE 's/^([0-9]+).*/\1/p')
-if [ -z "$JDK_MAJOR" ] || ! [[ "$JDK_MAJOR" =~ ^[0-9]+$ ]]; then
+if [ -z "$JDK_MAJOR" ]; then
   echo "ERROR: Invalid JDK_VERSION format: ${JDK_VERSION}. Expected format: 17, 25.0.2, 8u202, etc."
   exit 1
 fi
