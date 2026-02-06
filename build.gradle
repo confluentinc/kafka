@@ -20,6 +20,45 @@ import java.nio.charset.StandardCharsets
 
 buildscript {
   repositories {
+    mavenLocal()
+    maven {
+      name "third-party-artifacts"
+      url "https://confluent-524708692776.d.codeartifact.us-west-2.amazonaws.com/maven/confluent-maven/"
+      credentials {
+        username = mavenUsername
+        password = mavenThirdPartyPassword
+      }
+    }
+    maven {
+      name "third-party-artifacts-replica"
+      url "https://confluent-524708692776.d.codeartifact.us-east-1.amazonaws.com/maven/confluent-maven/"
+      credentials {
+        username = mavenUsername
+        password = mavenThirdPartyPassword
+      }
+    }
+    maven {
+      name 'confluent-codeartifact'
+      // We do not use mavenUrl property here since that is required to be a writeable repo (i.e. maven-releases)
+      // whereas we want to use a virtual repo for fetching dependencies
+      url 'https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven/'
+      credentials {
+        username = mavenUsername
+        password = mavenPassword
+      }
+    }
+    maven {
+      name 'confluent-codeartifact-replica'
+      // We do not use mavenUrl property here since that is required to be a writeable repo (i.e. maven-releases)
+      // whereas we want to use a virtual repo for fetching dependencies
+      url 'https://confluent-519856050701.d.codeartifact.us-east-1.amazonaws.com/maven/maven/'
+      credentials {
+        username = mavenUsername
+        password = mavenPassword
+      }
+    }
+    // This is required for def mavenUrl = project.repositories.find { it.name == "MavenRepo"}.url around line 1142
+    // we should remove this once we have a better way to handle this
     mavenCentral()
   }
   apply from: "$rootDir/gradle/dependencies.gradle"
@@ -1090,7 +1129,7 @@ project(':core') {
     testImplementation libs.junitJupiter
     testImplementation libs.slf4jlog4j
     testImplementation libs.caffeine
-    
+
     generator project(':generator')
   }
 
