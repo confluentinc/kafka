@@ -45,7 +45,7 @@ if [ -z `which javac` ]; then
     apt-get -y update
     apt-get install -y software-properties-common python-software-properties binutils java-common
 
-    echo "===> Installing JDK..."
+    echo "===> Installing JDK..." 
 
     mkdir -p /opt/jdk
     cd /opt/jdk
@@ -54,7 +54,7 @@ if [ -z `which javac` ]; then
     cd $JDK_MAJOR
     fetch_jdk_tgz $JDK_FULL
     tar x --strip-components=1 -zf $(path_to_jdk_cache $JDK_FULL)
-    for bin in /opt/jdk/$JDK_MAJOR/bin/* ; do
+    for bin in /opt/jdk/$JDK_MAJOR/bin/* ; do 
       name=$(basename $bin)
       update-alternatives --install /usr/bin/$name $name $bin 1081 && update-alternatives --set $name $bin
     done
