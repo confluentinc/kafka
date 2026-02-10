@@ -69,8 +69,7 @@
     {
       "environment_vars": [
         "JDK_MAJOR={{ user `jdk_version` }}",
-        "JDK_ARCH={{ user `jdk_arch` }}",
-        "JDK_FULL={{ user `jdk_version` }}-linux-{{ user `jdk_arch` }}"
+        "JDK_ARCH={{ user `jdk_arch` }}"
       ],
       "execute_command": "echo 'packer' | {{ .Vars }} sudo -E -S bash '{{ .Path }}'",
       "type": "shell",
