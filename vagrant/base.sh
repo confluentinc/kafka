@@ -32,13 +32,24 @@ fetch_jdk_tgz() {
 
   if [ ! -e $path ]; then
     mkdir -p $(dirname $path)
-    curl --retry 5 -s -L "https://s3-us-west-2.amazonaws.com/kafka-packages/jdk-${jdk_version}.tar.gz" -o $path
+    curl --retry 5 -s -L "https://s3-us-west-2.amazonaws.com/kafka-packages/jdk/jdk-${jdk_version}.tar.gz" -o $path
   fi
 }
 
-JDK_MAJOR="${JDK_MAJOR:-17}"
-JDK_FULL="${JDK_FULL:-17-linux-x64}"
-echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH"
+# Validate JDK_MAJOR - must be a version number (e.g., 8u144, 17, 25.0.1), default to 17 if empty or invalid
+if [[ -z "$JDK_MAJOR" || ! "$JDK_MAJOR" =~ ^[0-9]+(u[0-9]+|(\.[0-9]+)+)?$ ]]; then
+    JDK_MAJOR="17"
+fi
+
+# Validate JDK_ARCH - default to x64 if empty or invalid
+if [[ -z "$JDK_ARCH" || ! "$JDK_ARCH" =~ ^(x64|aarch64)$ ]]; then
+    JDK_ARCH="x64"
+fi
+
+# Construct JDK_FULL from validated JDK_MAJOR and JDK_ARCH
+JDK_FULL="${JDK_MAJOR}-linux-${JDK_ARCH}"
+
+echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH JDK_FULL=$JDK_FULL"
 export DEBIAN_FRONTEND=noninteractive
 
 if [ -z `which javac` ]; then
