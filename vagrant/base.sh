@@ -46,8 +46,10 @@ if [[ -z "$JDK_ARCH" || ! "$JDK_ARCH" =~ ^(x64|aarch64)$ ]]; then
     JDK_ARCH="x64"
 fi
 
-# Construct JDK_FULL from validated JDK_MAJOR and JDK_ARCH
-JDK_FULL="${JDK_MAJOR}-linux-${JDK_ARCH}"
+# Use JDK_FULL if provided and valid, otherwise construct from JDK_MAJOR and JDK_ARCH
+if [[ -z "$JDK_FULL" || ! "$JDK_FULL" =~ ^[0-9]+(u[0-9]+|(\.[0-9]+)+)?-linux-(x64|aarch64)$ ]]; then
+    JDK_FULL="${JDK_MAJOR}-linux-${JDK_ARCH}"
+fi
 
 echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH JDK_FULL=$JDK_FULL"
 export DEBIAN_FRONTEND=noninteractive
