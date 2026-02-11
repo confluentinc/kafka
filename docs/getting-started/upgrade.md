@@ -26,9 +26,9 @@ type: docs
 -->
 
 
-## Upgrading to 4.0.1
+## Upgrading to 4.0.2
 
-### Upgrading Clients to 4.0.1
+### Upgrading Clients to 4.0.2
 
 **For a rolling upgrade:**
 
@@ -37,7 +37,7 @@ type: docs
 
 
 
-### Upgrading Servers to 4.0.1 from any version 3.3.x through 3.9.x
+### Upgrading Servers to 4.0.2 from any version 3.3.x through 3.9.x
 
 Note: Apache Kafka 4.0 only supports KRaft mode - ZooKeeper mode has been removed. As such, **broker upgrades to 4.0.0 (and higher) require KRaft mode and the software and metadata versions must be at least 3.3.x** (the first version when KRaft mode was deemed production ready). For clusters in KRaft mode with versions older than 3.3.x, we recommend upgrading to 3.9.x before upgrading to 4.0.x. Clusters in ZooKeeper mode have to be [migrated to KRaft mode](/40/operations/kraft/#zookeeper-to-kraft-migration) before they can be upgraded to 4.0.x. 
 
@@ -67,7 +67,7 @@ Note: Apache Kafka 4.0 only supports KRaft mode - ZooKeeper mode has been remove
 ### Notable changes in 4.0.0
 
   * Old protocol API versions have been removed. Users should ensure brokers are version 2.1 or higher before upgrading Java clients (including Connect and Kafka Streams which use the clients internally) to 4.0. Similarly, users should ensure their Java clients (including Connect and Kafka Streams) version is 2.1 or higher before upgrading brokers to 4.0. Finally, care also needs to be taken when it comes to kafka clients that are not part of Apache Kafka, please see [KIP-896](https://cwiki.apache.org/confluence/display/KAFKA/KIP-896%3A+Remove+old+client+protocol+API+versions+in+Kafka+4.0) for the details. 
-  * Apache Kafka 4.0 only supports KRaft mode - ZooKeeper mode has been removed. About version upgrade, check [Upgrading to 4.0.1 from any version 3.3.x through 3.9.x](/40/getting-started/upgrade/#upgrading-servers-to-401-from-any-version-33x-through-39x) for more info. 
+  * Apache Kafka 4.0 only supports KRaft mode - ZooKeeper mode has been removed. About version upgrade, check [Upgrading to 4.0.2 from any version 3.3.x through 3.9.x](/40/getting-started/upgrade/#upgrading-servers-to-402-from-any-version-33x-through-39x) for more info.
   * Apache Kafka 4.0 ships with a brand-new group coordinator implementation (See [here](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=217387038#KIP848:TheNextGenerationoftheConsumerRebalanceProtocol-GroupCoordinator)). Functionally speaking, it implements all the same APIs. There are reasonable defaults, but the behavior of the new group coordinator can be tuned by setting the configurations with prefix `group.coordinator`. 
   * The Next Generation of the Consumer Rebalance Protocol ([KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)) is now Generally Available (GA) in Apache Kafka 4.0. The protocol is automatically enabled on the server when the upgrade to 4.0 is finalized. Note that once the new protocol is used by consumer groups, the cluster can only downgrade to version 3.4.1 or newer. Check [here](/40/documentation.html#consumer_rebalance_protocol) for details. 
   * Transactions Server Side Defense ([KIP-890](https://cwiki.apache.org/confluence/display/KAFKA/KIP-890%3A+Transactions+Server-Side+Defense)) brings a strengthened transactional protocol to Apache Kafka 4.0. The new and improved transactional protocol is enabled when the upgrade to 4.0 is finalized. When using 4.0 producer clients, the producer epoch is bumped on every transaction to ensure every transaction includes the intended messages and duplicates are not written as part of the next transaction. Downgrading the protocol is safe. For more information check [here](/40/documentation.html#transaction_protocol)
@@ -167,7 +167,7 @@ Note: Apache Kafka 4.0 only supports KRaft mode - ZooKeeper mode has been remove
       * **TransactionAbortableException:** Specifically introduced to signal errors that should lead to transaction abortion, ensuring this exception is properly handled is critical for maintaining the integrity of transactional processing.
       * To ensure seamless operation and compatibility with future Kafka versions, developers are encouraged to update their error-handling logic to treat both exceptions as triggers for aborting transactions. This approach is pivotal for preserving exactly-once semantics.
       * See [KIP-890](https://cwiki.apache.org/confluence/display/KAFKA/KIP-890%3A+Transactions+Server-Side+Defense) and [KIP-1050](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1050%3A+Consistent+error+handling+for+Transactions) for more details 
-    * The filename for rotated `state-change.log` files incorrectly rotates to `stage-change.log.[date]` (changing state to stage). This issue is corrected in 4.0.1. See [KAFKA-19576](https://issues.apache.org/jira/browse/KAFKA-19576) for details. 
+    * The filename for rotated `state-change.log` files incorrectly rotates to `stage-change.log.[date]` (changing state to stage). This issue is corrected in 4.0.2. See [KAFKA-19576](https://issues.apache.org/jira/browse/KAFKA-19576) for details.
 
 
 
