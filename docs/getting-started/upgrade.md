@@ -49,6 +49,14 @@ Note: Apache Kafka 4.0 only supports KRaft mode - ZooKeeper mode has been remove
 
 
 
+### Notable changes in 4.0.2
+
+  * [KAFKA-19012](https://issues.apache.org/jira/browse/KAFKA-19012): This ticket fixes a bug where records could inadvertently be routed to the incorrect topic under specific race conditions or metadata update scenarios.
+  * [KAFKA-19571](https://issues.apache.org/jira/browse/KAFKA-19012): This ticket fixes a critical race condition that can lead to a log directory being marked "offline."
+  * [KAFKA-19479](https://issues.apache.org/jira/browse/KAFKA-19479): Fixes an issue in Kafka Streams when processing.guarantee=at_least_once doesn't hold the delivery guarantees.
+  * [KAFKA-19760](https://issues.apache.org/jira/browse/KAFKA-19760): The group coordinator's overly optimistic behavior about compression ratios caused RecordTooLargeExceptions. See the JIRA ticket for more details.
+
+
 ### Notable changes in 4.0.1
 
   * The filename for rotated `state-change.log` files has been updated from `stage-change.log.[date]` to `state-change.log.[date]` in the log4j2.yaml configuration file. See [KAFKA-19576](https://issues.apache.org/jira/browse/KAFKA-19576) for details. 
