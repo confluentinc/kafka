@@ -31,6 +31,8 @@ TAGS
 Vagrantfile.local
 /logs
 .DS_Store
+Pipfile
+.java-version
 
 config/server-*
 config/zookeeper-*
