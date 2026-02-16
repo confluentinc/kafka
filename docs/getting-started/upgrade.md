@@ -26,6 +26,14 @@ type: docs
 -->
 
 
+## Upgrading to 4.1.2
+
+### Notable changes in 4.1.2
+
+* Includes a fix for the rare Kafka producer bug ([KAFKA-19012](https://issues.apache.org/jira/browse/KAFKA-19748)), in which a record could end up on the incorrect topic.
+
+
+
 ## Upgrading to 4.1.1
 
 ### Notable changes in 4.1.1
