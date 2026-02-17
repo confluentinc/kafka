@@ -83,6 +83,10 @@ public class GroupCoordinatorConfig {
     public static final String GROUP_COORDINATOR_NUM_THREADS_DOC = "The number of threads used by the group coordinator.";
     public static final int GROUP_COORDINATOR_NUM_THREADS_DEFAULT = 4;
 
+    public static final String GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_CONFIG = "group.coordinator.executor.threads";
+    public static final String GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_DOC = "The number of executor threads used by the group coordinator.";
+    public static final int GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_DEFAULT = 2;
+
     public static final String OFFSETS_LOAD_BUFFER_SIZE_CONFIG = "offsets.load.buffer.size";
     public static final int OFFSETS_LOAD_BUFFER_SIZE_DEFAULT = 5 * 1024 * 1024;
     public static final String OFFSETS_LOAD_BUFFER_SIZE_DOC = "Batch size for reading from the offsets segments when loading group metadata " +
@@ -317,6 +321,7 @@ public class GroupCoordinatorConfig {
         .define(GROUP_COORDINATOR_REBALANCE_PROTOCOLS_CONFIG, LIST, GROUP_COORDINATOR_REBALANCE_PROTOCOLS_DEFAULT, 
             ConfigDef.ValidList.in(false, Group.GroupType.documentValidValues()), MEDIUM, GROUP_COORDINATOR_REBALANCE_PROTOCOLS_DOC)
         .define(GROUP_COORDINATOR_NUM_THREADS_CONFIG, INT, GROUP_COORDINATOR_NUM_THREADS_DEFAULT, atLeast(1), HIGH, GROUP_COORDINATOR_NUM_THREADS_DOC)
+        .define(GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_CONFIG, INT, GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_DEFAULT, atLeast(1), HIGH, GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_DOC)
         .define(GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG, INT, GROUP_COORDINATOR_APPEND_LINGER_MS_DEFAULT, atLeast(-1), MEDIUM, GROUP_COORDINATOR_APPEND_LINGER_MS_DOC)
         .define(OFFSET_COMMIT_TIMEOUT_MS_CONFIG, INT, OFFSET_COMMIT_TIMEOUT_MS_DEFAULT, atLeast(1), HIGH, OFFSET_COMMIT_TIMEOUT_MS_DOC)
         .define(OFFSETS_LOAD_BUFFER_SIZE_CONFIG, INT, OFFSETS_LOAD_BUFFER_SIZE_DEFAULT, atLeast(1), HIGH, OFFSETS_LOAD_BUFFER_SIZE_DOC)
@@ -382,6 +387,7 @@ public class GroupCoordinatorConfig {
     public static final int CLASSIC_GROUP_NEW_MEMBER_JOIN_TIMEOUT_MS = 5 * 60 * 1000;
 
     private final int numThreads;
+    private final int numExecutorThreads;
     private final int appendLingerMs;
     private final int consumerGroupSessionTimeoutMs;
     private final int consumerGroupHeartbeatIntervalMs;
@@ -433,6 +439,7 @@ public class GroupCoordinatorConfig {
     @SuppressWarnings("this-escape")
     public GroupCoordinatorConfig(AbstractConfig config) {
         this.numThreads = config.getInt(GroupCoordinatorConfig.GROUP_COORDINATOR_NUM_THREADS_CONFIG);
+        this.numExecutorThreads = config.getInt(GroupCoordinatorConfig.GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_CONFIG);
         this.appendLingerMs = config.getInt(GroupCoordinatorConfig.GROUP_COORDINATOR_APPEND_LINGER_MS_CONFIG);
         this.consumerGroupSessionTimeoutMs = config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_SESSION_TIMEOUT_MS_CONFIG);
         this.consumerGroupHeartbeatIntervalMs = config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_HEARTBEAT_INTERVAL_MS_CONFIG);
@@ -669,6 +676,13 @@ public class GroupCoordinatorConfig {
      */
     public int numThreads() {
         return numThreads;
+    }
+
+    /**
+     * The number of executor threads.
+     */
+    public int numExecutorThreads() {
+        return numExecutorThreads;
     }
 
     /**
