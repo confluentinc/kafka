@@ -140,7 +140,9 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
@@ -277,8 +279,12 @@ public class GroupCoordinatorService implements GroupCoordinator {
                     .withSerializer(new GroupCoordinatorRecordSerde())
                     .withCompression(Compression.of(config.offsetTopicCompressionType()).build())
                     .withAppendLingerMs(config.appendLingerMs())
-                    .withExecutorService(Executors.newFixedThreadPool(
+                    .withExecutorService(new ThreadPoolExecutor(
                         config.numBackgroundThreads(),
+                        config.numBackgroundThreads(),
+                        0L,
+                        TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
                         ThreadUtils.createThreadFactory("group-coordinator-background-%d", false)
                     ))
                     .withCachedBufferMaxBytesSupplier(config::cachedBufferMaxBytes)

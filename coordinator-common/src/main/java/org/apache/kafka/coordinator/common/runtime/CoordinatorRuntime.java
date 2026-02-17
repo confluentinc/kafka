@@ -56,8 +56,8 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
@@ -116,7 +116,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
         private Serializer<U> serializer;
         private Compression compression;
         private OptionalInt appendLingerMs;
-        private ExecutorService executorService;
+        private ThreadPoolExecutor executorService;
         private Supplier<Integer> cachedBufferMaxBytesSupplier;
 
         public Builder<S, U> withLogPrefix(String logPrefix) {
@@ -189,7 +189,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
             return this;
         }
 
-        public Builder<S, U> withExecutorService(ExecutorService executorService) {
+        public Builder<S, U> withExecutorService(ThreadPoolExecutor executorService) {
             this.executorService = executorService;
             return this;
         }
@@ -1873,7 +1873,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
      * The executor service used by the coordinator runtime to schedule
      * asynchronous tasks.
      */
-    private final ExecutorService executorService;
+    private final ThreadPoolExecutor executorService;
 
     /**
      * The maximum buffer size that the coordinator can cache.
@@ -1926,7 +1926,7 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
         Serializer<U> serializer,
         Compression compression,
         OptionalInt appendLingerMs,
-        ExecutorService executorService,
+        ThreadPoolExecutor executorService,
         Supplier<Integer> cachedBufferMaxBytesSupplier
     ) {
         this.logPrefix = logPrefix;

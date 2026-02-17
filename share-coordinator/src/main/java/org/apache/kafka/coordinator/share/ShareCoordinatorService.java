@@ -40,6 +40,7 @@ import org.apache.kafka.common.requests.ReadShareGroupStateSummaryResponse;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.requests.WriteShareGroupStateResponse;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.ThreadUtils;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorEventProcessor;
@@ -75,7 +76,9 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
@@ -205,7 +208,14 @@ public class ShareCoordinatorService implements ShareCoordinator {
                     .withSerializer(new ShareCoordinatorRecordSerde())
                     .withCompression(Compression.of(config.shareCoordinatorStateTopicCompressionType()).build())
                     .withAppendLingerMs(config.shareCoordinatorAppendLingerMs())
-                    .withExecutorService(Executors.newSingleThreadExecutor())
+                    .withExecutorService(new ThreadPoolExecutor(
+                        1,
+                        1,
+                        0L,
+                        TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
+                        ThreadUtils.createThreadFactory("share-coordinator-background-%d", false)
+                    ))
                     .withCachedBufferMaxBytesSupplier(config::shareCoordinatorCachedBufferMaxBytes)
                     .build();
 

@@ -59,7 +59,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -126,7 +126,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -199,7 +199,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -252,7 +252,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -309,7 +309,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -383,7 +383,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -440,7 +440,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -497,7 +497,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -542,7 +542,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -593,7 +593,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(metrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -650,7 +650,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -738,7 +738,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -861,7 +861,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -887,7 +887,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -917,7 +917,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -979,7 +979,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1033,7 +1033,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1072,7 +1072,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1145,7 +1145,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1241,7 +1241,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1304,7 +1304,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1431,7 +1431,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1493,7 +1493,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1560,7 +1560,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1660,7 +1660,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1745,7 +1745,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1805,7 +1805,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1832,7 +1832,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1880,7 +1880,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -1922,7 +1922,7 @@ public class CoordinatorRuntimeTest {
     public void testClose() throws Exception {
         MockCoordinatorLoader loader = spy(new MockCoordinatorLoader());
         MockTimer timer = new MockTimer();
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
         CoordinatorRuntime<MockCoordinatorShard, String> runtime =
             new CoordinatorRuntime.Builder<MockCoordinatorShard, String>()
                 .withTime(timer.time())
@@ -2001,7 +2001,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2029,7 +2029,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2057,7 +2057,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2092,7 +2092,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2127,7 +2127,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2155,7 +2155,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2191,7 +2191,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2257,7 +2257,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2315,7 +2315,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2392,7 +2392,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2466,7 +2466,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2528,7 +2528,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2604,7 +2604,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2649,7 +2649,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2702,7 +2702,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2761,7 +2761,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2842,7 +2842,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2901,7 +2901,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -2961,7 +2961,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3008,7 +3008,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(0))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3084,7 +3084,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3163,7 +3163,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(0))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3238,7 +3238,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3309,7 +3309,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(serializer)
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3363,7 +3363,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(serializer)
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3412,7 +3412,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(mock(CoordinatorRuntimeMetrics.class))
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(serializer)
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> cachedBufferMaxBytes)
                 .build();
 
@@ -3466,7 +3466,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(serializer)
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(maxBufferSizeSupplierMock)
                 .build();
 
@@ -3540,7 +3540,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3676,7 +3676,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3729,7 +3729,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3816,7 +3816,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -3915,7 +3915,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4049,7 +4049,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.empty())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4158,7 +4158,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.empty())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4348,7 +4348,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.empty())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4509,7 +4509,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4625,7 +4625,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4675,7 +4675,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4785,7 +4785,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4882,7 +4882,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -4970,7 +4970,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(serializer)
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5041,7 +5041,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5155,7 +5155,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5267,7 +5267,7 @@ public class CoordinatorRuntimeTest {
                 .withCompression(compression)
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5354,7 +5354,7 @@ public class CoordinatorRuntimeTest {
                 .withCompression(compression)
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5441,7 +5441,7 @@ public class CoordinatorRuntimeTest {
                 .withCompression(compression)
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5533,7 +5533,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(0))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5621,7 +5621,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(0))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5689,7 +5689,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorRuntimeMetrics(runtimeMetrics)
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 
@@ -5749,7 +5749,7 @@ public class CoordinatorRuntimeTest {
         MockPartitionWriter writer = new MockPartitionWriter();
         ManualEventProcessor processor = new ManualEventProcessor();
         CoordinatorRuntimeMetrics runtimeMetrics = mock(CoordinatorRuntimeMetrics.class);
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
 
         when(executorService.submit(any(Runnable.class))).thenAnswer(args -> {
             Runnable op = args.getArgument(0);
@@ -5853,7 +5853,7 @@ public class CoordinatorRuntimeTest {
                 .withCoordinatorMetrics(mock(CoordinatorMetrics.class))
                 .withSerializer(new StringSerializer())
                 .withAppendLingerMs(OptionalInt.of(10))
-                .withExecutorService(mock(ExecutorService.class))
+                .withExecutorService(mock(ThreadPoolExecutor.class))
                 .withCachedBufferMaxBytesSupplier(() -> CACHED_BUFFER_MAX_BYTES)
                 .build();
 

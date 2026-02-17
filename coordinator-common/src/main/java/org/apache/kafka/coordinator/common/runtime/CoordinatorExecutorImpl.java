@@ -25,20 +25,20 @@ import org.slf4j.Logger;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public class CoordinatorExecutorImpl<U> implements CoordinatorExecutor<U> {
     private record TaskResult<R>(R result, Throwable exception) { }
 
     private final Logger log;
-    private final ExecutorService executor;
+    private final ThreadPoolExecutor executor;
     private final CoordinatorShardScheduler<U> scheduler;
     private final Map<String, TaskRunnable<?>> tasks = new ConcurrentHashMap<>();
 
     public CoordinatorExecutorImpl(
         LogContext logContext,
-        ExecutorService executor,
+        ThreadPoolExecutor executor,
         CoordinatorShardScheduler<U> scheduler
     ) {
         this.log = logContext.logger(CoordinatorExecutorImpl.class);

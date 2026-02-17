@@ -23,8 +23,8 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -49,7 +49,7 @@ public class CoordinatorExecutorImplTest {
     @Test
     public void testTaskSuccessfulLifecycle() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
             executorService,
@@ -103,7 +103,7 @@ public class CoordinatorExecutorImplTest {
     @Test
     public void testTaskFailedLifecycle() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
             executorService,
@@ -156,7 +156,7 @@ public class CoordinatorExecutorImplTest {
     @Test
     public void testTaskCancelledBeforeBeingExecuted() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
             executorService,
@@ -198,7 +198,7 @@ public class CoordinatorExecutorImplTest {
     @Test
     public void testTaskCancelledAfterBeingExecutedButBeforeWriteOperationIsExecuted() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
             executorService,
@@ -248,7 +248,7 @@ public class CoordinatorExecutorImplTest {
     @Test
     public void testTaskSchedulingWriteOperationFailed() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
             executorService,
@@ -292,7 +292,7 @@ public class CoordinatorExecutorImplTest {
     @Test
     public void testCancelAllTasks() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
-        ExecutorService executorService = mock(ExecutorService.class);
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
             executorService,
