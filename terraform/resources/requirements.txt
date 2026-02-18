@@ -36,7 +36,7 @@ mccabe==0.6.1
 opencensus-proto==0.1.0
 opentelemetry-proto==1.19.0
 packaging==23.0
-paho-mqtt==1.5.1
+paho-mqtt==2.1.0
 pluggy==1.0.0
 protobuf==4.24.4
 py==1.10.0
