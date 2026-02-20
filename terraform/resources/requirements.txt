@@ -11,7 +11,7 @@ contextlib2==0.6.0.post1
 crcmod==1.7
 cryptography==41.0.3
 elasticsearch==7.17.6
-charset-normalizer==2.0.6
+charset-normalizer==3.4.2
 click==8.0.1
 debugpy==1.4.3
 flake8==3.9.2
