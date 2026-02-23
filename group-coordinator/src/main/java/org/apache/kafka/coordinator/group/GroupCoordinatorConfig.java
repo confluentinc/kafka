@@ -80,11 +80,12 @@ public class GroupCoordinatorConfig {
     public static final int GROUP_COORDINATOR_APPEND_LINGER_MS_DEFAULT = -1;
 
     public static final String GROUP_COORDINATOR_NUM_THREADS_CONFIG = "group.coordinator.threads";
-    public static final String GROUP_COORDINATOR_NUM_THREADS_DOC = "The number of threads used by the group coordinator.";
+    public static final String GROUP_COORDINATOR_NUM_THREADS_DOC = "The number of threads used by the group coordinator for processing requests.";
     public static final int GROUP_COORDINATOR_NUM_THREADS_DEFAULT = 4;
 
     public static final String GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_CONFIG = "group.coordinator.executor.threads";
-    public static final String GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_DOC = "The number of executor threads used by the group coordinator.";
+    public static final String GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_DOC = "The number of executor threads used by the group coordinator for " +
+        "updating the list of topics for regex subscriptions and metadata changes and offloaded assignments.";
     public static final int GROUP_COORDINATOR_NUM_EXECUTOR_THREADS_DEFAULT = 2;
 
     public static final String OFFSETS_LOAD_BUFFER_SIZE_CONFIG = "offsets.load.buffer.size";
