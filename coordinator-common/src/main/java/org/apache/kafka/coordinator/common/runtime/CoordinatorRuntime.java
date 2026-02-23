@@ -490,6 +490,8 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
             );
             this.executor = new CoordinatorExecutorImpl<>(
                 logContext,
+                runtimeMetrics,
+                time,
                 executorService,
                 (operationName, operation) -> scheduleWriteOperation(
                     operationName,

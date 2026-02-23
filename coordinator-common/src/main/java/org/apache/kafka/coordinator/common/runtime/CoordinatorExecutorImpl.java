@@ -20,6 +20,7 @@ import org.apache.kafka.common.errors.CoordinatorLoadInProgressException;
 import org.apache.kafka.common.errors.NotCoordinatorException;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.Time;
 
 import org.slf4j.Logger;
 
@@ -32,16 +33,22 @@ public class CoordinatorExecutorImpl<U> implements CoordinatorExecutor<U> {
     private record TaskResult<R>(R result, Throwable exception) { }
 
     private final Logger log;
+    private final CoordinatorRuntimeMetrics metrics;
+    private final Time time;
     private final ThreadPoolExecutor executor;
     private final CoordinatorShardScheduler<U> scheduler;
     private final Map<String, TaskRunnable<?>> tasks = new ConcurrentHashMap<>();
 
     public CoordinatorExecutorImpl(
         LogContext logContext,
+        CoordinatorRuntimeMetrics metrics,
+        Time time,
         ThreadPoolExecutor executor,
         CoordinatorShardScheduler<U> scheduler
     ) {
         this.log = logContext.logger(CoordinatorExecutorImpl.class);
+        this.metrics = metrics;
+        this.time = time;
         this.executor = executor;
         this.scheduler = scheduler;
     }
@@ -63,14 +70,22 @@ public class CoordinatorExecutorImpl<U> implements CoordinatorExecutor<U> {
         // Put the task if the key is free. Otherwise, reject it.
         if (tasks.putIfAbsent(key, task) != null) return false;
 
+        var queuedTimeMs = time.milliseconds();
+
         // Submit the task.
         executor.submit(() -> {
             // If the task associated with the key is not us, it means
             // that the task was either replaced or cancelled. We stop.
             if (tasks.get(key) != task) return;
 
+            var dequeuedTimeMs = time.milliseconds();
+            metrics.recordExecutorQueueTime(dequeuedTimeMs - queuedTimeMs);
+
             // Execute the task.
             var result = executeTask(task);
+            long processingTimeMs = time.milliseconds() - dequeuedTimeMs;
+            metrics.recordExecutorProcessingTime(processingTimeMs);
+            metrics.recordExecutorThreadBusyTime((double) processingTimeMs / executor.getCorePoolSize());
 
             // Schedule the operation.
             scheduler.scheduleWriteOperation(

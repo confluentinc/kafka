@@ -81,6 +81,26 @@ public interface CoordinatorRuntimeMetrics extends AutoCloseable {
     void recordThreadIdleTime(double idleTimeMs);
 
     /**
+     * Update the executor queue time.
+     *
+     * @param durationMs The queue time.
+     */
+    void recordExecutorQueueTime(long durationMs);
+
+    /**
+     * Update the executor processing time.
+     *
+     * @param durationMs The executor processing time.
+     */
+    void recordExecutorProcessingTime(long durationMs);
+
+    /**
+     * Record the executor thread busy time.
+     * @param busyTimeMs The busy time in milliseconds.
+     */
+    void recordExecutorThreadBusyTime(double busyTimeMs);
+
+    /**
      * Register the event queue size gauge.
      *
      * @param sizeSupplier The size supplier.

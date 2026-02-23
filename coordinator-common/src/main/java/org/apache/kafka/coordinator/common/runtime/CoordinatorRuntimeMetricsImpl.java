@@ -18,6 +18,7 @@ package org.apache.kafka.coordinator.common.runtime;
 
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.metrics.Gauge;
+import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
@@ -78,6 +79,16 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
      * The buffer cache discard count metric name.
      */
     public static final String BATCH_BUFFER_CACHE_DISCARD_COUNT_METRIC_NAME = "batch-buffer-cache-discard-count";
+
+    /**
+     * The executor queue time metric name.
+     */
+    public static final String EXECUTOR_QUEUE_TIME_METRIC_NAME = "executor-queue-time-ms";
+
+    /**
+     * The executor processing time metric name.
+     */
+    public static final String EXECUTOR_PROCESSING_TIME_METRIC_NAME = "executor-processing-time-ms";
 
     /**
      * Metric to count the number of partitions in Loading state.
@@ -153,7 +164,22 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
      */
     private final Sensor flushSensor;
 
-    public CoordinatorRuntimeMetricsImpl(Metrics metrics, String metricsGroup) {
+    /**
+     * The executor thread busy sensor. Null when executor metrics are not enabled.
+     */
+    private final Sensor executorThreadBusySensor;
+
+    /**
+     * The executor queue time sensor. Null when executor metrics are not enabled.
+     */
+    private final Sensor executorQueueTimeSensor;
+
+    /**
+     * The executor processing time sensor. Null when executor metrics are not enabled.
+     */
+    private final Sensor executorProcessingTimeSensor;
+
+    public CoordinatorRuntimeMetricsImpl(Metrics metrics, String metricsGroup, boolean enableExecutorMetrics) {
         this.metrics = Objects.requireNonNull(metrics);
         this.metricsGroup = Objects.requireNonNull(metricsGroup);
 
@@ -265,6 +291,44 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
                 this.metricsGroup,
                 "The flushes per second."),
             new Rate(TimeUnit.SECONDS, new WindowedCount()));
+
+        if (enableExecutorMetrics) {
+            this.executorThreadBusySensor = metrics.sensor(this.metricsGroup + "-ExecutorThreadBusyRatio");
+            this.executorThreadBusySensor.add(
+                metrics.metricName(
+                    "executor-thread-idle-ratio-avg",
+                    this.metricsGroup,
+                    "The fraction of time the executor threads are idle. This is an average across " +
+                        "all coordinator executor threads."),
+                new Rate(TimeUnit.MILLISECONDS) {
+                    @Override
+                    public double measure(MetricConfig config, long now) {
+                        return 1.0 - super.measure(config, now);
+                    }
+                });
+
+            KafkaMetricHistogram executorQueueTimeHistogram = KafkaMetricHistogram.newLatencyHistogram(
+                suffix -> kafkaMetricName(
+                    EXECUTOR_QUEUE_TIME_METRIC_NAME + "-" + suffix,
+                    "The " + suffix + " executor queue time in milliseconds"
+                )
+            );
+            this.executorQueueTimeSensor = metrics.sensor(this.metricsGroup + "-ExecutorQueueTime");
+            this.executorQueueTimeSensor.add(executorQueueTimeHistogram);
+
+            KafkaMetricHistogram executorProcessingTimeHistogram = KafkaMetricHistogram.newLatencyHistogram(
+                suffix -> kafkaMetricName(
+                    EXECUTOR_PROCESSING_TIME_METRIC_NAME + "-" + suffix,
+                    "The " + suffix + " executor processing time in milliseconds"
+                )
+            );
+            this.executorProcessingTimeSensor = metrics.sensor(this.metricsGroup + "-ExecutorProcessingTime");
+            this.executorProcessingTimeSensor.add(executorProcessingTimeHistogram);
+        } else {
+            this.executorThreadBusySensor = null;
+            this.executorQueueTimeSensor = null;
+            this.executorProcessingTimeSensor = null;
+        }
     }
 
     /**
@@ -298,6 +362,15 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
         metrics.removeSensor(eventPurgatoryTimeSensor.name());
         metrics.removeSensor(lingerTimeSensor.name());
         metrics.removeSensor(flushSensor.name());
+        if (executorThreadBusySensor != null) {
+            metrics.removeSensor(executorThreadBusySensor.name());
+        }
+        if (executorQueueTimeSensor != null) {
+            metrics.removeSensor(executorQueueTimeSensor.name());
+        }
+        if (executorProcessingTimeSensor != null) {
+            metrics.removeSensor(executorProcessingTimeSensor.name());
+        }
     }
 
     /**
@@ -370,6 +443,27 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
     @Override
     public void recordThreadIdleTime(double idleTimeMs) {
         threadIdleSensor.record(idleTimeMs);
+    }
+
+    @Override
+    public void recordExecutorThreadBusyTime(double busyTimeMs) {
+        if (executorThreadBusySensor != null) {
+            executorThreadBusySensor.record(busyTimeMs);
+        }
+    }
+
+    @Override
+    public void recordExecutorQueueTime(long durationMs) {
+        if (executorQueueTimeSensor != null) {
+            executorQueueTimeSensor.record(durationMs);
+        }
+    }
+
+    @Override
+    public void recordExecutorProcessingTime(long durationMs) {
+        if (executorProcessingTimeSensor != null) {
+            executorProcessingTimeSensor.record(durationMs);
+        }
     }
 
     @Override

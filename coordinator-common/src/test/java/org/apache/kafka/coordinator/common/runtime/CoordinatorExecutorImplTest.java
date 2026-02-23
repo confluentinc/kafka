@@ -17,6 +17,8 @@
 package org.apache.kafka.coordinator.common.runtime;
 
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.common.utils.Time;
 
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +40,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 // Creating mocks of classes using generics creates unsafe assignment.
@@ -50,8 +54,11 @@ public class CoordinatorExecutorImplTest {
     public void testTaskSuccessfulLifecycle() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
         ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
+        CoordinatorRuntimeMetrics metrics = mock(CoordinatorRuntimeMetrics.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
+            metrics,
+            Time.SYSTEM,
             executorService,
             scheduler
         );
@@ -104,8 +111,11 @@ public class CoordinatorExecutorImplTest {
     public void testTaskFailedLifecycle() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
         ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
+        CoordinatorRuntimeMetrics metrics = mock(CoordinatorRuntimeMetrics.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
+            metrics,
+            Time.SYSTEM,
             executorService,
             scheduler
         );
@@ -157,8 +167,11 @@ public class CoordinatorExecutorImplTest {
     public void testTaskCancelledBeforeBeingExecuted() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
         ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
+        CoordinatorRuntimeMetrics metrics = mock(CoordinatorRuntimeMetrics.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
+            metrics,
+            Time.SYSTEM,
             executorService,
             scheduler
         );
@@ -199,8 +212,11 @@ public class CoordinatorExecutorImplTest {
     public void testTaskCancelledAfterBeingExecutedButBeforeWriteOperationIsExecuted() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
         ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
+        CoordinatorRuntimeMetrics metrics = mock(CoordinatorRuntimeMetrics.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
+            metrics,
+            Time.SYSTEM,
             executorService,
             scheduler
         );
@@ -249,8 +265,11 @@ public class CoordinatorExecutorImplTest {
     public void testTaskSchedulingWriteOperationFailed() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
         ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
+        CoordinatorRuntimeMetrics metrics = mock(CoordinatorRuntimeMetrics.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
+            metrics,
+            Time.SYSTEM,
             executorService,
             scheduler
         );
@@ -293,8 +312,11 @@ public class CoordinatorExecutorImplTest {
     public void testCancelAllTasks() {
         CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
         ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
+        CoordinatorRuntimeMetrics metrics = mock(CoordinatorRuntimeMetrics.class);
         CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
             LOG_CONTEXT,
+            metrics,
+            Time.SYSTEM,
             executorService,
             scheduler
         );
@@ -348,5 +370,54 @@ public class CoordinatorExecutorImplTest {
 
         assertEquals(2, taskCallCount.get());
         assertEquals(0, operationCallCount.get());
+    }
+
+    @Test
+    public void testMetrics() {
+        CoordinatorShardScheduler<String> scheduler = mock(CoordinatorShardScheduler.class);
+        CoordinatorRuntimeMetrics metrics = mock(CoordinatorRuntimeMetrics.class);
+        Time mockTime = new MockTime();
+        ThreadPoolExecutor executorService = mock(ThreadPoolExecutor.class);
+        CoordinatorExecutorImpl<String> executor = new CoordinatorExecutorImpl<>(
+            LOG_CONTEXT,
+            metrics,
+            mockTime,
+            executorService,
+            scheduler
+        );
+
+        when(executorService.getCorePoolSize()).thenReturn(2);
+
+        when(scheduler.scheduleWriteOperation(
+            eq(TASK_KEY),
+            any()
+        )).thenAnswer(args -> CompletableFuture.completedFuture(null));
+
+        when(executorService.submit(any(Runnable.class))).thenAnswer(args -> {
+            mockTime.sleep(100);
+
+            Runnable op = args.getArgument(0);
+            op.run();
+            return CompletableFuture.completedFuture(null);
+        });
+
+        CoordinatorExecutor.TaskRunnable<String> taskRunnable = () -> {
+            mockTime.sleep(500);
+            return "Hello!";
+        };
+
+        CoordinatorExecutor.TaskOperation<String, String> taskOperation = (result, exception) -> {
+            return new CoordinatorResult<>(List.of("record"), null);
+        };
+
+        executor.schedule(
+            TASK_KEY,
+            taskRunnable,
+            taskOperation
+        );
+
+        verify(metrics, times(1)).recordExecutorQueueTime(100);
+        verify(metrics, times(1)).recordExecutorProcessingTime(500);
+        verify(metrics, times(1)).recordExecutorThreadBusyTime(250.0);
     }
 }
