@@ -38,6 +38,8 @@ fetch_jdk_tgz() {
 
 JDK_MAJOR="${JDK_MAJOR:-17}"
 JDK_FULL="${JDK_FULL:-17-linux-x64}"
+echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH"
+export DEBIAN_FRONTEND=noninteractive
 
 if [ -z `which javac` ]; then
     apt-get -y update
@@ -94,7 +96,8 @@ get_kafka() {
 }
 
 # Install Kibosh
-apt-get update -y && apt-get install -y git cmake pkg-config libfuse-dev
+apt-get update -y && apt-get install -y git cmake pkg-config libfuse-dev ca-certificates
+update-ca-certificates --fresh
 pushd /opt
 rm -rf /opt/kibosh
 git clone -q  https://github.com/confluentinc/kibosh.git
