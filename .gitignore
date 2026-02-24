@@ -49,6 +49,7 @@ tests/venv
 docs/generated/
 
 .release-settings.json
+.release_work_dir/
 
 kafkatest.egg-info/
 systest/
