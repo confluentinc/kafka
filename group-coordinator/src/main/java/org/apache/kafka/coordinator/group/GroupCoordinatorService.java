@@ -276,7 +276,7 @@ public class GroupCoordinatorService implements GroupCoordinator {
                     .withSerializer(new GroupCoordinatorRecordSerde())
                     .withCompression(Compression.of(config.offsetTopicCompressionType()).build())
                     .withAppendLingerMs(config.appendLingerMs())
-                    .withExecutorService(Executors.newFixedThreadPool(config.numExecutorThreads()))
+                    .withExecutorService(Executors.newFixedThreadPool(config.numBackgroundThreads()))
                     .withCachedBufferMaxBytesSupplier(config::cachedBufferMaxBytes)
                     .build();
 
