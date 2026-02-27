@@ -537,6 +537,14 @@ public class StreamsConfig extends AbstractConfig {
     static final String DSL_STORE_SUPPLIERS_CLASS_DOC = "Defines which store implementations to plug in to DSL operators. Must implement the <code>org.apache.kafka.streams.state.DslStoreSuppliers</code> interface.";
     static final Class<?> DSL_STORE_SUPPLIERS_CLASS_DEFAULT = BuiltInDslStoreSuppliers.RocksDBDslStoreSuppliers.class;
 
+    /** {@code dsl.store.suppliers.class } */
+    public static final String DSL_STORE_FORMAT_CONFIG = "dsl.store.format";
+    public static final String DSL_STORE_FORMAT_DEFAULT = "DEFAULT";
+    public static final String DSL_STORE_FORMAT_HEADERS = "HEADERS";
+    private static final String DSL_STORE_FORMAT_DOC = "Specifies the state store format for DSL operators. " +
+        "'DEFAULT' creates either timestamped or plain state stores, depending on context. " +
+        "'HEADERS' creates headers-aware stores that preserve record headers.";
+
     /** {@code default key.serde} */
     @SuppressWarnings("WeakerAccess")
     public static final String DEFAULT_KEY_SERDE_CLASS_CONFIG = "default.key.serde";
@@ -1112,6 +1120,12 @@ public class StreamsConfig extends AbstractConfig {
                     DSL_STORE_SUPPLIERS_CLASS_DEFAULT,
                     Importance.LOW,
                     DSL_STORE_SUPPLIERS_CLASS_DOC)
+            .define(DSL_STORE_FORMAT_CONFIG,
+                    Type.STRING,
+                    DSL_STORE_FORMAT_DEFAULT,
+                    ConfigDef.CaseInsensitiveValidString.in(DSL_STORE_FORMAT_DEFAULT, DSL_STORE_FORMAT_HEADERS),
+                    Importance.LOW,
+                    DSL_STORE_FORMAT_DOC)
             .define(DEFAULT_CLIENT_SUPPLIER_CONFIG,
                     Type.CLASS,
                     DefaultKafkaClientSupplier.class.getName(),
