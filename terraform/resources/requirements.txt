@@ -29,7 +29,7 @@ idna==3.7
 iniconfig==1.1.1
 itsdangerous==2.0.1
 javaobj-py3==0.4.3
-jinja2==3.0.3
+jinja2==3.1.6
 jmespath==0.10.0
 MarkupSafe==2.1.3
 mccabe==0.6.1
