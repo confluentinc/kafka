@@ -81,14 +81,14 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
     public static final String BATCH_BUFFER_CACHE_DISCARD_COUNT_METRIC_NAME = "batch-buffer-cache-discard-count";
 
     /**
-     * The executor queue time metric name.
+     * The background queue time metric name.
      */
-    public static final String EXECUTOR_QUEUE_TIME_METRIC_NAME = "executor-queue-time-ms";
+    public static final String BACKGROUND_QUEUE_TIME_METRIC_NAME = "background-queue-time-ms";
 
     /**
-     * The executor processing time metric name.
+     * The background processing time metric name.
      */
-    public static final String EXECUTOR_PROCESSING_TIME_METRIC_NAME = "executor-processing-time-ms";
+    public static final String BACKGROUND_PROCESSING_TIME_METRIC_NAME = "background-processing-time-ms";
 
     /**
      * Metric to count the number of partitions in Loading state.
@@ -165,21 +165,21 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
     private final Sensor flushSensor;
 
     /**
-     * The executor thread busy sensor. Null when executor metrics are not enabled.
+     * The background thread busy sensor. Null when background metrics are not enabled.
      */
-    private final Sensor executorThreadBusySensor;
+    private final Sensor backgroundThreadBusySensor;
 
     /**
-     * The executor queue time sensor. Null when executor metrics are not enabled.
+     * The background queue time sensor. Null when background metrics are not enabled.
      */
-    private final Sensor executorQueueTimeSensor;
+    private final Sensor backgroundQueueTimeSensor;
 
     /**
-     * The executor processing time sensor. Null when executor metrics are not enabled.
+     * The background processing time sensor. Null when background metrics are not enabled.
      */
-    private final Sensor executorProcessingTimeSensor;
+    private final Sensor backgroundProcessingTimeSensor;
 
-    public CoordinatorRuntimeMetricsImpl(Metrics metrics, String metricsGroup, boolean enableExecutorMetrics) {
+    public CoordinatorRuntimeMetricsImpl(Metrics metrics, String metricsGroup, boolean enableBackgroundMetrics) {
         this.metrics = Objects.requireNonNull(metrics);
         this.metricsGroup = Objects.requireNonNull(metricsGroup);
 
@@ -292,14 +292,14 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
                 "The flushes per second."),
             new Rate(TimeUnit.SECONDS, new WindowedCount()));
 
-        if (enableExecutorMetrics) {
-            this.executorThreadBusySensor = metrics.sensor(this.metricsGroup + "-ExecutorThreadBusyRatio");
-            this.executorThreadBusySensor.add(
+        if (enableBackgroundMetrics) {
+            this.backgroundThreadBusySensor = metrics.sensor(this.metricsGroup + "-BackgroundThreadBusyRatio");
+            this.backgroundThreadBusySensor.add(
                 metrics.metricName(
-                    "executor-thread-idle-ratio-avg",
+                    "background-thread-idle-ratio-avg",
                     this.metricsGroup,
-                    "The fraction of time the executor threads are idle. This is an average across " +
-                        "all coordinator executor threads."),
+                    "The fraction of time the background threads are idle. This is an average across " +
+                        "all coordinator background threads."),
                 new Rate(TimeUnit.MILLISECONDS) {
                     @Override
                     public double measure(MetricConfig config, long now) {
@@ -307,27 +307,27 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
                     }
                 });
 
-            KafkaMetricHistogram executorQueueTimeHistogram = KafkaMetricHistogram.newLatencyHistogram(
+            KafkaMetricHistogram backgroundQueueTimeHistogram = KafkaMetricHistogram.newLatencyHistogram(
                 suffix -> kafkaMetricName(
-                    EXECUTOR_QUEUE_TIME_METRIC_NAME + "-" + suffix,
-                    "The " + suffix + " executor queue time in milliseconds"
+                    BACKGROUND_QUEUE_TIME_METRIC_NAME + "-" + suffix,
+                    "The " + suffix + " background queue time in milliseconds"
                 )
             );
-            this.executorQueueTimeSensor = metrics.sensor(this.metricsGroup + "-ExecutorQueueTime");
-            this.executorQueueTimeSensor.add(executorQueueTimeHistogram);
+            this.backgroundQueueTimeSensor = metrics.sensor(this.metricsGroup + "-BackgroundQueueTime");
+            this.backgroundQueueTimeSensor.add(backgroundQueueTimeHistogram);
 
-            KafkaMetricHistogram executorProcessingTimeHistogram = KafkaMetricHistogram.newLatencyHistogram(
+            KafkaMetricHistogram backgroundProcessingTimeHistogram = KafkaMetricHistogram.newLatencyHistogram(
                 suffix -> kafkaMetricName(
-                    EXECUTOR_PROCESSING_TIME_METRIC_NAME + "-" + suffix,
-                    "The " + suffix + " executor processing time in milliseconds"
+                    BACKGROUND_PROCESSING_TIME_METRIC_NAME + "-" + suffix,
+                    "The " + suffix + " background processing time in milliseconds"
                 )
             );
-            this.executorProcessingTimeSensor = metrics.sensor(this.metricsGroup + "-ExecutorProcessingTime");
-            this.executorProcessingTimeSensor.add(executorProcessingTimeHistogram);
+            this.backgroundProcessingTimeSensor = metrics.sensor(this.metricsGroup + "-BackgroundProcessingTime");
+            this.backgroundProcessingTimeSensor.add(backgroundProcessingTimeHistogram);
         } else {
-            this.executorThreadBusySensor = null;
-            this.executorQueueTimeSensor = null;
-            this.executorProcessingTimeSensor = null;
+            this.backgroundThreadBusySensor = null;
+            this.backgroundQueueTimeSensor = null;
+            this.backgroundProcessingTimeSensor = null;
         }
     }
 
@@ -362,14 +362,14 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
         metrics.removeSensor(eventPurgatoryTimeSensor.name());
         metrics.removeSensor(lingerTimeSensor.name());
         metrics.removeSensor(flushSensor.name());
-        if (executorThreadBusySensor != null) {
-            metrics.removeSensor(executorThreadBusySensor.name());
+        if (backgroundThreadBusySensor != null) {
+            metrics.removeSensor(backgroundThreadBusySensor.name());
         }
-        if (executorQueueTimeSensor != null) {
-            metrics.removeSensor(executorQueueTimeSensor.name());
+        if (backgroundQueueTimeSensor != null) {
+            metrics.removeSensor(backgroundQueueTimeSensor.name());
         }
-        if (executorProcessingTimeSensor != null) {
-            metrics.removeSensor(executorProcessingTimeSensor.name());
+        if (backgroundProcessingTimeSensor != null) {
+            metrics.removeSensor(backgroundProcessingTimeSensor.name());
         }
     }
 
@@ -446,23 +446,23 @@ public class CoordinatorRuntimeMetricsImpl implements CoordinatorRuntimeMetrics 
     }
 
     @Override
-    public void recordExecutorThreadBusyTime(double busyTimeMs) {
-        if (executorThreadBusySensor != null) {
-            executorThreadBusySensor.record(busyTimeMs);
+    public void recordBackgroundThreadBusyTime(double busyTimeMs) {
+        if (backgroundThreadBusySensor != null) {
+            backgroundThreadBusySensor.record(busyTimeMs);
         }
     }
 
     @Override
-    public void recordExecutorQueueTime(long durationMs) {
-        if (executorQueueTimeSensor != null) {
-            executorQueueTimeSensor.record(durationMs);
+    public void recordBackgroundQueueTime(long durationMs) {
+        if (backgroundQueueTimeSensor != null) {
+            backgroundQueueTimeSensor.record(durationMs);
         }
     }
 
     @Override
-    public void recordExecutorProcessingTime(long durationMs) {
-        if (executorProcessingTimeSensor != null) {
-            executorProcessingTimeSensor.record(durationMs);
+    public void recordBackgroundProcessingTime(long durationMs) {
+        if (backgroundProcessingTimeSensor != null) {
+            backgroundProcessingTimeSensor.record(durationMs);
         }
     }
 

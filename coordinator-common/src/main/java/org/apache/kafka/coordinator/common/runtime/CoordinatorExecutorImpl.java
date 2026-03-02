@@ -79,13 +79,13 @@ public class CoordinatorExecutorImpl<U> implements CoordinatorExecutor<U> {
             if (tasks.get(key) != task) return;
 
             var dequeuedTimeMs = time.milliseconds();
-            metrics.recordExecutorQueueTime(dequeuedTimeMs - queuedTimeMs);
+            metrics.recordBackgroundQueueTime(dequeuedTimeMs - queuedTimeMs);
 
             // Execute the task.
             var result = executeTask(task);
             long processingTimeMs = time.milliseconds() - dequeuedTimeMs;
-            metrics.recordExecutorProcessingTime(processingTimeMs);
-            metrics.recordExecutorThreadBusyTime((double) processingTimeMs / executor.getCorePoolSize());
+            metrics.recordBackgroundProcessingTime(processingTimeMs);
+            metrics.recordBackgroundThreadBusyTime((double) processingTimeMs / executor.getCorePoolSize());
 
             // Schedule the operation.
             scheduler.scheduleWriteOperation(

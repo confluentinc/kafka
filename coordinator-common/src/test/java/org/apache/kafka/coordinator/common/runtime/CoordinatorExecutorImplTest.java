@@ -416,8 +416,8 @@ public class CoordinatorExecutorImplTest {
             taskOperation
         );
 
-        verify(metrics, times(1)).recordExecutorQueueTime(100);
-        verify(metrics, times(1)).recordExecutorProcessingTime(500);
-        verify(metrics, times(1)).recordExecutorThreadBusyTime(250.0);
+        verify(metrics, times(1)).recordBackgroundQueueTime(100);
+        verify(metrics, times(1)).recordBackgroundProcessingTime(500);
+        verify(metrics, times(1)).recordBackgroundThreadBusyTime(250.0);
     }
 }

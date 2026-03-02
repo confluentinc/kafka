@@ -33,6 +33,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.IntStream;
 
+import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.BACKGROUND_PROCESSING_TIME_METRIC_NAME;
+import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.BACKGROUND_QUEUE_TIME_METRIC_NAME;
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.BATCH_BUFFER_CACHE_DISCARD_COUNT_METRIC_NAME;
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.BATCH_BUFFER_CACHE_SIZE_METRIC_NAME;
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.BATCH_FLUSH_TIME_METRIC_NAME;
@@ -40,8 +42,6 @@ import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetr
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.EVENT_PROCESSING_TIME_METRIC_NAME;
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.EVENT_PURGATORY_TIME_METRIC_NAME;
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.EVENT_QUEUE_TIME_METRIC_NAME;
-import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.EXECUTOR_PROCESSING_TIME_METRIC_NAME;
-import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.EXECUTOR_QUEUE_TIME_METRIC_NAME;
 import static org.apache.kafka.coordinator.common.runtime.CoordinatorRuntimeMetricsImpl.NUM_PARTITIONS_METRIC_NAME;
 import static org.apache.kafka.coordinator.common.runtime.KafkaMetricHistogram.MAX_LATENCY_MS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -98,36 +98,36 @@ public class CoordinatorRuntimeMetricsImplTest {
         );
     }
 
-    private static Set<MetricName> expectedExecutorMetricNames(Metrics metrics) {
+    private static Set<MetricName> expectedBackgroundMetricNames(Metrics metrics) {
         return Set.of(
-            kafkaMetricName(metrics, "executor-thread-idle-ratio-avg"),
-            kafkaMetricName(metrics, "executor-queue-time-ms-max"),
-            kafkaMetricName(metrics, "executor-queue-time-ms-p50"),
-            kafkaMetricName(metrics, "executor-queue-time-ms-p95"),
-            kafkaMetricName(metrics, "executor-queue-time-ms-p99"),
-            kafkaMetricName(metrics, "executor-queue-time-ms-p999"),
-            kafkaMetricName(metrics, "executor-processing-time-ms-max"),
-            kafkaMetricName(metrics, "executor-processing-time-ms-p50"),
-            kafkaMetricName(metrics, "executor-processing-time-ms-p95"),
-            kafkaMetricName(metrics, "executor-processing-time-ms-p99"),
-            kafkaMetricName(metrics, "executor-processing-time-ms-p999")
+            kafkaMetricName(metrics, "background-thread-idle-ratio-avg"),
+            kafkaMetricName(metrics, "background-queue-time-ms-max"),
+            kafkaMetricName(metrics, "background-queue-time-ms-p50"),
+            kafkaMetricName(metrics, "background-queue-time-ms-p95"),
+            kafkaMetricName(metrics, "background-queue-time-ms-p99"),
+            kafkaMetricName(metrics, "background-queue-time-ms-p999"),
+            kafkaMetricName(metrics, "background-processing-time-ms-max"),
+            kafkaMetricName(metrics, "background-processing-time-ms-p50"),
+            kafkaMetricName(metrics, "background-processing-time-ms-p95"),
+            kafkaMetricName(metrics, "background-processing-time-ms-p99"),
+            kafkaMetricName(metrics, "background-processing-time-ms-p999")
         );
     }
 
     @Test
-    public void testMetricNamesWithoutExecutorMetrics() {
+    public void testMetricNamesWithoutBackgroundMetrics() {
         Metrics metrics = new Metrics();
 
         Set<MetricName> expectedMetrics = expectedMetricNames(metrics);
-        Set<MetricName> executorMetrics = expectedExecutorMetricNames(metrics);
+        Set<MetricName> backgroundMetrics = expectedBackgroundMetricNames(metrics);
 
         try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP, false)) {
             runtimeMetrics.registerEventQueueSizeGauge(() -> 0);
             runtimeMetrics.registerBufferCacheSizeGauge(() -> 0L);
             expectedMetrics.forEach(metricName -> assertTrue(metrics.metrics().containsKey(metricName)));
-            executorMetrics.forEach(metricName -> assertFalse(
+            backgroundMetrics.forEach(metricName -> assertFalse(
                 metrics.metrics().containsKey(metricName),
-                "metrics should not contain executor metricName: " + metricName + " when executor metrics are disabled."
+                "metrics should not contain background metricName: " + metricName + " when background metrics are disabled."
             ));
         }
 
@@ -138,26 +138,26 @@ public class CoordinatorRuntimeMetricsImplTest {
     }
 
     @Test
-    public void testMetricNamesWithExecutorMetrics() {
+    public void testMetricNamesWithBackgroundMetrics() {
         Metrics metrics = new Metrics();
 
         Set<MetricName> expectedMetrics = expectedMetricNames(metrics);
-        Set<MetricName> executorMetrics = expectedExecutorMetricNames(metrics);
+        Set<MetricName> backgroundMetrics = expectedBackgroundMetricNames(metrics);
 
         try (CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP, true)) {
             runtimeMetrics.registerEventQueueSizeGauge(() -> 0);
             runtimeMetrics.registerBufferCacheSizeGauge(() -> 0L);
             expectedMetrics.forEach(metricName -> assertTrue(metrics.metrics().containsKey(metricName)));
-            executorMetrics.forEach(metricName -> assertTrue(metrics.metrics().containsKey(metricName)));
+            backgroundMetrics.forEach(metricName -> assertTrue(metrics.metrics().containsKey(metricName)));
         }
 
         expectedMetrics.forEach(metricName -> assertFalse(
             metrics.metrics().containsKey(metricName),
             "metrics did not expect to contain metricName: " + metricName + " after closing."
         ));
-        executorMetrics.forEach(metricName -> assertFalse(
+        backgroundMetrics.forEach(metricName -> assertFalse(
             metrics.metrics().containsKey(metricName),
-            "metrics did not expect to contain executor metricName: " + metricName + " after closing."
+            "metrics did not expect to contain background metricName: " + metricName + " after closing."
         ));
     }
 
@@ -182,7 +182,7 @@ public class CoordinatorRuntimeMetricsImplTest {
 
             // Check that all gauges were registered.
             expectedMetricNames(metrics).forEach(metricName -> assertTrue(metrics.metrics().containsKey(metricName)));
-            expectedExecutorMetricNames(metrics).forEach(metricName -> assertTrue(metrics.metrics().containsKey(metricName)));
+            expectedBackgroundMetricNames(metrics).forEach(metricName -> assertTrue(metrics.metrics().containsKey(metricName)));
         }
 
         clearInvocations(metrics);
@@ -277,14 +277,14 @@ public class CoordinatorRuntimeMetricsImplTest {
 
 
     @Test
-    public void testExecutorThreadIdleSensor() {
+    public void testBackgroundThreadIdleSensor() {
         Time time = new MockTime();
         Metrics metrics = new Metrics(time);
 
         CoordinatorRuntimeMetricsImpl runtimeMetrics = new CoordinatorRuntimeMetricsImpl(metrics, METRICS_GROUP, true);
-        IntStream.range(0, 3).forEach(i -> runtimeMetrics.recordExecutorThreadBusyTime((i + 1) * 1000.0));
+        IntStream.range(0, 3).forEach(i -> runtimeMetrics.recordBackgroundThreadBusyTime((i + 1) * 1000.0));
 
-        org.apache.kafka.common.MetricName metricName = kafkaMetricName(metrics, "executor-thread-idle-ratio-avg");
+        org.apache.kafka.common.MetricName metricName = kafkaMetricName(metrics, "background-thread-idle-ratio-avg");
         KafkaMetric metric = metrics.metrics().get(metricName);
         assertEquals(1 - 6 / 30.0, metric.metricValue()); // '1 - busy_ms / window_ms'
     }
@@ -327,8 +327,8 @@ public class CoordinatorRuntimeMetricsImplTest {
         EVENT_PURGATORY_TIME_METRIC_NAME,
         BATCH_LINGER_TIME_METRIC_NAME,
         BATCH_FLUSH_TIME_METRIC_NAME,
-        EXECUTOR_QUEUE_TIME_METRIC_NAME,
-        EXECUTOR_PROCESSING_TIME_METRIC_NAME
+        BACKGROUND_QUEUE_TIME_METRIC_NAME,
+        BACKGROUND_PROCESSING_TIME_METRIC_NAME
     })
     public void testHistogramMetrics(String metricNamePrefix) {
         Time time = new MockTime();
@@ -353,11 +353,11 @@ public class CoordinatorRuntimeMetricsImplTest {
                 case BATCH_FLUSH_TIME_METRIC_NAME:
                     runtimeMetrics.recordFlushTime(i);
                     break;
-                case EXECUTOR_QUEUE_TIME_METRIC_NAME:
-                    runtimeMetrics.recordExecutorQueueTime(i);
+                case BACKGROUND_QUEUE_TIME_METRIC_NAME:
+                    runtimeMetrics.recordBackgroundQueueTime(i);
                     break;
-                case EXECUTOR_PROCESSING_TIME_METRIC_NAME:
-                    runtimeMetrics.recordExecutorProcessingTime(i);
+                case BACKGROUND_PROCESSING_TIME_METRIC_NAME:
+                    runtimeMetrics.recordBackgroundProcessingTime(i);
                     break;
             }
         });
