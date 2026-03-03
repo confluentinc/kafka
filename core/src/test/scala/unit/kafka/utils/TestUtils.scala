@@ -140,6 +140,9 @@ object TestUtils extends Logging {
     JTestUtils.tempFile(content)
   }
 
+  def boundPort(broker: KafkaBroker, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): Int =
+    broker.boundPort(ListenerName.forSecurityProtocol(securityProtocol))
+
   /**
    * Create a test config for the provided parameters.
    *
@@ -170,6 +173,17 @@ object TestUtils extends Logging {
         enableSaslPlaintext = enableSaslPlaintext, enableSaslSsl = enableSaslSsl, rack = rackInfo.get(node), logDirCount = logDirCount, enableToken = enableToken,
         numPartitions = numPartitions, defaultReplicationFactor = defaultReplicationFactor, enableFetchFromFollower = enableFetchFromFollower)
     }
+  }
+
+  @deprecated("This method will be removed soon, please use plaintextBootstrapServers() or bootstrapServers() instead")
+  def getBrokerListStrFromServers[B <: KafkaBroker](
+                                                     brokers: Seq[B],
+                                                     protocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): String = {
+    brokers.map { s =>
+      val listener = s.config.effectiveAdvertisedBrokerListeners.find(_.securityProtocol == protocol).getOrElse(
+        sys.error(s"Could not find listener with security protocol $protocol"))
+      formatAddress(listener.host, boundPort(s, protocol))
+    }.mkString(",")
   }
 
   def plaintextBootstrapServers[B <: KafkaBroker](
