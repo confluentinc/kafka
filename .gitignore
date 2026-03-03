@@ -33,6 +33,7 @@ Vagrantfile.local
 .DS_Store
 Pipfile
 .java-version
+.cursor/
 
 config/server-*
 config/zookeeper-*
