@@ -1180,20 +1180,50 @@ class DynamicBrokerConfigTest {
   }
 
   @Test
-  def testCoordinatorCachedBufferMaxBytesUpdates(): Unit = {
+  def testDynamicGroupCoordinatorConfig(): Unit = {
+    assertTrue(GroupCoordinatorConfig.RECONFIGURABLE_CONFIGS.contains(GroupCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG))
+    assertTrue(GroupCoordinatorConfig.RECONFIGURABLE_CONFIGS.contains(GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG))
+    assertTrue(GroupCoordinatorConfig.RECONFIGURABLE_CONFIGS.contains(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG))
+    assertTrue(GroupCoordinatorConfig.RECONFIGURABLE_CONFIGS.contains(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG))
+
     val origProps = TestUtils.createBrokerConfig(0, port = 8181)
     origProps.put(GroupCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG, "2097152")
-    origProps.put(ShareCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG, "3145728")
-    val ctx = new DynamicLogConfigContext(origProps)
-    assertEquals(2 * 1024 * 1024, ctx.config.groupCoordinatorConfig.cachedBufferMaxBytes())
-    assertEquals(3 * 1024 * 1024, ctx.config.shareCoordinatorConfig.shareCoordinatorCachedBufferMaxBytes())
+    origProps.put(GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, "500")
+    origProps.put(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, "250")
+    origProps.put(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, "125")
+    val config = KafkaConfig(origProps)
+    config.dynamicConfig.initialize(None)
+    assertEquals(2 * 1024 * 1024, config.groupCoordinatorConfig.cachedBufferMaxBytes())
+    assertEquals(500, config.groupCoordinatorConfig.consumerGroupAssignmentIntervalMs())
+    assertEquals(250, config.groupCoordinatorConfig.shareGroupAssignmentIntervalMs())
+    assertEquals(125, config.groupCoordinatorConfig.streamsGroupAssignmentIntervalMs())
 
     val props = new Properties()
     props.put(GroupCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG, "4194304")
+    props.put(GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, "1000")
+    props.put(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, "500")
+    props.put(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, "250")
+    config.dynamicConfig.updateDefaultConfig(props)
+    assertEquals(4 * 1024 * 1024, config.groupCoordinatorConfig.cachedBufferMaxBytes())
+    assertEquals(1000, config.groupCoordinatorConfig.consumerGroupAssignmentIntervalMs())
+    assertEquals(500, config.groupCoordinatorConfig.shareGroupAssignmentIntervalMs())
+    assertEquals(250, config.groupCoordinatorConfig.streamsGroupAssignmentIntervalMs())
+  }
+
+  @Test
+  def testDynamicShareCoordinatorConfig(): Unit = {
+    assertTrue(ShareCoordinatorConfig.RECONFIGURABLE_CONFIGS.contains(ShareCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG))
+
+    val origProps = TestUtils.createBrokerConfig(0, port = 8181)
+    origProps.put(ShareCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG, "3145728")
+    val config = KafkaConfig(origProps)
+    config.dynamicConfig.initialize(None)
+    assertEquals(3 * 1024 * 1024, config.shareCoordinatorConfig.shareCoordinatorCachedBufferMaxBytes())
+
+    val props = new Properties()
     props.put(ShareCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG, "5242880")
-    ctx.config.dynamicConfig.updateDefaultConfig(props)
-    assertEquals(4 * 1024 * 1024, ctx.config.groupCoordinatorConfig.cachedBufferMaxBytes())
-    assertEquals(5 * 1024 * 1024, ctx.config.shareCoordinatorConfig.shareCoordinatorCachedBufferMaxBytes())
+    config.dynamicConfig.updateDefaultConfig(props)
+    assertEquals(5 * 1024 * 1024, config.shareCoordinatorConfig.shareCoordinatorCachedBufferMaxBytes())
   }
 }
 

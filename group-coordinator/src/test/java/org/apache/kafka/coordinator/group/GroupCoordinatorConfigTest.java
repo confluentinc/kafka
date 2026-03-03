@@ -200,7 +200,10 @@ public class GroupCoordinatorConfigTest {
         configs.put(GroupCoordinatorConfig.CONSUMER_GROUP_MIN_HEARTBEAT_INTERVAL_MS_CONFIG, 111);
         configs.put(GroupCoordinatorConfig.CONSUMER_GROUP_MAX_HEARTBEAT_INTERVAL_MS_CONFIG, 222);
         configs.put(GroupCoordinatorConfig.CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_CONFIG, 15 * 60 * 1000);
+        configs.put(GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 500);
+        configs.put(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 250);
         configs.put(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 5000);
+        configs.put(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 125);
         configs.put(GroupCoordinatorConfig.CACHED_BUFFER_MAX_BYTES_CONFIG, 2 * 1024 * 1024);
 
         GroupCoordinatorConfig config = createConfig(configs);
@@ -232,7 +235,10 @@ public class GroupCoordinatorConfigTest {
         assertEquals(111, config.consumerGroupMinHeartbeatIntervalMs());
         assertEquals(222, config.consumerGroupMaxHeartbeatIntervalMs());
         assertEquals(15 * 60 * 1000, config.consumerGroupRegexRefreshIntervalMs());
+        assertEquals(500, config.consumerGroupAssignmentIntervalMs());
+        assertEquals(250, config.shareGroupAssignmentIntervalMs());
         assertEquals(5000, config.streamsGroupInitialRebalanceDelayMs());
+        assertEquals(125, config.streamsGroupAssignmentIntervalMs());
         assertEquals(2 * 1024 * 1024, config.cachedBufferMaxBytes());
     }
 

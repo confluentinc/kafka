@@ -227,6 +227,10 @@ public class GroupCoordinatorConfig {
         "the topics matching the group subscribed regexes. This is only applicable to consumer groups using the consumer group protocol. ";
     public static final int CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_DEFAULT = 10 * 60 * 1000; // 10 minutes
 
+    public static final String CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.consumer.assignment.interval.ms";
+    public static final String CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DOC = "The interval between assignment updates for a consumer group.";
+    public static final int CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT = 1000;
+
     ///
     /// Share group configs
     ///
@@ -271,6 +275,10 @@ public class GroupCoordinatorConfig {
     public static final String SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_DOC = "Time elapsed before retrying initialize share group state request. " +
         "If below offsets.commit.timeout.ms, then value of offsets.commit.timeout.ms is used.";
 
+    public static final String SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.share.assignment.interval.ms";
+    public static final String SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DOC = "The interval between assignment updates for a share group.";
+    public static final int SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT = 1000;
+
     ///
     /// Streams group configs
     ///
@@ -314,8 +322,15 @@ public class GroupCoordinatorConfig {
     public static final int STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DEFAULT = 3000;
     public static final String STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DOC = "The amount of time the group coordinator will wait for more streams clients to join a new group before performing the first rebalance. A longer delay means potentially fewer rebalances.";
 
+    public static final String STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.streams.assignment.interval.ms";
+    public static final String STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DOC = "The interval between assignment updates for a streams group.";
+    public static final int STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT = 1000;
+
     public static final Set<String> RECONFIGURABLE_CONFIGS = Set.of(
-        CACHED_BUFFER_MAX_BYTES_CONFIG
+        CACHED_BUFFER_MAX_BYTES_CONFIG,
+        CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG,
+        SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG,
+        STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG
     );
     
     public static final ConfigDef CONFIG_DEF = new ConfigDef()
@@ -358,6 +373,7 @@ public class GroupCoordinatorConfig {
         .define(CONSUMER_GROUP_MIGRATION_POLICY_CONFIG, STRING, CONSUMER_GROUP_MIGRATION_POLICY_DEFAULT, ConfigDef.CaseInsensitiveValidString.in(Utils.enumOptions(ConsumerGroupMigrationPolicy.class)), MEDIUM, CONSUMER_GROUP_MIGRATION_POLICY_DOC)
         // Interval config used for testing purposes.
         .defineInternal(CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_CONFIG, INT, CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_DEFAULT, atLeast(10 * 1000), MEDIUM, CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_DOC)
+        .define(CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
 
         // Share group configs
         .define(SHARE_GROUP_SESSION_TIMEOUT_MS_CONFIG, INT, SHARE_GROUP_SESSION_TIMEOUT_MS_DEFAULT, atLeast(1), MEDIUM, SHARE_GROUP_SESSION_TIMEOUT_MS_DOC)
@@ -369,6 +385,7 @@ public class GroupCoordinatorConfig {
         .define(SHARE_GROUP_MAX_SIZE_CONFIG, INT, SHARE_GROUP_MAX_SIZE_DEFAULT, between(1, 1000), MEDIUM, SHARE_GROUP_MAX_SIZE_DOC)
         .define(SHARE_GROUP_ASSIGNORS_CONFIG, LIST, SHARE_GROUP_ASSIGNORS_DEFAULT, ConfigDef.ValidList.anyNonDuplicateValues(false, false), MEDIUM, SHARE_GROUP_ASSIGNORS_DOC)
         .defineInternal(SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_CONFIG, INT, SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_DEFAULT, atLeast(1), LOW, SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_DOC)
+        .define(SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
 
         // Streams group configs
         .define(STREAMS_GROUP_SESSION_TIMEOUT_MS_CONFIG, INT, STREAMS_GROUP_SESSION_TIMEOUT_MS_DEFAULT, atLeast(1), MEDIUM, STREAMS_GROUP_SESSION_TIMEOUT_MS_DOC)
@@ -380,7 +397,8 @@ public class GroupCoordinatorConfig {
         .define(STREAMS_GROUP_MAX_SIZE_CONFIG, INT, STREAMS_GROUP_MAX_SIZE_DEFAULT, atLeast(1), MEDIUM, STREAMS_GROUP_MAX_SIZE_DOC)
         .define(STREAMS_GROUP_NUM_STANDBY_REPLICAS_CONFIG, INT, STREAMS_GROUP_NUM_STANDBY_REPLICAS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_NUM_STANDBY_REPLICAS_DOC)
         .define(STREAMS_GROUP_MAX_STANDBY_REPLICAS_CONFIG, INT, STREAMS_GROUP_MAX_STANDBY_REPLICAS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_MAX_STANDBY_REPLICAS_DOC)
-        .define(STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, INT, STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DOC);
+        .define(STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, INT, STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DOC)
+        .define(STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DOC);
 
 
     /**
@@ -892,6 +910,13 @@ public class GroupCoordinatorConfig {
     }
 
     /**
+     * The interval between assignment updates for a consumer group.
+     */
+    public int consumerGroupAssignmentIntervalMs() {
+        return config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG);
+    }
+
+    /**
      * The share group session timeout in milliseconds.
      */
     public int shareGroupSessionTimeoutMs() {
@@ -952,6 +977,13 @@ public class GroupCoordinatorConfig {
      */
     public int shareGroupInitializeRetryIntervalMs() {
         return shareGroupInitializeRetryIntervalMs;
+    }
+
+    /**
+     * The interval between assignment updates for a share group.
+     */
+    public int shareGroupAssignmentIntervalMs() {
+        return config.getInt(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG);
     }
 
     /**
@@ -1022,5 +1054,12 @@ public class GroupCoordinatorConfig {
      */
     public int streamsGroupInitialRebalanceDelayMs() {
         return streamsGroupInitialRebalanceDelayMs;
+    }
+
+    /**
+     * The interval between assignment updates for a streams group.
+     */
+    public int streamsGroupAssignmentIntervalMs() {
+        return config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG);
     }
 }

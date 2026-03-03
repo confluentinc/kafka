@@ -8651,6 +8651,19 @@ public class GroupMetadataManager {
     }
 
     /**
+     * Get the interval between assignment updates of the provided consumer group.
+     */
+    // package private for testing
+    int consumerGroupAssignmentIntervalMs(String groupId) {
+        Optional<GroupConfig> groupConfig = groupConfigManager.groupConfig(groupId);
+        int assignmentIntervalMs = groupConfig.map(GroupConfig::consumerAssignmentIntervalMs)
+            .orElse(-1);
+        return assignmentIntervalMs >= 0 ?
+            assignmentIntervalMs :
+            config.consumerGroupAssignmentIntervalMs();
+    }
+
+    /**
      * Get the session timeout of the provided share group.
      */
     private int shareGroupSessionTimeoutMs(String groupId) {
@@ -8669,6 +8682,19 @@ public class GroupMetadataManager {
     }
 
     /**
+     * Get the interval between assignment updates of the provided share group.
+     */
+    // package private for testing
+    int shareGroupAssignmentIntervalMs(String groupId) {
+        Optional<GroupConfig> groupConfig = groupConfigManager.groupConfig(groupId);
+        int assignmentIntervalMs = groupConfig.map(GroupConfig::shareAssignmentIntervalMs)
+            .orElse(-1);
+        return assignmentIntervalMs >= 0 ?
+            assignmentIntervalMs :
+            config.shareGroupAssignmentIntervalMs();
+    }
+
+    /**
      * Get the session timeout of the provided streams group.
      */
     private int streamsGroupSessionTimeoutMs(String groupId) {
@@ -8684,6 +8710,19 @@ public class GroupMetadataManager {
         Optional<GroupConfig> groupConfig = groupConfigManager.groupConfig(groupId);
         return groupConfig.map(GroupConfig::streamsHeartbeatIntervalMs)
             .orElse(config.streamsGroupHeartbeatIntervalMs());
+    }
+
+    /**
+     * Get the interval between assignment updates of the provided streams group.
+     */
+    // package private for testing
+    int streamsGroupAssignmentIntervalMs(String groupId) {
+        Optional<GroupConfig> groupConfig = groupConfigManager.groupConfig(groupId);
+        int assignmentIntervalMs = groupConfig.map(GroupConfig::streamsAssignmentIntervalMs)
+            .orElse(-1);
+        return assignmentIntervalMs >= 0 ?
+            assignmentIntervalMs :
+            config.streamsGroupAssignmentIntervalMs();
     }
 
     /**

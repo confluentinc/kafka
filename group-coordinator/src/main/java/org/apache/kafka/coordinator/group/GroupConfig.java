@@ -46,6 +46,9 @@ public final class GroupConfig extends AbstractConfig {
 
     public static final String CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG = "consumer.heartbeat.interval.ms";
 
+    public static final String CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG = "consumer.assignment.interval.ms";
+    public static final int CONSUMER_ASSIGNMENT_INTERVAL_MS_DEFAULT = -1;
+
     public static final String SHARE_SESSION_TIMEOUT_MS_CONFIG = "share.session.timeout.ms";
 
     public static final String SHARE_HEARTBEAT_INTERVAL_MS_CONFIG = "share.heartbeat.interval.ms";
@@ -71,6 +74,9 @@ public final class GroupConfig extends AbstractConfig {
         "If set to \"read_uncommitted\", the share group will return all messages, even transactional messages which have been aborted. " +
         "Non-transactional records will be returned unconditionally in either mode.";
 
+    public static final String SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG = "share.assignment.interval.ms";
+    public static final int SHARE_ASSIGNMENT_INTERVAL_MS_DEFAULT = -1;
+
     public static final String STREAMS_SESSION_TIMEOUT_MS_CONFIG = "streams.session.timeout.ms";
 
     public static final String STREAMS_HEARTBEAT_INTERVAL_MS_CONFIG = "streams.heartbeat.interval.ms";
@@ -79,9 +85,14 @@ public final class GroupConfig extends AbstractConfig {
 
     public static final String STREAMS_INITIAL_REBALANCE_DELAY_MS_CONFIG = "streams.initial.rebalance.delay.ms";
 
+    public static final String STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG = "streams.assignment.interval.ms";
+    public static final int STREAMS_ASSIGNMENT_INTERVAL_MS_DEFAULT = -1;
+
     public final int consumerSessionTimeoutMs;
 
     public final int consumerHeartbeatIntervalMs;
+
+    public final int consumerAssignmentIntervalMs;
 
     public final int shareSessionTimeoutMs;
 
@@ -93,6 +104,8 @@ public final class GroupConfig extends AbstractConfig {
 
     public final String shareAutoOffsetReset;
 
+    public final int shareAssignmentIntervalMs;
+
     public final int streamsSessionTimeoutMs;
 
     public final int streamsHeartbeatIntervalMs;
@@ -100,6 +113,8 @@ public final class GroupConfig extends AbstractConfig {
     public final int streamsNumStandbyReplicas;
 
     public final int streamsInitialRebalanceDelayMs;
+
+    public final int streamsAssignmentIntervalMs;
 
     public final String shareIsolationLevel;
 
@@ -116,6 +131,12 @@ public final class GroupConfig extends AbstractConfig {
             atLeast(1),
             MEDIUM,
             GroupCoordinatorConfig.CONSUMER_GROUP_HEARTBEAT_INTERVAL_MS_DOC)
+        .define(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG,
+            INT,
+            CONSUMER_ASSIGNMENT_INTERVAL_MS_DEFAULT,
+            atLeast(-1),
+            MEDIUM,
+            GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
         .define(SHARE_SESSION_TIMEOUT_MS_CONFIG,
             INT,
             GroupCoordinatorConfig.SHARE_GROUP_SESSION_TIMEOUT_MS_DEFAULT,
@@ -152,6 +173,12 @@ public final class GroupConfig extends AbstractConfig {
             in(IsolationLevel.READ_COMMITTED.toString(), IsolationLevel.READ_UNCOMMITTED.toString()),
             MEDIUM,
             SHARE_ISOLATION_LEVEL_DOC)
+        .define(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG,
+            INT,
+            SHARE_ASSIGNMENT_INTERVAL_MS_DEFAULT,
+            atLeast(-1),
+            MEDIUM,
+            GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
         .define(STREAMS_SESSION_TIMEOUT_MS_CONFIG,
             INT,
             GroupCoordinatorConfig.STREAMS_GROUP_SESSION_TIMEOUT_MS_DEFAULT,
@@ -175,21 +202,30 @@ public final class GroupConfig extends AbstractConfig {
             GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DEFAULT,
             atLeast(0),
             MEDIUM,
-            GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DOC);
+            GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DOC)
+        .define(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG,
+            INT,
+            STREAMS_ASSIGNMENT_INTERVAL_MS_DEFAULT,
+            atLeast(-1),
+            MEDIUM,
+            GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DOC);
 
     public GroupConfig(Map<?, ?> props) {
         super(CONFIG, props, false);
         this.consumerSessionTimeoutMs = getInt(CONSUMER_SESSION_TIMEOUT_MS_CONFIG);
         this.consumerHeartbeatIntervalMs = getInt(CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG);
+        this.consumerAssignmentIntervalMs = getInt(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG);
         this.shareSessionTimeoutMs = getInt(SHARE_SESSION_TIMEOUT_MS_CONFIG);
         this.shareHeartbeatIntervalMs = getInt(SHARE_HEARTBEAT_INTERVAL_MS_CONFIG);
         this.shareRecordLockDurationMs = getInt(SHARE_RECORD_LOCK_DURATION_MS_CONFIG);
         this.shareDeliveryCountLimit = getInt(SHARE_DELIVERY_COUNT_LIMIT_CONFIG);
         this.shareAutoOffsetReset = getString(SHARE_AUTO_OFFSET_RESET_CONFIG);
+        this.shareAssignmentIntervalMs = getInt(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG);
         this.streamsSessionTimeoutMs = getInt(STREAMS_SESSION_TIMEOUT_MS_CONFIG);
         this.streamsHeartbeatIntervalMs = getInt(STREAMS_HEARTBEAT_INTERVAL_MS_CONFIG);
         this.streamsNumStandbyReplicas = getInt(STREAMS_NUM_STANDBY_REPLICAS_CONFIG);
         this.streamsInitialRebalanceDelayMs = getInt(STREAMS_INITIAL_REBALANCE_DELAY_MS_CONFIG);
+        this.streamsAssignmentIntervalMs = getInt(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG);
         this.shareIsolationLevel = getString(SHARE_ISOLATION_LEVEL_CONFIG);
     }
 
@@ -362,6 +398,13 @@ public final class GroupConfig extends AbstractConfig {
     }
 
     /**
+     * The interval between assignment updates for a consumer group.
+     */
+    public int consumerAssignmentIntervalMs() {
+        return consumerAssignmentIntervalMs;
+    }
+
+    /**
      * The share group session timeout in milliseconds.
      */
     public int shareSessionTimeoutMs() {
@@ -394,6 +437,13 @@ public final class GroupConfig extends AbstractConfig {
     }
 
     /**
+     * The interval between assignment updates for a share group.
+     */
+    public int shareAssignmentIntervalMs() {
+        return shareAssignmentIntervalMs;
+    }
+
+    /**
      * The streams group session timeout in milliseconds.
      */
     public int streamsSessionTimeoutMs() {
@@ -419,6 +469,13 @@ public final class GroupConfig extends AbstractConfig {
      */
     public int streamsInitialRebalanceDelayMs() {
         return streamsInitialRebalanceDelayMs;
+    }
+
+    /**
+     * The interval between assignment updates for a streams group.
+     */
+    public int streamsAssignmentIntervalMs() {
+        return streamsAssignmentIntervalMs;
     }
 
     /**
