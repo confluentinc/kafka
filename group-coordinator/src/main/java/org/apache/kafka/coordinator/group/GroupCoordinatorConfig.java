@@ -231,6 +231,14 @@ public class GroupCoordinatorConfig {
     public static final String CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DOC = "The interval between assignment updates for a consumer group.";
     public static final int CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT = 1000;
 
+    public static final String CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.consumer.min.assignment.interval.ms";
+    public static final String CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DOC = "The minimum interval between assignment updates for a consumer group.";
+    public static final int CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DEFAULT = 0;
+
+    public static final String CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.consumer.max.assignment.interval.ms";
+    public static final String CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DOC = "The maximum interval between assignment updates for a consumer group.";
+    public static final int CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DEFAULT = 15000;
+
     ///
     /// Share group configs
     ///
@@ -279,6 +287,14 @@ public class GroupCoordinatorConfig {
     public static final String SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DOC = "The interval between assignment updates for a share group.";
     public static final int SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT = 1000;
 
+    public static final String SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.share.min.assignment.interval.ms";
+    public static final String SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DOC = "The minimum interval between assignment updates for a share group.";
+    public static final int SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DEFAULT = 0;
+
+    public static final String SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.share.max.assignment.interval.ms";
+    public static final String SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DOC = "The maximum interval between assignment updates for a share group.";
+    public static final int SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DEFAULT = 15000;
+
     ///
     /// Streams group configs
     ///
@@ -325,6 +341,14 @@ public class GroupCoordinatorConfig {
     public static final String STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.streams.assignment.interval.ms";
     public static final String STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DOC = "The interval between assignment updates for a streams group.";
     public static final int STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT = 1000;
+
+    public static final String STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.streams.min.assignment.interval.ms";
+    public static final String STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DOC = "The minimum interval between assignment updates for a streams group.";
+    public static final int STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DEFAULT = 0;
+
+    public static final String STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG = "group.streams.max.assignment.interval.ms";
+    public static final String STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DOC = "The maximum interval between assignment updates for a streams group.";
+    public static final int STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DEFAULT = 15000;
 
     public static final Set<String> RECONFIGURABLE_CONFIGS = Set.of(
         CACHED_BUFFER_MAX_BYTES_CONFIG,
@@ -374,6 +398,8 @@ public class GroupCoordinatorConfig {
         // Interval config used for testing purposes.
         .defineInternal(CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_CONFIG, INT, CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_DEFAULT, atLeast(10 * 1000), MEDIUM, CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_DOC)
         .define(CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
+        .define(CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DOC)
+        .define(CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DOC)
 
         // Share group configs
         .define(SHARE_GROUP_SESSION_TIMEOUT_MS_CONFIG, INT, SHARE_GROUP_SESSION_TIMEOUT_MS_DEFAULT, atLeast(1), MEDIUM, SHARE_GROUP_SESSION_TIMEOUT_MS_DOC)
@@ -386,6 +412,8 @@ public class GroupCoordinatorConfig {
         .define(SHARE_GROUP_ASSIGNORS_CONFIG, LIST, SHARE_GROUP_ASSIGNORS_DEFAULT, ConfigDef.ValidList.anyNonDuplicateValues(false, false), MEDIUM, SHARE_GROUP_ASSIGNORS_DOC)
         .defineInternal(SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_CONFIG, INT, SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_DEFAULT, atLeast(1), LOW, SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_DOC)
         .define(SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
+        .define(SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DOC)
+        .define(SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DOC)
 
         // Streams group configs
         .define(STREAMS_GROUP_SESSION_TIMEOUT_MS_CONFIG, INT, STREAMS_GROUP_SESSION_TIMEOUT_MS_DEFAULT, atLeast(1), MEDIUM, STREAMS_GROUP_SESSION_TIMEOUT_MS_DOC)
@@ -398,7 +426,9 @@ public class GroupCoordinatorConfig {
         .define(STREAMS_GROUP_NUM_STANDBY_REPLICAS_CONFIG, INT, STREAMS_GROUP_NUM_STANDBY_REPLICAS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_NUM_STANDBY_REPLICAS_DOC)
         .define(STREAMS_GROUP_MAX_STANDBY_REPLICAS_CONFIG, INT, STREAMS_GROUP_MAX_STANDBY_REPLICAS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_MAX_STANDBY_REPLICAS_DOC)
         .define(STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, INT, STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DOC)
-        .define(STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DOC);
+        .define(STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
+        .define(STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_DOC)
+        .define(STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG, INT, STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DEFAULT, atLeast(0), MEDIUM, STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_DOC);
 
 
     /**
@@ -432,6 +462,8 @@ public class GroupCoordinatorConfig {
     private final int consumerGroupMinHeartbeatIntervalMs;
     private final int consumerGroupMaxHeartbeatIntervalMs;
     private final int consumerGroupRegexRefreshIntervalMs;
+    private final int consumerGroupMinAssignmentIntervalMs;
+    private final int consumerGroupMaxAssignmentIntervalMs;
     // Share group configurations
     private final int shareGroupMaxSize;
     private final int shareGroupSessionTimeoutMs;
@@ -442,6 +474,8 @@ public class GroupCoordinatorConfig {
     private final int shareGroupMaxHeartbeatIntervalMs;
     private final List<ShareGroupPartitionAssignor> shareGroupAssignors;
     private final int shareGroupInitializeRetryIntervalMs;
+    private final int shareGroupMinAssignmentIntervalMs;
+    private final int shareGroupMaxAssignmentIntervalMs;
     // Streams group configurations
     private final int streamsGroupSessionTimeoutMs;
     private final int streamsGroupMinSessionTimeoutMs;
@@ -453,6 +487,8 @@ public class GroupCoordinatorConfig {
     private final int streamsGroupNumStandbyReplicas;
     private final int streamsGroupMaxStandbyReplicas;
     private final int streamsGroupInitialRebalanceDelayMs;
+    private final int streamsGroupMinAssignmentIntervalMs;
+    private final int streamsGroupMaxAssignmentIntervalMs;
 
     private final AbstractConfig config;
 
@@ -487,6 +523,8 @@ public class GroupCoordinatorConfig {
         this.consumerGroupMinHeartbeatIntervalMs = config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_MIN_HEARTBEAT_INTERVAL_MS_CONFIG);
         this.consumerGroupMaxHeartbeatIntervalMs = config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_MAX_HEARTBEAT_INTERVAL_MS_CONFIG);
         this.consumerGroupRegexRefreshIntervalMs = config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_REGEX_REFRESH_INTERVAL_MS_CONFIG);
+        this.consumerGroupMinAssignmentIntervalMs = config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG);
+        this.consumerGroupMaxAssignmentIntervalMs = config.getInt(GroupCoordinatorConfig.CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG);
         // Share group configurations
         this.shareGroupSessionTimeoutMs = config.getInt(GroupCoordinatorConfig.SHARE_GROUP_SESSION_TIMEOUT_MS_CONFIG);
         this.shareGroupMinSessionTimeoutMs = config.getInt(GroupCoordinatorConfig.SHARE_GROUP_MIN_SESSION_TIMEOUT_MS_CONFIG);
@@ -498,6 +536,8 @@ public class GroupCoordinatorConfig {
         this.shareGroupAssignors = shareGroupAssignors(config);
         int initializeRetryMs = config.getInt(GroupCoordinatorConfig.SHARE_GROUP_INITIALIZE_RETRY_INTERVAL_MS_CONFIG);
         this.shareGroupInitializeRetryIntervalMs = Math.max(initializeRetryMs, this.offsetCommitTimeoutMs);
+        this.shareGroupMinAssignmentIntervalMs = config.getInt(GroupCoordinatorConfig.SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG);
+        this.shareGroupMaxAssignmentIntervalMs = config.getInt(GroupCoordinatorConfig.SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG);
         // Streams group configurations
         this.streamsGroupSessionTimeoutMs = config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_SESSION_TIMEOUT_MS_CONFIG);
         this.streamsGroupMinSessionTimeoutMs = config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_MIN_SESSION_TIMEOUT_MS_CONFIG);
@@ -509,6 +549,8 @@ public class GroupCoordinatorConfig {
         this.streamsGroupNumStandbyReplicas = config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_NUM_STANDBY_REPLICAS_CONFIG);
         this.streamsGroupMaxStandbyReplicas = config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_MAX_STANDBY_REPLICAS_CONFIG);
         this.streamsGroupInitialRebalanceDelayMs = config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG);
+        this.streamsGroupMinAssignmentIntervalMs = config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG);
+        this.streamsGroupMaxAssignmentIntervalMs = config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG);
         this.config = config;
 
         // New group coordinator configs validation.
@@ -527,6 +569,14 @@ public class GroupCoordinatorConfig {
                 String.format("%s must be less than or equal to %s", CONSUMER_GROUP_SESSION_TIMEOUT_MS_CONFIG, CONSUMER_GROUP_MAX_SESSION_TIMEOUT_MS_CONFIG));
         require(consumerGroupHeartbeatIntervalMs < consumerGroupSessionTimeoutMs,
                 String.format("%s must be less than %s", CONSUMER_GROUP_HEARTBEAT_INTERVAL_MS_CONFIG, CONSUMER_GROUP_SESSION_TIMEOUT_MS_CONFIG));
+
+        require(consumerGroupMaxAssignmentIntervalMs >= consumerGroupMinAssignmentIntervalMs,
+                String.format("%s must be greater than or equal to %s", CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG, CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG));
+        require(consumerGroupAssignmentIntervalMs() >= consumerGroupMinAssignmentIntervalMs,
+                String.format("%s must be greater than or equal to %s", CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG));
+        require(consumerGroupAssignmentIntervalMs() <= consumerGroupMaxAssignmentIntervalMs,
+                String.format("%s must be less than or equal to %s", CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG));
+
         // Share group configs validation.
         require(shareGroupMaxHeartbeatIntervalMs >= shareGroupMinHeartbeatIntervalMs,
             String.format("%s must be greater than or equal to %s",
@@ -553,6 +603,17 @@ public class GroupCoordinatorConfig {
                 SHARE_GROUP_HEARTBEAT_INTERVAL_MS_CONFIG, SHARE_GROUP_SESSION_TIMEOUT_MS_CONFIG));
         require(shareGroupAssignors.size() == 1,
             String.format("%s must contain exactly one assignor, but found %d", SHARE_GROUP_ASSIGNORS_CONFIG, shareGroupAssignors.size()));
+
+        require(shareGroupMaxAssignmentIntervalMs >= shareGroupMinAssignmentIntervalMs,
+            String.format("%s must be greater than or equal to %s",
+                SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG, SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG));
+        require(shareGroupAssignmentIntervalMs() >= shareGroupMinAssignmentIntervalMs,
+            String.format("%s must be greater than or equal to %s",
+                SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG));
+        require(shareGroupAssignmentIntervalMs() <= shareGroupMaxAssignmentIntervalMs,
+            String.format("%s must be less than or equal to %s",
+                SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG));
+
         // Streams group configs validation.
         require(streamsGroupMaxHeartbeatIntervalMs >= streamsGroupMinHeartbeatIntervalMs,
             String.format("%s must be greater than or equal to %s",
@@ -574,6 +635,16 @@ public class GroupCoordinatorConfig {
         require(streamsGroupHeartbeatIntervalMs < streamsGroupSessionTimeoutMs,
             String.format("%s must be less than %s",
                 STREAMS_GROUP_HEARTBEAT_INTERVAL_MS_CONFIG, STREAMS_GROUP_SESSION_TIMEOUT_MS_CONFIG));
+
+        require(streamsGroupMaxAssignmentIntervalMs >= streamsGroupMinAssignmentIntervalMs,
+            String.format("%s must be greater than or equal to %s",
+                STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG, STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG));
+        require(streamsGroupAssignmentIntervalMs() >= streamsGroupMinAssignmentIntervalMs,
+            String.format("%s must be greater than or equal to %s",
+                STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG));
+        require(streamsGroupAssignmentIntervalMs() <= streamsGroupMaxAssignmentIntervalMs,
+            String.format("%s must be less than or equal to %s",
+                STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG));
     }
 
     public static GroupCoordinatorConfig fromProps(
@@ -917,6 +988,20 @@ public class GroupCoordinatorConfig {
     }
 
     /**
+     * The minimum interval between assignment updates for a consumer group.
+     */
+    public int consumerGroupMinAssignmentIntervalMs() {
+        return consumerGroupMinAssignmentIntervalMs;
+    }
+
+    /**
+     * The maximum interval between assignment updates for a consumer group.
+     */
+    public int consumerGroupMaxAssignmentIntervalMs() {
+        return consumerGroupMaxAssignmentIntervalMs;
+    }
+
+    /**
      * The share group session timeout in milliseconds.
      */
     public int shareGroupSessionTimeoutMs() {
@@ -984,6 +1069,20 @@ public class GroupCoordinatorConfig {
      */
     public int shareGroupAssignmentIntervalMs() {
         return config.getInt(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG);
+    }
+
+    /**
+     * The minimum interval between assignment updates for a share group.
+     */
+    public int shareGroupMinAssignmentIntervalMs() {
+        return shareGroupMinAssignmentIntervalMs;
+    }
+
+    /**
+     * The maximum interval between assignment updates for a share group.
+     */
+    public int shareGroupMaxAssignmentIntervalMs() {
+        return shareGroupMaxAssignmentIntervalMs;
     }
 
     /**
@@ -1061,5 +1160,19 @@ public class GroupCoordinatorConfig {
      */
     public int streamsGroupAssignmentIntervalMs() {
         return config.getInt(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG);
+    }
+
+    /**
+     * The minimum interval between assignment updates for a streams group.
+     */
+    public int streamsGroupMinAssignmentIntervalMs() {
+        return streamsGroupMinAssignmentIntervalMs;
+    }
+
+    /**
+     * The maximum interval between assignment updates for a streams group.
+     */
+    public int streamsGroupMaxAssignmentIntervalMs() {
+        return streamsGroupMaxAssignmentIntervalMs;
     }
 }

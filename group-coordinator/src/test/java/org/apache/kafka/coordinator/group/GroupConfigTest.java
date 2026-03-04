@@ -149,6 +149,16 @@ public class GroupConfigTest {
         doTestInvalidProps(props, InvalidConfigurationException.class);
         props = createValidGroupConfig();
 
+        // Check for invalid consumerAssignmentIntervalMs, < MIN
+        props.put(GroupConfig.CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG, "500");
+        doTestInvalidProps(props, InvalidConfigurationException.class);
+        props = createValidGroupConfig();
+
+        // Check for invalid consumerAssignmentIntervalMs, > MAX
+        props.put(GroupConfig.CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG, "20000");
+        doTestInvalidProps(props, InvalidConfigurationException.class);
+        props = createValidGroupConfig();
+
         // Check for invalid shareSessionTimeoutMs, < MIN
         props.put(GroupConfig.SHARE_SESSION_TIMEOUT_MS_CONFIG, "1");
         doTestInvalidProps(props, InvalidConfigurationException.class);
@@ -206,6 +216,16 @@ public class GroupConfigTest {
         doTestInvalidProps(props, ConfigException.class);
         props = createValidGroupConfig();
 
+        // Check for invalid shareAssignmentIntervalMs, < MIN
+        props.put(GroupConfig.SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG, "500");
+        doTestInvalidProps(props, InvalidConfigurationException.class);
+        props = createValidGroupConfig();
+
+        // Check for invalid shareAssignmentIntervalMs, > MAX
+        props.put(GroupConfig.SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG, "20000");
+        doTestInvalidProps(props, InvalidConfigurationException.class);
+        props = createValidGroupConfig();
+
         // Check for invalid streamsSessionTimeoutMs, < MIN
         props.put(GroupConfig.STREAMS_SESSION_TIMEOUT_MS_CONFIG, "1");
         doTestInvalidProps(props, InvalidConfigurationException.class);
@@ -223,6 +243,16 @@ public class GroupConfigTest {
 
         // Check for invalid streamsHeartbeatIntervalMs, > MAX
         props.put(GroupConfig.STREAMS_HEARTBEAT_INTERVAL_MS_CONFIG, "70000");
+        doTestInvalidProps(props, InvalidConfigurationException.class);
+        props = createValidGroupConfig();
+
+        // Check for invalid streamsAssignmentIntervalMs, < MIN
+        props.put(GroupConfig.STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG, "500");
+        doTestInvalidProps(props, InvalidConfigurationException.class);
+        props = createValidGroupConfig();
+
+        // Check for invalid streamsAssignmentIntervalMs, > MAX
+        props.put(GroupConfig.STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG, "20000");
         doTestInvalidProps(props, InvalidConfigurationException.class);
         props = createValidGroupConfig();
 
@@ -310,7 +340,16 @@ public class GroupConfigTest {
     }
 
     private GroupCoordinatorConfig createGroupCoordinatorConfig() {
-        return GroupCoordinatorConfigTest.createGroupCoordinatorConfig(OFFSET_METADATA_MAX_SIZE, OFFSETS_RETENTION_CHECK_INTERVAL_MS, OFFSETS_RETENTION_MINUTES);
+        return GroupCoordinatorConfigTest.createGroupCoordinatorConfig(
+            OFFSET_METADATA_MAX_SIZE,
+            OFFSETS_RETENTION_CHECK_INTERVAL_MS,
+            OFFSETS_RETENTION_MINUTES,
+            Map.of(
+                GroupCoordinatorConfig.CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG, 1000,
+                GroupCoordinatorConfig.SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG, 1000,
+                GroupCoordinatorConfig.STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG, 1000
+            )
+        );
     }
 
     private ShareGroupConfig createShareGroupConfig() {
