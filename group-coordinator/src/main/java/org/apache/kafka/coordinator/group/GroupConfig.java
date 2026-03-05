@@ -458,8 +458,10 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * The interval between assignment updates for a consumer group.
      */
-    public int consumerAssignmentIntervalMs() {
-        return consumerAssignmentIntervalMs;
+    public Optional<Integer> consumerAssignmentIntervalMs() {
+        return consumerAssignmentIntervalMs >= 0 ?
+            Optional.of(consumerAssignmentIntervalMs) :
+            Optional.empty();
     }
 
     /**
@@ -504,8 +506,10 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * The interval between assignment updates for a share group.
      */
-    public int shareAssignmentIntervalMs() {
-        return shareAssignmentIntervalMs;
+    public Optional<Integer> shareAssignmentIntervalMs() {
+        return shareAssignmentIntervalMs >= 0 ?
+            Optional.of(shareAssignmentIntervalMs) :
+            Optional.empty();
     }
 
     /**
@@ -546,8 +550,10 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * The interval between assignment updates for a streams group.
      */
-    public int streamsAssignmentIntervalMs() {
-        return streamsAssignmentIntervalMs;
+    public Optional<Integer> streamsAssignmentIntervalMs() {
+        return streamsAssignmentIntervalMs >= 0 ?
+            Optional.of(streamsAssignmentIntervalMs) :
+            Optional.empty();
     }
 
     /**

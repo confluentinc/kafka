@@ -8656,11 +8656,8 @@ public class GroupMetadataManager {
     // package private for testing
     int consumerGroupAssignmentIntervalMs(String groupId) {
         Optional<GroupConfig> groupConfig = groupConfigManager.groupConfig(groupId);
-        int assignmentIntervalMs = groupConfig.map(GroupConfig::consumerAssignmentIntervalMs)
-            .orElse(-1);
-        return assignmentIntervalMs >= 0 ?
-            assignmentIntervalMs :
-            config.consumerGroupAssignmentIntervalMs();
+        return groupConfig.flatMap(GroupConfig::consumerAssignmentIntervalMs)
+            .orElse(config.consumerGroupAssignmentIntervalMs());
     }
 
     /**
@@ -8697,11 +8694,8 @@ public class GroupMetadataManager {
     // package private for testing
     int shareGroupAssignmentIntervalMs(String groupId) {
         Optional<GroupConfig> groupConfig = groupConfigManager.groupConfig(groupId);
-        int assignmentIntervalMs = groupConfig.map(GroupConfig::shareAssignmentIntervalMs)
-            .orElse(-1);
-        return assignmentIntervalMs >= 0 ?
-            assignmentIntervalMs :
-            config.shareGroupAssignmentIntervalMs();
+        return groupConfig.flatMap(GroupConfig::shareAssignmentIntervalMs)
+            .orElse(config.shareGroupAssignmentIntervalMs());
     }
 
     /**
@@ -8738,11 +8732,8 @@ public class GroupMetadataManager {
     // package private for testing
     int streamsGroupAssignmentIntervalMs(String groupId) {
         Optional<GroupConfig> groupConfig = groupConfigManager.groupConfig(groupId);
-        int assignmentIntervalMs = groupConfig.map(GroupConfig::streamsAssignmentIntervalMs)
-            .orElse(-1);
-        return assignmentIntervalMs >= 0 ?
-            assignmentIntervalMs :
-            config.streamsGroupAssignmentIntervalMs();
+        return groupConfig.flatMap(GroupConfig::streamsAssignmentIntervalMs)
+            .orElse(config.streamsGroupAssignmentIntervalMs());
     }
 
     /**
