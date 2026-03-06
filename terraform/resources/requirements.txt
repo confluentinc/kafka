@@ -6,7 +6,7 @@ botocore==1.23.54
 cachetools==4.2.2
 certifi==2021.10.8
 cffi==1.15.1
-configparser==4.0.2
+configparser==7.2.0
 contextlib2==0.6.0.post1
 crcmod==1.7
 cryptography==41.0.3
