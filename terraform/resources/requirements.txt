@@ -26,7 +26,7 @@ google-resumable-media==2.0.3
 googleapis-common-protos==1.53.0
 grpcio==1.58.0
 idna==3.7
-iniconfig==1.1.1
+iniconfig==2.1.0
 itsdangerous==2.0.1
 javaobj-py3==0.4.3
 jinja2==3.0.3
