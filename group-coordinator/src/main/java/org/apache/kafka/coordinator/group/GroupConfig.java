@@ -48,7 +48,6 @@ public final class GroupConfig extends AbstractConfig {
     public static final String CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG = "consumer.heartbeat.interval.ms";
 
     public static final String CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG = "consumer.assignment.interval.ms";
-    public static final int CONSUMER_ASSIGNMENT_INTERVAL_MS_DEFAULT = -1;
 
     public static final String CONSUMER_ASSIGNOR_OFFLOAD_ENABLE_CONFIG = "consumer.assignor.offload.enable";
 
@@ -78,7 +77,6 @@ public final class GroupConfig extends AbstractConfig {
         "Non-transactional records will be returned unconditionally in either mode.";
 
     public static final String SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG = "share.assignment.interval.ms";
-    public static final int SHARE_ASSIGNMENT_INTERVAL_MS_DEFAULT = -1;
 
     public static final String SHARE_ASSIGNOR_OFFLOAD_ENABLE_CONFIG = "share.assignor.offload.enable";
 
@@ -91,7 +89,6 @@ public final class GroupConfig extends AbstractConfig {
     public static final String STREAMS_INITIAL_REBALANCE_DELAY_MS_CONFIG = "streams.initial.rebalance.delay.ms";
 
     public static final String STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG = "streams.assignment.interval.ms";
-    public static final int STREAMS_ASSIGNMENT_INTERVAL_MS_DEFAULT = -1;
 
     public static final String STREAMS_ASSIGNOR_OFFLOAD_ENABLE_CONFIG = "streams.assignor.offload.enable";
 
@@ -99,7 +96,7 @@ public final class GroupConfig extends AbstractConfig {
 
     public final int consumerHeartbeatIntervalMs;
 
-    public final int consumerAssignmentIntervalMs;
+    public final Optional<Integer> consumerAssignmentIntervalMs;
 
     public final Optional<Boolean> consumerAssignorOffloadEnable;
 
@@ -113,7 +110,7 @@ public final class GroupConfig extends AbstractConfig {
 
     public final String shareAutoOffsetReset;
 
-    public final int shareAssignmentIntervalMs;
+    public final Optional<Integer> shareAssignmentIntervalMs;
 
     public final Optional<Boolean> shareAssignorOffloadEnable;
 
@@ -125,7 +122,7 @@ public final class GroupConfig extends AbstractConfig {
 
     public final int streamsInitialRebalanceDelayMs;
 
-    public final int streamsAssignmentIntervalMs;
+    public final Optional<Integer> streamsAssignmentIntervalMs;
 
     public final Optional<Boolean> streamsAssignorOffloadEnable;
 
@@ -146,13 +143,13 @@ public final class GroupConfig extends AbstractConfig {
             GroupCoordinatorConfig.CONSUMER_GROUP_HEARTBEAT_INTERVAL_MS_DOC)
         .define(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG,
             INT,
-            CONSUMER_ASSIGNMENT_INTERVAL_MS_DEFAULT,
+            GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT,
             atLeast(-1),
             MEDIUM,
             GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
         .define(CONSUMER_ASSIGNOR_OFFLOAD_ENABLE_CONFIG,
             BOOLEAN,
-            null,
+            GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNOR_OFFLOAD_ENABLE_DEFAULT,
             MEDIUM,
             GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNOR_OFFLOAD_ENABLE_DOC)
         .define(SHARE_SESSION_TIMEOUT_MS_CONFIG,
@@ -193,13 +190,13 @@ public final class GroupConfig extends AbstractConfig {
             SHARE_ISOLATION_LEVEL_DOC)
         .define(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG,
             INT,
-            SHARE_ASSIGNMENT_INTERVAL_MS_DEFAULT,
+            GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT,
             atLeast(-1),
             MEDIUM,
             GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
         .define(SHARE_ASSIGNOR_OFFLOAD_ENABLE_CONFIG,
             BOOLEAN,
-            null,
+            GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_DEFAULT,
             MEDIUM,
             GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_DOC)
         .define(STREAMS_SESSION_TIMEOUT_MS_CONFIG,
@@ -228,13 +225,13 @@ public final class GroupConfig extends AbstractConfig {
             GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_DOC)
         .define(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG,
             INT,
-            STREAMS_ASSIGNMENT_INTERVAL_MS_DEFAULT,
+            GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DEFAULT,
             atLeast(-1),
             MEDIUM,
             GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_DOC)
         .define(STREAMS_ASSIGNOR_OFFLOAD_ENABLE_CONFIG,
             BOOLEAN,
-            null,
+            GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_DEFAULT,
             MEDIUM,
             GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_DOC);
 
@@ -242,21 +239,33 @@ public final class GroupConfig extends AbstractConfig {
         super(CONFIG, props, false);
         this.consumerSessionTimeoutMs = getInt(CONSUMER_SESSION_TIMEOUT_MS_CONFIG);
         this.consumerHeartbeatIntervalMs = getInt(CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG);
-        this.consumerAssignmentIntervalMs = getInt(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG);
-        this.consumerAssignorOffloadEnable = Optional.ofNullable(getBoolean(CONSUMER_ASSIGNOR_OFFLOAD_ENABLE_CONFIG));
+        this.consumerAssignmentIntervalMs = props.containsKey(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG) ?
+            Optional.of(getInt(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG)) :
+            Optional.empty();
+        this.consumerAssignorOffloadEnable = props.containsKey(CONSUMER_ASSIGNOR_OFFLOAD_ENABLE_CONFIG) ?
+            Optional.of(getBoolean(CONSUMER_ASSIGNOR_OFFLOAD_ENABLE_CONFIG)) :
+            Optional.empty();
         this.shareSessionTimeoutMs = getInt(SHARE_SESSION_TIMEOUT_MS_CONFIG);
         this.shareHeartbeatIntervalMs = getInt(SHARE_HEARTBEAT_INTERVAL_MS_CONFIG);
         this.shareRecordLockDurationMs = getInt(SHARE_RECORD_LOCK_DURATION_MS_CONFIG);
         this.shareDeliveryCountLimit = getInt(SHARE_DELIVERY_COUNT_LIMIT_CONFIG);
         this.shareAutoOffsetReset = getString(SHARE_AUTO_OFFSET_RESET_CONFIG);
-        this.shareAssignmentIntervalMs = getInt(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG);
-        this.shareAssignorOffloadEnable = Optional.ofNullable(getBoolean(SHARE_ASSIGNOR_OFFLOAD_ENABLE_CONFIG));
+        this.shareAssignmentIntervalMs = props.containsKey(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG) ?
+            Optional.of(getInt(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG)) :
+            Optional.empty();
+        this.shareAssignorOffloadEnable = props.containsKey(SHARE_ASSIGNOR_OFFLOAD_ENABLE_CONFIG) ?
+            Optional.of(getBoolean(SHARE_ASSIGNOR_OFFLOAD_ENABLE_CONFIG)) :
+            Optional.empty();
         this.streamsSessionTimeoutMs = getInt(STREAMS_SESSION_TIMEOUT_MS_CONFIG);
         this.streamsHeartbeatIntervalMs = getInt(STREAMS_HEARTBEAT_INTERVAL_MS_CONFIG);
         this.streamsNumStandbyReplicas = getInt(STREAMS_NUM_STANDBY_REPLICAS_CONFIG);
         this.streamsInitialRebalanceDelayMs = getInt(STREAMS_INITIAL_REBALANCE_DELAY_MS_CONFIG);
-        this.streamsAssignmentIntervalMs = getInt(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG);
-        this.streamsAssignorOffloadEnable = Optional.ofNullable(getBoolean(STREAMS_ASSIGNOR_OFFLOAD_ENABLE_CONFIG));
+        this.streamsAssignmentIntervalMs = props.containsKey(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG) ?
+            Optional.of(getInt(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG)) :
+            Optional.empty();
+        this.streamsAssignorOffloadEnable = props.containsKey(STREAMS_ASSIGNOR_OFFLOAD_ENABLE_CONFIG) ?
+            Optional.of(getBoolean(STREAMS_ASSIGNOR_OFFLOAD_ENABLE_CONFIG)) :
+            Optional.empty();
         this.shareIsolationLevel = getString(SHARE_ISOLATION_LEVEL_CONFIG);
     }
 
@@ -291,16 +300,16 @@ public final class GroupConfig extends AbstractConfig {
     private static void validateValues(Map<?, ?> valueMaps, GroupCoordinatorConfig groupCoordinatorConfig, ShareGroupConfig shareGroupConfig) {
         int consumerHeartbeatInterval = (Integer) valueMaps.get(CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG);
         int consumerSessionTimeout = (Integer) valueMaps.get(CONSUMER_SESSION_TIMEOUT_MS_CONFIG);
-        int consumerAssignmentIntervalMs = (Integer) valueMaps.get(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG);
+        Integer consumerAssignmentIntervalMs = (Integer) valueMaps.get(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG);
         int shareHeartbeatInterval = (Integer) valueMaps.get(SHARE_HEARTBEAT_INTERVAL_MS_CONFIG);
         int shareSessionTimeout = (Integer) valueMaps.get(SHARE_SESSION_TIMEOUT_MS_CONFIG);
         int shareRecordLockDurationMs = (Integer) valueMaps.get(SHARE_RECORD_LOCK_DURATION_MS_CONFIG);
         int shareDeliveryCountLimit = (Integer) valueMaps.get(SHARE_DELIVERY_COUNT_LIMIT_CONFIG);
-        int shareAssignmentIntervalMs = (Integer) valueMaps.get(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG);
+        Integer shareAssignmentIntervalMs = (Integer) valueMaps.get(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG);
         int streamsSessionTimeoutMs = (Integer) valueMaps.get(STREAMS_SESSION_TIMEOUT_MS_CONFIG);
         int streamsHeartbeatIntervalMs = (Integer) valueMaps.get(STREAMS_HEARTBEAT_INTERVAL_MS_CONFIG);
         int streamsNumStandbyReplicas = (Integer) valueMaps.get(STREAMS_NUM_STANDBY_REPLICAS_CONFIG);
-        int streamsAssignmentIntervalMs = (Integer) valueMaps.get(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG);
+        Integer streamsAssignmentIntervalMs = (Integer) valueMaps.get(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG);
         if (consumerHeartbeatInterval < groupCoordinatorConfig.consumerGroupMinHeartbeatIntervalMs()) {
             throw new InvalidConfigurationException(CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG + " must be greater than or equal to " +
                 GroupCoordinatorConfig.CONSUMER_GROUP_MIN_HEARTBEAT_INTERVAL_MS_CONFIG);
@@ -317,11 +326,11 @@ public final class GroupConfig extends AbstractConfig {
             throw new InvalidConfigurationException(CONSUMER_SESSION_TIMEOUT_MS_CONFIG + " must be less than or equal to " +
                 GroupCoordinatorConfig.CONSUMER_GROUP_MAX_SESSION_TIMEOUT_MS_CONFIG);
         }
-        if (consumerAssignmentIntervalMs >= 0 && consumerAssignmentIntervalMs < groupCoordinatorConfig.consumerGroupMinAssignmentIntervalMs()) {
+        if (consumerAssignmentIntervalMs != null && consumerAssignmentIntervalMs < groupCoordinatorConfig.consumerGroupMinAssignmentIntervalMs()) {
             throw new InvalidConfigurationException(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG + " must be greater than or equal to " +
                 GroupCoordinatorConfig.CONSUMER_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG);
         }
-        if (consumerAssignmentIntervalMs >= 0 && consumerAssignmentIntervalMs > groupCoordinatorConfig.consumerGroupMaxAssignmentIntervalMs()) {
+        if (consumerAssignmentIntervalMs != null && consumerAssignmentIntervalMs > groupCoordinatorConfig.consumerGroupMaxAssignmentIntervalMs()) {
             throw new InvalidConfigurationException(CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG + " must be less than or equal to " +
                 GroupCoordinatorConfig.CONSUMER_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG);
         }
@@ -357,11 +366,11 @@ public final class GroupConfig extends AbstractConfig {
             throw new InvalidConfigurationException(SHARE_DELIVERY_COUNT_LIMIT_CONFIG + " must be less than or equal to " +
                     ShareGroupConfig.SHARE_GROUP_MAX_DELIVERY_COUNT_LIMIT_CONFIG);
         }
-        if (shareAssignmentIntervalMs >= 0 && shareAssignmentIntervalMs < groupCoordinatorConfig.shareGroupMinAssignmentIntervalMs()) {
+        if (shareAssignmentIntervalMs != null && shareAssignmentIntervalMs < groupCoordinatorConfig.shareGroupMinAssignmentIntervalMs()) {
             throw new InvalidConfigurationException(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG + " must be greater than or equal to " +
                 GroupCoordinatorConfig.SHARE_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG);
         }
-        if (shareAssignmentIntervalMs >= 0 && shareAssignmentIntervalMs > groupCoordinatorConfig.shareGroupMaxAssignmentIntervalMs()) {
+        if (shareAssignmentIntervalMs != null && shareAssignmentIntervalMs > groupCoordinatorConfig.shareGroupMaxAssignmentIntervalMs()) {
             throw new InvalidConfigurationException(SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG + " must be less than or equal to " +
                 GroupCoordinatorConfig.SHARE_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG);
         }
@@ -385,11 +394,11 @@ public final class GroupConfig extends AbstractConfig {
             throw new InvalidConfigurationException(STREAMS_NUM_STANDBY_REPLICAS_CONFIG + " must be less than or equal to " +
                 GroupCoordinatorConfig.STREAMS_GROUP_MAX_STANDBY_REPLICAS_CONFIG);
         }
-        if (streamsAssignmentIntervalMs >= 0 && streamsAssignmentIntervalMs < groupCoordinatorConfig.streamsGroupMinAssignmentIntervalMs()) {
+        if (streamsAssignmentIntervalMs != null && streamsAssignmentIntervalMs < groupCoordinatorConfig.streamsGroupMinAssignmentIntervalMs()) {
             throw new InvalidConfigurationException(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG + " must be greater than or equal to " +
                 GroupCoordinatorConfig.STREAMS_GROUP_MIN_ASSIGNMENT_INTERVAL_MS_CONFIG);
         }
-        if (streamsAssignmentIntervalMs >= 0 && streamsAssignmentIntervalMs > groupCoordinatorConfig.streamsGroupMaxAssignmentIntervalMs()) {
+        if (streamsAssignmentIntervalMs != null && streamsAssignmentIntervalMs > groupCoordinatorConfig.streamsGroupMaxAssignmentIntervalMs()) {
             throw new InvalidConfigurationException(STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG + " must be less than or equal to " +
                 GroupCoordinatorConfig.STREAMS_GROUP_MAX_ASSIGNMENT_INTERVAL_MS_CONFIG);
         }
@@ -459,9 +468,7 @@ public final class GroupConfig extends AbstractConfig {
      * The interval between assignment updates for a consumer group.
      */
     public Optional<Integer> consumerAssignmentIntervalMs() {
-        return consumerAssignmentIntervalMs >= 0 ?
-            Optional.of(consumerAssignmentIntervalMs) :
-            Optional.empty();
+        return consumerAssignmentIntervalMs;
     }
 
     /**
@@ -507,9 +514,7 @@ public final class GroupConfig extends AbstractConfig {
      * The interval between assignment updates for a share group.
      */
     public Optional<Integer> shareAssignmentIntervalMs() {
-        return shareAssignmentIntervalMs >= 0 ?
-            Optional.of(shareAssignmentIntervalMs) :
-            Optional.empty();
+        return shareAssignmentIntervalMs;
     }
 
     /**
@@ -551,9 +556,7 @@ public final class GroupConfig extends AbstractConfig {
      * The interval between assignment updates for a streams group.
      */
     public Optional<Integer> streamsAssignmentIntervalMs() {
-        return streamsAssignmentIntervalMs >= 0 ?
-            Optional.of(streamsAssignmentIntervalMs) :
-            Optional.empty();
+        return streamsAssignmentIntervalMs;
     }
 
     /**

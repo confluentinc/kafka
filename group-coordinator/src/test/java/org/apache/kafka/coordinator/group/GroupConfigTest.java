@@ -329,6 +329,16 @@ public class GroupConfigTest {
     }
 
     @Test
+    public void testAssignmentIntervalMsAbsentWhenNotConfigured() {
+        // When the assignment interval config is absent, the group-level value is empty.
+        Properties props = new Properties();
+        GroupConfig config = GroupConfig.fromProps(Map.of(), props);
+        assertEquals(Optional.empty(), config.consumerAssignmentIntervalMs());
+        assertEquals(Optional.empty(), config.shareAssignmentIntervalMs());
+        assertEquals(Optional.empty(), config.streamsAssignmentIntervalMs());
+    }
+
+    @Test
     public void testAssignorOffloadEnableAbsentWhenNotConfigured() {
         // When the offload enable config is absent, the group-level value is empty.
         Properties props = new Properties();
