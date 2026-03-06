@@ -15111,7 +15111,7 @@ public class GroupMetadataManagerTest {
         );
 
         // Consumer group with a member using the classic protocol.
-        // The group epoch is greater than the member epoch.
+        // The target assignment epoch is greater than the member epoch.
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withConfig(GroupCoordinatorConfig.CONSUMER_GROUP_MIGRATION_POLICY_CONFIG, ConsumerGroupMigrationPolicy.DOWNGRADE.toString())
             .withConsumerGroup(new ConsumerGroupBuilder(groupId, 11)
@@ -15123,7 +15123,8 @@ public class GroupMetadataManagerTest {
                             .setSupportedProtocols(protocols)
                     )
                     .setMemberEpoch(10)
-                    .build()))
+                    .build())
+                .withAssignmentEpoch(11))
             .build();
 
         assertThrows(RebalanceInProgressException.class, () -> context.sendClassicGroupSync(
@@ -15215,7 +15216,7 @@ public class GroupMetadataManagerTest {
                 )))
         );
 
-        // Member 1 has a member epoch smaller than the group epoch.
+        // Member 1 has a member epoch smaller than the target assignment epoch.
         ConsumerGroupMember member1 = new ConsumerGroupMember.Builder(memberId1)
             .setRebalanceTimeoutMs(rebalanceTimeout)
             .setClassicMemberMetadata(
@@ -15257,7 +15258,8 @@ public class GroupMetadataManagerTest {
                 .withMember(member1)
                 .withMember(member2)
                 .withMember(member3)
-                .withAssignment(memberId3, mkAssignment(mkTopicAssignment(barTopicId, 0, 1, 2))))
+                .withAssignment(memberId3, mkAssignment(mkTopicAssignment(barTopicId, 0, 1, 2)))
+                .withAssignmentEpoch(10))
             .build();
 
         List.of(memberId1, memberId2, memberId3).forEach(memberId -> {
@@ -15449,7 +15451,7 @@ public class GroupMetadataManagerTest {
                 )))
         );
 
-        // Consumer group with a member using the classic protocol whose member epoch is smaller than the group epoch.
+        // Consumer group with a member using the classic protocol whose member epoch is smaller than the target assignment epoch.
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withConsumerGroup(new ConsumerGroupBuilder(groupId, 10)
                 .withMember(new ConsumerGroupMember.Builder(memberId)
@@ -15460,7 +15462,8 @@ public class GroupMetadataManagerTest {
                             .setSupportedProtocols(protocols)
                     )
                     .setMemberEpoch(9)
-                    .build()))
+                    .build())
+                .withAssignmentEpoch(10))
             .build();
 
         // Heartbeat to schedule the join timeout.
