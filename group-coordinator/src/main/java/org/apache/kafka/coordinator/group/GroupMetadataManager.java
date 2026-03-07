@@ -2067,34 +2067,41 @@ public class GroupMetadataManager {
         // 4. Update the target assignment if the group epoch is larger than the target assignment epoch or a static member
         // replaces an existing static member.
         // The delta between the existing and the new target assignment is persisted to the partition.
+        Optional<TasksTuple> updatedTargetAssignment = Optional.empty();
+        boolean initialDelayActive = timer.isScheduled(streamsInitialRebalanceKey(groupId));
+        if (groupEpoch > group.assignmentEpoch() && !initialDelayActive) {
+            updatedTargetAssignment = maybeUpdateStreamsTargetAssignment(
+                group,
+                groupEpoch,
+                Optional.of(updatedMember),
+                updatedConfiguredTopology,
+                metadataImage,
+                records,
+                currentAssignmentConfigs
+            );
+        }
+
         int targetAssignmentEpoch;
         TasksTuple targetAssignment;
-        if (groupEpoch > group.assignmentEpoch()) {
-            boolean initialDelayActive = timer.isScheduled(streamsInitialRebalanceKey(groupId));
-            if (initialDelayActive) {
-                // During initial rebalance delay, return empty assignment to first joining members.
-                targetAssignmentEpoch = Math.max(1, group.assignmentEpoch());
-                targetAssignment = TasksTuple.EMPTY;
+        if (updatedTargetAssignment.isPresent()) {
+            targetAssignmentEpoch = groupEpoch;
+            targetAssignment = updatedTargetAssignment.get();
+        } else if (!initialDelayActive && group.assignmentEpoch() > 0) {
+            targetAssignmentEpoch = group.assignmentEpoch();
+            targetAssignment = group.targetAssignment(updatedMember.memberId());
+        } else {
 
+            if (group.isEmpty() || initialDelayActive) {
                 returnedStatus.add(
                     new Status()
                         .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
                         .setStatusDetail("Assignment delayed due to the configured initial rebalance delay.")
                 );
-            } else {
-                targetAssignment = updateStreamsTargetAssignment(
-                    group,
-                    groupEpoch,
-                    Optional.of(updatedMember),
-                    updatedConfiguredTopology,
-                    metadataImage,
-                    records,
-                    currentAssignmentConfigs
-                );
-                targetAssignmentEpoch = groupEpoch;
             }
-        } else {
-            targetAssignmentEpoch = group.assignmentEpoch();
+
+            // There is no assignment yet. Epoch 1 holds an empty assignment for all members so that
+            // we can reconcile members away from epoch 0.
+            targetAssignmentEpoch = Math.max(1, group.assignmentEpoch());
             targetAssignment = group.targetAssignment(updatedMember.memberId());
         }
 
@@ -2396,11 +2403,9 @@ public class GroupMetadataManager {
 
         // 2. Update the target assignment if the group epoch is larger than the target assignment epoch. The delta between
         // the existing and the new target assignment is persisted to the partition.
-        final int targetAssignmentEpoch;
-        final Assignment targetAssignment;
-
+        Optional<Assignment> updatedTargetAssignment = Optional.empty();
         if (groupEpoch > group.assignmentEpoch()) {
-            targetAssignment = updateTargetAssignment(
+            updatedTargetAssignment = maybeUpdateTargetAssignment(
                 group,
                 groupEpoch,
                 member,
@@ -2408,7 +2413,13 @@ public class GroupMetadataManager {
                 subscriptionType,
                 records
             );
+        }
+
+        final int targetAssignmentEpoch;
+        final Assignment targetAssignment;
+        if (updatedTargetAssignment.isPresent()) {
             targetAssignmentEpoch = groupEpoch;
+            targetAssignment = updatedTargetAssignment.get();
         } else {
             targetAssignmentEpoch = group.assignmentEpoch();
             targetAssignment = group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId());
@@ -2611,11 +2622,9 @@ public class GroupMetadataManager {
 
             // 2. Update the target assignment if the group epoch is larger than the target assignment epoch.
             // The delta between the existing and the new target assignment is persisted to the partition.
-            final int targetAssignmentEpoch;
-            final Assignment targetAssignment;
-
+            Optional<Assignment> updatedTargetAssignment = Optional.empty();
             if (groupEpoch > group.assignmentEpoch()) {
-                targetAssignment = updateTargetAssignment(
+                updatedTargetAssignment = maybeUpdateTargetAssignment(
                     group,
                     groupEpoch,
                     member,
@@ -2623,7 +2632,13 @@ public class GroupMetadataManager {
                     subscriptionType,
                     records
                 );
+            }
+
+            final int targetAssignmentEpoch;
+            final Assignment targetAssignment;
+            if (updatedTargetAssignment.isPresent()) {
                 targetAssignmentEpoch = groupEpoch;
+                targetAssignment = updatedTargetAssignment.get();
             } else {
                 targetAssignmentEpoch = group.assignmentEpoch();
                 targetAssignment = group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId());
@@ -2773,18 +2788,22 @@ public class GroupMetadataManager {
 
         // 2. Update the target assignment if the group epoch is larger than the target assignment epoch. The delta between
         // the existing and the new target assignment is persisted to the partition.
-        final int targetAssignmentEpoch;
-        final Assignment targetAssignment;
-
+        Optional<Assignment> updatedTargetAssignment = Optional.empty();
         if (groupEpoch > group.assignmentEpoch()) {
-            targetAssignment = updateTargetAssignment(
+            updatedTargetAssignment = maybeUpdateTargetAssignment(
                 group,
                 groupEpoch,
                 updatedMember,
                 subscriptionType,
                 records
             );
+        }
+
+        final int targetAssignmentEpoch;
+        final Assignment targetAssignment;
+        if (updatedTargetAssignment.isPresent()) {
             targetAssignmentEpoch = groupEpoch;
+            targetAssignment = updatedTargetAssignment.get();
         } else {
             targetAssignmentEpoch = group.assignmentEpoch();
             targetAssignment = group.targetAssignment(updatedMember.memberId());
@@ -3806,7 +3825,7 @@ public class GroupMetadataManager {
      * @param records          The list to accumulate any new records.
      * @return The new target assignment.
      */
-    private Assignment updateTargetAssignment(
+    private Optional<Assignment> maybeUpdateTargetAssignment(
         ConsumerGroup group,
         int groupEpoch,
         ConsumerGroupMember member,
@@ -3854,9 +3873,9 @@ public class GroupMetadataManager {
 
             MemberAssignment newMemberAssignment = assignmentResult.targetAssignment().get(updatedMember.memberId());
             if (newMemberAssignment != null) {
-                return new Assignment(newMemberAssignment.partitions());
+                return Optional.of(new Assignment(newMemberAssignment.partitions()));
             } else {
-                return Assignment.EMPTY;
+                return Optional.of(Assignment.EMPTY);
             }
         } catch (PartitionAssignorException ex) {
             String msg = String.format("Failed to compute a new target assignment for epoch %d: %s",
@@ -3876,7 +3895,7 @@ public class GroupMetadataManager {
      * @param records          The list to accumulate any new records.
      * @return The new target assignment.
      */
-    private Assignment updateTargetAssignment(
+    private Optional<Assignment> maybeUpdateTargetAssignment(
         ShareGroup group,
         int groupEpoch,
         ShareGroupMember updatedMember,
@@ -3915,9 +3934,9 @@ public class GroupMetadataManager {
 
             MemberAssignment newMemberAssignment = assignmentResult.targetAssignment().get(updatedMember.memberId());
             if (newMemberAssignment != null) {
-                return new Assignment(newMemberAssignment.partitions());
+                return Optional.of(new Assignment(newMemberAssignment.partitions()));
             } else {
-                return Assignment.EMPTY;
+                return Optional.of(Assignment.EMPTY);
             }
         } catch (PartitionAssignorException ex) {
             String msg = String.format("Failed to compute a new target assignment for epoch %d: %s",
@@ -3937,7 +3956,7 @@ public class GroupMetadataManager {
      * @param records              The list to accumulate any new records.
      * @return The new target assignment for the updated member, or EMPTY if no member specified.
      */
-    private TasksTuple updateStreamsTargetAssignment(
+    private Optional<TasksTuple> maybeUpdateStreamsTargetAssignment(
         StreamsGroup group,
         int groupEpoch,
         Optional<StreamsGroupMember> updatedMember,
@@ -3980,8 +3999,10 @@ public class GroupMetadataManager {
 
             records.addAll(assignmentResult.records());
 
-            return updatedMember.map(member -> assignmentResult.targetAssignment().get(member.memberId()))
-                .orElse(TasksTuple.EMPTY);
+            return Optional.of(
+                updatedMember.map(member -> assignmentResult.targetAssignment().get(member.memberId()))
+                    .orElse(TasksTuple.EMPTY)
+            );
         } catch (TaskAssignorException ex) {
             String msg = String.format("Failed to compute a new target assignment for epoch %d: %s",
                 groupEpoch, ex.getMessage());
@@ -4018,7 +4039,7 @@ public class GroupMetadataManager {
             }
 
             List<CoordinatorRecord> records = new ArrayList<>();
-            updateStreamsTargetAssignment(
+            maybeUpdateStreamsTargetAssignment(
                 group,
                 group.groupEpoch(),
                 Optional.empty(),
