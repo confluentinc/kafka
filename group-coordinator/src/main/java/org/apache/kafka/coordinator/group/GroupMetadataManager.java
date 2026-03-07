@@ -1259,18 +1259,19 @@ public class GroupMetadataManager {
      * Creates a ClassicGroup corresponding to the given ConsumerGroup.
      *
      * @param consumerGroup             The converted ConsumerGroup.
+     * @param groupEpoch                The group epoch.
+     * @param targetAssignmentEpoch     The target assignment epoch.
      * @param leavingMembers            The leaving member(s) that triggered the downgrade validation.
      * @param joiningMember             The newly joined member if the downgrade is triggered by static member replacement.
      *                                  When not null, must have an instanceId that matches the replaced member.
-     * @param hasSubscriptionChanged    The boolean indicating whether the joining member has a different subscription
-     *                                  from the replaced member. Only used when joiningMember is set.
      * @param records                   The record list to which the conversion records are added.
      */
     private void convertToClassicGroup(
         ConsumerGroup consumerGroup,
+        int groupEpoch,
+        int targetAssignmentEpoch,
         Set<ConsumerGroupMember> leavingMembers,
         ConsumerGroupMember joiningMember,
-        boolean hasSubscriptionChanged,
         List<CoordinatorRecord> records
     ) {
         if (joiningMember == null) {
@@ -1311,12 +1312,14 @@ public class GroupMetadataManager {
 
         classicGroup.allMembers().forEach(member -> rescheduleClassicGroupMemberHeartbeat(classicGroup, member));
 
-        // If the downgrade is triggered by a member leaving the group or a static
-        // member replacement with a different subscription, a rebalance should be triggered.
+        // If the downgrade is triggered by a member leaving the group or the
+        // assignment is stale, a rebalance should be triggered.
+        // When the downgrade is triggered by static member replacement,
+        // the group epoch is bumped so the assignment must be stale.
         if (joiningMember == null) {
             prepareRebalance(classicGroup, String.format("Downgrade group %s from consumer to classic for member leaving.", classicGroup.groupId()));
-        } else if (hasSubscriptionChanged) {
-            prepareRebalance(classicGroup, String.format("Downgrade group %s from consumer to classic for static member replacement with different subscription.", classicGroup.groupId()));
+        } else if (targetAssignmentEpoch < groupEpoch) {
+            prepareRebalance(classicGroup, String.format("Downgrade group %s from consumer to classic with stale assignment.", classicGroup.groupId()));
         }
 
         log.info("[GroupId {}] Converted the consumer group to a classic group.", consumerGroup.groupId());
@@ -2601,9 +2604,10 @@ public class GroupMetadataManager {
             // 3. Downgrade the consumer group.
             convertToClassicGroup(
                 group,
+                groupEpoch,
+                group.assignmentEpoch(),
                 Set.of(),
                 updatedMember,
-                bumpGroupEpoch,
                 records
             );
         } else {
@@ -4202,7 +4206,7 @@ public class GroupMetadataManager {
 
         List<CoordinatorRecord> records = new ArrayList<>();
         if (validateOnlineDowngradeWithFencedMembers(group, members)) {
-            convertToClassicGroup(group, members, null, false, records);
+            convertToClassicGroup(group, group.groupEpoch(), group.assignmentEpoch(), members, null, records);
             return new CoordinatorResult<>(records, response, null, false);
         } else {
             for (ConsumerGroupMember member : members) {
