@@ -2091,7 +2091,7 @@ public class GroupMetadataManager {
             targetAssignment = group.targetAssignment(updatedMember.memberId());
         } else {
 
-            if (group.isEmpty() || initialDelayActive) {
+            if (initialDelayActive) {
                 returnedStatus.add(
                     new Status()
                         .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
