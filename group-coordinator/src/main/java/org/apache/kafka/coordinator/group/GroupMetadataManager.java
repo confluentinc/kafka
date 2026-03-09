@@ -3829,7 +3829,8 @@ public class GroupMetadataManager {
      * @param updatedMember    The updated member.
      * @param subscriptionType The group subscription type.
      * @param records          The list to accumulate any new records.
-     * @return The new target assignment.
+     * @return An {@link Optional} containing the new target assignment for the updated member,
+     *         or {@link Optional#empty()} if there is no new target assignment.
      */
     private Optional<Assignment> maybeUpdateTargetAssignment(
         ConsumerGroup group,
@@ -3899,7 +3900,8 @@ public class GroupMetadataManager {
      * @param updatedMember    The updated member.
      * @param subscriptionType The group subscription type.
      * @param records          The list to accumulate any new records.
-     * @return The new target assignment.
+     * @return An {@link Optional} containing the new target assignment for the updated member,
+     *         or {@link Optional#empty()} if there is no new target assignment.
      */
     private Optional<Assignment> maybeUpdateTargetAssignment(
         ShareGroup group,
@@ -3960,7 +3962,9 @@ public class GroupMetadataManager {
      * @param updatedMember        The updated member (optional).
      * @param metadataImage        The metadata image.
      * @param records              The list to accumulate any new records.
-     * @return The new target assignment for the updated member, or EMPTY if no member specified.
+     * @return An {@link Optional} containing the new target assignment for the updated member,
+     *         or {@link TasksTuple#EMPTY} if no member specified.
+     *         {@link Optional#empty()} if there is no new target assignment for the group.
      */
     private Optional<TasksTuple> maybeUpdateStreamsTargetAssignment(
         StreamsGroup group,
