@@ -2097,6 +2097,12 @@ public class GroupMetadataManager {
                         .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
                         .setStatusDetail("Assignment delayed due to the configured initial rebalance delay.")
                 );
+            } else {
+                returnedStatus.add(
+                    new Status()
+                        .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
+                        .setStatusDetail("Assignment computation is in progress.")
+                );
             }
 
             // There is no assignment yet. Epoch 1 holds an empty assignment for all members so that
