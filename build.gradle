@@ -4170,7 +4170,9 @@ def verifyVersionConsistencyTask = tasks.register('verifyVersionConsistency') {
 
   doLast {
     def rawVersion = project.version.toString()
+    System.out.println("rawVersion " + rawVersion)
     def targets = getVersionTargets(rawVersion)
+    System.out.println("targets " + targets)
     def inconsistentFiles = []
 
     targets.each { item ->
@@ -4185,6 +4187,7 @@ def verifyVersionConsistencyTask = tasks.register('verifyVersionConsistency') {
       // One way is to simulate the replacement and see if it changes nothing.
       
       def replacementStr = item.replace instanceof Closure ? item.replace.call() : item.replace
+      System.out.println("replacementStr " + replacementStr)
       def newContent = content.replaceAll(item.pattern, replacementStr)
 
       if (content != newContent) {
