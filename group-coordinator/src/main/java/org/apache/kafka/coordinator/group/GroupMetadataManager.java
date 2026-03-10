@@ -2113,33 +2113,16 @@ public class GroupMetadataManager {
         // 4. Update the target assignment if the group epoch is larger than the target assignment epoch or a static member
         // replaces an existing static member.
         // The delta between the existing and the new target assignment is persisted to the partition.
-        UpdateTargetAssignmentResult<TasksTuple> updateTargetAssignmentResult = UpdateTargetAssignmentResult.fromLastTargetAssignment(
+        UpdateTargetAssignmentResult<TasksTuple> updateTargetAssignmentResult = maybeUpdateStreamsTargetAssignment(
             group,
-            Optional.of(updatedMember)
+            groupEpoch,
+            Optional.of(updatedMember),
+            updatedConfiguredTopology,
+            metadataImage,
+            records,
+            Optional.of(returnedStatus),
+            currentAssignmentConfigs
         );
-        boolean initialDelayActive = timer.isScheduled(streamsInitialRebalanceKey(groupId));
-        if (!initialDelayActive) {
-            updateTargetAssignmentResult = maybeUpdateStreamsTargetAssignment(
-                group,
-                groupEpoch,
-                Optional.of(updatedMember),
-                updatedConfiguredTopology,
-                metadataImage,
-                records,
-                currentAssignmentConfigs
-            );
-        } else {
-            returnedStatus.add(
-                new Status()
-                    .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
-                    .setStatusDetail("Assignment delayed due to the configured initial rebalance delay.")
-            );
-
-            updateTargetAssignmentResult = new UpdateTargetAssignmentResult<>(
-                Math.max(1, group.assignmentEpoch()),
-                group.targetAssignment(updatedMember.memberId())
-            );
-        }
 
         // 5. Reconcile the member's assignment with the target assignment if the member is not
         // fully reconciled yet.
@@ -3961,6 +3944,7 @@ public class GroupMetadataManager {
      * @param updatedMember        The updated member (optional).
      * @param metadataImage        The metadata image.
      * @param records              The list to accumulate any new records.
+     * @param returnedStatus       A mutable collection of status to be returned in the response.
      * @return The new target assignment for the updated member, or EMPTY if no member specified.
      */
     private UpdateTargetAssignmentResult<TasksTuple> maybeUpdateStreamsTargetAssignment(
@@ -3970,8 +3954,24 @@ public class GroupMetadataManager {
         ConfiguredTopology configuredTopology,
         CoordinatorMetadataImage metadataImage,
         List<CoordinatorRecord> records,
+        Optional<List<Status>> returnedStatus,
         Map<String, String> assignmentConfigs
     ) {
+        boolean initialDelayActive = timer.isScheduled(streamsInitialRebalanceKey(group.groupId()));
+        if (initialDelayActive) {
+            returnedStatus.ifPresent(statusList -> statusList.add(
+                new Status()
+                    .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
+                    .setStatusDetail("Assignment delayed due to the configured initial rebalance delay.")
+            ));
+
+            return new UpdateTargetAssignmentResult<>(
+                Math.max(1, group.assignmentEpoch()),
+                updatedMember.map(member -> group.targetAssignment(member.memberId()))
+                    .orElse(TasksTuple.EMPTY)
+            );
+        }
+
         if (groupEpoch <= group.assignmentEpoch()) {
             // The assignment is up to date.
             return UpdateTargetAssignmentResult.fromLastTargetAssignment(group, updatedMember);
@@ -4059,6 +4059,7 @@ public class GroupMetadataManager {
                 group.configuredTopology().get(),
                 metadataImage,
                 records,
+                Optional.empty(),
                 group.lastAssignmentConfigs()
             );
 
