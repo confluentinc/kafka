@@ -61,10 +61,6 @@ blocks:
       jobs:
         - name: Build, Compile, Validations, Publish
           commands:
-            - |
-              if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]]; then
-                . vault-setup
-              fi
             - >-
               if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]] && [ "$NANO_VERSION" = "true" ] && [ "$RELEASE_JOB" = "false" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then
                 . ci-tools ci-update-version
@@ -77,9 +73,9 @@ blocks:
               if [[ "${SEMAPHORE_ORGANIZATION_URL}" != *".semaphoreci.com" ]] && [ "$PUBLISH" = "true" ] && [ "$SEMAPHORE_GIT_REF_TYPE" != "pull-request" ] && [ "$ENABLE_PUBLISH_ARTIFACTS" = "true" ]; then \
                 if [[ "$RELEASE_JOB" = "false" ]]; then \
                   . ci-tools ci-push-tag; \
-                  mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_snapshots_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2); \
+                  mavenUrl="https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/"; \
                 elif [[ "$SEMAPHORE_GIT_BRANCH" == *-alpha* ]]; then \
-                  mavenUrl=$(vault kv get v1/ci/kv/gradle/artifactory_preview_release_settings | grep mavenUrl | cut -d "," -f 2 | cut -d "'" -f 2); \
+                  mavenUrl="https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-releases-preview/"; \
                 fi; \
                 ./gradlewAll -PmavenUrl=$mavenUrl -PkeepAliveMode=session uploadArchives; \
               fi
