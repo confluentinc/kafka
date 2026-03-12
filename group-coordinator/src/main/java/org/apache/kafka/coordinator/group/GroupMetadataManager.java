@@ -3973,6 +3973,7 @@ public class GroupMetadataManager {
         try {
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder assignmentResultBuilder =
                 new org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder(
+                    logContext,
                     group.groupId(),
                     groupEpoch,
                     assignor,
@@ -3990,8 +3991,10 @@ public class GroupMetadataManager {
             );
 
             long startTimeMs = time.milliseconds();
+            org.apache.kafka.coordinator.group.streams.assignor.GroupAssignment groupAssignment =
+                assignmentResultBuilder.buildTargetAssignment();
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
-                assignmentResultBuilder.build();
+                assignmentResultBuilder.buildRecords(groupAssignment);
             long assignorTimeMs = time.milliseconds() - startTimeMs;
 
             if (log.isDebugEnabled()) {

@@ -17,6 +17,7 @@
 package org.apache.kafka.coordinator.group.streams;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
@@ -34,8 +35,11 @@ import org.apache.kafka.coordinator.group.streams.topics.ConfiguredTopology;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +47,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 
 import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
@@ -71,11 +76,14 @@ public class TargetAssignmentBuilderTest {
 
         when(topology.isReady()).thenReturn(false);
 
-        TargetAssignmentBuilder builder = new TargetAssignmentBuilder(groupId, groupEpoch, assignor, assignmentConfigs)
+        LogContext logContext = new LogContext();
+
+        TargetAssignmentBuilder builder = new TargetAssignmentBuilder(logContext, groupId, groupEpoch, assignor, assignmentConfigs)
             .withTime(new MockTime(0, 12345L, 12345L))
             .withTopology(topology);
 
-        TargetAssignmentBuilder.TargetAssignmentResult result = builder.build();
+        GroupAssignment groupAssignment = builder.buildTargetAssignment();
+        TargetAssignmentBuilder.TargetAssignmentResult result = builder.buildRecords(groupAssignment);
 
         List<CoordinatorRecord> expectedRecords = List.of(
             StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentMetadataRecord(groupId, groupEpoch, 12345L)
@@ -589,6 +597,100 @@ public class TargetAssignmentBuilderTest {
     }
 
     
+    private static Stream<Arguments> taskRolesAndBooleans() {
+        return Arrays.stream(TaskRole.values())
+            .flatMap(taskRole -> Stream.of(
+                Arguments.of(taskRole, false),
+                Arguments.of(taskRole, true)
+            ));
+    }
+
+    @ParameterizedTest
+    @MethodSource("taskRolesAndBooleans")
+    public void testDeleteMemberDuringAssignmentOffload(TaskRole taskRole, boolean isStatic) {
+        TargetAssignmentBuilderTestContext context = new TargetAssignmentBuilderTestContext(
+            "my-group",
+            20,
+            12345L
+        );
+
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
+
+        context.addGroupMember("member-1", isStatic ? "instance-member-1" : null, mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 1, 2),
+            mkTasks(barSubtopologyId, 1, 2)
+        ));
+
+        context.addGroupMember("member-2", isStatic ? "instance-member-2" : null, mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 3, 4),
+            mkTasks(barSubtopologyId, 3, 4)
+        ));
+
+        context.addGroupMember("member-3", isStatic ? "instance-member-3" : null, mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 5, 6),
+            mkTasks(barSubtopologyId, 5, 6)
+        ));
+
+        context.prepareMemberAssignment("member-1", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 3, 4),
+            mkTasks(barSubtopologyId, 3, 4)
+        ));
+
+        context.prepareMemberAssignment("member-2", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 5, 6),
+            mkTasks(barSubtopologyId, 5, 6)
+        ));
+
+        context.prepareMemberAssignment("member-3", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 1, 2),
+            mkTasks(barSubtopologyId, 1, 2)
+        ));
+
+        org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult result = context.build(
+            // member-3 leaves during the offloaded assignment.
+            Set.of("member-1", "member-2"),
+            isStatic ?
+                Map.of(
+                    "instance-member-1", "member-1",
+                    "instance-member-2", "member-2"
+                ) :
+                Map.of()
+        );
+
+        assertEquals(3, result.records().size());
+
+        assertUnorderedRecordsEquals(List.of(List.of(
+            newStreamsGroupTargetAssignmentRecord("my-group", "member-1", mkTasksTuple(taskRole,
+                mkTasks(fooSubtopologyId, 3, 4),
+                mkTasks(barSubtopologyId, 3, 4)
+            )),
+            newStreamsGroupTargetAssignmentRecord("my-group", "member-2", mkTasksTuple(taskRole,
+                mkTasks(fooSubtopologyId, 5, 6),
+                mkTasks(barSubtopologyId, 5, 6)
+            ))
+        )), result.records().subList(0, 2));
+
+        assertEquals(newStreamsGroupTargetAssignmentMetadataRecord(
+            "my-group",
+            20,
+            12345L
+        ), result.records().get(2));
+
+        Map<String, TasksTuple> expectedAssignment = new HashMap<>();
+        expectedAssignment.put("member-1", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 3, 4),
+            mkTasks(barSubtopologyId, 3, 4)
+        ));
+        expectedAssignment.put("member-2", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 5, 6),
+            mkTasks(barSubtopologyId, 5, 6)
+        ));
+
+        assertEquals(expectedAssignment, result.targetAssignment());
+    }
+
+    
     @ParameterizedTest
     @EnumSource(TaskRole.class)
     public void testReplaceStaticMember(TaskRole taskRole) {
@@ -668,6 +770,99 @@ public class TargetAssignmentBuilderTest {
         expectedAssignment.put("member-3-a", mkTasksTuple(taskRole, 
             mkTasks(fooSubtopologyId, 5, 6),
             mkTasks(barSubtopologyId, 5, 6)
+        ));
+
+        assertEquals(expectedAssignment, result.targetAssignment());
+    }
+
+    
+    @ParameterizedTest
+    @EnumSource(TaskRole.class)
+    public void testReplaceStaticMemberDuringAssignmentOffload(TaskRole taskRole) {
+        TargetAssignmentBuilderTestContext context = new TargetAssignmentBuilderTestContext(
+            "my-group",
+            20,
+            12345L
+        );
+
+        String fooSubtopologyId = context.addSubtopologyWithSingleSourceTopic("foo", 6);
+        String barSubtopologyId = context.addSubtopologyWithSingleSourceTopic("bar", 6);
+
+        context.addGroupMember("member-1", "instance-member-1", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 1, 2),
+            mkTasks(barSubtopologyId, 1, 2)
+        ));
+
+        context.addGroupMember("member-2", "instance-member-2", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 3, 4),
+            mkTasks(barSubtopologyId, 3, 4)
+        ));
+
+        context.addGroupMember("member-3", "instance-member-3", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 5, 6),
+            mkTasks(barSubtopologyId, 5, 6)
+        ));
+
+        context.prepareMemberAssignment("member-1", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 3, 4),
+            mkTasks(barSubtopologyId, 3, 4)
+        ));
+
+        context.prepareMemberAssignment("member-2", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 5, 6),
+            mkTasks(barSubtopologyId, 5, 6)
+        ));
+
+        context.prepareMemberAssignment("member-3", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 1, 2),
+            mkTasks(barSubtopologyId, 1, 2)
+        ));
+
+        TargetAssignmentBuilder.TargetAssignmentResult result = context.build(
+            Set.of("member-1", "member-2", "member-3-a"),
+            Map.of(
+                "instance-member-1", "member-1",
+                "instance-member-2", "member-2",
+                "instance-member-3", "member-3-a"
+            )
+        );
+
+        assertEquals(4, result.records().size());
+
+        assertUnorderedRecordsEquals(List.of(List.of(
+            newStreamsGroupTargetAssignmentRecord("my-group", "member-1", mkTasksTuple(taskRole,
+                mkTasks(fooSubtopologyId, 3, 4),
+                mkTasks(barSubtopologyId, 3, 4)
+            )),
+            newStreamsGroupTargetAssignmentRecord("my-group", "member-2", mkTasksTuple(taskRole,
+                mkTasks(fooSubtopologyId, 5, 6),
+                mkTasks(barSubtopologyId, 5, 6)
+            )),
+            newStreamsGroupTargetAssignmentRecord("my-group", "member-3-a", mkTasksTuple(taskRole,
+                mkTasks(fooSubtopologyId, 1, 2),
+                mkTasks(barSubtopologyId, 1, 2)
+            ))
+        )), result.records().subList(0, 3));
+
+        assertEquals(newStreamsGroupTargetAssignmentMetadataRecord(
+            "my-group",
+            20,
+            12345L
+        ), result.records().get(3));
+
+        Map<String, TasksTuple> expectedAssignment = new HashMap<>();
+        expectedAssignment.put("member-1", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 3, 4),
+            mkTasks(barSubtopologyId, 3, 4)
+        ));
+        expectedAssignment.put("member-2", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 5, 6),
+            mkTasks(barSubtopologyId, 5, 6)
+        ));
+
+        expectedAssignment.put("member-3-a", mkTasksTuple(taskRole,
+            mkTasks(fooSubtopologyId, 1, 2),
+            mkTasks(barSubtopologyId, 1, 2)
         ));
 
         assertEquals(expectedAssignment, result.targetAssignment());
@@ -787,6 +982,20 @@ public class TargetAssignmentBuilderTest {
         }
 
         public org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult build() {
+            return build(Optional.empty(), Optional.empty());
+        }
+
+        public org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult build(
+            Set<String> currentMemberIds,
+            Map<String, String> currentStaticMembers
+        ) {
+            return build(Optional.of(currentMemberIds), Optional.of(currentStaticMembers));
+        }
+
+        public org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult build(
+            Optional<Set<String>> currentMemberIds,
+            Optional<Map<String, String>> currentStaticMembers
+        ) {
             // Prepare expected member specs.
             Map<String, AssignmentMemberSpec> memberSpecs = new HashMap<>();
 
@@ -837,8 +1046,10 @@ public class TargetAssignmentBuilderTest {
                 .thenReturn(new GroupAssignment(memberAssignments));
 
             // Create and populate the assignment builder.
+            LogContext logContext = new LogContext();
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder builder = new org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder(
-                groupId, groupEpoch, assignor, Map.of())
+                logContext, groupId, groupEpoch, assignor, Map.of())
+                .withTime(new MockTime(0, assignmentTimestamp, assignmentTimestamp))
                 .withMembers(members)
                 .withTopology(topology)
                 .withStaticMembers(staticMembers)
@@ -855,9 +1066,12 @@ public class TargetAssignmentBuilderTest {
             });
 
             // Execute the builder.
-            org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult result = builder
-                .withTime(new MockTime(0, assignmentTimestamp, assignmentTimestamp))
-                .build();
+            GroupAssignment groupAssignment = builder.buildTargetAssignment();
+            org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult result = builder.buildRecords(
+                groupAssignment,
+                currentMemberIds,
+                currentStaticMembers
+            );
 
             // Verify that the assignor was called once with the expected
             // assignment spec.
