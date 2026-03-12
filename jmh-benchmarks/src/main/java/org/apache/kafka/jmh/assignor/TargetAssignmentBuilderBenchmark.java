@@ -17,6 +17,7 @@
 package org.apache.kafka.jmh.assignor;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.group.api.assignor.GroupAssignment;
 import org.apache.kafka.coordinator.group.api.assignor.GroupSpec;
@@ -112,7 +113,8 @@ public class TargetAssignmentBuilderBenchmark {
             .setSubscribedTopicNames(allTopicNames)
             .build();
 
-        targetAssignmentBuilder = new TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder(GROUP_ID, GROUP_EPOCH, partitionAssignor)
+        LogContext logContext = new LogContext();
+        targetAssignmentBuilder = new TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder(logContext, GROUP_ID, GROUP_EPOCH, partitionAssignor)
             .withMembers(members)
             .withSubscriptionType(subscriptionType)
             .withTargetAssignment(existingTargetAssignment)
@@ -189,6 +191,7 @@ public class TargetAssignmentBuilderBenchmark {
     @Threads(1)
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public void build() {
-        targetAssignmentBuilder.build();
+        GroupAssignment groupAssignment = targetAssignmentBuilder.buildTargetAssignment();
+        targetAssignmentBuilder.buildRecords(groupAssignment);
     }
 }

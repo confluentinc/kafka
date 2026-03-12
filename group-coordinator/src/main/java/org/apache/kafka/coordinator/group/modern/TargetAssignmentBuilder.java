@@ -17,6 +17,7 @@
 package org.apache.kafka.coordinator.group.modern;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorMetadataImage;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
@@ -30,9 +31,12 @@ import org.apache.kafka.coordinator.group.modern.consumer.ConsumerGroupMember;
 import org.apache.kafka.coordinator.group.modern.consumer.ResolvedRegularExpression;
 import org.apache.kafka.coordinator.group.modern.share.ShareGroupMember;
 
+import org.slf4j.Logger;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -101,11 +105,12 @@ public abstract class TargetAssignmentBuilder<T extends ModernGroupMember, U ext
         private Map<String, ResolvedRegularExpression> resolvedRegularExpressions = Map.of();
 
         public ConsumerTargetAssignmentBuilder(
+            LogContext logContext,
             String groupId,
             int groupEpoch,
             PartitionAssignor assignor
         ) {
-            super(groupId, groupEpoch, assignor);
+            super(logContext, groupId, groupEpoch, assignor);
         }
 
         /**
@@ -188,11 +193,12 @@ public abstract class TargetAssignmentBuilder<T extends ModernGroupMember, U ext
 
     public static class ShareTargetAssignmentBuilder extends TargetAssignmentBuilder<ShareGroupMember, ShareTargetAssignmentBuilder> {
         public ShareTargetAssignmentBuilder(
+            LogContext logContext,
             String groupId,
             int groupEpoch,
             PartitionAssignor assignor
         ) {
-            super(groupId, groupEpoch, assignor);
+            super(logContext, groupId, groupEpoch, assignor);
         }
 
         @Override
@@ -240,6 +246,11 @@ public abstract class TargetAssignmentBuilder<T extends ModernGroupMember, U ext
             );
         }
     }
+
+    /**
+     * The logger.
+     */
+    private final Logger log;
 
     /**
      * The time.
@@ -306,15 +317,18 @@ public abstract class TargetAssignmentBuilder<T extends ModernGroupMember, U ext
     /**
      * Constructs the object.
      *
+     * @param logContext    The log context.
      * @param groupId       The group id.
      * @param groupEpoch    The group epoch to compute a target assignment for.
      * @param assignor      The assignor to use to compute the target assignment.
      */
     public TargetAssignmentBuilder(
+        LogContext logContext,
         String groupId,
         int groupEpoch,
         PartitionAssignor assignor
     ) {
+        this.log = logContext.logger(this.getClass());
         this.groupId = Objects.requireNonNull(groupId);
         this.groupEpoch = groupEpoch;
         this.assignor = Objects.requireNonNull(assignor);
@@ -448,11 +462,10 @@ public abstract class TargetAssignmentBuilder<T extends ModernGroupMember, U ext
     /**
      * Builds the new target assignment.
      *
-     * @return A TargetAssignmentResult which contains the records to update
-     *         the existing target assignment.
+     * @return The new target assignment.
      * @throws PartitionAssignorException if the target assignment cannot be computed.
      */
-    public TargetAssignmentResult build() throws PartitionAssignorException {
+    public GroupAssignment buildTargetAssignment() throws PartitionAssignorException {
         Map<String, MemberSubscriptionAndAssignmentImpl> memberSpecs = new HashMap<>();
         TopicIds.TopicResolver topicResolver = new TopicIds.CachedTopicResolver(metadataImage);
 
@@ -499,19 +512,126 @@ public abstract class TargetAssignmentBuilder<T extends ModernGroupMember, U ext
             new SubscribedTopicDescriberImpl(metadataImage)
         );
 
+        return newGroupAssignment;
+    }
+
+    /**
+     * Builds the records for the new target assignment, when the set of members and static members
+     * have not changed since the assignment was built.
+     *
+     * @param newGroupAssignment    The new target assignment.
+     * @return A TargetAssignmentResult which contains the records to update
+     *         the existing target assignment.
+     */
+    public TargetAssignmentResult buildRecords(GroupAssignment newGroupAssignment) {
+        return buildRecords(newGroupAssignment, Optional.empty(), Optional.empty());
+    }
+
+    /**
+     * Builds the records for the new target assignment, when the set of members and static members
+     * may have changed since the assignment was built.
+     *
+     * @param newGroupAssignment    The new target assignment.
+     * @param currentMemberIds      The current set of member ids.
+     * @param currentStaticMembers  The current static members.
+     * @return A TargetAssignmentResult which contains the records to update
+     *         the existing target assignment.
+     */
+    public TargetAssignmentResult buildRecords(
+        GroupAssignment newGroupAssignment,
+        Set<String> currentMemberIds,
+        Map<String, String> currentStaticMembers
+    ) {
+        return buildRecords(newGroupAssignment, Optional.of(currentMemberIds), Optional.of(currentStaticMembers));
+    }
+
+    /**
+     * Builds the records for the new target assignment.
+     *
+     * @param newGroupAssignment    The new target assignment.
+     * @param currentMemberIds      The current set of member ids, if they may have changed since the assignment was built.
+     * @param currentStaticMembers  The current static members, if they may have changed since the assignment was built.
+     * @return A TargetAssignmentResult which contains the records to update
+     *         the existing target assignment.
+     */
+    @SuppressWarnings({"CyclomaticComplexity", "NPathComplexity"})
+    public TargetAssignmentResult buildRecords(
+        GroupAssignment newGroupAssignment,
+        Optional<Set<String>> currentMemberIds,
+        Optional<Map<String, String>> currentStaticMembers
+    ) {
+        Set<String> memberIds = new HashSet<>(members.keySet());
+
+        // Update the member ids for updated or deleted members.
+        updatedMembers.forEach((memberId, updatedMemberOrNull) -> {
+            if (updatedMemberOrNull == null) {
+                memberIds.remove(memberId);
+            } else {
+                memberIds.add(memberId);
+            }
+        });
+
+        // Build map of replacement member ids for static members that have churned.
+        Map<String, String> staticMemberIdRemapping = new HashMap<>();
+        if (currentStaticMembers.isPresent()) {
+            for (Map.Entry<String, String> entry : staticMembers.entrySet()) {
+                String instanceId = entry.getKey();
+                String oldMemberId = entry.getValue();
+                String newMemberId = currentStaticMembers.get().get(instanceId);
+                staticMemberIdRemapping.put(oldMemberId, newMemberId);
+
+                if (log.isDebugEnabled()) {
+                    if (newMemberId == null) {
+                        log.debug("[GroupId {}] Skipping target assignment record for removed static member {} with instance id {}.",
+                            groupId, oldMemberId, instanceId);
+                    } else if (!oldMemberId.equals(newMemberId)) {
+                        log.debug("[GroupId {}] Replacing static member id {} with {} for instance id {} in target assignment.",
+                            groupId, oldMemberId, newMemberId, instanceId);
+                    }
+                }
+            }
+        }
+
         // Compute delta from previous to new target assignment and create the relevant records.
         List<CoordinatorRecord> records = new ArrayList<>();
+        Map<String, MemberAssignment> newTargetAssignment = null;
 
-        for (String memberId : memberSpecs.keySet()) {
+        // Construct newTargetAssignment when the current set of members may have changed.
+        if (currentMemberIds.isPresent() || currentStaticMembers.isPresent()) {
+            newTargetAssignment = new HashMap<>();
+        }
+
+        for (String memberId : memberIds) {
+            String newMemberId = memberId;
+
+            // Run the member id through the static member remapping.
+            if (staticMemberIdRemapping.containsKey(memberId)) {
+                newMemberId = staticMemberIdRemapping.get(memberId);
+                if (newMemberId == null) {
+                    // The static member has been removed.
+                    continue;
+                }
+            }
+
+            // Don't emit records for members that have been removed.
+            if (currentMemberIds.isPresent() && !currentMemberIds.get().contains(newMemberId)) {
+                log.debug("[GroupId {}] Skipping target assignment record for removed member {}.", groupId, newMemberId);
+                continue;
+            }
+
             Assignment oldMemberAssignment = targetAssignment.get(memberId);
             Assignment newMemberAssignment = newMemberAssignment(newGroupAssignment, memberId);
+
+            if (newTargetAssignment != null) {
+                newTargetAssignment.put(newMemberId, newGroupAssignment.members().get(memberId));
+            }
 
             if (!newMemberAssignment.equals(oldMemberAssignment)) {
                 // If the member had no assignment or had a different assignment, we
                 // create a record for the new assignment.
                 records.add(newTargetAssignmentRecord(
                     groupId,
-                    memberId,
+                    newMemberId,
                     newMemberAssignment.partitions()
                 ));
             }
@@ -520,7 +640,10 @@ public abstract class TargetAssignmentBuilder<T extends ModernGroupMember, U ext
         // Bump the target assignment epoch.
         records.add(newTargetAssignmentMetadataRecord(groupId, groupEpoch, time.milliseconds()));
 
-        return new TargetAssignmentResult(records, newGroupAssignment.members());
+        return new TargetAssignmentResult(
+            records,
+            newTargetAssignment != null ? newTargetAssignment : newGroupAssignment.members()
+        );
     }
 
     protected abstract U self();

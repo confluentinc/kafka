@@ -86,6 +86,7 @@ import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorResult;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorTimer;
 import org.apache.kafka.coordinator.group.api.assignor.ConsumerGroupPartitionAssignor;
+import org.apache.kafka.coordinator.group.api.assignor.GroupAssignment;
 import org.apache.kafka.coordinator.group.api.assignor.MemberAssignment;
 import org.apache.kafka.coordinator.group.api.assignor.PartitionAssignorException;
 import org.apache.kafka.coordinator.group.api.assignor.ShareGroupPartitionAssignor;
@@ -3815,7 +3816,7 @@ public class GroupMetadataManager {
         ).orElse(defaultConsumerGroupAssignor.name());
         try {
             TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder assignmentResultBuilder =
-                new TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder(group.groupId(), groupEpoch, consumerGroupAssignors.get(preferredServerAssignor))
+                new TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder(logContext, group.groupId(), groupEpoch, consumerGroupAssignors.get(preferredServerAssignor))
                     .withTime(time)
                     .withMembers(group.members())
                     .withStaticMembers(group.staticMembers())
@@ -3834,8 +3835,9 @@ public class GroupMetadataManager {
             }
 
             long startTimeMs = time.milliseconds();
+            GroupAssignment groupAssignment = assignmentResultBuilder.buildTargetAssignment();
             TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
-                assignmentResultBuilder.build();
+                assignmentResultBuilder.buildRecords(groupAssignment);
             long assignorTimeMs = time.milliseconds() - startTimeMs;
 
             if (log.isDebugEnabled()) {
@@ -3890,7 +3892,7 @@ public class GroupMetadataManager {
                 Map.of();
 
             TargetAssignmentBuilder.ShareTargetAssignmentBuilder assignmentResultBuilder =
-                new TargetAssignmentBuilder.ShareTargetAssignmentBuilder(group.groupId(), groupEpoch, shareGroupAssignor)
+                new TargetAssignmentBuilder.ShareTargetAssignmentBuilder(logContext, group.groupId(), groupEpoch, shareGroupAssignor)
                     .withTime(time)
                     .withMembers(group.members())
                     .withSubscriptionType(subscriptionType)
@@ -3901,8 +3903,9 @@ public class GroupMetadataManager {
                     .addOrUpdateMember(updatedMember.memberId(), updatedMember);
 
             long startTimeMs = time.milliseconds();
+            GroupAssignment groupAssignment = assignmentResultBuilder.buildTargetAssignment();
             TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
-                assignmentResultBuilder.build();
+                assignmentResultBuilder.buildRecords(groupAssignment);
             long assignorTimeMs = time.milliseconds() - startTimeMs;
 
             if (log.isDebugEnabled()) {
