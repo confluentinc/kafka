@@ -460,12 +460,15 @@ public class StreamsGroupCommand {
 
         Map<TopicPartition, OffsetAndMetadata> getCommittedOffsets(String groupId) {
             try {
-                var sourceTopics = adminClient.describeStreamsGroups(
+                var subtopologies = adminClient.describeStreamsGroups(
                     List.of(groupId),
                     withTimeoutMs(new DescribeStreamsGroupsOptions())
                 ).all().get().get(groupId)
-                    .subtopologies().stream()
-                    .flatMap(subtopology -> subtopology.sourceTopics().stream())
+                    .subtopologies();
+                var sourceTopics = subtopologies.stream()
+                    .flatMap(subtopology -> Stream.concat(
+                        subtopology.sourceTopics().stream(),
+                        subtopology.repartitionSourceTopics().keySet().stream()))
                     .collect(Collectors.toSet());
 
                 var allTopicPartitions = adminClient.listStreamsGroupOffsets(
