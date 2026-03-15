@@ -1318,6 +1318,12 @@ public class TopologyTestDriver implements Closeable {
             inner.init(stateStoreContext, root);
         }
 
+        @SuppressWarnings("deprecation")
+        @Override
+        public void flush() {
+            inner.flush();
+        }
+
         @Override
         public void put(final K key, final V value) {
             inner.put(key, ValueAndTimestamp.make(value, ConsumerRecord.NO_TIMESTAMP));
@@ -1346,6 +1352,17 @@ public class TopologyTestDriver implements Closeable {
         }
 
         @Override
+        public Long committedOffset(final TopicPartition topicPartition) {
+            return inner.committedOffset(topicPartition);
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public boolean managesOffsets() {
+            return inner.managesOffsets();
+        }
+
+        @Override
         public void close() {
             inner.close();
         }
@@ -1366,6 +1383,15 @@ public class TopologyTestDriver implements Closeable {
         }
 
         @Override
+        public <R> QueryResult<R> query(
+            final Query<R> query,
+            final PositionBound positionBound,
+            final QueryConfig config
+        ) {
+            return inner.query(query, positionBound, config);
+        }
+
+        @Override
         public Position getPosition() {
             return inner.getPosition();
         }
@@ -1382,6 +1408,12 @@ public class TopologyTestDriver implements Closeable {
         @Override
         public void init(final StateStoreContext stateStoreContext, final StateStore root) {
             inner.init(stateStoreContext, root);
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public void flush() {
+            inner.flush();
         }
 
         @Override
@@ -1439,6 +1471,17 @@ public class TopologyTestDriver implements Closeable {
         }
 
         @Override
+        public Long committedOffset(final TopicPartition topicPartition) {
+            return inner.committedOffset(topicPartition);
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public boolean managesOffsets() {
+            return inner.managesOffsets();
+        }
+
+        @Override
         public void close() {
             inner.close();
         }
@@ -1456,6 +1499,15 @@ public class TopologyTestDriver implements Closeable {
         @Override
         public boolean isOpen() {
             return inner.isOpen();
+        }
+
+        @Override
+        public <R> QueryResult<R> query(
+            final Query<R> query,
+            final PositionBound positionBound,
+            final QueryConfig config
+        ) {
+            return inner.query(query, positionBound, config);
         }
 
         @Override
