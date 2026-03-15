@@ -32,14 +32,42 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class GroupConfigManager implements AutoCloseable {
 
+    /**
+     * The default group config.
+     *
+     * When a group has config overrides, unoverridden configs will inherit values from this default
+     * group config.
+     */
     private final GroupConfig defaultConfig;
 
+    /**
+     * The group configs for each group.
+     *
+     * Groups are only present in this map when they have config overrides.
+     */
     private final Map<String, GroupConfig> configMap;
 
+    /**
+     * The group coordinator config.
+     */
     private final GroupCoordinatorConfig groupCoordinatorConfig;
 
+    /**
+     * The share group config.
+     */
     private final ShareGroupConfig shareGroupConfig;
 
+    /**
+     * Constructor.
+     *
+     * @param defaultConfig          The default group config. When a group has config overrides,
+     *                               unoverridden configs will inherit values from the default group
+     *                               config. Configs that are absent from the default group config
+     *                               will take on the default values defined in
+     *                               {@link GroupConfig#configDef()}.
+     * @param groupCoordinatorConfig The group coordinator config.
+     * @param shareGroupConfig       The share group config.
+     */
     public GroupConfigManager(
         Map<?, ?> defaultConfig,
         GroupCoordinatorConfig groupCoordinatorConfig,
@@ -57,7 +85,7 @@ public class GroupConfigManager implements AutoCloseable {
      * This method evaluates all configuration values within broker-level bounds.
      *
      * @param groupId        The group id.
-     * @param newGroupConfig The new group config.
+     * @param newGroupConfig The new set of group config overrides.
      */
     public void updateGroupConfig(String groupId, Properties newGroupConfig) {
         if (null == groupId || groupId.isEmpty()) {
@@ -83,7 +111,7 @@ public class GroupConfigManager implements AutoCloseable {
     }
 
     /**
-     * Get the group config if it exists, otherwise return None.
+     * Get the group config if it has any overrides, otherwise return {@link Optional#empty()}.
      * The returned config has already been evaluated within broker-level bounds.
      *
      * @param groupId  The group id.

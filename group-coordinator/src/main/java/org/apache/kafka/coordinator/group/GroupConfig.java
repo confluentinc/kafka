@@ -353,6 +353,10 @@ public final class GroupConfig extends AbstractConfig {
 
     /**
      * Validates the values of the given properties.
+     *
+     * @param valueMaps              The full set of parsed config values with defaults applied.
+     * @param groupCoordinatorConfig The group coordinator config.
+     * @param shareGroupConfig       The share group config.
      */
     @SuppressWarnings({"CyclomaticComplexity", "NPathComplexity"})
     private static void validateValues(Map<String, Object> unparsedMap, GroupCoordinatorConfig groupCoordinatorConfig, ShareGroupConfig shareGroupConfig) {
@@ -508,6 +512,10 @@ public final class GroupConfig extends AbstractConfig {
      * Check that the given properties contain only valid group config names and that
      * all values can be parsed and are valid. The provided properties are merged with
      * the broker-level defaults before validation.
+     *
+     * @param props                  The set of group config overrides.
+     * @param groupCoordinatorConfig The group coordinator config.
+     * @param shareGroupConfig       The share group config.
      */
     public static void validate(Map<String, ?> props, GroupCoordinatorConfig groupCoordinatorConfig, ShareGroupConfig shareGroupConfig) {
         // TODO: We shouldn't be re-deriving the default config from GroupConfigManager here.
@@ -524,11 +532,11 @@ public final class GroupConfig extends AbstractConfig {
      * Evaluate group config values to their effective values within broker-level bounds.
      * Out-of-range values are capped and a WARN log is emitted.
      *
-     * @param props                  The raw group config properties.
+     * @param props                  The set of group config overrides.
      * @param groupId                The group id.
      * @param groupCoordinatorConfig The group coordinator config.
      * @param shareGroupConfig       The share group config.
-     * @return A new Properties with out-of-range values capped.
+     * @return A new {@link Properties} with out-of-range values capped.
      */
     public static Properties evaluate(
         Properties props,
