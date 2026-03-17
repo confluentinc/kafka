@@ -70,7 +70,9 @@ abstract class AbstractReadOnlyDecorator<T extends StateStore, K, V> extends Wra
     }
 
     static StateStore getReadOnlyStore(final StateStore global) {
-        if (global instanceof TimestampedKeyValueStore) {
+        if (global instanceof TimestampedKeyValueStoreWithHeaders) {
+            return new TimestampedKeyValueStoreReadOnlyDecoratorWithHeaders<>((TimestampedKeyValueStoreWithHeaders<?, ?>) global);
+        } else if (global instanceof TimestampedKeyValueStore) {
             return new TimestampedKeyValueStoreReadOnlyDecorator<>((TimestampedKeyValueStore<?, ?>) global);
         } else if (global instanceof VersionedKeyValueStore) {
             return new VersionedKeyValueStoreReadOnlyDecorator<>((VersionedKeyValueStore<?, ?>) global);
