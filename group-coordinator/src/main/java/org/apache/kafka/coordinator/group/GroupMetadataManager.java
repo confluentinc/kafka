@@ -2729,9 +2729,15 @@ public class GroupMetadataManager {
             member,
             updatedMember,
             records
-        ) || initializedAssignmentPending(group);
+        );
 
         int groupEpoch = group.groupEpoch();
+        if (group.assignmentEpoch() >= groupEpoch) {
+            // A new assignment is needed if no assignment is pending and there are unassigned
+            // initialized partitions.
+            bumpGroupEpoch |= initializedAssignmentPending(group);
+        }
+
         Map<String, SubscriptionCount> subscribedTopicNamesMap = group.subscribedTopicNames();
         SubscriptionType subscriptionType = group.subscriptionType();
 
@@ -3925,6 +3931,15 @@ public class GroupMetadataManager {
     ) {
         if (group.assignmentEpoch() >= groupEpoch) {
             // The assignment is up to date.
+            return UpdateTargetAssignmentResult.fromLastTargetAssignment(group, updatedMember);
+        }
+
+        boolean canComputeNextTargetAssignment = canComputeNextTargetAssignment(
+            group.assignmentTimestamp(),
+            shareGroupAssignmentIntervalMs(group.groupId()),
+            time.milliseconds()
+        );
+        if (!canComputeNextTargetAssignment) {
             return UpdateTargetAssignmentResult.fromLastTargetAssignment(group, updatedMember);
         }
 
