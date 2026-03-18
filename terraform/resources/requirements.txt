@@ -40,7 +40,7 @@ paho-mqtt==1.5.1
 pluggy==1.0.0
 protobuf==4.24.4
 py==1.10.0
-pyasn1==0.4.8
+pyasn1==0.6.3
 pycodestyle==2.7.0
 pycparser==2.21
 pycryptodome==3.19.1
