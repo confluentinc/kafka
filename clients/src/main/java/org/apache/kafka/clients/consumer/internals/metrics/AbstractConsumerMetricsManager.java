@@ -16,26 +16,22 @@
  */
 package org.apache.kafka.clients.consumer.internals.metrics;
 
-import org.apache.kafka.common.MetricName;
+import java.util.Objects;
 
-public abstract class RebalanceMetricsManager extends AbstractConsumerMetricsManager {
-    protected final String metricGroupName;
+/**
+ * Utility class that serves as a common abstraction point for consumers to create and register their
+ * metrics, and to ensure they're removed on {@link #close()} via the {@link MetricsLedger} instance.
+ */
+public abstract class AbstractConsumerMetricsManager implements AutoCloseable {
 
-    RebalanceMetricsManager(MetricsLedger metrics, String metricGroupName) {
-        super(metrics);
-        this.metricGroupName = metricGroupName;
+    protected final MetricsLedger metrics;
+
+    protected AbstractConsumerMetricsManager(MetricsLedger metrics) {
+        this.metrics = Objects.requireNonNull(metrics);
     }
 
-    protected MetricName createMetric(String name, String description) {
-        return metrics.metricName(name, metricGroupName, description);
+    @Override
+    public void close() {
+        metrics.close();
     }
-
-    public abstract void recordRebalanceStarted(long nowMs);
-
-    public abstract void recordRebalanceEnded(long nowMs);
-
-    public void maybeRecordRebalanceFailed() {
-    }
-
-    public abstract boolean rebalanceStarted();
 }
