@@ -354,7 +354,8 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Validates the values of the given properties.
      *
-     * @param valueMaps              The full set of parsed config values with defaults applied.
+     * @param unparsedMap            The config values to validate.
+     *                               TODO: KAFKA-20337: Decide whether this should be group-level overrides only.
      * @param groupCoordinatorConfig The group coordinator config.
      * @param shareGroupConfig       The share group config.
      */
