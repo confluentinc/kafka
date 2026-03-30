@@ -14,28 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.clients.consumer.internals.events;
-
-import org.apache.kafka.clients.consumer.internals.StreamsRebalanceData;
+package org.apache.kafka.clients.consumer.internals.metrics;
 
 import java.util.Objects;
 
-public class StreamsOnTasksAssignedCallbackNeededEvent extends CompletableBackgroundEvent<Void> {
+/**
+ * Utility class that serves as a common abstraction point for consumers to create and register their
+ * metrics, and to ensure they're removed on {@link #close()} via the {@link MetricsLedger} instance.
+ */
+public abstract class AbstractConsumerMetricsManager implements AutoCloseable {
 
-    private final StreamsRebalanceData.Assignment assignment;
+    protected final MetricsLedger metrics;
 
-    public StreamsOnTasksAssignedCallbackNeededEvent(StreamsRebalanceData.Assignment assignment) {
-        super(Type.STREAMS_ON_TASKS_ASSIGNED_CALLBACK_NEEDED, Long.MAX_VALUE);
-        this.assignment = Objects.requireNonNull(assignment);
-    }
-
-    public StreamsRebalanceData.Assignment assignment() {
-        return assignment;
+    protected AbstractConsumerMetricsManager(MetricsLedger metrics) {
+        this.metrics = Objects.requireNonNull(metrics);
     }
 
     @Override
-    protected String toStringBase() {
-        return super.toStringBase() +
-            ", assignment=" + assignment;
+    public void close() {
+        metrics.close();
     }
 }
