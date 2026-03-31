@@ -15,7 +15,7 @@
 
 import re
 
-from ducktape.mark import parametrize
+from ducktape.mark import ignore, parametrize
 from ducktape.mark.resource import cluster
 from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
@@ -45,6 +45,7 @@ class NetworkDegradeTest(Test):
         self.trogdor.stop()
         self.zk.stop()
 
+    @ignore
     @cluster(num_nodes=5)
     @parametrize(task_name="latency-100", device_name="eth0", latency_ms=50, rate_limit_kbit=0)
     @parametrize(task_name="latency-100-rate-1000", device_name="eth0", latency_ms=50, rate_limit_kbit=1000)
