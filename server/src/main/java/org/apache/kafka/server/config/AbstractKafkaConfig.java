@@ -26,6 +26,7 @@ import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.coordinator.group.GroupConfig;
 import org.apache.kafka.coordinator.group.GroupCoordinatorConfig;
 import org.apache.kafka.coordinator.group.modern.share.ShareGroupConfig;
 import org.apache.kafka.coordinator.share.ShareCoordinatorConfig;
@@ -350,4 +351,12 @@ public abstract class AbstractKafkaConfig extends AbstractConfig {
      * @param reconfigurable the component to unregister
      */
     public abstract void removeReconfigurable(Reconfigurable reconfigurable);
+
+    public Map<String, Object> extractGroupConfigMap() {
+        Map<String, Object> defaults = new HashMap<>();
+        GroupConfig.ALL_GROUP_CONFIG_SYNONYMS.forEach((groupConfigName, brokerConfigName) ->
+            brokerConfigName.ifPresent(name -> defaults.put(groupConfigName, get(name)))
+        );
+        return defaults;
+    }
 }
