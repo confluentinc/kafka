@@ -5051,10 +5051,10 @@ public class KafkaAdminClient extends AdminClient {
             @Override
             void handleResponse(AbstractResponse response) {
                 handleNotControllerError(response);
-                RemoveRaftVoterResponse addResponse = (RemoveRaftVoterResponse) response;
-                Errors error = Errors.forCode(addResponse.data().errorCode());
+                RemoveRaftVoterResponse removeResponse = (RemoveRaftVoterResponse) response;
+                Errors error = Errors.forCode(removeResponse.data().errorCode());
                 if (error != Errors.NONE)
-                    future.completeExceptionally(error.exception(addResponse.data().errorMessage()));
+                    future.completeExceptionally(error.exception(removeResponse.data().errorMessage()));
                 else
                     future.complete(null);
             }
