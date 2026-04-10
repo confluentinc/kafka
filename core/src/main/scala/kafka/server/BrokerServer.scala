@@ -60,6 +60,7 @@ import org.apache.kafka.server.{AssignmentsManager, BrokerFeatures, BrokerLifecy
 import org.apache.kafka.server.transaction.AddPartitionsToTxnManager
 import org.apache.kafka.storage.internals.log.{LogDirFailureChannel, LogManager => JLogManager}
 import org.apache.kafka.storage.log.metrics.BrokerTopicStats
+import org.apache.kafka.server.partition.{AlterPartitionManager, DefaultAlterPartitionManager}
 
 import java.time.Duration
 import java.util
@@ -290,14 +291,14 @@ class BrokerServer(
 
       remoteLogManagerOpt = createRemoteLogManager(listenerInfo)
 
-      alterPartitionManager = AlterPartitionManager(
+      alterPartitionManager = DefaultAlterPartitionManager.create(
         config,
-        scheduler = kafkaScheduler,
+        kafkaScheduler,
         controllerNodeProvider,
-        time = time,
+        time,
         metrics,
         s"broker-${config.nodeId}-",
-        brokerEpochSupplier = () => lifecycleManager.brokerEpoch
+        () => lifecycleManager.brokerEpoch
       )
       alterPartitionManager.start()
 
