@@ -33,7 +33,7 @@ global_job_config:
     - name: PUBLISH
       value: "true"
     - name: ENABLE_PUBLISH_ARTIFACTS
-      value: "false"
+      value: "true"
     - name: ENABLE_DOWNSTREAM_TRIGGER
       value: "true"
     - name: DOWNSTREAM_PROJECTS
