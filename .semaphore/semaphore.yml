@@ -17,7 +17,7 @@ version: v1.0
 name: build-test-release
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-arm64-3
+    type: s1-prod-ubuntu24-04-arm64-4
 fail_fast:
   cancel:
     when: "true"
@@ -33,7 +33,7 @@ global_job_config:
     - name: PUBLISH
       value: "true"
     - name: ENABLE_PUBLISH_ARTIFACTS
-      value: "false"
+      value: "true"
     - name: ENABLE_DOWNSTREAM_TRIGGER
       value: "true"
     - name: DOWNSTREAM_PROJECTS
