@@ -63,7 +63,7 @@ public class ShareConsumerRackAwareTest {
             @ClusterConfigProperty(key = GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, value = "1000")
         })
     })
-    void testShareConsumerWithRackAwareAssignor(ClusterInstance clusterInstance) throws ExecutionException, InterruptedException {
+    public void testShareConsumerWithRackAwareAssignor(ClusterInstance clusterInstance) throws ExecutionException, InterruptedException {
         String groupId = "group0";
         String topic = "test-topic";
         try (Admin admin = clusterInstance.admin();
