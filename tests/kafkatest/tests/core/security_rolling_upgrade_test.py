@@ -39,6 +39,8 @@ class TestSecurityRollingUpgrade(ProduceConsumeValidateTest):
         self.producer_throughput = 100
         self.num_producers = 1
         self.num_consumers = 1
+        self.producer_start_timeout_sec = 60
+        self.consumer_start_timeout_sec = 120
         self.zk = ZookeeperService(self.test_context, num_nodes=1)
         self.kafka = KafkaService(self.test_context, num_nodes=3, zk=self.zk, topics={self.topic: {
             "partitions": 3,
