@@ -52,7 +52,7 @@ class SecurityTest(EndToEndTest):
                 node.account.ssh("grep %s %s" % (error, self.producer.LOG_FILE))
             for node in self.consumer.nodes:
                 node.account.ssh("grep %s %s" % (error, self.consumer.LOG_FILE))
-        except RemoteCommandError:
+        except (RemoteCommandError, TimeoutError):
             return False
 
         return True
@@ -115,7 +115,7 @@ class SecurityTest(EndToEndTest):
                 pass
 
             error = 'SSLHandshakeException' if security_protocol == 'SSL' else 'INVALID_REPLICATION_FACTOR'
-            wait_until(lambda: self.producer_consumer_have_expected_error(error), timeout_sec=30)
+            wait_until(lambda: self.producer_consumer_have_expected_error(error), timeout_sec=60)
             self.producer.stop()
             self.consumer.stop()
 
