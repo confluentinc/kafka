@@ -2196,7 +2196,7 @@ class ReplicaManagerTest {
         .setLeaderEpoch(leaderEpochFromLeader)
         .setEndOffset(offsetFromLeader)).asJava,
       BrokerEndPoint(1, "host1" ,1), time)
-    val replicaManager = new ReplicaManager(
+    val replicaManager: ReplicaManager = new ReplicaManager(
       metrics = metrics,
       config = config,
       time = time,
