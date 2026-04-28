@@ -168,7 +168,7 @@ versions += [
   snappy: "1.1.10.5",
   spotbugs: "4.8.0",
   zinc: "1.9.2",
-  zookeeper: "3.8.6",
+  zookeeper: "3.8.4",
   zstd: "1.5.6-4"
 ]
 
