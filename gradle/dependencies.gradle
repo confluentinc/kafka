@@ -130,7 +130,7 @@ versions += [
   lz4: "1.10.2",
   mavenArtifact: "3.9.15",
   metrics: "2.2.0",
-  netty: "4.1.130.Final",
+  netty: "4.1.132.Final",
   pcollections: "4.0.1",
   powermock: "2.0.9",
   reflections: "0.10.2",
