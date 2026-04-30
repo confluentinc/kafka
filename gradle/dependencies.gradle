@@ -131,7 +131,7 @@ versions += [
   swaggerAnnotations: "2.2.8",
   swaggerJaxrs2: "2.2.8",
   zinc: "1.8.0",
-  zookeeper: "3.8.4",
+  zookeeper: "3.8.6",
   zstd: "1.5.5-1"
 ]
 libs += [
