@@ -106,7 +106,7 @@ versions += [
   kafka_32: "3.2.3",
   kafka_33: "3.3.1",
   lz4: "1.10.2",
-  mavenArtifact: "3.8.4",
+  mavenArtifact: "3.9.15",
   metrics: "2.2.0",
   mockito: "4.6.1",
   netty: "4.1.130.Final",
