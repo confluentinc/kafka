@@ -146,7 +146,7 @@ versions += [
   kafka_35: "3.5.2",
   kafka_36: "3.6.1",
   lz4: "1.10.2",
-  mavenArtifact: "3.8.8",
+  mavenArtifact: "3.9.15",
   metrics: "2.2.0",
   netty: "4.1.130.Final",
   opentelemetryProto: "1.0.0-alpha",
