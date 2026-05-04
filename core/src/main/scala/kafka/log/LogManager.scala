@@ -126,7 +126,7 @@ class LogManager(logDirs: Seq[File],
 
   // visible for testing
   private[log] val dirLocks = lockLogDirs(liveLogDirs)
-  private val directoryIds: mutable.Map[String, Uuid] = loadDirectoryIds(liveLogDirs)
+  val directoryIds: mutable.Map[String, Uuid] = loadDirectoryIds(liveLogDirs)
   def directoryIdsSet: Predef.Set[Uuid] = directoryIds.values.toSet
 
   def updateCordonedLogDirs(newCordonedLogDirs: Set[String]): Unit = {

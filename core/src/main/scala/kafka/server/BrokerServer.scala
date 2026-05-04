@@ -65,7 +65,6 @@ import java.util
 import java.util.Optional
 import java.util.concurrent.locks.{Condition, ReentrantLock}
 import java.util.concurrent.{CompletableFuture, ExecutionException, TimeUnit, TimeoutException}
-import java.util.stream.Collectors
 import scala.collection.Map
 import scala.jdk.CollectionConverters._
 import scala.jdk.OptionConverters.RichOption
@@ -223,7 +222,7 @@ class BrokerServer(
         config,
         time,
         s"broker-${config.nodeId}-",
-        logManager.directoryIdsSet.asJava,
+        util.Map.copyOf(logManager.directoryIds.asJava),
         () => new Thread(() => shutdown(), "kafka-shutdown-thread").start(),
         () => metadataCache.metadataVersion().isCordonedLogDirsSupported)
 
@@ -338,9 +337,6 @@ class BrokerServer(
 
         override def handleCordoned(directoryIds: util.Set[Uuid]): Unit =
           lifecycleManager.propagateDirectoryCordoned(directoryIds)
-
-        override def handleUncordoned(directoryIds: util.Set[Uuid]): Unit =
-          lifecycleManager.propagateDirectoryUncordoned(directoryIds)
 }
 
       /**
@@ -420,17 +416,13 @@ class BrokerServer(
         s"broker-${config.nodeId}-",
         config.brokerHeartbeatIntervalMs
       )
-      val initialCordonedLogDirs: util.Set[Uuid] = config.cordonedLogDirs().stream()
-        .map(dir => logManager.directoryId(dir).get)
-        .collect(Collectors.toSet())
       lifecycleManager.start(
         () => sharedServer.loader.lastAppliedOffset(),
         brokerLifecycleChannelManager,
         clusterId,
         listenerInfo.toBrokerRegistrationRequest,
         featuresRemapped,
-        logManager.readBrokerEpochFromCleanShutdownFiles(),
-        initialCordonedLogDirs
+        logManager.readBrokerEpochFromCleanShutdownFiles()
       )
 
       // The FetchSessionCache is divided into config.numIoThreads shards, each responsible

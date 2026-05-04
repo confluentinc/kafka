@@ -56,7 +56,6 @@ public class LogManager {
      *
      * @param replicas       The replicas hosting the partition
      * @param brokerId       The ID of the current broker.
-     * @param topicId        The ID of the topic
      * @param log            The log object to check
      * @return true if the log should not exist on the broker, false otherwise.
      */

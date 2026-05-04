@@ -26,8 +26,7 @@ import kafka.network.DataPlaneAcceptor
 import kafka.raft.KafkaRaftManager
 import kafka.server.DynamicBrokerConfig._
 import kafka.utils.Logging
-import org.apache.kafka.common.Reconfigurable
-import org.apache.kafka.common.Endpoint
+import org.apache.kafka.common.{Endpoint, Reconfigurable, Uuid}
 import org.apache.kafka.common.config.{ConfigDef, ConfigException, ConfigResource, SslConfigs}
 import org.apache.kafka.common.metadata.{ConfigRecord, MetadataRecordType}
 import org.apache.kafka.common.metrics.{Metrics, MetricsReporter}
@@ -48,9 +47,11 @@ import org.apache.kafka.server.util.LockUtils.{inReadLock, inWriteLock}
 import org.apache.kafka.snapshot.RecordsSnapshotReader
 import org.apache.kafka.storage.internals.log.LogConfig
 
+import java.util.stream.Collectors
 import scala.util.Using
 import scala.collection._
 import scala.jdk.CollectionConverters._
+import scala.jdk.OptionConverters.RichOption
 
 /**
   * Dynamic broker configurations may be defined at two levels:
@@ -610,20 +611,13 @@ class DynamicLogConfig(logManager: LogManager, directoryEventHandler: DirectoryE
 
   override def reconfigure(oldConfig: KafkaConfig, newConfig: KafkaConfig): Unit = {
     val newBrokerDefaults = new util.HashMap[String, Object](newConfig.extractLogConfigMap)
+    logManager.reconfigureDefaultLogConfig(new LogConfig(newBrokerDefaults))
+    updateLogsConfig(newBrokerDefaults.asScala)
 
     logManager.updateCordonedLogDirs(newConfig.cordonedLogDirs.asScala.toSet)
-    val newCordoned: Set[String] = newConfig.cordonedLogDirs.asScala.toSet -- oldConfig.cordonedLogDirs.asScala.toSet
-    val newUncordoned: Set[String] = oldConfig.cordonedLogDirs.asScala.toSet -- newConfig.cordonedLogDirs.asScala.toSet
-    if (newCordoned.nonEmpty) {
-      directoryEventHandler.handleCordoned(newCordoned.map(dir => logManager.directoryId(dir).get).toSet.asJava)
-    }
-    if (newUncordoned.nonEmpty) {
-      directoryEventHandler.handleUncordoned(newUncordoned.map(dir => logManager.directoryId(dir).get).toSet.asJava)
-    }
-
-    logManager.reconfigureDefaultLogConfig(new LogConfig(newBrokerDefaults))
-
-    updateLogsConfig(newBrokerDefaults.asScala)
+    directoryEventHandler.handleCordoned(newConfig.cordonedLogDirs.stream
+      .flatMap[Uuid](dir => logManager.directoryId(dir).toJava.stream)
+      .collect(Collectors.toSet[Uuid]))
   }
 }
 
