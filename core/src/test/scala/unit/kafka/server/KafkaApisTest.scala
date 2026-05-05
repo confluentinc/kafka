@@ -1509,7 +1509,7 @@ class KafkaApisTest extends Logging {
     val txnOffsetCommitRequest = new TxnOffsetCommitRequestData()
       .setGroupId("group")
       .setMemberId("member")
-      .setGenerationId(10)
+      .setGenerationIdOrMemberEpoch(10)
       .setProducerId(20)
       .setProducerEpoch(30)
       .setGroupInstanceId("instance-id")
@@ -1744,7 +1744,7 @@ class KafkaApisTest extends Logging {
   }
 
   @ParameterizedTest
-  @ApiKeyVersionsSource(apiKey = ApiKeys.TXN_OFFSET_COMMIT)
+  @ApiKeyVersionsSource(apiKey = ApiKeys.TXN_OFFSET_COMMIT, enableUnstableLastVersion = false)
   def shouldReplaceCoordinatorNotAvailableWithLoadInProcessInTxnOffsetCommitWithOlderClient(version: Short): Unit = {
     val topic = "topic"
     addTopicToMetadataCache(topic, numPartitions = 2)
