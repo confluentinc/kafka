@@ -28,7 +28,7 @@ public final class JaasUtils {
     public static final String JAVA_LOGIN_CONFIG_PARAM = "java.security.auth.login.config";
     public static final String DISALLOWED_LOGIN_MODULES_CONFIG = "org.apache.kafka.disallowed.login.modules";
     public static final String DISALLOWED_LOGIN_MODULES_DEFAULT =
-            "com.sun.security.auth.module.JndiLoginModule,com.sun.security.auth.module.LdapLoginModule";
+            "com.sun.security.auth.module.JndiLoginModule,com.sun.security.auth.module.LdapLoginModule,com.ibm.security.auth.module.LdapLoginModule,org.eclipse.jetty.jaas.spi.LdapLoginModule";
     public static final String SERVICE_NAME = "serviceName";
 
     public static final String ZK_SASL_CLIENT = "zookeeper.sasl.client";
