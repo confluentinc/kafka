@@ -1668,6 +1668,7 @@ project(':test-common:test-common-runtime') {
     implementation libs.slf4jApi
     implementation testFixtures(project(':clients'))
 
+    testImplementation testFixtures(project(':clients'))
     testImplementation libs.junitJupiter
     testImplementation libs.mockitoCore
     testImplementation testLog4j2Libs
