@@ -346,6 +346,9 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Returns the broker-level synonym config name for the given group config name,
      * or {@code Optional.empty()} if no broker-level synonym exists.
+     *
+     * @param groupConfigName The group-level config name.
+      * @return The broker-level config name, or {@code Optional.empty()} if no broker-level config exists.
      */
     public static Optional<String> brokerSynonym(String groupConfigName) {
         return ALL_GROUP_CONFIG_SYNONYMS.getOrDefault(groupConfigName, Optional.empty());
@@ -403,6 +406,8 @@ public final class GroupConfig extends AbstractConfig {
 
     /**
      * Check that property names are valid.
+     *
+     * @param props                  The group config overrides.
      */
     public static void validateNames(Map<String, ?> props) {
         Set<String> names = configNames();
@@ -416,6 +421,10 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Check that the given properties contain only valid group config names and that
      * all values can be parsed and are valid.
+     *
+     * @param props                  The unparsed group config overrides.
+     * @param groupCoordinatorConfig The group coordinator config.
+     * @param shareGroupConfig       The share group config.
      */
     public static void validate(
         Map<String, ?> props,
@@ -435,6 +444,10 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Validates the parsed values against broker-level bounds.
      * Only configs explicitly present in the parsed map are validated.
+     *
+     * @param parsed                 The parsed group config overrides.
+     * @param groupCoordinatorConfig The group coordinator config.
+     * @param shareGroupConfig       The share group config.
      */
     private static void validateValues(
         Map<String, Object> parsed,
@@ -569,6 +582,11 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Validates that an integer config value falls within [min, max].
      * No-op when the key is absent from the parsed map.
+     *
+     * @param parsed                 The parsed group config overrides.
+     * @param key                    The config key.
+     * @param min                    The minimum allowed value (inclusive).
+     * @param max                    The maximum allowed value (inclusive).
      */
     private static void validateIntRange(
         Map<String, Object> parsed,
@@ -585,6 +603,10 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Validates that an integer config value does not exceed max.
      * No-op when the key is absent from the parsed map.
+     *
+     * @param parsed                 The parsed group config overrides.
+     * @param key                    The config key.
+     * @param max                    The maximum allowed value (inclusive).
      */
     private static void validateIntMax(
         Map<String, Object> parsed,
@@ -600,6 +622,10 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Validates that an integer config value is at least min.
      * No-op when the key is absent from the parsed map.
+     *
+     * @param parsed                 The parsed group config overrides.
+     * @param key                    The config key.
+     * @param min                    The minimum allowed value (inclusive).
      */
     private static void validateIntMin(
         Map<String, Object> parsed,
@@ -615,6 +641,12 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Validates that the session timeout is greater than the heartbeat interval.
      * Uses broker defaults for any config not present in the parsed map.
+     *
+     * @param parsed                 The parsed group config overrides.
+     * @param sessionKey             The session timeout config key.
+     * @param defaultSession         The default session timeout value when there is no override.
+     * @param heartbeatKey           The heartbeat interval config key.
+     * @param defaultHeartbeat       The default heartbeat interval value when there is no override.
      */
     private static void validateSessionExceedsHeartbeat(
         Map<String, Object> parsed,
@@ -637,11 +669,11 @@ public final class GroupConfig extends AbstractConfig {
      * Evaluate group config values to their effective values within broker-level bounds.
      * Out-of-range values are capped and a WARN log is emitted.
      *
-     * @param props                  The raw group config properties.
+     * @param props                  The unparsed group config overrides.
      * @param groupId                The group id.
      * @param groupCoordinatorConfig The group coordinator config.
      * @param shareGroupConfig       The share group config.
-     * @return A new Properties with out-of-range values capped.
+     * @return A new {@link Properties} with out-of-range values capped.
      */
     public static Properties evaluate(
         Properties props,
@@ -660,6 +692,15 @@ public final class GroupConfig extends AbstractConfig {
         return effective;
     }
 
+    /**
+     * Evaluate group config values to their effective values within broker-level bounds.
+     * Out-of-range values are capped and a WARN log is emitted.
+     *
+     * @param props                  The unparsed group config overrides to modify in place.
+     * @param groupId                The group id.
+     * @param groupCoordinatorConfig The group coordinator config.
+     * @param shareGroupConfig       The share group config.
+     */
     private static void evaluateValues(
         Properties props,
         String groupId,
@@ -804,6 +845,13 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Log a WARN if the session timeout is not greater than the heartbeat interval after
      * evaluation. When a key is absent from props, the broker-level default is used.
+     *
+     * @param props                  The unparsed group config overrides.
+     * @param groupId                The group id.
+     * @param sessionKey             The session timeout config key.
+     * @param defaultSession         The default session timeout value when there is no override.
+     * @param heartbeatKey           The heartbeat interval config key.
+     * @param defaultHeartbeat       The default heartbeat interval value when there is no override.
      */
     private static void checkSessionExceedsHeartbeat(
         Properties props,
@@ -831,7 +879,7 @@ public final class GroupConfig extends AbstractConfig {
      * Clamp a config value to [min, max]. A WARN log is emitted on adjustment.
      * No-op when the key is absent from props.
      *
-     * @param props   The properties to modify in place.
+     * @param props   The unparsed group config overrides to modify in place.
      * @param groupId The group id.
      * @param key     The config key.
      * @param min     The minimum allowed value (inclusive).
@@ -865,7 +913,7 @@ public final class GroupConfig extends AbstractConfig {
      * Clamp a config value to at most max. A WARN log is emitted on adjustment.
      * No-op when the key is absent from props.
      *
-     * @param props   The properties to modify in place.
+     * @param props   The unparsed group config overrides to modify in place.
      * @param groupId The group id.
      * @param key     The config key.
      * @param max     The maximum allowed value (inclusive).
@@ -892,7 +940,7 @@ public final class GroupConfig extends AbstractConfig {
      * Clamp a config value to at least min. A WARN log is emitted on adjustment.
      * No-op when the key is absent from props.
      *
-     * @param props   The properties to modify in place.
+     * @param props   The unparsed group config overrides to modify in place.
      * @param groupId The group id.
      * @param key     The config key.
      * @param min     The minimum allowed value (inclusive).
@@ -917,6 +965,9 @@ public final class GroupConfig extends AbstractConfig {
 
     /**
      * Create a group config instance using the given properties and defaults.
+     *
+     * @param defaults  The full default group config values.
+     * @param overrides The group config overrides.
      */
     public static GroupConfig fromProps(
         Map<?, ?> defaults,
