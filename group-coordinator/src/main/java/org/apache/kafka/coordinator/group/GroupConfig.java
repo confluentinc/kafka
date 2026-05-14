@@ -407,11 +407,11 @@ public final class GroupConfig extends AbstractConfig {
     /**
      * Check that property names are valid.
      *
-     * @param props                  The group config overrides.
+     * @param newGroupConfig         The new group config overrides.
      */
-    public static void validateNames(Map<String, ?> props) {
+    public static void validateNames(Map<String, ?> newGroupConfig) {
         Set<String> names = configNames();
-        for (String name : props.keySet()) {
+        for (String name : newGroupConfig.keySet()) {
             if (!names.contains(name)) {
                 throw new InvalidConfigurationException("Unknown group config name: " + name);
             }
@@ -422,18 +422,18 @@ public final class GroupConfig extends AbstractConfig {
      * Check that the given properties contain only valid group config names and that
      * all values can be parsed and are valid.
      *
-     * @param props                  The unparsed group config overrides.
+     * @param newGroupConfig         The new unparsed group config overrides.
      * @param groupCoordinatorConfig The group coordinator config.
      * @param shareGroupConfig       The share group config.
      */
     public static void validate(
-        Map<String, ?> props,
+        Map<String, ?> newGroupConfig,
         GroupCoordinatorConfig groupCoordinatorConfig,
         ShareGroupConfig shareGroupConfig
     ) {
-        validateNames(props);
-        var parsed = CONFIG_DEF.parse(props);
-        parsed.keySet().retainAll(props.keySet());
+        validateNames(newGroupConfig);
+        var parsed = CONFIG_DEF.parse(newGroupConfig);
+        parsed.keySet().retainAll(newGroupConfig.keySet());
         validateValues(
             parsed,
             groupCoordinatorConfig,
@@ -669,20 +669,20 @@ public final class GroupConfig extends AbstractConfig {
      * Evaluate group config values to their effective values within broker-level bounds.
      * Out-of-range values are capped and a WARN log is emitted.
      *
-     * @param props                  The unparsed group config overrides.
+     * @param newGroupConfig         The new unparsed group config overrides.
      * @param groupId                The group id.
      * @param groupCoordinatorConfig The group coordinator config.
      * @param shareGroupConfig       The share group config.
      * @return A new {@link Properties} with out-of-range values capped.
      */
     public static Properties evaluate(
-        Properties props,
+        Properties newGroupConfig,
         String groupId,
         GroupCoordinatorConfig groupCoordinatorConfig,
         ShareGroupConfig shareGroupConfig
     ) {
         Properties effective = new Properties();
-        effective.putAll(props);
+        effective.putAll(newGroupConfig);
         evaluateValues(
             effective,
             groupId,
@@ -702,28 +702,28 @@ public final class GroupConfig extends AbstractConfig {
      * @param shareGroupConfig       The share group config.
      */
     private static void evaluateValues(
-        Properties props,
+        Properties newGroupConfig,
         String groupId,
         GroupCoordinatorConfig groupCoordinatorConfig,
         ShareGroupConfig shareGroupConfig
     ) {
         // Consumer group configs.
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             CONSUMER_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupMinSessionTimeoutMs(),
             groupCoordinatorConfig.consumerGroupMaxSessionTimeoutMs()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupMinHeartbeatIntervalMs(),
             groupCoordinatorConfig.consumerGroupMaxHeartbeatIntervalMs()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupMinAssignmentIntervalMs(),
@@ -732,42 +732,42 @@ public final class GroupConfig extends AbstractConfig {
 
         // Share group configs.
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             SHARE_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.shareGroupMinSessionTimeoutMs(),
             groupCoordinatorConfig.shareGroupMaxSessionTimeoutMs()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             SHARE_HEARTBEAT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.shareGroupMinHeartbeatIntervalMs(),
             groupCoordinatorConfig.shareGroupMaxHeartbeatIntervalMs()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             SHARE_RECORD_LOCK_DURATION_MS_CONFIG,
             shareGroupConfig.shareGroupMinRecordLockDurationMs(),
             shareGroupConfig.shareGroupMaxRecordLockDurationMs()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             SHARE_DELIVERY_COUNT_LIMIT_CONFIG,
             shareGroupConfig.shareGroupMinDeliveryCountLimit(),
             shareGroupConfig.shareGroupMaxDeliveryCountLimit()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             SHARE_PARTITION_MAX_RECORD_LOCKS_CONFIG,
             shareGroupConfig.shareGroupMinPartitionMaxRecordLocks(),
             shareGroupConfig.shareGroupMaxPartitionMaxRecordLocks()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.shareGroupMinAssignmentIntervalMs(),
@@ -776,40 +776,40 @@ public final class GroupConfig extends AbstractConfig {
 
         // Streams group configs.
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             STREAMS_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinSessionTimeoutMs(),
             groupCoordinatorConfig.streamsGroupMaxSessionTimeoutMs()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             STREAMS_HEARTBEAT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinHeartbeatIntervalMs(),
             groupCoordinatorConfig.streamsGroupMaxHeartbeatIntervalMs()
         );
         clampToMax(
-            props,
+            newGroupConfig,
             groupId,
             STREAMS_NUM_STANDBY_REPLICAS_CONFIG,
             groupCoordinatorConfig.streamsGroupMaxNumStandbyReplicas()
         );
         clampToRange(
-            props,
+            newGroupConfig,
             groupId,
             STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinAssignmentIntervalMs(),
             groupCoordinatorConfig.streamsGroupMaxAssignmentIntervalMs()
         );
         clampToMin(
-            props,
+            newGroupConfig,
             groupId,
             STREAMS_TASK_OFFSET_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinTaskOffsetIntervalMs()
         );
         clampToMax(
-            props,
+            newGroupConfig,
             groupId,
             STREAMS_NUM_WARMUP_REPLICAS_CONFIG,
             groupCoordinatorConfig.streamsGroupMaxWarmupReplicas()
@@ -817,7 +817,7 @@ public final class GroupConfig extends AbstractConfig {
 
         // Verify that clamping did not break the session > heartbeat invariant.
         checkSessionExceedsHeartbeat(
-            props,
+            newGroupConfig,
             groupId,
             CONSUMER_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupSessionTimeoutMs(),
@@ -825,7 +825,7 @@ public final class GroupConfig extends AbstractConfig {
             groupCoordinatorConfig.consumerGroupHeartbeatIntervalMs()
         );
         checkSessionExceedsHeartbeat(
-            props,
+            newGroupConfig,
             groupId,
             SHARE_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.shareGroupSessionTimeoutMs(),
@@ -833,7 +833,7 @@ public final class GroupConfig extends AbstractConfig {
             groupCoordinatorConfig.shareGroupHeartbeatIntervalMs()
         );
         checkSessionExceedsHeartbeat(
-            props,
+            newGroupConfig,
             groupId,
             STREAMS_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupSessionTimeoutMs(),
