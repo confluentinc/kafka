@@ -83,6 +83,7 @@ import static org.apache.kafka.streams.StreamsConfig.RACK_AWARE_ASSIGNMENT_TRAFF
 import static org.apache.kafka.streams.StreamsConfig.STATE_DIR_CONFIG;
 import static org.apache.kafka.streams.StreamsConfig.TASK_ASSIGNOR_CLASS_CONFIG;
 import static org.apache.kafka.streams.StreamsConfig.TOPOLOGY_OPTIMIZATION_CONFIG;
+import static org.apache.kafka.streams.StreamsConfig.TRANSACTIONAL_STATE_STORES_CONFIG;
 import static org.apache.kafka.streams.StreamsConfig.adminClientPrefix;
 import static org.apache.kafka.streams.StreamsConfig.consumerPrefix;
 import static org.apache.kafka.streams.StreamsConfig.producerPrefix;
@@ -1911,6 +1912,18 @@ public class StreamsConfigTest {
 
             assertEquals(0, streamsConfigLogs.getMessages().size());
         }
+    }
+
+    @Test
+    public void shouldDisableTransactionalStateStoresByDefault() {
+        assertFalse(streamsConfig.getBoolean(TRANSACTIONAL_STATE_STORES_CONFIG));
+    }
+
+    @Test
+    public void shouldEnableTransactionalStateStoresWhenConfigured() {
+        props.put(TRANSACTIONAL_STATE_STORES_CONFIG, true);
+        streamsConfig = new StreamsConfig(props);
+        assertTrue(streamsConfig.getBoolean(TRANSACTIONAL_STATE_STORES_CONFIG));
     }
 
     static class MisconfiguredSerde implements Serde<Object> {
