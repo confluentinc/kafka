@@ -348,7 +348,7 @@ public final class GroupConfig extends AbstractConfig {
      * or {@code Optional.empty()} if no broker-level synonym exists.
      *
      * @param groupConfigName The group-level config name.
-      * @return The broker-level config name, or {@code Optional.empty()} if no broker-level config exists.
+     * @return The broker-level config name, or {@code Optional.empty()} if no broker-level config exists.
      */
     public static Optional<String> brokerSynonym(String groupConfigName) {
         return ALL_GROUP_CONFIG_SYNONYMS.getOrDefault(groupConfigName, Optional.empty());
