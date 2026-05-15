@@ -844,9 +844,9 @@ public final class GroupConfig extends AbstractConfig {
 
     /**
      * Log a WARN if the session timeout is not greater than the heartbeat interval after
-     * evaluation. When a key is absent from props, the broker-level default is used.
+     * evaluation. When a key is absent from newGroupConfig, the broker-level default is used.
      *
-     * @param props                  The unparsed group config overrides.
+     * @param newGroupConfig         The new unparsed group config overrides.
      * @param groupId                The group id.
      * @param sessionKey             The session timeout config key.
      * @param defaultSession         The default session timeout value when there is no override.
@@ -854,15 +854,15 @@ public final class GroupConfig extends AbstractConfig {
      * @param defaultHeartbeat       The default heartbeat interval value when there is no override.
      */
     private static void checkSessionExceedsHeartbeat(
-        Properties props,
+        Properties newGroupConfig,
         String groupId,
         String sessionKey,
         int defaultSession,
         String heartbeatKey,
         int defaultHeartbeat
     ) {
-        Object rawSession = props.get(sessionKey);
-        Object rawHeartbeat = props.get(heartbeatKey);
+        Object rawSession = newGroupConfig.get(sessionKey);
+        Object rawHeartbeat = newGroupConfig.get(heartbeatKey);
         if (rawSession == null && rawHeartbeat == null) return;
 
         int session = rawSession != null ? Integer.parseInt(rawSession.toString()) : defaultSession;
@@ -877,22 +877,22 @@ public final class GroupConfig extends AbstractConfig {
 
     /**
      * Clamp a config value to [min, max]. A WARN log is emitted on adjustment.
-     * No-op when the key is absent from props.
+     * No-op when the key is absent from newGroupConfig.
      *
-     * @param props   The unparsed group config overrides to modify in place.
-     * @param groupId The group id.
-     * @param key     The config key.
-     * @param min     The minimum allowed value (inclusive).
-     * @param max     The maximum allowed value (inclusive).
+     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
+     * @param groupId                The group id.
+     * @param key                    The config key.
+     * @param min                    The minimum allowed value (inclusive).
+     * @param max                    The maximum allowed value (inclusive).
      */
     private static void clampToRange(
-        Properties props,
+        Properties newGroupConfig,
         String groupId,
         String key,
         int min,
         int max
     ) {
-        Object rawValue = props.get(key);
+        Object rawValue = newGroupConfig.get(key);
         if (rawValue == null) return;
 
         int value = Integer.parseInt(rawValue.toString());
@@ -900,31 +900,31 @@ public final class GroupConfig extends AbstractConfig {
             LOG.warn("The group config '{}' for group '{}' has value {} which is below the broker's " +
                     "allowed minimum {}. The effective value will be capped to {}.",
                 key, groupId, value, min, min);
-            props.put(key, min);
+            newGroupConfig.put(key, min);
         } else if (value > max) {
             LOG.warn("The group config '{}' for group '{}' has value {} which exceeds the broker's " +
                     "allowed maximum {}. The effective value will be capped to {}.",
                 key, groupId, value, max, max);
-            props.put(key, max);
+            newGroupConfig.put(key, max);
         }
     }
 
     /**
      * Clamp a config value to at most max. A WARN log is emitted on adjustment.
-     * No-op when the key is absent from props.
+     * No-op when the key is absent from newGroupConfig.
      *
-     * @param props   The unparsed group config overrides to modify in place.
-     * @param groupId The group id.
-     * @param key     The config key.
-     * @param max     The maximum allowed value (inclusive).
+     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
+     * @param groupId                The group id.
+     * @param key                    The config key.
+     * @param max                    The maximum allowed value (inclusive).
      */
     private static void clampToMax(
-        Properties props,
+        Properties newGroupConfig,
         String groupId,
         String key,
         int max
     ) {
-        Object rawValue = props.get(key);
+        Object rawValue = newGroupConfig.get(key);
         if (rawValue == null) return;
 
         int value = Integer.parseInt(rawValue.toString());
@@ -932,26 +932,26 @@ public final class GroupConfig extends AbstractConfig {
             LOG.warn("The group config '{}' for group '{}' has value {} which exceeds the broker's " +
                     "allowed maximum {}. The effective value will be capped to {}.",
                 key, groupId, value, max, max);
-            props.put(key, max);
+            newGroupConfig.put(key, max);
         }
     }
 
     /**
      * Clamp a config value to at least min. A WARN log is emitted on adjustment.
-     * No-op when the key is absent from props.
+     * No-op when the key is absent from newGroupConfig.
      *
-     * @param props   The unparsed group config overrides to modify in place.
-     * @param groupId The group id.
-     * @param key     The config key.
-     * @param min     The minimum allowed value (inclusive).
+     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
+     * @param groupId                The group id.
+     * @param key                    The config key.
+     * @param min                    The minimum allowed value (inclusive).
      */
     private static void clampToMin(
-        Properties props,
+        Properties newGroupConfig,
         String groupId,
         String key,
         int min
     ) {
-        Object rawValue = props.get(key);
+        Object rawValue = newGroupConfig.get(key);
         if (rawValue == null) return;
 
         int value = Integer.parseInt(rawValue.toString());
@@ -959,7 +959,7 @@ public final class GroupConfig extends AbstractConfig {
             LOG.warn("The group config '{}' for group '{}' has value {} which is below the broker's " +
                     "allowed minimum {}. The effective value will be capped to {}.",
                 key, groupId, value, min, min);
-            props.put(key, min);
+            newGroupConfig.put(key, min);
         }
     }
 
