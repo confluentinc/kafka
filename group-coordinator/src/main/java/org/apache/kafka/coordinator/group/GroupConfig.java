@@ -681,49 +681,49 @@ public final class GroupConfig extends AbstractConfig {
         GroupCoordinatorConfig groupCoordinatorConfig,
         ShareGroupConfig shareGroupConfig
     ) {
-        Properties effective = new Properties();
-        effective.putAll(newGroupConfig);
+        Properties evaluatedGroupConfig = new Properties();
+        evaluatedGroupConfig.putAll(newGroupConfig);
         evaluateValues(
-            effective,
+            evaluatedGroupConfig,
             groupId,
             groupCoordinatorConfig,
             shareGroupConfig
         );
-        return effective;
+        return evaluatedGroupConfig;
     }
 
     /**
      * Evaluate group config values to their effective values within broker-level bounds.
      * Out-of-range values are capped and a WARN log is emitted.
      *
-     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
+     * @param evaluatedGroupConfig   The unparsed group config overrides to modify in place.
      * @param groupId                The group id.
      * @param groupCoordinatorConfig The group coordinator config.
      * @param shareGroupConfig       The share group config.
      */
     private static void evaluateValues(
-        Properties newGroupConfig,
+        Properties evaluatedGroupConfig,
         String groupId,
         GroupCoordinatorConfig groupCoordinatorConfig,
         ShareGroupConfig shareGroupConfig
     ) {
         // Consumer group configs.
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             CONSUMER_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupMinSessionTimeoutMs(),
             groupCoordinatorConfig.consumerGroupMaxSessionTimeoutMs()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             CONSUMER_HEARTBEAT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupMinHeartbeatIntervalMs(),
             groupCoordinatorConfig.consumerGroupMaxHeartbeatIntervalMs()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             CONSUMER_ASSIGNMENT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupMinAssignmentIntervalMs(),
@@ -732,42 +732,42 @@ public final class GroupConfig extends AbstractConfig {
 
         // Share group configs.
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             SHARE_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.shareGroupMinSessionTimeoutMs(),
             groupCoordinatorConfig.shareGroupMaxSessionTimeoutMs()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             SHARE_HEARTBEAT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.shareGroupMinHeartbeatIntervalMs(),
             groupCoordinatorConfig.shareGroupMaxHeartbeatIntervalMs()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             SHARE_RECORD_LOCK_DURATION_MS_CONFIG,
             shareGroupConfig.shareGroupMinRecordLockDurationMs(),
             shareGroupConfig.shareGroupMaxRecordLockDurationMs()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             SHARE_DELIVERY_COUNT_LIMIT_CONFIG,
             shareGroupConfig.shareGroupMinDeliveryCountLimit(),
             shareGroupConfig.shareGroupMaxDeliveryCountLimit()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             SHARE_PARTITION_MAX_RECORD_LOCKS_CONFIG,
             shareGroupConfig.shareGroupMinPartitionMaxRecordLocks(),
             shareGroupConfig.shareGroupMaxPartitionMaxRecordLocks()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             SHARE_ASSIGNMENT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.shareGroupMinAssignmentIntervalMs(),
@@ -776,40 +776,40 @@ public final class GroupConfig extends AbstractConfig {
 
         // Streams group configs.
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             STREAMS_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinSessionTimeoutMs(),
             groupCoordinatorConfig.streamsGroupMaxSessionTimeoutMs()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             STREAMS_HEARTBEAT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinHeartbeatIntervalMs(),
             groupCoordinatorConfig.streamsGroupMaxHeartbeatIntervalMs()
         );
         clampToMax(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             STREAMS_NUM_STANDBY_REPLICAS_CONFIG,
             groupCoordinatorConfig.streamsGroupMaxNumStandbyReplicas()
         );
         clampToRange(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             STREAMS_ASSIGNMENT_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinAssignmentIntervalMs(),
             groupCoordinatorConfig.streamsGroupMaxAssignmentIntervalMs()
         );
         clampToMin(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             STREAMS_TASK_OFFSET_INTERVAL_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupMinTaskOffsetIntervalMs()
         );
         clampToMax(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             STREAMS_NUM_WARMUP_REPLICAS_CONFIG,
             groupCoordinatorConfig.streamsGroupMaxWarmupReplicas()
@@ -817,7 +817,7 @@ public final class GroupConfig extends AbstractConfig {
 
         // Verify that clamping did not break the session > heartbeat invariant.
         checkSessionExceedsHeartbeat(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             CONSUMER_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.consumerGroupSessionTimeoutMs(),
@@ -825,7 +825,7 @@ public final class GroupConfig extends AbstractConfig {
             groupCoordinatorConfig.consumerGroupHeartbeatIntervalMs()
         );
         checkSessionExceedsHeartbeat(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             SHARE_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.shareGroupSessionTimeoutMs(),
@@ -833,7 +833,7 @@ public final class GroupConfig extends AbstractConfig {
             groupCoordinatorConfig.shareGroupHeartbeatIntervalMs()
         );
         checkSessionExceedsHeartbeat(
-            newGroupConfig,
+            evaluatedGroupConfig,
             groupId,
             STREAMS_SESSION_TIMEOUT_MS_CONFIG,
             groupCoordinatorConfig.streamsGroupSessionTimeoutMs(),
@@ -877,22 +877,22 @@ public final class GroupConfig extends AbstractConfig {
 
     /**
      * Clamp a config value to [min, max]. A WARN log is emitted on adjustment.
-     * No-op when the key is absent from newGroupConfig.
+     * No-op when the key is absent from evaluatedGroupConfig.
      *
-     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
+     * @param evaluatedGroupConfig   The unparsed group config overrides to modify in place.
      * @param groupId                The group id.
      * @param key                    The config key.
      * @param min                    The minimum allowed value (inclusive).
      * @param max                    The maximum allowed value (inclusive).
      */
     private static void clampToRange(
-        Properties newGroupConfig,
+        Properties evaluatedGroupConfig,
         String groupId,
         String key,
         int min,
         int max
     ) {
-        Object rawValue = newGroupConfig.get(key);
+        Object rawValue = evaluatedGroupConfig.get(key);
         if (rawValue == null) return;
 
         int value = Integer.parseInt(rawValue.toString());
@@ -900,31 +900,31 @@ public final class GroupConfig extends AbstractConfig {
             LOG.warn("The group config '{}' for group '{}' has value {} which is below the broker's " +
                     "allowed minimum {}. The effective value will be capped to {}.",
                 key, groupId, value, min, min);
-            newGroupConfig.put(key, min);
+            evaluatedGroupConfig.put(key, min);
         } else if (value > max) {
             LOG.warn("The group config '{}' for group '{}' has value {} which exceeds the broker's " +
                     "allowed maximum {}. The effective value will be capped to {}.",
                 key, groupId, value, max, max);
-            newGroupConfig.put(key, max);
+            evaluatedGroupConfig.put(key, max);
         }
     }
 
     /**
      * Clamp a config value to at most max. A WARN log is emitted on adjustment.
-     * No-op when the key is absent from newGroupConfig.
+     * No-op when the key is absent from evaluatedGroupConfig.
      *
-     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
+     * @param evaluatedGroupConfig   The unparsed group config overrides to modify in place.
      * @param groupId                The group id.
      * @param key                    The config key.
      * @param max                    The maximum allowed value (inclusive).
      */
     private static void clampToMax(
-        Properties newGroupConfig,
+        Properties evaluatedGroupConfig,
         String groupId,
         String key,
         int max
     ) {
-        Object rawValue = newGroupConfig.get(key);
+        Object rawValue = evaluatedGroupConfig.get(key);
         if (rawValue == null) return;
 
         int value = Integer.parseInt(rawValue.toString());
@@ -932,26 +932,26 @@ public final class GroupConfig extends AbstractConfig {
             LOG.warn("The group config '{}' for group '{}' has value {} which exceeds the broker's " +
                     "allowed maximum {}. The effective value will be capped to {}.",
                 key, groupId, value, max, max);
-            newGroupConfig.put(key, max);
+            evaluatedGroupConfig.put(key, max);
         }
     }
 
     /**
      * Clamp a config value to at least min. A WARN log is emitted on adjustment.
-     * No-op when the key is absent from newGroupConfig.
+     * No-op when the key is absent from evaluatedGroupConfig.
      *
-     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
+     * @param evaluatedGroupConfig   The unparsed group config overrides to modify in place.
      * @param groupId                The group id.
      * @param key                    The config key.
      * @param min                    The minimum allowed value (inclusive).
      */
     private static void clampToMin(
-        Properties newGroupConfig,
+        Properties evaluatedGroupConfig,
         String groupId,
         String key,
         int min
     ) {
-        Object rawValue = newGroupConfig.get(key);
+        Object rawValue = evaluatedGroupConfig.get(key);
         if (rawValue == null) return;
 
         int value = Integer.parseInt(rawValue.toString());
@@ -959,7 +959,7 @@ public final class GroupConfig extends AbstractConfig {
             LOG.warn("The group config '{}' for group '{}' has value {} which is below the broker's " +
                     "allowed minimum {}. The effective value will be capped to {}.",
                 key, groupId, value, min, min);
-            newGroupConfig.put(key, min);
+            evaluatedGroupConfig.put(key, min);
         }
     }
 
