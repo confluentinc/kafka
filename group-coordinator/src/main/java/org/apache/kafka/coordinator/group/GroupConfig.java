@@ -696,7 +696,7 @@ public final class GroupConfig extends AbstractConfig {
      * Evaluate group config values to their effective values within broker-level bounds.
      * Out-of-range values are capped and a WARN log is emitted.
      *
-     * @param props                  The unparsed group config overrides to modify in place.
+     * @param newGroupConfig         The new unparsed group config overrides to modify in place.
      * @param groupId                The group id.
      * @param groupCoordinatorConfig The group coordinator config.
      * @param shareGroupConfig       The share group config.
