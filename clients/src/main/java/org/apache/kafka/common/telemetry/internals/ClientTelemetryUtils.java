@@ -19,6 +19,7 @@ package org.apache.kafka.common.telemetry.internals;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
+import org.apache.kafka.common.errors.TelemetryTooLargeException;
 import org.apache.kafka.common.metrics.MetricsContext;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.CompressionType;
@@ -51,6 +52,8 @@ public class ClientTelemetryUtils {
     public static final Predicate<? super MetricKeyable> SELECTOR_NO_METRICS = k -> false;
 
     public static final Predicate<? super MetricKeyable> SELECTOR_ALL_METRICS = k -> true;
+
+    private static final int DECOMPRESS_READ_BUFFER_BYTES = 8 * 1024;
 
     /**
      * Examine the response data and handle different error code accordingly:
@@ -203,14 +206,19 @@ public class ClientTelemetryUtils {
         }
     }
 
-    public static ByteBuffer decompress(byte[] metrics, CompressionType compressionType) {
+    public static ByteBuffer decompress(byte[] metrics, CompressionType compressionType, int maxDecompressedBytes) {
         ByteBuffer data = ByteBuffer.wrap(metrics);
         Compression compression = Compression.of(compressionType).build();
         try (InputStream in = compression.wrapForInput(data, RecordBatch.CURRENT_MAGIC_VALUE, BufferSupplier.create());
             ByteBufferOutputStream out = new ByteBufferOutputStream(512)) {
-            byte[] bytes = new byte[data.capacity() * 2];
+            byte[] bytes = new byte[Math.min(data.capacity() * 2, DECOMPRESS_READ_BUFFER_BYTES)];
             int nRead;
+            int totalRead = 0;
             while ((nRead = in.read(bytes, 0, bytes.length)) != -1) {
+                totalRead += nRead;
+                if (totalRead > maxDecompressedBytes) {
+                    throw new TelemetryTooLargeException("Decompressed telemetry metrics exceed maximum allowed size: " + maxDecompressedBytes);
+                }
                 out.write(bytes, 0, nRead);
             }
             out.buffer().flip();
