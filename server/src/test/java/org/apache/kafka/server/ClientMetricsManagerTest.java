@@ -1079,7 +1079,7 @@ public class ClientMetricsManagerTest {
     @Test
     public void testPushTelemetryPluginException() throws Exception {
         ClientMetricsReceiverPlugin receiverPlugin = Mockito.mock(ClientMetricsReceiverPlugin.class);
-        Mockito.doThrow(new RuntimeException("test exception")).when(receiverPlugin).exportMetrics(Mockito.any(), Mockito.any());
+        Mockito.doThrow(new RuntimeException("test exception")).when(receiverPlugin).exportMetrics(Mockito.any(), Mockito.any(), Mockito.anyInt());
 
         try (
                 Metrics kafkaMetrics = new Metrics();
