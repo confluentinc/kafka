@@ -180,6 +180,9 @@
       <allow pkg="org.apache.kafka.clients.admin" />
       <!-- for testing -->
       <allow pkg="org.apache.kafka.common.errors" />
+      <!-- for PushTelemetryRequest decompression and tests -->
+      <allow pkg="io.opentelemetry.proto"/>
+      <allow pkg="org.apache.kafka.common.telemetry" />
     </subpackage>
 
     <subpackage name="serialization">
