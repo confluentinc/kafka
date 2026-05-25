@@ -20,13 +20,20 @@ import io.opentelemetry.proto.metrics.v1.MetricsData;
 
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.errors.TelemetryTooLargeException;
 import org.apache.kafka.common.metrics.MetricsContext;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.record.RecordBatch;
+import org.apache.kafka.common.utils.BufferSupplier;
+import org.apache.kafka.common.utils.ByteBufferOutputStream;
+import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -43,6 +50,8 @@ public class ClientTelemetryUtils {
     public final static Predicate<? super MetricKeyable> SELECTOR_NO_METRICS = k -> false;
 
     public final static Predicate<? super MetricKeyable> SELECTOR_ALL_METRICS = k -> true;
+
+    private static final int DECOMPRESS_READ_BUFFER_BYTES = 8 * 1024;
 
     /**
      * Examine the response data and handle different error code accordingly:
@@ -179,12 +188,35 @@ public class ClientTelemetryUtils {
         return CompressionType.NONE;
     }
 
-    public static ByteBuffer compress(byte[] raw, CompressionType compressionType) {
-        // TODO: Support compression in client telemetry.
-        if (compressionType == CompressionType.NONE) {
-            return ByteBuffer.wrap(raw);
-        } else {
-            throw new UnsupportedOperationException("Compression is not supported");
+    public static byte[] compress(byte[] raw, CompressionType compressionType) throws IOException {
+        try (ByteBufferOutputStream compressedOut = new ByteBufferOutputStream(512)) {
+            try (OutputStream out = compressionType.wrapForOutput(compressedOut, RecordBatch.CURRENT_MAGIC_VALUE)) {
+                out.write(raw);
+                out.flush();
+            }
+            compressedOut.buffer().flip();
+            return Utils.toArray(compressedOut.buffer());
+        }
+    }
+
+    public static ByteBuffer decompress(byte[] metrics, CompressionType compressionType, int maxDecompressedBytes) {
+        ByteBuffer data = ByteBuffer.wrap(metrics);
+        try (InputStream in = compressionType.wrapForInput(data, RecordBatch.CURRENT_MAGIC_VALUE, BufferSupplier.create());
+            ByteBufferOutputStream out = new ByteBufferOutputStream(512)) {
+            byte[] bytes = new byte[Math.min(data.capacity() * 2, DECOMPRESS_READ_BUFFER_BYTES)];
+            int nRead;
+            int totalRead = 0;
+            while ((nRead = in.read(bytes, 0, bytes.length)) != -1) {
+                totalRead += nRead;
+                if (totalRead > maxDecompressedBytes) {
+                    throw new TelemetryTooLargeException("Decompressed telemetry metrics exceed maximum allowed size: " + maxDecompressedBytes);
+                }
+                out.write(bytes, 0, nRead);
+            }
+            out.buffer().flip();
+            return out.buffer();
+        } catch (IOException e) {
+            throw new KafkaException("Failed to decompress metrics data", e);
         }
     }
 

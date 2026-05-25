@@ -44,12 +44,12 @@ public class ClientMetricsReceiverPlugin {
         receivers.add(receiver);
     }
 
-    public DefaultClientTelemetryPayload getPayLoad(PushTelemetryRequest request) {
-        return new DefaultClientTelemetryPayload(request);
+    public DefaultClientTelemetryPayload getPayLoad(PushTelemetryRequest request, int maxDecompressedBytes) {
+        return new DefaultClientTelemetryPayload(request, maxDecompressedBytes);
     }
 
-    public void exportMetrics(RequestContext context, PushTelemetryRequest request) {
-        DefaultClientTelemetryPayload payload = getPayLoad(request);
+    public void exportMetrics(RequestContext context, PushTelemetryRequest request, int maxDecompressedBytes) {
+        DefaultClientTelemetryPayload payload = getPayLoad(request, maxDecompressedBytes);
         for (ClientTelemetryReceiver receiver : receivers) {
             receiver.exportMetrics(context, payload);
         }

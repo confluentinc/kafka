@@ -176,8 +176,8 @@ public class ClientMetricsManager implements Closeable {
         byte[] metrics = request.data().metrics();
         if (metrics != null && metrics.length > 0) {
             try {
-                receiverPlugin.exportMetrics(requestContext, request);
-            } catch (Throwable exception) {
+                receiverPlugin.exportMetrics(requestContext, request, clientTelemetryMaxBytes);
+            } catch (Exception exception) {
                 clientInstance.lastKnownError(Errors.INVALID_RECORD);
                 return request.errorResponse(0, Errors.INVALID_RECORD);
             }

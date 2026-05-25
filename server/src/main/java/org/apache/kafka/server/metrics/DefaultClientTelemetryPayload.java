@@ -32,11 +32,11 @@ public class DefaultClientTelemetryPayload implements ClientTelemetryPayload {
     final private String metricsContentType;
     final private ByteBuffer metricsData;
 
-    DefaultClientTelemetryPayload(PushTelemetryRequest request) {
+    DefaultClientTelemetryPayload(PushTelemetryRequest request, int maxDecompressedBytes) {
         this.clientInstanceId = request.data().clientInstanceId();
         this.isClientTerminating = request.data().terminating();
         this.metricsContentType = request.metricsContentType();
-        this.metricsData = request.metricsData();
+        this.metricsData = request.metricsData(maxDecompressedBytes);
     }
 
     @Override

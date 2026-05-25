@@ -42,11 +42,10 @@ import org.apache.kafka.common.requests.PushTelemetryRequest;
 import org.apache.kafka.common.requests.PushTelemetryResponse;
 import org.apache.kafka.common.telemetry.ClientTelemetryState;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
@@ -713,12 +712,12 @@ public class ClientTelemetryReporter implements MetricsReporter {
             }
 
             CompressionType compressionType = ClientTelemetryUtils.preferredCompressionType(localSubscription.acceptedCompressionTypes());
-            ByteBuffer compressedPayload;
+            byte[] compressedPayload;
             try {
                 compressedPayload = ClientTelemetryUtils.compress(payload, compressionType);
-            } catch (Throwable e) {
-                log.debug("Failed to compress telemetry payload for compression: {}, sending uncompressed data", compressionType);
-                compressedPayload = ByteBuffer.wrap(payload);
+            } catch (IOException e) {
+                log.info("Failed to compress telemetry payload for compression: {}, sending uncompressed data", compressionType);
+                compressedPayload = payload;
                 compressionType = CompressionType.NONE;
             }
 
@@ -728,7 +727,7 @@ public class ClientTelemetryReporter implements MetricsReporter {
                     .setSubscriptionId(localSubscription.subscriptionId())
                     .setTerminating(terminating)
                     .setCompressionType(compressionType.id)
-                    .setMetrics(Utils.readBytes(compressedPayload)), true);
+                    .setMetrics(compressedPayload), true);
 
             return Optional.of(requestBuilder);
         }
