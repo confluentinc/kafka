@@ -36,6 +36,7 @@ fetch_jdk_tgz() {
   fi
 }
 
+export DEBIAN_FRONTEND=noninteractive
 # Validate JDK_MAJOR - must be a version number (e.g., 17, 25.0.1), default to 17 if empty or invalid
 if [[ -z "$JDK_MAJOR" ]]; then
     JDK_MAJOR="17"
