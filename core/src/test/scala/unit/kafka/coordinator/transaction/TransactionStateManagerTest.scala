@@ -71,7 +71,7 @@ class TransactionStateManagerTest {
   val metadataCache: MetadataCache = mock(classOf[MetadataCache])
 
   when(metadataCache.features()).thenReturn {
-    new FinalizedFeatures(
+    FinalizedFeatures.of(
       MetadataVersion.latestTesting(),
       util.Map.of(TransactionVersion.FEATURE_NAME, TransactionVersion.TV_2.featureLevel()),
       0)
@@ -1356,7 +1356,7 @@ class TransactionStateManagerTest {
   def testTransactionVersionInTransactionManager(transactionVersion: TransactionVersion): Unit = {
     val metadataCache = mock(classOf[MetadataCache])
     when(metadataCache.features()).thenReturn {
-      new FinalizedFeatures(
+      FinalizedFeatures.of(
         MetadataVersion.latestTesting(),
         util.Map.of(TransactionVersion.FEATURE_NAME, transactionVersion.featureLevel()),
         0)
