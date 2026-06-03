@@ -99,6 +99,11 @@ for %%i in ("%BASE_DIR%\core\build\libs\kafka_%SCALA_BINARY_VERSION%*.jar") do (
 	call :concat "%%i"
 )
 
+rem Classpath addition for shared JARs
+for %%i in (confluent-common, rest-utils, schema-registry, ksqldb) do (
+	call :concat %BASE_DIR%/share/java/%%i/*
+)
+
 rem JMX settings
 IF ["%KAFKA_JMX_OPTS%"] EQU [""] (
 	set KAFKA_JMX_OPTS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false  -Dcom.sun.management.jmxremote.ssl=false
