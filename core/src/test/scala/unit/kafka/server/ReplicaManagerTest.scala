@@ -5643,6 +5643,38 @@ class ReplicaManagerTest {
     }
   }
 
+  @Test
+  def testPartitionListenerWhenPartitionBecomesFollower(): Unit = {
+    val localId = 0
+    val topicPartition = new TopicPartition("foo", 0)
+    val replicaManager = setupReplicaManagerWithMockedPurgatories(new MockTimer(time), localId)
+    try {
+      val listener = new MockPartitionListener
+      listener.verify()
+
+      // Broker 0 becomes leader of the partition.
+      val leaderTopicsDelta = topicsCreateDelta(localId, isStartIdLeader = true)
+      val leaderMetadataImage = imageFromTopics(leaderTopicsDelta.apply())
+      replicaManager.applyDelta(leaderTopicsDelta, leaderMetadataImage)
+
+      // Register a listener.
+      assertTrue(replicaManager.maybeAddListener(topicPartition, listener))
+      listener.verify()
+
+      // Broker 0 transitions to follower of the partition. The listener is notified that
+      // the partition is becoming a follower. This happens before the follower starts
+      // fetching from the new leader, hence before any high watermark update reflecting
+      // the new leader's records.
+      val followerTopicsDelta = topicsChangeDelta(leaderMetadataImage.topics(), localId, isStartIdLeader = false)
+      val followerMetadataImage = imageFromTopics(followerTopicsDelta.apply())
+      replicaManager.applyDelta(followerTopicsDelta, followerMetadataImage)
+
+      listener.verify(expectedFollower = true)
+    } finally {
+      replicaManager.shutdown(checkpointHW = false)
+    }
+  }
+
   private def topicsCreateDelta(startId: Int, isStartIdLeader: Boolean, partition:Int = 0, directoryIds: List[Uuid] = List.empty): TopicsDelta = {
     val leader = if (isStartIdLeader) startId else startId + 1
     val delta = new TopicsDelta(TopicsImage.EMPTY)
