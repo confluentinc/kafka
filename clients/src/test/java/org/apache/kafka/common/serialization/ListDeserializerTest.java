@@ -19,6 +19,7 @@ package org.apache.kafka.common.serialization;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.errors.SerializationException;
 
 import org.junit.jupiter.api.Test;
 
@@ -227,8 +228,7 @@ public class ListDeserializerTest {
     public void testListKeyDeserializerShouldThrowConfigExceptionDueAlreadyInitialized() {
         props.put(CommonClientConfigs.DEFAULT_LIST_KEY_SERDE_TYPE_CLASS, ArrayList.class);
         props.put(CommonClientConfigs.DEFAULT_LIST_KEY_SERDE_INNER_CLASS, Serdes.StringSerde.class);
-        final ListDeserializer<Integer> initializedListDeserializer = new ListDeserializer<>(ArrayList.class,
-            Serdes.Integer().deserializer());
+        final ListDeserializer<Integer> initializedListDeserializer = new ListDeserializer<>(ArrayList.class, new IntegerDeserializer());
         final ConfigException exception = assertThrows(
             ConfigException.class,
             () -> initializedListDeserializer.configure(props, true)
@@ -240,13 +240,128 @@ public class ListDeserializerTest {
     public void testListValueDeserializerShouldThrowConfigExceptionDueAlreadyInitialized() {
         props.put(CommonClientConfigs.DEFAULT_LIST_VALUE_SERDE_TYPE_CLASS, ArrayList.class);
         props.put(CommonClientConfigs.DEFAULT_LIST_VALUE_SERDE_INNER_CLASS, Serdes.StringSerde.class);
-        final ListDeserializer<Integer> initializedListDeserializer = new ListDeserializer<>(ArrayList.class,
-            Serdes.Integer().deserializer());
+        final ListDeserializer<Integer> initializedListDeserializer = new ListDeserializer<>(ArrayList.class, new IntegerDeserializer());
         final ConfigException exception = assertThrows(
             ConfigException.class,
             () -> initializedListDeserializer.configure(props, true)
         );
         assertEquals("List deserializer was already initialized using a non-default constructor", exception.getMessage());
+    }
+
+    @Test
+    public void shouldThrowOnNegativeLength() {
+        final byte[] corruptedData = new byte[] {
+            (byte) Serdes.ListSerde.SerializationStrategy.VARIABLE_SIZE.ordinal(),
+            (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF // encodes length == -1
+        };
+
+        final ListDeserializer<String> testDeserializer = new ListDeserializer<>(ArrayList.class, new StringDeserializer());
+
+        final SerializationException exception = assertThrows(
+            SerializationException.class,
+            () -> testDeserializer.deserialize(null, corruptedData)
+        );
+        assertEquals(
+            "Corrupted byte[]. The number of list entries cannot be negative.",
+            exception.getMessage()
+        );
+    }
+
+    @Test
+    public void shouldThrowOnTooLargeLength() {
+        final byte[] corruptedData = new byte[] {
+            (byte) Serdes.ListSerde.SerializationStrategy.VARIABLE_SIZE.ordinal(),
+            (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0xFF // encodes length 255
+        };
+
+        final ListDeserializer<String> testDeserializer = new ListDeserializer<>(ArrayList.class, new StringDeserializer());
+
+        final SerializationException exception = assertThrows(
+            SerializationException.class,
+            () -> testDeserializer.deserialize(null, corruptedData)
+        );
+        assertEquals(
+            "Corrupted byte[]. The number of list entries cannot be larger than overall number of bytes.",
+            exception.getMessage()
+        );
+    }
+
+    @Test
+    public void shouldThrowOnNegativeEntrySize() {
+        final byte[] corruptedData = new byte[] {
+            (byte) Serdes.ListSerde.SerializationStrategy.VARIABLE_SIZE.ordinal(),
+            (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, // encodes length == 0
+            (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFE // encodes entrySize == -2 (-1 would be a valid `null` entry)
+        };
+
+        final ListDeserializer<String> testDeserializer = new ListDeserializer<>(ArrayList.class, new StringDeserializer());
+
+        final SerializationException exception = assertThrows(
+            SerializationException.class,
+            () -> testDeserializer.deserialize(null, corruptedData)
+        );
+        assertEquals(
+            "Corrupted byte[]. A list entry cannot have negative size.",
+            exception.getMessage()
+        );
+    }
+
+    @Test
+    public void shouldThrowOnTooLargeEntrySize() {
+        final byte[] corruptedData = new byte[] {
+            (byte) Serdes.ListSerde.SerializationStrategy.VARIABLE_SIZE.ordinal(),
+            (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, // encodes length == 1
+            (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0xFF, // encodes entrySize == 255
+        };
+
+        final ListDeserializer<String> testDeserializer = new ListDeserializer<>(ArrayList.class, new StringDeserializer());
+
+        final SerializationException exception = assertThrows(
+            SerializationException.class,
+            () -> testDeserializer.deserialize(null, corruptedData)
+        );
+        assertEquals(
+            "Corrupted byte[]. A list entry cannot be larger than the overall number of bytes.",
+            exception.getMessage()
+        );
+    }
+
+    @Test
+    public void shouldThrowOnNegativeNullEntryLength() {
+        final byte[] corruptedData = new byte[] {
+            (byte) Serdes.ListSerde.SerializationStrategy.CONSTANT_SIZE.ordinal(),
+            (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF // encodes number of null entries == -1
+        };
+
+        final ListDeserializer<String> testDeserializer = new ListDeserializer<>(ArrayList.class, new StringDeserializer());
+
+        final SerializationException exception = assertThrows(
+            SerializationException.class,
+            () -> testDeserializer.deserialize(null, corruptedData)
+        );
+        assertEquals(
+            "Corrupted byte[]. The number of null list entries cannot be negative.",
+            exception.getMessage()
+        );
+    }
+
+    @Test
+    public void shouldThrowOnTooLargeNullEntryLength() {
+        final byte[] corruptedData = new byte[] {
+            (byte) Serdes.ListSerde.SerializationStrategy.CONSTANT_SIZE.ordinal(),
+            (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0xFF // encodes number of null entries == 255
+        };
+
+        final ListDeserializer<String> testDeserializer = new ListDeserializer<>(ArrayList.class, new StringDeserializer());
+
+        final SerializationException exception = assertThrows(
+            SerializationException.class,
+            () -> testDeserializer.deserialize(null, corruptedData)
+        );
+        assertEquals(
+            "Corrupted byte[]. The number of null list entries cannot be larger than overall number of bytes.",
+            exception.getMessage()
+        );
     }
 
 }
