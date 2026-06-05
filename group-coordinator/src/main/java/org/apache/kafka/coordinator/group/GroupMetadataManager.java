@@ -4340,7 +4340,6 @@ public class GroupMetadataManager {
 
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder assignmentResultBuilder =
                 new org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder(
-                    group.groupId(),
                     groupEpoch,
                     assignor,
                     assignmentConfigs
@@ -4364,7 +4363,14 @@ public class GroupMetadataManager {
                     group.groupId(), groupEpoch, assignor, assignorTimeMs);
             }
 
-            records.addAll(assignmentResult.records());
+            new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(log, group.groupId())
+                .withTargetAssignmentMetadata(assignmentResult.targetAssignmentMetadata())
+                .withCurrentMemberIds(updatedMembersAndTargetAssignment.members().keySet())
+                .withPreviousStaticMembers(updatedMembersAndTargetAssignment.staticMembers())
+                .withCurrentStaticMembers(updatedMembersAndTargetAssignment.staticMembers())
+                .withCurrentTargetAssignment(updatedMembersAndTargetAssignment.targetAssignment())
+                .withNewTargetAssignment(assignmentResult.targetAssignment())
+                .build(records);
 
             return new UpdateTargetAssignmentResult<>(
                 groupEpoch,
