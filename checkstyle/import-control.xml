@@ -140,6 +140,8 @@
         <allow pkg="org.testcontainers" />
         <allow pkg="org.keycloak" />
         <allow pkg="dasniko.testcontainers" />
+        <!-- For asserting log output in tests via LogCaptureAppender -->
+        <allow class="org.apache.logging.log4j.Level" />
       </subpackage>
     </subpackage>
 

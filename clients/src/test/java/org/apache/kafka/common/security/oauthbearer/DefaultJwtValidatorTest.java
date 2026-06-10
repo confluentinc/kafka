@@ -30,6 +30,7 @@ import org.jose4j.jws.AlgorithmIdentifiers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.kafka.common.config.internals.BrokerSecurityConfigs.ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG;
@@ -39,6 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 public class DefaultJwtValidatorTest extends OAuthBearerTest {
+
+    private static final String EXPECTED_ISSUER = "https://idp.legit.example/";
 
     @AfterEach
     public void tearDown() {
@@ -69,14 +72,18 @@ public class DefaultJwtValidatorTest extends OAuthBearerTest {
         PublicJsonWebKey jwk = createRsaJwk();
         AccessTokenBuilder builder = new AccessTokenBuilder()
             .jwk(jwk)
-            .alg(AlgorithmIdentifiers.RSA_USING_SHA256);
+            .alg(AlgorithmIdentifiers.RSA_USING_SHA256)
+            .addCustomClaim("iss", EXPECTED_ISSUER);
         String accessToken = builder.build();
 
         JsonWebKeySet jwks = new JsonWebKeySet(jwk);
         String jwksJson = jwks.toJson(JsonWebKey.OutputControlLevel.PUBLIC_ONLY);
         String fileUrl = tempFile(jwksJson).toURI().toString();
         System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, fileUrl);
-        Map<String, ?> configs = getSaslConfigs(SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_URL, fileUrl);
+        Map<String, Object> rawConfigs = new HashMap<>();
+        rawConfigs.put(SaslConfigs.SASL_OAUTHBEARER_JWKS_ENDPOINT_URL, fileUrl);
+        rawConfigs.put(SaslConfigs.SASL_OAUTHBEARER_EXPECTED_ISSUER, EXPECTED_ISSUER);
+        Map<String, ?> configs = getSaslConfigs(rawConfigs);
 
         DefaultJwtValidator jwtValidator = new DefaultJwtValidator();
         assertDoesNotThrow(() -> jwtValidator.configure(configs, OAUTHBEARER_MECHANISM, getJaasConfigEntries()));
