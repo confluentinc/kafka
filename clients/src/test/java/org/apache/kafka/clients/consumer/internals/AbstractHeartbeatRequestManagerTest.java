@@ -181,7 +181,7 @@ abstract class AbstractHeartbeatRequestManagerTest {
         result.unsentRequests.get(0).handler().onComplete(response);
 
         verify(membershipManager, never()).transitionToFatal();
-        verify(membershipManager).onHeartbeatRequestSkipped();
+        verify(membershipManager).onHeartbeatFailure(false);
         verify(backgroundEventHandler, never()).add(any());
     }
 
