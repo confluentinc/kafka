@@ -131,6 +131,7 @@ public class TopicAdmin implements AutoCloseable {
 
     private static final String CLEANUP_POLICY_CONFIG = TopicConfig.CLEANUP_POLICY_CONFIG;
     private static final String CLEANUP_POLICY_COMPACT = TopicConfig.CLEANUP_POLICY_COMPACT;
+    private static final String MIN_INSYNC_REPLICAS_CONFIG = TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 
     /**
      * A builder of {@link NewTopic} instances.
@@ -200,6 +201,18 @@ public class TopicAdmin implements AutoCloseable {
             this.configs.put(CLEANUP_POLICY_CONFIG, CLEANUP_POLICY_COMPACT);
             return this;
         }
+
+        /**
+         * Specify the minimum number of in-sync replicas required for this topic.
+         *
+         * @param minInSyncReplicas the minimum number of in-sync replicas allowed for the topic; must be positive
+         * @return this builder to allow methods to be chained; never null
+         */
+        public NewTopicBuilder minInSyncReplicas(short minInSyncReplicas) {
+            this.configs.put(MIN_INSYNC_REPLICAS_CONFIG, Short.toString(minInSyncReplicas));
+            return this;
+        }
+
 
         /**
          * Specify the configuration properties for the topic, overwriting any previously-set properties.
