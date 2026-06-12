@@ -12786,6 +12786,77 @@ public class GroupMetadataManagerTest {
         assertThrows(InconsistentGroupProtocolException.class, () -> context.sendClassicGroupJoin(requestWithInvalidProtocolType));
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testClassicMemberJoinToConsumerGroupWithDisabledMigrationPolicy(boolean isStatic) {
+        String groupId = "group-id";
+        String classicMemberId = Uuid.randomUuid().toString();
+        String classicInstanceId = "classic-instance-id";
+        String consumerMemberId = Uuid.randomUuid().toString();
+        String consumerInstanceId = "consumer-instance-id";
+        String errorMessage = String.format(
+            "Cannot join the consumer group %s with the classic protocol because the group migration is disabled.", groupId);
+
+        // The group already contains a classic member. For the static case it also contains a
+        // consumer-protocol static member that a classic member could try to replace.
+        ConsumerGroupBuilder groupBuilder = new ConsumerGroupBuilder(groupId, 10)
+            .withMember(new ConsumerGroupMember.Builder(classicMemberId)
+                .setState(MemberState.STABLE)
+                .setMemberEpoch(10)
+                .setPreviousMemberEpoch(10)
+                .setInstanceId(isStatic ? classicInstanceId : null)
+                .setClassicMemberMetadata(
+                    new ConsumerGroupMemberMetadataValue.ClassicMemberMetadata()
+                        .setSessionTimeoutMs(5000)
+                        .setSupportedProtocols(ConsumerGroupMember.classicProtocolListFromJoinRequestProtocolCollection(
+                            GroupMetadataManagerTestContext.toProtocols("range"))))
+                .build());
+        if (isStatic) {
+            groupBuilder.withMember(new ConsumerGroupMember.Builder(consumerMemberId)
+                .setState(MemberState.STABLE)
+                .setMemberEpoch(10)
+                .setPreviousMemberEpoch(10)
+                .setInstanceId(consumerInstanceId)
+                .build());
+        }
+        GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.CONSUMER_GROUP_MIGRATION_POLICY_CONFIG, ConsumerGroupMigrationPolicy.DISABLED.toString())
+            .withConsumerGroup(groupBuilder)
+            .build();
+
+        // A new classic member cannot join
+        JoinGroupRequestData newMemberRequest = new GroupMetadataManagerTestContext.JoinGroupRequestBuilder()
+            .withGroupId(groupId)
+            .withMemberId(UNKNOWN_MEMBER_ID)
+            .withGroupInstanceId(isStatic ? "new-instance-id" : null)
+            .withProtocols(GroupMetadataManagerTestContext.toProtocols("range"))
+            .build();
+        assertEquals(errorMessage,
+            assertThrows(InconsistentGroupProtocolException.class, () -> context.sendClassicGroupJoin(newMemberRequest, isStatic)).getMessage());
+
+        // The existing classic member cannot rejoin.
+        JoinGroupRequestData rejoinRequest = new GroupMetadataManagerTestContext.JoinGroupRequestBuilder()
+            .withGroupId(groupId)
+            .withMemberId(isStatic ? UNKNOWN_MEMBER_ID : classicMemberId)
+            .withGroupInstanceId(isStatic ? classicInstanceId : null)
+            .withProtocols(GroupMetadataManagerTestContext.toProtocols("range"))
+            .build();
+        assertEquals(errorMessage,
+            assertThrows(InconsistentGroupProtocolException.class, () -> context.sendClassicGroupJoin(rejoinRequest, isStatic)).getMessage());
+
+        if (isStatic) {
+            // A classic member cannot replace an existing consumer-protocol static member.
+            JoinGroupRequestData replaceRequest = new GroupMetadataManagerTestContext.JoinGroupRequestBuilder()
+                .withGroupId(groupId)
+                .withMemberId(UNKNOWN_MEMBER_ID)
+                .withGroupInstanceId(consumerInstanceId)
+                .withProtocols(GroupMetadataManagerTestContext.toProtocols("range"))
+                .build();
+            assertEquals(errorMessage,
+                assertThrows(InconsistentGroupProtocolException.class, () -> context.sendClassicGroupJoin(replaceRequest, true)).getMessage());
+        }
+    }
+
     @Test
     public void testJoiningConsumerGroupWithNewDynamicMember() throws Exception {
         String groupId = "group-id";
@@ -13094,7 +13165,7 @@ public class GroupMetadataManagerTest {
         String memberId = Uuid.randomUuid().toString();
         String instanceId = "instance-id";
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.CONSUMER_GROUP_MIGRATION_POLICY_CONFIG, ConsumerGroupMigrationPolicy.DISABLED.toString())
+            .withConfig(GroupCoordinatorConfig.CONSUMER_GROUP_MIGRATION_POLICY_CONFIG, ConsumerGroupMigrationPolicy.UPGRADE.toString())
             .withConfig(GroupCoordinatorConfig.CONSUMER_GROUP_ASSIGNORS_CONFIG, List.of(new NoOpPartitionAssignor()))
             .withMetadataImage(metadataImage)
             .withConsumerGroup(new ConsumerGroupBuilder(groupId, 10)
