@@ -92,7 +92,7 @@ import org.apache.kafka.network.metrics.{RequestChannelMetrics, RequestMetrics}
 import org.apache.kafka.raft.{KRaftConfigs, QuorumConfig}
 import org.apache.kafka.security.authorizer.AclEntry
 import org.apache.kafka.server.FetchContext.FullFetchContext
-import org.apache.kafka.server.{AutoTopicCreationManager, ClientMetricsManager, FetchManager, FetchSessionCacheShard, SimpleApiVersionManager}
+import org.apache.kafka.server.{AutoTopicCreationManager, ClientMetricsManager, FetchManager, FetchSessionCacheShard, ForwardingManager, SimpleApiVersionManager}
 import org.apache.kafka.server.authorizer.{Action, AuthorizationResult, Authorizer}
 import org.apache.kafka.server.common.{FeatureVersion, FinalizedFeatures, GroupVersion, KRaftVersion, MetadataVersion, RequestLocal, ShareVersion, StreamsVersion, TransactionVersion}
 import org.apache.kafka.server.config.{ReplicationConfigs, ServerConfigs, ServerLogConfigs}
@@ -559,7 +559,7 @@ class KafkaApisTest extends Logging {
 
     when(clientRequestQuotaManager.maybeRecordAndGetThrottleTimeMs(any[Request](),
       any[Long])).thenReturn(0)
-    val forwardCallback: ArgumentCaptor[Option[AbstractResponse] => Unit] = ArgumentCaptor.forClass(classOf[Option[AbstractResponse] => Unit])
+    val forwardCallback: ArgumentCaptor[Consumer[Optional[AbstractResponse]]] = ArgumentCaptor.forClass(classOf[Consumer[Optional[AbstractResponse]]])
 
     kafkaApis.handle(request, RequestLocal.withThreadConfinedCaching)
     verify(forwardingManager).forwardRequest(
@@ -570,7 +570,7 @@ class KafkaApisTest extends Logging {
       s"`handle` returned (is $apiKey marked as forwardable in `ApiKeys`?)")
 
     val expectedResponse = apiRequest.getErrorResponse(Errors.NOT_CONTROLLER.exception)
-    forwardCallback.getValue.apply(Some(expectedResponse))
+    forwardCallback.getValue.accept(Optional.of(expectedResponse))
 
     val capturedResponse = verifyNoThrottling[AbstractResponse](request)
     assertEquals(expectedResponse.data, capturedResponse.data)
@@ -651,8 +651,8 @@ class KafkaApisTest extends Logging {
     val request = buildRequest(requestBuilder)
 
     kafkaApis = createKafkaApis()
-    val forwardCallback: ArgumentCaptor[Option[AbstractResponse] => Unit] =
-      ArgumentCaptor.forClass(classOf[Option[AbstractResponse] => Unit])
+    val forwardCallback: ArgumentCaptor[Consumer[Optional[AbstractResponse]]] =
+      ArgumentCaptor.forClass(classOf[Consumer[Optional[AbstractResponse]]])
 
     when(clientRequestQuotaManager.maybeRecordAndGetThrottleTimeMs(request, time.milliseconds()))
       .thenReturn(requestThrottleTimeMs)
@@ -669,7 +669,7 @@ class KafkaApisTest extends Logging {
     responseData.topics().add(new CreatableTopicResult()
       .setErrorCode(Errors.THROTTLING_QUOTA_EXCEEDED.code))
 
-    forwardCallback.getValue.apply(Some(new CreateTopicsResponse(responseData)))
+    forwardCallback.getValue.accept(Optional.of(new CreateTopicsResponse(responseData)))
 
     val expectedThrottleTimeMs = math.max(controllerThrottleTimeMs, requestThrottleTimeMs)
 
