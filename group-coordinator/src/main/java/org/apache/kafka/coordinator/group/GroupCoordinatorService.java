@@ -20,6 +20,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.config.TopicConfig;
+import org.apache.kafka.common.errors.CoordinatorLoadInProgressException;
+import org.apache.kafka.common.errors.CoordinatorNotAvailableException;
 import org.apache.kafka.common.errors.GroupIdNotFoundException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.NotCoordinatorException;
@@ -795,11 +797,23 @@ public class GroupCoordinatorService implements GroupCoordinator {
         if (throwable == null) {
             return new SetTopologyOutcome(responseOnSuccess, BackoffAction.CLEAR, null);
         }
+        Throwable cause = Errors.maybeUnwrapException(throwable);
         // The group was deleted between the plugin call and the bookkeeping write — the
         // push already took effect at the plugin and no live group remains to throttle,
         // so drop the orphaned back-off entry instead of arming one nobody will clear.
-        if (Errors.maybeUnwrapException(throwable) instanceof GroupIdNotFoundException) {
+        if (cause instanceof GroupIdNotFoundException) {
             return new SetTopologyOutcome(null, BackoffAction.CLEAR_GROUP, throwable);
+        }
+        // This broker stopped being the coordinator between the plugin call and the
+        // bookkeeping write. The client will retry against the new coordinator, which
+        // holds no back-off entry of its own; arming a broker-wide entry here would
+        // leak until expiry and could suppress a legitimate solicitation if the group
+        // ever migrates back. The retry that lands on the new coordinator is what
+        // re-establishes convergence, not a back-off window on the broker that bowed out.
+        if (cause instanceof NotCoordinatorException
+            || cause instanceof CoordinatorLoadInProgressException
+            || cause instanceof CoordinatorNotAvailableException) {
+            return new SetTopologyOutcome(null, BackoffAction.NOOP, throwable);
         }
         return new SetTopologyOutcome(null, BackoffAction.ARM, throwable);
     }
@@ -1627,9 +1641,42 @@ public class GroupCoordinatorService implements GroupCoordinator {
                     return CompletableFuture.completedFuture(deletableGroupResults);
                 }
 
-                return handleDeleteGroups(context, topicPartition, retainedGroupIds)
-                    .whenComplete((resp, __) -> resp.forEach(result -> deletableGroupResults.add(result.duplicate())))
-                    .thenApply(__ -> deletableGroupResults);
+                return runPrePluginDelete(topicPartition, retainedGroupIds)
+                    .thenCompose(streamsErrMap -> {
+                        List<String> afterStreams = filterStreamsTopologyErrors(
+                            streamsErrMap, retainedGroupIds, deletableGroupResults);
+                        if (afterStreams.isEmpty()) {
+                            return CompletableFuture.completedFuture(deletableGroupResults);
+                        }
+                        return handleDeleteGroups(context, topicPartition, afterStreams)
+                            .whenComplete((resp, __) -> resp.forEach(result -> deletableGroupResults.add(result.duplicate())))
+                            .thenApply(__ -> deletableGroupResults);
+                    })
+                    .exceptionally(exception -> {
+                        // Defensive net for any uncaught synchronous throw in the
+                        // post-runPrePluginDelete stage. Without this, the exception would
+                        // propagate through FutureUtils.combineFutures.join() and fail the
+                        // whole cross-partition DeleteGroups response — including groups on
+                        // other partitions that already succeeded. Runtime read failures
+                        // inside runPrePluginDelete are absorbed there, so they never reach
+                        // this branch; what we are catching here is the synchronous stages
+                        // (filterStreamsTopologyErrors etc.). Fold the exception into
+                        // per-group failures for any retainedGroupIds not yet recorded.
+                        ApiError apiError = ApiError.fromThrowable(exception);
+                        Set<String> recorded = new HashSet<>();
+                        deletableGroupResults.forEach(result -> recorded.add(result.groupId()));
+                        for (String groupId : retainedGroupIds) {
+                            if (!recorded.contains(groupId)) {
+                                deletableGroupResults.add(
+                                    new DeleteGroupsResponseData.DeletableGroupResult()
+                                        .setGroupId(groupId)
+                                        .setErrorCode(apiError.error().code())
+                                        .setErrorMessage(apiError.message())
+                                );
+                            }
+                        }
+                        return deletableGroupResults;
+                    });
             });
             // deleteShareGroups has its own exceptionally block, so we don't need one here.
 
@@ -1686,6 +1733,92 @@ public class GroupCoordinatorService implements GroupCoordinator {
         // Let us invoke the standard procedure of any non-share
         // groups or successfully deleted share groups remaining.
         return groupSet.stream().toList();
+    }
+
+    /**
+     * Drive the topology-description plugin's pre-delete flow: identify which of the
+     * supplied group ids carry a stored topology description, call
+     * {@code plugin.deleteTopology} for each, and drop the corresponding back-off entries.
+     *
+     * <p>Short-circuits with an empty failure map when no plugin is configured, so a
+     * broker with the feature disabled does not hit the runtime for a per-partition read.
+     * The chain mirrors the structure of {@code streamsGroupTopologyDescriptionUpdate}:
+     * the manager exposes pure plugin invocation ({@code invokeDeleteTopologies}) plus
+     * a back-off mutation ({@code clearBackoffGroup}), and this service helper assembles
+     * the runtime read, the plugin call, and the back-off cleanup into one future.
+     *
+     * <p>Runtime read failures (e.g. {@code NOT_COORDINATOR}) are folded back into the
+     * same per-group failure map so the caller can report them uniformly; we deliberately
+     * pass through the more specific runtime error rather than collapsing everything to
+     * {@code GROUP_DELETION_FAILED}.
+     */
+    private CompletableFuture<Map<String, ApiError>> runPrePluginDelete(
+        TopicPartition topicPartition,
+        List<String> groupIds
+    ) {
+        if (!streamsGroupTopologyDescriptionManager.isPluginConfigured()) {
+            return CompletableFuture.completedFuture(Map.of());
+        }
+        return runtime.scheduleReadOperation(
+                "streams-group-topology-pre-delete",
+                topicPartition,
+                (coordinator, lastCommittedOffset) ->
+                    coordinator.streamsGroupsWithStoredTopologyDescription(groupIds, lastCommittedOffset))
+            .thenCompose(groupsWithStored ->
+                streamsGroupTopologyDescriptionManager.invokeDeleteTopologies(groupsWithStored)
+                    .thenApply(failures -> {
+                        // Clear back-off entries for every group whose plugin state we
+                        // attempted to delete (regardless of plugin outcome): the group is
+                        // about to be tombstoned on success and re-evaluated by the next
+                        // heartbeat on failure, so any in-flight back-off entry at the old
+                        // epoch is no longer load-bearing.
+                        groupsWithStored.forEach(streamsGroupTopologyDescriptionManager::clearBackoffGroup);
+                        return failures;
+                    }))
+            .exceptionally(exception -> {
+                // Use ApiError.fromThrowable so the error reported to the client matches what
+                // the sibling DeleteGroups paths return: it unwraps CompletionException so the
+                // ErrorMessage is the cause's own message rather than the FQCN-prefixed
+                // toString(), and it suppresses the message for UNKNOWN_SERVER_ERROR so we do
+                // not leak plugin internals.
+                ApiError apiError = ApiError.fromThrowable(exception);
+                Map<String, ApiError> failures = new HashMap<>();
+                groupIds.forEach(id -> failures.put(id, apiError));
+                return failures;
+            });
+    }
+
+    /**
+     * Move plugin failures into {@code deletableGroupResults} and return the group ids
+     * that should still proceed to tombstoning. Version-agnostic: the raw {@link ApiError}
+     * is added as-is; any per-version translation of new error codes (e.g. downgrading
+     * {@code GROUP_DELETION_FAILED} for {@code DeleteGroups} v&lt;3) happens at the
+     * {@code KafkaApis} layer where {@code request.context.apiVersion()} is in scope and
+     * matches how other new error codes are version-gated.
+     */
+    private static List<String> filterStreamsTopologyErrors(
+        Map<String, ApiError> streamsErrMap,
+        List<String> groupIds,
+        DeleteGroupsResponseData.DeletableGroupResultCollection deletableGroupResults
+    ) {
+        if (streamsErrMap.isEmpty()) {
+            return groupIds;
+        }
+        List<String> retained = new ArrayList<>();
+        for (String groupId : groupIds) {
+            ApiError err = streamsErrMap.get(groupId);
+            if (err == null) {
+                retained.add(groupId);
+            } else {
+                deletableGroupResults.add(
+                    new DeleteGroupsResponseData.DeletableGroupResult()
+                        .setGroupId(groupId)
+                        .setErrorCode(err.error().code())
+                        .setErrorMessage(err.message())
+                );
+            }
+        }
+        return retained;
     }
 
     private CompletableFuture<DeleteGroupsResponseData.DeletableGroupResultCollection> handleDeleteGroups(

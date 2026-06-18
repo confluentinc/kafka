@@ -18,14 +18,20 @@ package org.apache.kafka.coordinator.group.streams;
 
 import org.apache.kafka.common.message.StreamsGroupHeartbeatResponseData;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.requests.ApiError;
 import org.apache.kafka.common.requests.StreamsGroupHeartbeatResponse.Status;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.coordinator.group.api.streams.StreamsGroupTopologyDescription;
 import org.apache.kafka.coordinator.group.api.streams.StreamsGroupTopologyDescriptionPlugin;
 import org.apache.kafka.coordinator.group.api.streams.StreamsTopologyDescriptionPermanentFailureException;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -196,6 +202,61 @@ public class StreamsGroupTopologyDescriptionManager implements AutoCloseable {
      */
     public void clearBackoffGroup(String groupId) {
         backoff.clearGroup(groupId);
+    }
+
+    /**
+     * Call {@code plugin.deleteTopology} for every supplied group id. Returns a per-group
+     * map of failures keyed by group id; groups absent from the map either had no plugin
+     * configured or the plugin call succeeded. The returned future never completes
+     * exceptionally — failures are folded into the map so the service-level
+     * {@code DeleteGroups} flow can dispatch on the per-group outcome without try/catch
+     * on the underlying future. A synchronous throw from the plugin (which violates the
+     * SPI contract) is mapped to the same {@code GROUP_DELETION_FAILED} as an
+     * exceptional future.
+     *
+     * <p>Pure plugin invocation: does not read group state and does not touch the
+     * back-off map. The service layer pre-filters the input via
+     * {@code streamsGroupsWithStoredTopologyDescription} and is responsible for invoking
+     * {@link #clearBackoffGroup} for the groups that were attempted.
+     */
+    public CompletableFuture<Map<String, ApiError>> invokeDeleteTopologies(Set<String> groupIds) {
+        if (plugin.isEmpty() || groupIds.isEmpty()) {
+            return CompletableFuture.completedFuture(Map.of());
+        }
+        final StreamsGroupTopologyDescriptionPlugin p = plugin.get();
+        List<CompletableFuture<Map.Entry<String, ApiError>>> outcomes = new ArrayList<>(groupIds.size());
+        for (String groupId : groupIds) {
+            CompletableFuture<Map.Entry<String, ApiError>> outcome;
+            try {
+                outcome = p.deleteTopology(groupId).handle((unused, throwable) -> toFailureEntry(groupId, throwable));
+            } catch (Exception e) {
+                // Synchronous throw from the plugin violates the SPI contract; treat it as
+                // any other per-group failure so the failures map carries it back to the
+                // caller without dropping the rest of the batch.
+                outcome = CompletableFuture.completedFuture(toFailureEntry(groupId, e));
+            }
+            outcomes.add(outcome);
+        }
+        CompletableFuture<?>[] all = outcomes.toArray(new CompletableFuture<?>[0]);
+        return CompletableFuture.allOf(all).thenApply(unused -> {
+            Map<String, ApiError> failures = new HashMap<>();
+            for (CompletableFuture<Map.Entry<String, ApiError>> future : outcomes) {
+                Map.Entry<String, ApiError> entry = future.join();
+                if (entry != null) {
+                    failures.put(entry.getKey(), entry.getValue());
+                }
+            }
+            return failures;
+        });
+    }
+
+    private static Map.Entry<String, ApiError> toFailureEntry(String groupId, Throwable throwable) {
+        if (throwable == null) {
+            return null;
+        }
+        Throwable cause = Errors.maybeUnwrapException(throwable);
+        String message = cause != null ? cause.getMessage() : "Plugin failure (no cause).";
+        return Map.entry(groupId, new ApiError(Errors.GROUP_DELETION_FAILED, message));
     }
 
     // Visible for testing.
