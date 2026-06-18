@@ -4470,15 +4470,16 @@ public class GroupMetadataManager {
             .setMemberEpoch(memberEpoch)
             .setStatus(List.of());
 
-        // Leave/fence paths use StreamsGroupHeartbeatResult.withoutEpochContext: the departing
-        // member will never push a topology description, so the service-layer post-processing
-        // sees epochs of -1 and short-circuits. Without this the manager would arm a back-off
-        // window for a member that is on its way out, delaying push solicitation for the rest
-        // of the group.
         if (instanceId == null) {
             StreamsGroupMember member = group.getMemberOrThrow(memberId);
             log.info("[GroupId {}][MemberId {}] Member {} left the streams group.", groupId, memberId, memberId);
-            return streamsGroupFenceMember(group, member, StreamsGroupHeartbeatResult.withoutEpochContext(response));
+            return streamsGroupFenceMember(group, member, new StreamsGroupHeartbeatResult(
+                response,
+                Map.of(),
+                group.currentTopologyEpoch(),
+                group.storedDescriptionTopologyEpoch(),
+                group.failedDescriptionTopologyEpoch()
+            ));
         } else {
             StreamsGroupMember member = group.staticMember(instanceId);
             throwIfStaticMemberIsUnknown(member, instanceId);
@@ -4490,7 +4491,13 @@ public class GroupMetadataManager {
             } else {
                 log.info("[GroupId {}][MemberId {}] Static member {} with instance id {} left the streams group.",
                     group.groupId(), memberId, memberId, instanceId);
-                return streamsGroupFenceMember(group, member, StreamsGroupHeartbeatResult.withoutEpochContext(response));
+                return streamsGroupFenceMember(group, member, new StreamsGroupHeartbeatResult(
+                    response,
+                    Map.of(),
+                    group.currentTopologyEpoch(),
+                    group.storedDescriptionTopologyEpoch(),
+                    group.failedDescriptionTopologyEpoch()
+                ));
             }
         }
     }
@@ -4557,12 +4564,15 @@ public class GroupMetadataManager {
             .setMemberEpoch(LEAVE_GROUP_STATIC_MEMBER_EPOCH)
             .setStatus(List.of());
 
-        // Static-leave is a departing path: a member that will not push at this epoch,
-        // so we use the withoutEpochContext factory to skip the heartbeat post-processing
-        // and avoid arming the back-off on its behalf.
         return new CoordinatorResult<>(
             List.of(record),
-            StreamsGroupHeartbeatResult.withoutEpochContext(response)
+            new StreamsGroupHeartbeatResult(
+                response,
+                Map.of(),
+                group.currentTopologyEpoch(),
+                group.storedDescriptionTopologyEpoch(),
+                group.failedDescriptionTopologyEpoch()
+            )
         );
     }
 
@@ -8408,41 +8418,64 @@ public class GroupMetadataManager {
     ) {
         Set<String> withStored = new HashSet<>();
         for (String groupId : groupIds) {
-            try {
-                StreamsGroup group = streamsGroup(groupId, committedOffset);
-                if (group.storedDescriptionTopologyEpoch(committedOffset) != -1) {
-                    withStored.add(groupId);
-                }
-            } catch (GroupIdNotFoundException ignored) {
-                // Not a streams group on this shard; nothing to clean up.
+            // Non-throwing lookup + type check: silently skip absent or non-streams groups.
+            Group group = groups.get(groupId, committedOffset);
+            if (group != null
+                && group.type() == STREAMS
+                && ((StreamsGroup) group).storedDescriptionTopologyEpoch(committedOffset) != -1) {
+                withStored.add(groupId);
             }
         }
         return withStored;
     }
 
     /**
-     * Persist the outcome of a topology description plugin call for a streams group.
+     * Advance {@code StoredDescriptionTopologyEpoch} to {@code pushedEpoch} after a successful
+     * plugin {@code setTopology}, so subsequent heartbeats at the same epoch do not re-solicit.
      *
-     * <p>On a successful plugin {@code setTopology} the {@code StoredDescriptionTopologyEpoch}
-     * field is advanced to the pushed epoch; on a permanent failure the
-     * {@code FailedDescriptionTopologyEpoch} field is advanced instead so subsequent
-     * heartbeats at the same epoch do not re-solicit a push.
-     *
-     * @param groupId           The streams group id.
-     * @param pushedEpoch       The topology epoch on the push that just completed.
-     * @param permanentFailure  True if the plugin signalled a permanent failure; false on success.
+     * @param groupId      The streams group id.
+     * @param pushedEpoch  The topology epoch on the push that just completed.
      * @return A coordinator result carrying the metadata record that updates the field.
      * @throws GroupIdNotFoundException if the streams group no longer exists.
      */
-    public CoordinatorResult<Void, CoordinatorRecord> streamsGroupSetTopologyDescriptionEpoch(
+    public CoordinatorResult<Void, CoordinatorRecord> setStoredDescriptionTopologyEpoch(
+        String groupId,
+        int pushedEpoch
+    ) throws GroupIdNotFoundException {
+        return updateTopologyDescriptionEpochs(groupId, pushedEpoch, false);
+    }
+
+    /**
+     * Advance {@code FailedDescriptionTopologyEpoch} to {@code pushedEpoch} after a permanent
+     * plugin failure, so subsequent heartbeats at the same epoch do not re-solicit a push.
+     *
+     * @param groupId      The streams group id.
+     * @param pushedEpoch  The topology epoch on the push that just completed.
+     * @return A coordinator result carrying the metadata record that updates the field.
+     * @throws GroupIdNotFoundException if the streams group no longer exists.
+     */
+    public CoordinatorResult<Void, CoordinatorRecord> setFailedDescriptionTopologyEpoch(
+        String groupId,
+        int pushedEpoch
+    ) throws GroupIdNotFoundException {
+        return updateTopologyDescriptionEpochs(groupId, pushedEpoch, true);
+    }
+
+    private CoordinatorResult<Void, CoordinatorRecord> updateTopologyDescriptionEpochs(
         String groupId,
         int pushedEpoch,
         boolean permanentFailure
     ) throws GroupIdNotFoundException {
         StreamsGroup group = streamsGroup(groupId);
 
-        int newStored = permanentFailure ? group.storedDescriptionTopologyEpoch() : pushedEpoch;
-        int newFailed = permanentFailure ? pushedEpoch : group.failedDescriptionTopologyEpoch();
+        // Only advance these epochs, never regress them: a stale push committing after the group
+        // advanced (or after a concurrent higher-epoch push) must not move stored/failed back.
+        int newStored = permanentFailure
+            ? group.storedDescriptionTopologyEpoch()
+            : Math.max(group.storedDescriptionTopologyEpoch(), pushedEpoch);
+        int newFailed = permanentFailure
+            ? Math.max(group.failedDescriptionTopologyEpoch(), pushedEpoch)
+            : group.failedDescriptionTopologyEpoch();
 
         CoordinatorRecord record = newStreamsGroupMetadataRecord(
             groupId,

@@ -496,6 +496,29 @@ public class GroupCoordinatorServiceTopologyDescriptionTest {
     }
 
     @Test
+    public void testHeartbeatSkipsFlagForDepartingMember() throws Exception {
+        // A leave heartbeat carries a negative member epoch. Even though the result shows the
+        // stored epoch lagging (which would otherwise solicit a push), the gate must not arm
+        // the back-off or set the flag for a member on its way out.
+        CoordinatorRuntime<GroupCoordinatorShard, CoordinatorRecord> runtime = mockRuntime();
+        StreamsGroupTopologyDescriptionPlugin plugin = mock(StreamsGroupTopologyDescriptionPlugin.class);
+        when(runtime.scheduleWriteOperation(
+            eq("streams-group-heartbeat"),
+            eq(GROUP_TP),
+            any()
+        )).thenReturn(CompletableFuture.completedFuture(
+            new StreamsGroupHeartbeatResult(new StreamsGroupHeartbeatResponseData(), Map.of(), 5, -1, -1)));
+
+        GroupCoordinatorService service = buildService(runtime, Optional.of(plugin), true);
+        StreamsGroupHeartbeatResult result = service.streamsGroupHeartbeat(
+            requestContext(ApiKeys.STREAMS_GROUP_HEARTBEAT),
+            validHeartbeatRequest().setMemberEpoch(-1)
+        ).get(5, TimeUnit.SECONDS);
+
+        assertFalse(result.data().topologyDescriptionRequired());
+    }
+
+    @Test
     public void testHeartbeatArmSuppressReSolicitCycle() throws Exception {
         // End-to-end exercise of the arm → suppress → re-solicit cycle through the
         // service + TopologyDescriptionManager. Backoff primitive tests cover this in
@@ -710,7 +733,8 @@ public class GroupCoordinatorServiceTopologyDescriptionTest {
         DeleteGroupsResponseData.DeletableGroupResult result = results.find("foo");
         assertNotNull(result);
         assertEquals(Errors.GROUP_DELETION_FAILED.code(), result.errorCode());
-        assertEquals("plugin offline", result.errorMessage());
+        // The raw plugin message ("plugin offline") must not be forwarded to the client.
+        assertEquals("Topology description plugin failed to delete the topology.", result.errorMessage());
         verify(runtime, never()).scheduleWriteOperation(
             eq("delete-groups"), any(), any());
     }
@@ -886,7 +910,7 @@ public class GroupCoordinatorServiceTopologyDescriptionTest {
         DeleteGroupsResponseData.DeletableGroupResult badResult = results.find("bad");
         assertNotNull(badResult);
         assertEquals(Errors.GROUP_DELETION_FAILED.code(), badResult.errorCode());
-        assertEquals("rejected", badResult.errorMessage());
+        assertEquals("Topology description plugin failed to delete the topology.", badResult.errorMessage());
     }
 
     private static StreamsGroupTopologyDescriptionUpdateRequestData validUpdateRequest() {

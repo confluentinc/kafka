@@ -16,7 +16,12 @@
  */
 package org.apache.kafka.coordinator.group.streams;
 
+import org.apache.kafka.common.errors.CoordinatorLoadInProgressException;
+import org.apache.kafka.common.errors.CoordinatorNotAvailableException;
+import org.apache.kafka.common.errors.GroupIdNotFoundException;
+import org.apache.kafka.common.errors.NotCoordinatorException;
 import org.apache.kafka.common.message.StreamsGroupHeartbeatResponseData;
+import org.apache.kafka.common.message.StreamsGroupTopologyDescriptionUpdateResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.ApiError;
 import org.apache.kafka.common.requests.StreamsGroupHeartbeatResponse.Status;
@@ -33,6 +38,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Broker-level component that owns the streams-group topology description plugin
@@ -102,9 +108,13 @@ public class StreamsGroupTopologyDescriptionManager implements AutoCloseable {
     public StreamsGroupHeartbeatResult maybeSetTopologyDescriptionRequired(
         StreamsGroupHeartbeatResult result,
         String groupId,
-        int apiVersion
+        int apiVersion,
+        int memberEpoch
     ) {
-        if (apiVersion < 1 || plugin.isEmpty()) {
+        // Do not solicit a push from a departing member (a leave heartbeat carries a negative
+        // member epoch): arming the back-off on its behalf would only delay solicitation for the
+        // rest of the group.
+        if (apiVersion < 1 || plugin.isEmpty() || memberEpoch < 0) {
             return result;
         }
         StreamsGroupHeartbeatResponseData response = result.data();
@@ -185,19 +195,47 @@ public class StreamsGroupTopologyDescriptionManager implements AutoCloseable {
     }
 
     /**
-     * Drop the back-off entry for a group at the given topology epoch. Epoch-scoped so a
-     * late post-plugin callback at an old epoch cannot wipe a window a concurrent
-     * heartbeat armed at the advanced epoch. Delegates to
-     * {@link StreamsGroupTopologyDescriptionBackoff#clear}.
+     * Settle the per-group back-off after the bookkeeping write that records a push outcome
+     * (the stored epoch on success, the failed epoch on a permanent failure) completes, and
+     * return the response to send to the client — or rethrow the write failure so the service's
+     * terminal handler maps it.
+     *
+     * <p>On a clean write the back-off is cleared for this epoch (epoch-scoped so a late callback
+     * at an old epoch cannot wipe a window a concurrent heartbeat armed at the advanced epoch);
+     * if the group was deleted underneath the write its whole entry is dropped; a coordinator-moved
+     * error leaves the back-off untouched (the new coordinator owns convergence once the client
+     * retries); any other failure arms it so the next heartbeat re-solicits.
      */
-    public void clearBackoff(String groupId, int topologyEpoch) {
-        backoff.clear(groupId, topologyEpoch);
+    public StreamsGroupTopologyDescriptionUpdateResponseData completeEpochWrite(
+        String groupId,
+        int topologyEpoch,
+        Throwable writeException,
+        StreamsGroupTopologyDescriptionUpdateResponseData responseOnCommit
+    ) {
+        if (writeException == null) {
+            backoff.clear(groupId, topologyEpoch);
+            return responseOnCommit;
+        }
+        Throwable cause = Errors.maybeUnwrapException(writeException);
+        if (cause instanceof GroupIdNotFoundException) {
+            backoff.clearGroup(groupId);
+        } else if (cause instanceof NotCoordinatorException
+            || cause instanceof CoordinatorLoadInProgressException
+            || cause instanceof CoordinatorNotAvailableException) {
+            // Coordinator moved between the plugin call and the write; the new coordinator owns
+            // convergence after the client retries, so leave the back-off alone.
+        } else {
+            backoff.armOrExtend(groupId, topologyEpoch);
+        }
+        throw new CompletionException(writeException);
     }
 
     /**
-     * Drop the back-off entry for a group unconditionally. Used by paths that remove the
-     * group entirely (explicit DeleteGroups, periodic cleanup of naturally-expired
-     * groups, post-plugin write failing with GroupIdNotFoundException). Delegates to
+     * Drop the back-off entry for a group unconditionally. Currently called when a group is
+     * removed via explicit DeleteGroups and on a post-plugin write failing with
+     * GroupIdNotFoundException. NOTE: groups removed by other lifecycle paths (session expiry,
+     * partition unload, tombstone-via-replay) are not yet wired to this, so their back-off
+     * entries can leak until the group id is reused. Delegates to
      * {@link StreamsGroupTopologyDescriptionBackoff#clearGroup}.
      */
     public void clearBackoffGroup(String groupId) {
@@ -254,9 +292,11 @@ public class StreamsGroupTopologyDescriptionManager implements AutoCloseable {
         if (throwable == null) {
             return null;
         }
-        Throwable cause = Errors.maybeUnwrapException(throwable);
-        String message = cause != null ? cause.getMessage() : "Plugin failure (no cause).";
-        return Map.entry(groupId, new ApiError(Errors.GROUP_DELETION_FAILED, message));
+        // Do not forward the plugin's raw exception message to the client: it can be null and
+        // may leak plugin internals (the ErrorMessage is serialized at DeleteGroups v3+). Use a
+        // fixed generic message, mirroring invokeSetTopology.
+        return Map.entry(groupId, new ApiError(Errors.GROUP_DELETION_FAILED,
+            "Topology description plugin failed to delete the topology."));
     }
 
     // Visible for testing.
