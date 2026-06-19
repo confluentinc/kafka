@@ -4350,17 +4350,18 @@ public class GroupMetadataManager {
                 updatedMembersAndTargetAssignment.addOrUpdateMember(member.memberId(), member)
             );
 
+            org.apache.kafka.coordinator.group.streams.assignor.GroupSpec groupSpec =
+                new org.apache.kafka.coordinator.group.streams.GroupSpecBuilder(assignmentConfigs)
+                    .withMembers(updatedMembersAndTargetAssignment.members())
+                    .withTargetAssignment(updatedMembersAndTargetAssignment.targetAssignment())
+                    .build();
+
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder assignmentResultBuilder =
-                new org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder(
-                    groupEpoch,
-                    assignor,
-                    assignmentConfigs
-                )
-                .withTime(time)
-                .withMembers(updatedMembersAndTargetAssignment.members())
-                .withTopology(configuredTopology)
-                .withMetadataImage(metadataImage)
-                .withTargetAssignment(updatedMembersAndTargetAssignment.targetAssignment());
+                new org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder(groupEpoch, assignor)
+                    .withTime(time)
+                    .withTopology(configuredTopology)
+                    .withMetadataImage(metadataImage)
+                    .withGroupSpec(groupSpec);
 
             long startTimeMs = time.milliseconds();
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
