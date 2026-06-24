@@ -651,7 +651,15 @@ public class StreamsGroupHeartbeatRequestManager implements RequestManager {
             case STREAMS_INVALID_TOPOLOGY:
             case STREAMS_INVALID_TOPOLOGY_EPOCH:
             case STREAMS_TOPOLOGY_FENCED:
+            case UNRELEASED_INSTANCE_ID:
                 logger.error("StreamsGroupHeartbeatRequest failed due to {}: {}", error, errorMessage);
+                handleFatalFailure(error.exception(errorMessage));
+                break;
+
+            case FENCED_INSTANCE_ID:
+                logger.error("StreamsGroupHeartbeatRequest failed because instance id {} is fenced: {}. " +
+                        "Check for another Streams instance using the same group instance id.",
+                    membershipManager.groupInstanceId().get(), errorMessage);
                 handleFatalFailure(error.exception(errorMessage));
                 break;
 
