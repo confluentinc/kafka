@@ -2288,6 +2288,7 @@ public class GroupMetadataManager {
                 group.storedDescriptionTopologyEpoch(),
                 group.failedDescriptionTopologyEpoch()
             ));
+            maybeCancelStaleTargetAssignmentUpdate(groupId, groupEpoch);
             log.info("[GroupId {}][MemberId {}] Bumped streams group epoch to {} with metadata hash {} and validated topic epoch {}.", groupId, memberId, groupEpoch, metadataHash, validatedTopologyEpoch);
             metrics.record(STREAMS_GROUP_REBALANCES_SENSOR_NAME);
             group.setMetadataRefreshDeadline(currentTimeMs + METADATA_REFRESH_INTERVAL_MS, groupEpoch);
@@ -4752,6 +4753,19 @@ public class GroupMetadataManager {
             return new UpdateTargetAssignmentResult<>(groupEpoch, updatedMembersAndTargetAssignment.targetAssignment());
         }
 
+        String targetAssignmentUpdateKey = groupTargetAssignmentUpdateKey(group.groupId());
+        if (executor.isScheduled(targetAssignmentUpdateKey)) {
+            // There is already an async assignor run in progress. We must not start another run
+            // until it has completed, regardless of whether the next run will be sync or async.
+            returnedStatus.ifPresent(statusList -> statusList.add(
+                new Status()
+                    .setStatusCode(StreamsGroupHeartbeatResponse.Status.ASSIGNMENT_DELAYED.code())
+                    .setStatusDetail("Assignment calculation is in progress.")
+            ));
+
+            return new UpdateTargetAssignmentResult<>(group.assignmentEpoch(), updatedMembersAndTargetAssignment.targetAssignment());
+        }
+
         boolean canComputeNextTargetAssignment = canComputeNextTargetAssignment(
             group.assignmentTimestamp(),
             streamsGroupAssignmentIntervalMs(group.groupId()),
@@ -4767,24 +4781,26 @@ public class GroupMetadataManager {
             return new UpdateTargetAssignmentResult<>(group.assignmentEpoch(), updatedMembersAndTargetAssignment.targetAssignment());
         }
 
-        TaskAssignor assignor = streamsGroupAssignor(group.groupId(), true);
-        try {
-            org.apache.kafka.coordinator.group.api.streams.assignor.GroupSpec groupSpec =
-                new org.apache.kafka.coordinator.group.streams.GroupSpecBuilder(assignmentConfigs)
-                    .withMembers(updatedMembersAndTargetAssignment.members())
-                    .withTaskOffsets(group.taskOffsets())
-                    .build();
+        boolean offloadAssignor = streamsGroupAssignorOffloadEnable(group.groupId());
 
-            org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder assignmentResultBuilder =
+        TaskAssignor assignor = streamsGroupAssignor(group.groupId(), true);
+
+        org.apache.kafka.coordinator.group.api.streams.assignor.GroupSpec groupSpec =
+            new org.apache.kafka.coordinator.group.streams.GroupSpecBuilder(assignmentConfigs)
+                .withMembers(updatedMembersAndTargetAssignment.members())
+                .withTaskOffsets(group.taskOffsets())
+                .withAssignorOffload(offloadAssignor)
+                .build();
+
+        Supplier<org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult> buildTargetAssignment = () -> {
+            long startTimeMs = time.milliseconds();
+            org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
                 new org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder(groupEpoch, assignor)
                     .withTime(time)
                     .withTopology(configuredTopology)
                     .withMetadataImage(metadataImage)
-                    .withGroupSpec(groupSpec);
-
-            long startTimeMs = time.milliseconds();
-            org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
-                assignmentResultBuilder.build();
+                    .withGroupSpec(groupSpec)
+                    .build();
             long assignorTimeMs = time.milliseconds() - startTimeMs;
 
             if (log.isDebugEnabled()) {
@@ -4793,6 +4809,37 @@ public class GroupMetadataManager {
             } else {
                 log.info("[GroupId {}] Computed a new target assignment for epoch {} with '{}' assignor in {}ms.",
                     group.groupId(), groupEpoch, assignor, assignorTimeMs);
+            }
+
+            return assignmentResult;
+        };
+
+        if (offloadAssignor) {
+            Map<String, String> previousStaticMembers = Map.copyOf(updatedMembersAndTargetAssignment.staticMembers());
+
+            inflightOffloadedAssignorEpochs.put(group.groupId(), groupEpoch);
+            executor.schedule(
+                targetAssignmentUpdateKey,
+                buildTargetAssignment::get,
+                (result, exception) -> handleOffloadedStreamsTargetAssignmentResult(
+                    group.groupId(),
+                    groupEpoch,
+                    previousStaticMembers,
+                    result,
+                    exception
+                )
+            );
+
+            return new UpdateTargetAssignmentResult<>(group.assignmentEpoch(), updatedMembersAndTargetAssignment.targetAssignment());
+        } else {
+            org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult assignmentResult;
+            try {
+                assignmentResult = buildTargetAssignment.get();
+            } catch (TaskAssignorException ex) {
+                String msg = String.format("Failed to compute a new target assignment for epoch %d: %s",
+                    groupEpoch, ex.getMessage());
+                log.error("[GroupId {}] {}.", group.groupId(), msg, ex);
+                throw new UnknownServerException(msg, ex);
             }
 
             new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(log, group.groupId())
@@ -4805,11 +4852,74 @@ public class GroupMetadataManager {
                 .build(records);
 
             return new UpdateTargetAssignmentResult<>(groupEpoch, assignmentResult.targetAssignment());
-        } catch (TaskAssignorException ex) {
-            String msg = String.format("Failed to compute a new target assignment for epoch %d: %s",
-                groupEpoch, ex.getMessage());
-            log.error("[GroupId {}] {}.", group.groupId(), msg, ex);
-            throw new UnknownServerException(msg, ex);
+        }
+    }
+
+    /**
+     * Handle the result of the asynchronous task that computes a streams group's
+     * target assignment when assignor offloading is enabled.
+     *
+     * @param groupId                The group id.
+     * @param targetAssignmentEpoch  The assignment epoch.
+     * @param previousStaticMembers  The static members at schedule time, keyed by instance id.
+     * @param result                 The computed target assignment.
+     * @param exception              The exception if the computation failed.
+     * @return A CoordinatorResult containing the records to mutate the group state.
+     */
+    private CoordinatorResult<Void, CoordinatorRecord> handleOffloadedStreamsTargetAssignmentResult(
+        String groupId,
+        int targetAssignmentEpoch,
+        Map<String, String> previousStaticMembers,
+        org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult result,
+        Throwable exception
+    ) {
+        inflightOffloadedAssignorEpochs.remove(groupId, targetAssignmentEpoch);
+
+        if (exception != null) {
+            log.error("[GroupId {}] Failed to compute a new target assignment for epoch {}: {}.",
+                groupId, targetAssignmentEpoch, exception.getMessage(), exception);
+            return new CoordinatorResult<>(List.of());
+        }
+
+        try {
+            StreamsGroup streamsGroup = streamsGroup(groupId);
+            if (streamsGroup.groupEpoch() < targetAssignmentEpoch) {
+                // The assignment epoch is greater than the group epoch. This means that the
+                // assignment was built off a group state that was not successfully written to the
+                // log and was reverted. Discard the assignment.
+                log.debug("[GroupId {}] Discarding stale offloaded target assignment for epoch {} (current group epoch is {}).",
+                    groupId, targetAssignmentEpoch, streamsGroup.groupEpoch());
+                return new CoordinatorResult<>(List.of());
+            }
+
+            if (streamsGroup.assignmentEpoch() >= targetAssignmentEpoch) {
+                // The assignment epoch is already caught up.
+                // Writing this record would backslide it.
+                log.debug("[GroupId {}] Discarding stale offloaded target assignment for epoch {} (current assignment epoch is {}).",
+                    groupId, targetAssignmentEpoch, streamsGroup.assignmentEpoch());
+                return new CoordinatorResult<>(List.of());
+            }
+
+            log.debug("[GroupId {}] Received updated target assignment for epoch {}: {}.",
+                groupId, targetAssignmentEpoch, result.targetAssignment());
+
+            TargetAssignmentRecordsBuilder<TasksTuple> assignmentRecordsBuilder =
+                new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(log, groupId)
+                    .withTargetAssignmentMetadata(result.targetAssignmentMetadata())
+                    .withCurrentMemberIds(streamsGroup.members().keySet())
+                    .withPreviousStaticMembers(previousStaticMembers)
+                    .withCurrentStaticMembers(streamsGroup.staticMembers())
+                    .withCurrentTargetAssignment(streamsGroup.targetAssignment())
+                    .withNewTargetAssignment(result.targetAssignment());
+
+            return new CoordinatorResult<>(assignmentRecordsBuilder.build());
+        } catch (GroupIdNotFoundException ex) {
+            log.debug("[GroupId {}] Received updated target assignment but the streams group no longer exists.", groupId);
+            return new CoordinatorResult<>(List.of());
+        } catch (Throwable t) {
+            log.error("[GroupId {}] Failed to compute a new target assignment for epoch {}: {}.",
+                groupId, targetAssignmentEpoch, t.getMessage(), t);
+            return new CoordinatorResult<>(List.of());
         }
     }
 
@@ -5417,6 +5527,7 @@ public class GroupMetadataManager {
             group.storedDescriptionTopologyEpoch(),
             group.failedDescriptionTopologyEpoch()
         ));
+        maybeCancelStaleTargetAssignmentUpdate(group.groupId(), groupEpoch);
 
         // If this is the last member, the group becomes empty so we must
         // also update the assignment epoch to match the group epoch. We
@@ -5426,6 +5537,9 @@ public class GroupMetadataManager {
         if (group.members().size() == 1) {
             records.add(newStreamsGroupTargetAssignmentMetadataRecord(
                 group.groupId(), groupEpoch, 0L));
+            // A pending offloaded assignor run would overwrite the new assignment
+            // epoch with a stale one, so cancel it.
+            cancelTargetAssignmentUpdate(group.groupId());
         }
 
         cancelTimers(group.groupId(), member.memberId());
