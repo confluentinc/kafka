@@ -90,20 +90,24 @@ public class StreamsGroupHeartbeatRequestManager implements RequestManager {
         private final StreamsMembershipManager membershipManager;
         private final int rebalanceTimeoutMs;
         private final StreamsRebalanceData streamsRebalanceData;
+        private final Time time;
         private final LastSentFields lastSentFields = new LastSentFields();
         private int endpointInformationEpoch = -1;
-
+        private long lastTaskOffsetIntervalTs = -1;
 
         public HeartbeatState(final StreamsRebalanceData streamsRebalanceData,
                               final StreamsMembershipManager membershipManager,
-                              final int rebalanceTimeoutMs) {
+                              final int rebalanceTimeoutMs,
+                              final Time time) {
             this.membershipManager = membershipManager;
             this.streamsRebalanceData = streamsRebalanceData;
             this.rebalanceTimeoutMs = rebalanceTimeoutMs;
+            this.time = time;
         }
 
         public void reset() {
             lastSentFields.reset();
+            lastTaskOffsetIntervalTs = -1L;
         }
 
         public int endpointInformationEpoch() {
@@ -147,17 +151,78 @@ public class StreamsGroupHeartbeatRequestManager implements RequestManager {
                 data.setActiveTasks(fromStreamsToHeartbeatRequest(Set.of()));
                 data.setStandbyTasks(fromStreamsToHeartbeatRequest(Set.of()));
                 data.setWarmupTasks(fromStreamsToHeartbeatRequest(Set.of()));
+                data.setTaskOffsets(convertToList(streamsRebalanceData.taskOffsetSum()));
+                data.setTaskEndOffsets(convertToList(streamsRebalanceData.taskEndOffsetSum()));
+                lastTaskOffsetIntervalTs = time.milliseconds();
             } else {
-                StreamsRebalanceData.Assignment reconciledAssignment = streamsRebalanceData.reconciledAssignment();
-                if (!reconciledAssignment.equals(lastSentFields.assignment)) {
+                final StreamsRebalanceData.Assignment reconciledAssignment = streamsRebalanceData.reconciledAssignment();
+                final boolean assignmentChanged = !reconciledAssignment.equals(lastSentFields.assignment);
+
+                if (assignmentChanged) {
                     data.setActiveTasks(fromStreamsToHeartbeatRequest(reconciledAssignment.activeTasks()));
                     data.setStandbyTasks(fromStreamsToHeartbeatRequest(reconciledAssignment.standbyTasks()));
                     data.setWarmupTasks(fromStreamsToHeartbeatRequest(reconciledAssignment.warmupTasks()));
                     lastSentFields.assignment = reconciledAssignment;
                 }
+
+                // call both method only once, as they invoke an expensive `supplier`
+                final Map<StreamsRebalanceData.TaskId, Long> taskOffsetSum = streamsRebalanceData.taskOffsetSum();
+                final Map<StreamsRebalanceData.TaskId, Long> taskEndOffsetSum = streamsRebalanceData.taskEndOffsetSum();
+
+                if (assignmentChanged
+                    || taskOffsetIntervalPassed()
+                    || hasAtLeastOneHotWarmupTask(reconciledAssignment.warmupTasks(), taskOffsetSum, taskEndOffsetSum)
+                ) {
+
+                    // TODO: send only if changed this last time
+                    data.setTaskOffsets(convertToList(taskOffsetSum));
+                    data.setTaskEndOffsets(convertToList(taskEndOffsetSum));
+
+                    lastTaskOffsetIntervalTs = time.milliseconds();
+                }
             }
             data.setShutdownApplication(streamsRebalanceData.shutdownRequested());
             return data;
+        }
+
+        private static List<StreamsGroupHeartbeatRequestData.TaskOffset> convertToList(Map<StreamsRebalanceData.TaskId, Long> offsetsMap) {
+            return offsetsMap.entrySet().stream().map(
+                    entry -> new StreamsGroupHeartbeatRequestData.TaskOffset()
+                        .setSubtopologyId(entry.getKey().subtopologyId())
+                        .setPartition(entry.getKey().partitionId())
+                        .setOffset(entry.getValue()))
+                .collect(Collectors.toList());
+        }
+
+        private boolean taskOffsetIntervalPassed() {
+            return lastTaskOffsetIntervalTs + streamsRebalanceData.taskOffsetIntervalMs() <= time.milliseconds();
+        }
+
+        private boolean hasAtLeastOneHotWarmupTask(
+            final Set<StreamsRebalanceData.TaskId> warmupTasks,
+            final Map<StreamsRebalanceData.TaskId, Long> taskOffsetSum,
+            final Map<StreamsRebalanceData.TaskId, Long> taskEndOffsetSum
+        ) {
+            if (warmupTasks.isEmpty()) {
+                return false;
+            }
+
+            final long acceptableRecoveryLag = streamsRebalanceData.acceptableRecoveryLag();
+
+            return warmupTasks.stream()
+                .anyMatch(taskId -> {
+                    final Long offset = taskOffsetSum.get(taskId);
+                    final Long endOffset = taskEndOffsetSum.get(taskId);
+
+                    // offset and endOffset might not be known,
+                    // or be capped at MAX_VALUE due to overflow
+                    if (offset == null || offset == Long.MAX_VALUE
+                        || endOffset == null || endOffset == Long.MAX_VALUE) {
+                        return false;
+                    }
+
+                    return endOffset - offset <= acceptableRecoveryLag;
+                });
         }
 
         private static List<StreamsGroupHeartbeatRequestData.TaskIds> fromStreamsToHeartbeatRequest(final Set<StreamsRebalanceData.TaskId> tasks) {
@@ -327,7 +392,7 @@ public class StreamsGroupHeartbeatRequestManager implements RequestManager {
         this.maxPollIntervalMs = config.getInt(CommonClientConfigs.MAX_POLL_INTERVAL_MS_CONFIG);
         long retryBackoffMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
         long retryBackoffMaxMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MAX_MS_CONFIG);
-        this.heartbeatState = new HeartbeatState(streamsRebalanceData, membershipManager, maxPollIntervalMs);
+        this.heartbeatState = new HeartbeatState(streamsRebalanceData, membershipManager, maxPollIntervalMs, time);
         this.heartbeatRequestState = new HeartbeatRequestState(
             logContext,
             time,
