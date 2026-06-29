@@ -4333,6 +4333,16 @@ public class GroupMetadataManager {
 
         TaskAssignor assignor = streamsGroupAssignor(group.groupId());
         try {
+            UpdatedMembersAndTargetAssignmentView<StreamsGroupMember, TasksTuple> updatedMembersAndTargetAssignment =
+                new UpdatedMembersAndTargetAssignmentView<>(
+                    group.members(),
+                    group.staticMembers(),
+                    group.targetAssignment()
+                );
+            updatedMember.ifPresent(member ->
+                updatedMembersAndTargetAssignment.addOrUpdateMember(member.memberId(), member.instanceId().orElse(null), member)
+            );
+
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder assignmentResultBuilder =
                 new org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder(
                     group.groupId(),
@@ -4341,23 +4351,10 @@ public class GroupMetadataManager {
                     assignmentConfigs
                 )
                 .withTime(time)
-                .withMembers(group.members())
+                .withMembers(updatedMembersAndTargetAssignment.members())
                 .withTopology(configuredTopology)
-                .withStaticMembers(group.staticMembers())
                 .withMetadataImage(metadataImage)
-                .withTargetAssignment(group.targetAssignment());
-
-            updatedMember.ifPresent(member -> {
-                assignmentResultBuilder.addOrUpdateMember(member.memberId(), member);
-                // If the instance id was associated to a different member, it means that the
-                // static member is replaced by the current member hence we remove the previous one.
-                member.instanceId().ifPresent(instanceId -> {
-                    StreamsGroupMember previousMember = group.staticMember(instanceId);
-                    if (previousMember != null && !member.memberId().equals(previousMember.memberId())) {
-                        assignmentResultBuilder.removeMember(previousMember.memberId());
-                    }
-                });
-            });
+                .withTargetAssignment(updatedMembersAndTargetAssignment.targetAssignment());
 
             long startTimeMs = time.milliseconds();
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
