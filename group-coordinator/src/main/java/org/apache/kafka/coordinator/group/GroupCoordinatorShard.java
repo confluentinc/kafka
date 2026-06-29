@@ -1031,13 +1031,6 @@ public class GroupCoordinatorShard implements CoordinatorShard<CoordinatorRecord
      * topology-description cleanup cycle so a concurrent {@code setTopology} that has advanced
      * the field is preserved.
      */
-    public CoordinatorResult<Void, CoordinatorRecord> clearStoredDescriptionTopologyEpoch(
-        String groupId,
-        int expectedStoredEpoch
-    ) {
-        return groupMetadataManager.clearStoredDescriptionTopologyEpoch(groupId, expectedStoredEpoch);
-    }
-
     /**
      * Batched form of {@link #clearStoredDescriptionTopologyEpoch}: emits one conditional clear
      * record per entry in {@code expectedStoredEpochByGroupId} in a single
