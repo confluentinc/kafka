@@ -759,14 +759,26 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]>, BatchWritingS
 
     @Override
     public ReadOnlyKeyValueStore<Bytes, byte[]> readOnly(final IsolationLevel isolationLevel) {
-        Objects.requireNonNull(isolationLevel, "isolationLevel cannot be null");
-        final DBAccessor viewAccessor;
-        if (isolationLevel == IsolationLevel.READ_COMMITTED && dbAccessor instanceof TransactionalDBAccessor) {
-            viewAccessor = ((TransactionalDBAccessor) dbAccessor).underlying;
-        } else {
-            viewAccessor = dbAccessor;
+        return new ReadOnlyView(dbAccessor.readOnly(isolationLevel));
+    }
+
+    // Read helpers for isolation-level views that sit above this store (e.g. LogicalKeyValueSegment.readOnly).
+    byte[] get(final Bytes key, final DBAccessor accessor) {
+        validateStoreOpen();
+        try {
+            return cfAccessor.get(accessor, key.get());
+        } catch (final RocksDBException e) {
+            throw new ProcessorStateException("Error while getting value for key from store " + name, e);
         }
-        return new ReadOnlyView(viewAccessor);
+    }
+
+    byte[] get(final Bytes key, final ReadOptions readOptions, final DBAccessor accessor) {
+        validateStoreOpen();
+        try {
+            return cfAccessor.get(accessor, key.get(), readOptions);
+        } catch (final RocksDBException e) {
+            throw new ProcessorStateException("Error while getting value for key from store " + name, e);
+        }
     }
 
     /**
@@ -1065,6 +1077,11 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]>, BatchWritingS
         void reset();
         void close();
 
+        default DBAccessor readOnly(final IsolationLevel isolationLevel) {
+            Objects.requireNonNull(isolationLevel, "isolationLevel cannot be null");
+            return this;
+        }
+
         default ManagedKeyValueIterator<Bytes, byte[]> all(final ColumnFamilyHandle cf, final String storeName, final boolean forward) {
             final RocksIterator iter = newIterator(cf);
             if (forward) {
@@ -1256,6 +1273,16 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]>, BatchWritingS
         public void close() {
             buffer.close();
             underlying.close();
+        }
+
+        @Override
+        public DBAccessor readOnly(final IsolationLevel isolationLevel) {
+            Objects.requireNonNull(isolationLevel, "isolationLevel cannot be null");
+            if (isolationLevel == IsolationLevel.READ_COMMITTED) {
+                return underlying;
+            } else {
+                return this;
+            }
         }
 
         @Override
