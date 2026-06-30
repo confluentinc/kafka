@@ -63,7 +63,7 @@ versions += [
   gradle: "8.14.1",
   grgit: "4.1.1",
   httpclient: "4.5.14",
-  jackson: "2.21.1",
+  jackson: "2.21.4",
   jacksonAnnotations: "2.21",
   jacoco: "0.8.13",
   javassist: "3.30.2-GA",
