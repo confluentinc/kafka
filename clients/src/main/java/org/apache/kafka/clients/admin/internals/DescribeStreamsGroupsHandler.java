@@ -40,7 +40,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -339,75 +338,6 @@ public class DescribeStreamsGroupsHandler extends AdminApiHandler.Batched<Coordi
 
     private StreamsGroupMemberDescription.Endpoint convertEndpoint(final StreamsGroupDescribeResponseData.Endpoint endpoint) {
         return new StreamsGroupMemberDescription.Endpoint(endpoint.host(), endpoint.port());
-    }
-
-    private static StreamsGroupTopologyDescription convertTopologyDescription(
-            final StreamsGroupDescribeResponseData.TopologyDescription wire) {
-        final List<StreamsGroupTopologyDescription.Subtopology> subtopologies = new ArrayList<>(wire.subtopologies().size());
-        for (StreamsGroupDescribeResponseData.TopologyDescriptionSubtopology sub : wire.subtopologies()) {
-            subtopologies.add(new StreamsGroupTopologyDescription.Subtopology(
-                sub.subtopologyId(),
-                convertNodes(sub.nodes())
-            ));
-        }
-        final List<StreamsGroupTopologyDescription.GlobalStore> globalStores = new ArrayList<>(wire.globalStores().size());
-        for (StreamsGroupDescribeResponseData.TopologyDescriptionGlobalStore gs : wire.globalStores()) {
-            final StreamsGroupTopologyDescription.Node sourceNode = convertNode(gs.source(), Set.of(), Set.of());
-            final StreamsGroupTopologyDescription.Node processorNode = convertNode(gs.processor(), Set.of(), Set.of());
-            globalStores.add(new StreamsGroupTopologyDescription.GlobalStore(
-                (StreamsGroupTopologyDescription.Source) sourceNode,
-                (StreamsGroupTopologyDescription.Processor) processorNode
-            ));
-        }
-        return new StreamsGroupTopologyDescription(subtopologies, globalStores);
-    }
-
-    private static List<StreamsGroupTopologyDescription.Node> convertNodes(
-            final List<StreamsGroupDescribeResponseData.TopologyDescriptionNode> nodes) {
-        final Map<String, Set<String>> predecessors = new HashMap<>();
-        for (StreamsGroupDescribeResponseData.TopologyDescriptionNode node : nodes) {
-            for (String successor : node.successors()) {
-                predecessors.computeIfAbsent(successor, __ -> new LinkedHashSet<>()).add(node.name());
-            }
-        }
-        final List<StreamsGroupTopologyDescription.Node> result = new ArrayList<>(nodes.size());
-        for (StreamsGroupDescribeResponseData.TopologyDescriptionNode node : nodes) {
-            final Set<String> preds = predecessors.getOrDefault(node.name(), Set.of());
-            final Set<String> succs = new LinkedHashSet<>(node.successors());
-            result.add(convertNode(node, preds, succs));
-        }
-        return result;
-    }
-
-    private static StreamsGroupTopologyDescription.Node convertNode(
-            final StreamsGroupDescribeResponseData.TopologyDescriptionNode node,
-            final Set<String> predecessors,
-            final Set<String> successors) {
-        switch (node.nodeType()) {
-            case NODE_TYPE_SOURCE:
-                return new StreamsGroupTopologyDescription.Source(
-                    node.name(),
-                    new LinkedHashSet<>(node.sourceTopics()),
-                    new LinkedHashSet<>(predecessors),
-                    new LinkedHashSet<>(successors)
-                );
-            case NODE_TYPE_PROCESSOR:
-                return new StreamsGroupTopologyDescription.Processor(
-                    node.name(),
-                    new LinkedHashSet<>(node.stores()),
-                    new LinkedHashSet<>(predecessors),
-                    new LinkedHashSet<>(successors)
-                );
-            case NODE_TYPE_SINK:
-                return new StreamsGroupTopologyDescription.Sink(
-                    node.name(),
-                    Optional.ofNullable(node.sinkTopic()),
-                    new LinkedHashSet<>(predecessors),
-                    new LinkedHashSet<>(successors)
-                );
-            default:
-                throw new IllegalArgumentException("Unknown node type: " + node.nodeType());
-        }
     }
 
     private void handleError(
