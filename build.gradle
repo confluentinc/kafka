@@ -1512,7 +1512,6 @@ project(':metadata') {
     testFixturesImplementation libs.junitJupiter
 
     testImplementation libs.junitJupiter
-    testImplementation libs.jqwik
     testImplementation libs.mockitoCore
     testImplementation testFixtures(project(':clients'))
     testImplementation testFixtures(project(':raft'))
@@ -2286,7 +2285,6 @@ project(':raft') {
     testFixturesImplementation project(':clients')
     testFixturesImplementation testFixtures(project(':clients'))
     testFixturesImplementation project(':server-common')
-    testFixturesImplementation libs.jqwik
     testFixturesImplementation libs.junitJupiter
     testFixturesImplementation libs.mockitoCore
     testFixturesImplementation libs.slf4jApi
@@ -2298,7 +2296,6 @@ project(':raft') {
     testImplementation libs.jacksonDataformatYaml
     testImplementation libs.junitJupiter
     testImplementation libs.mockitoCore
-    testImplementation libs.jqwik
     testImplementation testLog4j2Libs
 
     testRuntimeOnly runtimeTestLibs
@@ -2364,7 +2361,7 @@ project(':raft') {
 
   test {
     useJUnitPlatform {
-      includeEngines 'jqwik', 'junit-jupiter'
+      includeEngines 'junit-jupiter'
     }
   }
 
@@ -3106,22 +3103,19 @@ project(':streams:streams-scala') {
   spotless {
     scala {
       target '**/*.scala'
-      scalafmt("$versions.scalafmt").configFile('../../checkstyle/.scalafmt.conf').scalaMajorVersion(versions.baseScala)
+      // Skip scalafmt while Spotless is affected by https://github.com/diffplug/spotless/issues/2850.
       licenseHeaderFile '../../checkstyle/java.header', 'package'
     }
   }
 }
 
 project(':streams:integration-tests') {
-  apply plugin: 'scala'
-
   base {
     archivesName = "kafka-streams-integration-tests"
   }
 
   dependencies {
     implementation libs.slf4jApi
-    implementation libs.scalaLibrary
 
     testImplementation testFixtures(project(':clients'))
     testImplementation project(':group-coordinator')
@@ -3130,7 +3124,6 @@ project(':streams:integration-tests') {
     testImplementation testFixtures(project(':server-common'))
     testImplementation project(':storage')
     testImplementation project(':streams').sourceSets.test.output
-    testImplementation project(':streams:streams-scala')
     testImplementation project(':test-common:test-common-runtime')
     testImplementation project(':tools')
     testImplementation project(':transaction-coordinator')
@@ -3143,26 +3136,6 @@ project(':streams:integration-tests') {
     testImplementation project(':streams:test-utils')
 
     testRuntimeOnly runtimeTestLibs
-  }
-
-  sourceSets {
-    // Set java/scala source folders in the `scala` block to enable joint compilation
-    main {
-      java {
-        srcDirs = []
-      }
-      scala {
-        srcDirs = []
-      }
-    }
-    test {
-      java {
-        srcDirs = []
-      }
-      scala {
-        srcDirs = ["src/test/java", "src/test/scala"]
-      }
-    }
   }
 }
 
