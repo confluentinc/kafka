@@ -51,14 +51,9 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
     private final String groupId;
 
     /**
-     * The target assignment epoch.
+     * The target assignment metadata.
      */
-    private int assignmentEpoch;
-
-    /**
-     * The time at which the target assignment calculation finished.
-     */
-    private long assignmentTimestampMs;
+    private TargetAssignmentMetadata targetAssignmentMetadata;
 
     /**
      * The static members in the group at the time the new target assignment was computed.
@@ -100,24 +95,13 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
     }
 
     /**
-     * Sets the target assignment epoch.
+     * Sets the target assignment metadata.
      *
-     * @param assignmentEpoch The target assignment epoch.
+     * @param targetAssignmentMetadata The target assignment metadata.
      * @return This object.
      */
-    public TargetAssignmentRecordsBuilder<A> withAssignmentEpoch(int assignmentEpoch) {
-        this.assignmentEpoch = assignmentEpoch;
-        return this;
-    }
-
-    /**
-     * Sets the time at which the target assignment calculation finished.
-     *
-     * @param assignmentTimestampMs The time at which the target assignment calculation finished.
-     * @return This object.
-     */
-    public TargetAssignmentRecordsBuilder<A> withAssignmentTimestampMs(long assignmentTimestampMs) {
-        this.assignmentTimestampMs = assignmentTimestampMs;
+    public TargetAssignmentRecordsBuilder<A> withTargetAssignmentMetadata(TargetAssignmentMetadata targetAssignmentMetadata) {
+        this.targetAssignmentMetadata = Objects.requireNonNull(targetAssignmentMetadata);
         return this;
     }
 
@@ -311,7 +295,11 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
         }
 
         // Bump the target assignment epoch.
-        records.add(newTargetAssignmentMetadataRecord(groupId, assignmentEpoch, assignmentTimestampMs));
+        records.add(newTargetAssignmentMetadataRecord(
+            groupId,
+            targetAssignmentMetadata.assignmentEpoch(),
+            targetAssignmentMetadata.assignmentTimestamp()
+        ));
     }
 
     protected abstract A emptyMemberAssignment();
