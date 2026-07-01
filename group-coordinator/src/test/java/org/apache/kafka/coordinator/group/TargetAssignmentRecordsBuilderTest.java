@@ -47,8 +47,7 @@ public class TargetAssignmentRecordsBuilderTest {
     public void testEmpty() {
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 .withCurrentMemberIds(Set.of())
                 .withCurrentTargetAssignment(Map.of())
                 .withNewTargetAssignment(Map.of())
@@ -66,8 +65,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 .withCurrentMemberIds(Set.of("member-1", "member-2"))
                 .withCurrentTargetAssignment(Map.of(
                     "member-1", new Assignment(mkAssignment(
@@ -103,8 +101,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 .withCurrentMemberIds(Set.of("member-1", "member-2"))
                 .withCurrentTargetAssignment(Map.of(
                     "member-1", new Assignment(mkAssignment(
@@ -150,8 +147,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 .withCurrentMemberIds(Set.of("member-1", "member-2", "member-3"))
                 .withCurrentTargetAssignment(Map.of(
                     "member-1", new Assignment(mkAssignment(
@@ -203,8 +199,7 @@ public class TargetAssignmentRecordsBuilderTest {
     public void testAssignmentEmptyWhenOmitted() {
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 .withCurrentMemberIds(Set.of("member-1"))
                 .withCurrentTargetAssignment(Map.of())
                 // The assignor did not include an entry for member 1.
@@ -224,8 +219,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 .withCurrentMemberIds(Set.of("member-1"))
                 .withCurrentTargetAssignment(Map.of(
                     "member-1", new Assignment(mkAssignment(
@@ -255,8 +249,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 // Member 2 has left.
                 .withCurrentMemberIds(Set.of("member-1"))
                 .withCurrentTargetAssignment(Map.of(
@@ -291,8 +284,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 // Member 2 has joined.
                 .withCurrentMemberIds(Set.of("member-1", "member-2"))
                 .withCurrentTargetAssignment(Map.of(
@@ -320,8 +312,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 .withCurrentMemberIds(Set.of("member-1", "member-3"))
                 // Static member 2 has been replaced with member 3.
                 .withPreviousStaticMembers(Map.of("instance-id", "member-2"))
@@ -359,8 +350,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withAssignmentEpoch(20)
-                .withAssignmentTimestampMs(12345L)
+                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                 // Member 2 is still around but member 3 has its instance id now.
                 .withCurrentMemberIds(Set.of("member-1", "member-2", "member-3"))
                 .withPreviousStaticMembers(Map.of("instance-id", "member-2"))
@@ -403,8 +393,7 @@ public class TargetAssignmentRecordsBuilderTest {
         public void testEmptyMemberAssignment() {
             List<CoordinatorRecord> records =
                 new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                    .withAssignmentEpoch(20)
-                    .withAssignmentTimestampMs(12345L)
+                    .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of())
                     .withNewTargetAssignment(Map.of())
@@ -423,8 +412,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
             List<CoordinatorRecord> records =
                 new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                    .withAssignmentEpoch(20)
-                    .withAssignmentTimestampMs(12345L)
+                    .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of(
                         "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0))),
@@ -452,8 +440,7 @@ public class TargetAssignmentRecordsBuilderTest {
         public void testEmptyMemberAssignment() {
             List<CoordinatorRecord> records =
                 new TargetAssignmentRecordsBuilder.ShareTargetAssignmentRecordsBuilder(LOG, "my-group")
-                    .withAssignmentEpoch(20)
-                    .withAssignmentTimestampMs(12345L)
+                    .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of())
                     .withNewTargetAssignment(Map.of())
@@ -472,8 +459,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
             List<CoordinatorRecord> records =
                 new TargetAssignmentRecordsBuilder.ShareTargetAssignmentRecordsBuilder(LOG, "my-group")
-                    .withAssignmentEpoch(20)
-                    .withAssignmentTimestampMs(12345L)
+                    .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of(
                         "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0, 1))),
@@ -501,8 +487,7 @@ public class TargetAssignmentRecordsBuilderTest {
         public void testEmptyMemberAssignment() {
             List<CoordinatorRecord> records =
                 new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(LOG, "my-group")
-                    .withAssignmentEpoch(20)
-                    .withAssignmentTimestampMs(12345L)
+                    .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of())
                     .withNewTargetAssignment(Map.of())
@@ -521,8 +506,7 @@ public class TargetAssignmentRecordsBuilderTest {
 
             List<CoordinatorRecord> records =
                 new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(LOG, "my-group")
-                    .withAssignmentEpoch(20)
-                    .withAssignmentTimestampMs(12345L)
+                    .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of(
                         "member-1", mkTasksTuple(TaskRole.ACTIVE,
