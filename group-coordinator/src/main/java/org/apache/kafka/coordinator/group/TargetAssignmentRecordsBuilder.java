@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.coordinator.group;
 
-import org.apache.kafka.common.utils.internals.LogContext;
 import org.apache.kafka.coordinator.common.runtime.CoordinatorRecord;
 import org.apache.kafka.coordinator.group.modern.Assignment;
 import org.apache.kafka.coordinator.group.streams.StreamsCoordinatorRecordHelpers;
@@ -89,14 +88,14 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
     /**
      * Constructs the object.
      *
-     * @param logContext    The log context.
-     * @param groupId       The group id.
+     * @param log       The logger.
+     * @param groupId   The group id.
      */
     public TargetAssignmentRecordsBuilder(
-        LogContext logContext,
+        Logger log,
         String groupId
     ) {
-        this.log = logContext.logger(this.getClass());
+        this.log = log;
         this.groupId = Objects.requireNonNull(groupId);
     }
 
@@ -336,8 +335,8 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
 
     public static class ConsumerTargetAssignmentRecordsBuilder extends TargetAssignmentRecordsBuilder<Assignment> {
 
-        public ConsumerTargetAssignmentRecordsBuilder(LogContext logContext, String groupId) {
-            super(logContext, groupId);
+        public ConsumerTargetAssignmentRecordsBuilder(Logger log, String groupId) {
+            super(log, groupId);
         }
 
         @Override
@@ -385,8 +384,8 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
 
     public static class ShareTargetAssignmentRecordsBuilder extends TargetAssignmentRecordsBuilder<Assignment> {
 
-        public ShareTargetAssignmentRecordsBuilder(LogContext logContext, String groupId) {
-            super(logContext, groupId);
+        public ShareTargetAssignmentRecordsBuilder(Logger log, String groupId) {
+            super(log, groupId);
         }
 
         @Override
@@ -434,8 +433,8 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
 
     public static class StreamsTargetAssignmentRecordsBuilder extends TargetAssignmentRecordsBuilder<TasksTuple> {
 
-        public StreamsTargetAssignmentRecordsBuilder(LogContext logContext, String groupId) {
-            super(logContext, groupId);
+        public StreamsTargetAssignmentRecordsBuilder(Logger log, String groupId) {
+            super(log, groupId);
         }
 
         @Override

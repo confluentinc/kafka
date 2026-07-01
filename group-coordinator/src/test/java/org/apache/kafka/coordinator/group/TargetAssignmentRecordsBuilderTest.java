@@ -26,6 +26,7 @@ import org.apache.kafka.coordinator.group.streams.TasksTuple;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -40,10 +41,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TargetAssignmentRecordsBuilderTest {
 
+    private static final Logger LOG = new LogContext().logger(TargetAssignmentRecordsBuilder.class);
+
     @Test
     public void testEmpty() {
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 .withCurrentMemberIds(Set.of())
@@ -62,7 +65,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid barTopicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 .withCurrentMemberIds(Set.of("member-1", "member-2"))
@@ -99,7 +102,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid barTopicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 .withCurrentMemberIds(Set.of("member-1", "member-2"))
@@ -146,7 +149,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid barTopicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 .withCurrentMemberIds(Set.of("member-1", "member-2", "member-3"))
@@ -199,7 +202,7 @@ public class TargetAssignmentRecordsBuilderTest {
     @Test
     public void testAssignmentEmptyWhenOmitted() {
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 .withCurrentMemberIds(Set.of("member-1"))
@@ -220,7 +223,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid topicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 .withCurrentMemberIds(Set.of("member-1"))
@@ -251,7 +254,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid topicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 // Member 2 has left.
@@ -287,7 +290,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid topicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 // Member 2 has joined.
@@ -316,7 +319,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid topicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 .withCurrentMemberIds(Set.of("member-1", "member-3"))
@@ -355,7 +358,7 @@ public class TargetAssignmentRecordsBuilderTest {
         Uuid topicId = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withAssignmentEpoch(20)
                 .withAssignmentTimestampMs(12345L)
                 // Member 2 is still around but member 3 has its instance id now.
@@ -399,7 +402,7 @@ public class TargetAssignmentRecordsBuilderTest {
         @Test
         public void testEmptyMemberAssignment() {
             List<CoordinatorRecord> records =
-                new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+                new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                     .withAssignmentEpoch(20)
                     .withAssignmentTimestampMs(12345L)
                     .withCurrentMemberIds(Set.of("member-1"))
@@ -419,7 +422,7 @@ public class TargetAssignmentRecordsBuilderTest {
             Uuid topicId = Uuid.randomUuid();
 
             List<CoordinatorRecord> records =
-                new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+                new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                     .withAssignmentEpoch(20)
                     .withAssignmentTimestampMs(12345L)
                     .withCurrentMemberIds(Set.of("member-1"))
@@ -448,7 +451,7 @@ public class TargetAssignmentRecordsBuilderTest {
         @Test
         public void testEmptyMemberAssignment() {
             List<CoordinatorRecord> records =
-                new TargetAssignmentRecordsBuilder.ShareTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+                new TargetAssignmentRecordsBuilder.ShareTargetAssignmentRecordsBuilder(LOG, "my-group")
                     .withAssignmentEpoch(20)
                     .withAssignmentTimestampMs(12345L)
                     .withCurrentMemberIds(Set.of("member-1"))
@@ -468,7 +471,7 @@ public class TargetAssignmentRecordsBuilderTest {
             Uuid topicId = Uuid.randomUuid();
 
             List<CoordinatorRecord> records =
-                new TargetAssignmentRecordsBuilder.ShareTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+                new TargetAssignmentRecordsBuilder.ShareTargetAssignmentRecordsBuilder(LOG, "my-group")
                     .withAssignmentEpoch(20)
                     .withAssignmentTimestampMs(12345L)
                     .withCurrentMemberIds(Set.of("member-1"))
@@ -497,7 +500,7 @@ public class TargetAssignmentRecordsBuilderTest {
         @Test
         public void testEmptyMemberAssignment() {
             List<CoordinatorRecord> records =
-                new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+                new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(LOG, "my-group")
                     .withAssignmentEpoch(20)
                     .withAssignmentTimestampMs(12345L)
                     .withCurrentMemberIds(Set.of("member-1"))
@@ -517,7 +520,7 @@ public class TargetAssignmentRecordsBuilderTest {
             String subtopology1 = "subtopology-1";
 
             List<CoordinatorRecord> records =
-                new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(new LogContext(), "my-group")
+                new TargetAssignmentRecordsBuilder.StreamsTargetAssignmentRecordsBuilder(LOG, "my-group")
                     .withAssignmentEpoch(20)
                     .withAssignmentTimestampMs(12345L)
                     .withCurrentMemberIds(Set.of("member-1"))
