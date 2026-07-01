@@ -128,7 +128,7 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
      * @return This object.
      */
     public TargetAssignmentRecordsBuilder<A> withPreviousStaticMembers(Map<String, String> previousStaticMembers) {
-        this.previousStaticMembers = previousStaticMembers;
+        this.previousStaticMembers = Objects.requireNonNull(previousStaticMembers);
         return this;
     }
 
@@ -139,7 +139,7 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
      * @return This object.
      */
     public TargetAssignmentRecordsBuilder<A> withCurrentMemberIds(Set<String> currentMemberIds) {
-        this.currentMemberIds = currentMemberIds;
+        this.currentMemberIds = Objects.requireNonNull(currentMemberIds);
         return this;
     }
 
@@ -150,7 +150,7 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
      * @return This object.
      */
     public TargetAssignmentRecordsBuilder<A> withCurrentStaticMembers(Map<String, String> currentStaticMembers) {
-        this.currentStaticMembers = currentStaticMembers;
+        this.currentStaticMembers = Objects.requireNonNull(currentStaticMembers);
         return this;
     }
 
@@ -161,7 +161,7 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
      * @return This object.
      */
     public TargetAssignmentRecordsBuilder<A> withCurrentTargetAssignment(Map<String, A> currentTargetAssignment) {
-        this.currentTargetAssignment = currentTargetAssignment;
+        this.currentTargetAssignment = Objects.requireNonNull(currentTargetAssignment);
         return this;
     }
 
@@ -172,7 +172,7 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
      * @return This object.
      */
     public TargetAssignmentRecordsBuilder<A> withNewTargetAssignment(Map<String, A> newTargetAssignment) {
-        this.newTargetAssignment = newTargetAssignment;
+        this.newTargetAssignment = Objects.requireNonNull(newTargetAssignment);
         return this;
     }
 
