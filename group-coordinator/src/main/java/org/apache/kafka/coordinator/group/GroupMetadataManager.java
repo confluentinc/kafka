@@ -4129,9 +4129,10 @@ public class GroupMetadataManager {
                 new UpdatedMembersAndTargetAssignmentView<>(
                     group.members(),
                     group.staticMembers(),
-                    group.targetAssignment()
+                    group.targetAssignment(),
+                    ConsumerGroupMember::instanceId
                 );
-            updatedMembersAndTargetAssignment.addOrUpdateMember(updatedMember.memberId(), updatedMember.instanceId(), updatedMember);
+            updatedMembersAndTargetAssignment.addOrUpdateMember(updatedMember.memberId(), updatedMember);
 
             TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder assignmentResultBuilder =
                 new TargetAssignmentBuilder.ConsumerTargetAssignmentBuilder(group.groupId(), groupEpoch, consumerGroupAssignors.get(preferredServerAssignor))
@@ -4212,9 +4213,10 @@ public class GroupMetadataManager {
                 new UpdatedMembersAndTargetAssignmentView<>(
                     group.members(),
                     Map.of(),
-                    group.targetAssignment()
+                    group.targetAssignment(),
+                    ShareGroupMember::instanceId
                 );
-            updatedMembersAndTargetAssignment.addOrUpdateMember(updatedMember.memberId(), updatedMember.instanceId(), updatedMember);
+            updatedMembersAndTargetAssignment.addOrUpdateMember(updatedMember.memberId(), updatedMember);
 
             TargetAssignmentBuilder.ShareTargetAssignmentBuilder assignmentResultBuilder =
                 new TargetAssignmentBuilder.ShareTargetAssignmentBuilder(group.groupId(), groupEpoch, shareGroupAssignor)
@@ -4316,10 +4318,11 @@ public class GroupMetadataManager {
                 new UpdatedMembersAndTargetAssignmentView<>(
                     group.members(),
                     group.staticMembers(),
-                    group.targetAssignment()
+                    group.targetAssignment(),
+                    m -> m.instanceId().orElse(null)
                 );
             updatedMember.ifPresent(member ->
-                updatedMembersAndTargetAssignment.addOrUpdateMember(member.memberId(), member.instanceId().orElse(null), member)
+                updatedMembersAndTargetAssignment.addOrUpdateMember(member.memberId(), member)
             );
 
             org.apache.kafka.coordinator.group.streams.TargetAssignmentBuilder assignmentResultBuilder =
