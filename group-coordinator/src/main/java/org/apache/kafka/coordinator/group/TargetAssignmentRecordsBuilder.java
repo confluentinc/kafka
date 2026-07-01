@@ -78,12 +78,12 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
     /**
      * The current target assignment.
      */
-    private Map<String, A> currentTargetAssignment = Map.of();
+    private Map<String, A> currentTargetAssignment;
 
     /**
      * The new target assignment.
      */
-    private Map<String, A> newTargetAssignment = Map.of();
+    private Map<String, A> newTargetAssignment;
 
     /**
      * Constructs the object.
