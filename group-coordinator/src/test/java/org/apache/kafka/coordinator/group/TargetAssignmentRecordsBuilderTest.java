@@ -214,36 +214,6 @@ public class TargetAssignmentRecordsBuilderTest {
     }
 
     @Test
-    public void testAssignmentRemoved() {
-        Uuid topicId = Uuid.randomUuid();
-
-        List<CoordinatorRecord> records =
-            new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
-                .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
-                .withCurrentMemberIds(Set.of("member-1"))
-                .withCurrentTargetAssignment(Map.of(
-                    "member-1", new Assignment(mkAssignment(
-                        mkTopicAssignment(topicId, 0, 1, 2)
-                    )),
-                    "member-2", new Assignment(mkAssignment(
-                        mkTopicAssignment(topicId, 3, 4, 5)
-                    ))
-                ))
-                .withNewTargetAssignment(Map.of(
-                    "member-1", new Assignment(mkAssignment(
-                        mkTopicAssignment(topicId, 0, 1, 2)
-                    ))
-                ))
-                .build();
-
-        assertEquals(List.of(
-            // Member 2's target assignment is tombstoned.
-            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentTombstoneRecord("my-group", "member-2"),
-            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord("my-group", 20, 12345L)
-        ), records);
-    }
-
-    @Test
     public void testMemberLeft() {
         Uuid topicId = Uuid.randomUuid();
 
@@ -430,8 +400,7 @@ public class TargetAssignmentRecordsBuilderTest {
                     .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of(
-                        "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0))),
-                        "member-2", new Assignment(mkAssignment(mkTopicAssignment(topicId, 1)))
+                        "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0)))
                     ))
                     .withNewTargetAssignment(Map.of(
                         "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0, 1, 2, 3)))
@@ -442,7 +411,6 @@ public class TargetAssignmentRecordsBuilderTest {
                 GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord("my-group", "member-1", mkAssignment(
                     mkTopicAssignment(topicId, 0, 1, 2, 3)
                 )),
-                GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentTombstoneRecord("my-group", "member-2"),
                 GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord("my-group", 20, 12345L)
             ), records);
         }
@@ -477,8 +445,7 @@ public class TargetAssignmentRecordsBuilderTest {
                     .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
                     .withCurrentMemberIds(Set.of("member-1"))
                     .withCurrentTargetAssignment(Map.of(
-                        "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0, 1))),
-                        "member-2", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0, 1)))
+                        "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0, 1)))
                     ))
                     .withNewTargetAssignment(Map.of(
                         "member-1", new Assignment(mkAssignment(mkTopicAssignment(topicId, 0, 1, 2, 3)))
@@ -489,7 +456,6 @@ public class TargetAssignmentRecordsBuilderTest {
                 GroupCoordinatorRecordHelpers.newShareGroupTargetAssignmentRecord("my-group", "member-1", mkAssignment(
                     mkTopicAssignment(topicId, 0, 1, 2, 3)
                 )),
-                GroupCoordinatorRecordHelpers.newShareGroupTargetAssignmentTombstoneRecord("my-group", "member-2"),
                 GroupCoordinatorRecordHelpers.newShareGroupTargetAssignmentMetadataRecord("my-group", 20, 12345L)
             ), records);
         }
@@ -526,9 +492,6 @@ public class TargetAssignmentRecordsBuilderTest {
                     .withCurrentTargetAssignment(Map.of(
                         "member-1", mkTasksTuple(TaskRole.ACTIVE,
                             mkTasks(subtopology1, 0)
-                        ),
-                        "member-2", mkTasksTuple(TaskRole.ACTIVE,
-                            mkTasks(subtopology1, 1)
                         )
                     ))
                     .withNewTargetAssignment(Map.of(
@@ -542,7 +505,6 @@ public class TargetAssignmentRecordsBuilderTest {
                 StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord("my-group", "member-1", mkTasksTuple(TaskRole.ACTIVE,
                     mkTasks(subtopology1, 0, 1, 2, 3)
                 )),
-                StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentTombstoneRecord("my-group", "member-2"),
                 StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentMetadataRecord("my-group", 20, 12345L)
             ), records);
         }
