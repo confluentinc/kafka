@@ -186,7 +186,8 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
         //  * When static members are replaced, we move the assignment from the old member id to the
         //    new member id.
         //  * When members rejoin with the same member id but a different instance id, they keep
-        //    their existing assignment.
+        //    their existing assignment. This operation will never happen when using the official
+        //    Java client and may be forbidden in the future.
         //
         // Thus, when building the new target assignment records,
         //  * we should not emit records for members that have left the group
@@ -201,8 +202,15 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
             String newMemberId = currentStaticMembers.get(instanceId);
 
             if (currentMemberIds.contains(oldMemberId)) {
-                // The member id is still in the group. We must not create a remapping entry,
+                // The old member id is still in the group. We must not create a remapping entry,
                 // otherwise we could give the same assignment to two different members.
+                continue;
+            }
+
+            if (newTargetAssignment.containsKey(newMemberId)) {
+                // The new member id has been in the group the whole time. Avoid creating a
+                // remapping entry. Note that this is best effort, since newTargetAssignment may not
+                // contain entries for every member that used to be in the group.
                 continue;
             }
 
