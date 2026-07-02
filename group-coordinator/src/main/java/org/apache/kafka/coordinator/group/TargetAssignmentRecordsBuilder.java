@@ -176,7 +176,6 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
      *
      * @param records The list to accumulate records.
      */
-    @SuppressWarnings({"CyclomaticComplexity", "NPathComplexity"})
     public void build(List<CoordinatorRecord> records) {
         // The members in the group may have changed while the target assignment was computed.
         // We want to act as if concurrent member operations such as leaves and static member
@@ -217,58 +216,11 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
             if (newMemberId != null) {
                 staticMemberIdRemapping.put(newMemberId, oldMemberId);
             }
-
-            if (log.isDebugEnabled()) {
-                if (newMemberId == null) {
-                    log.debug("[GroupId {}] Previous static member {} with instance id {} has no replacement, discarding their target assignment.",
-                        groupId, oldMemberId, instanceId);
-                } else {
-                    log.debug("[GroupId {}] Previous static member {} with instance id {} has been replaced by {}, transferring target assignment.",
-                        groupId, oldMemberId, instanceId, newMemberId);
-                }
-            }
         }
 
         if (log.isDebugEnabled()) {
-            // Log current static members with no previous static member.
-            for (Map.Entry<String, String> entry : currentStaticMembers.entrySet()) {
-                String instanceId = entry.getKey();
-                String newMemberId = entry.getValue();
-
-                if (newTargetAssignment.containsKey(newMemberId)) {
-                    // The member has been in the group the whole time.
-                    continue;
-                }
-
-                if (!previousStaticMembers.containsKey(instanceId)) {
-                    log.debug("[GroupId {}] Current static member {} with instance id {} has no previous static member and will receive an empty target assignment.",
-                        groupId, newMemberId, instanceId);
-                }
-            }
-
-            // Log previous members that have left the group.
-            for (String memberId : newTargetAssignment.keySet()) {
-                if (currentMemberIds.contains(memberId)) {
-                    // The member has been in the group the whole time.
-                    continue;
-                }
-
-                log.debug("[GroupId {}] Member {} has left the group, discarding their target assignment unless they were static and a corresponding static member exists.",
-                    groupId, memberId);
-            }
-
-            // Log current members that have joined the group.
-            for (String memberId : currentMemberIds) {
-                if (newTargetAssignment.containsKey(memberId)) {
-                    // The member has been in the group the whole time.
-                    continue;
-                }
-
-                if (!staticMemberIdRemapping.containsKey(memberId)) {
-                    log.debug("[GroupId {}] Member {} is new and will receive an empty target assignment or has no target assignment.",
-                        groupId, memberId);
-                }
-            }
+            logStaticMembers();
+            logMembersLeftAndJoined(staticMemberIdRemapping);
         }
 
         for (String memberId : currentMemberIds) {
@@ -308,6 +260,67 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
             targetAssignmentMetadata.assignmentEpoch(),
             targetAssignmentMetadata.assignmentTimestamp()
         ));
+    }
+
+    private void logStaticMembers() {
+        for (Map.Entry<String, String> entry : previousStaticMembers.entrySet()) {
+            String instanceId = entry.getKey();
+            String oldMemberId = entry.getValue();
+            String newMemberId = currentStaticMembers.get(instanceId);
+
+            if (currentMemberIds.contains(oldMemberId) ||
+                newTargetAssignment.containsKey(newMemberId)) {
+                // The member has been in the group the whole time.
+                continue;
+            }
+
+            if (newMemberId == null) {
+                log.debug("[GroupId {}] Previous static member {} with instance id {} has no replacement, discarding their target assignment.",
+                    groupId, oldMemberId, instanceId);
+            } else {
+                log.debug("[GroupId {}] Previous static member {} with instance id {} has been replaced by {}, transferring target assignment.",
+                    groupId, oldMemberId, instanceId, newMemberId);
+            }
+        }
+
+        for (Map.Entry<String, String> entry : currentStaticMembers.entrySet()) {
+            String instanceId = entry.getKey();
+            String newMemberId = entry.getValue();
+
+            if (newTargetAssignment.containsKey(newMemberId)) {
+                // The member has been in the group the whole time.
+                continue;
+            }
+
+            if (!previousStaticMembers.containsKey(instanceId)) {
+                log.debug("[GroupId {}] Current static member {} with instance id {} has no previous static member and will receive an empty target assignment.",
+                    groupId, newMemberId, instanceId);
+            }
+        }
+    }
+
+    private void logMembersLeftAndJoined(Map<String, String> staticMemberIdRemapping) {
+        for (String memberId : newTargetAssignment.keySet()) {
+            if (currentMemberIds.contains(memberId)) {
+                // The member has been in the group the whole time.
+                continue;
+            }
+
+            log.debug("[GroupId {}] Member {} has left the group, discarding their target assignment unless they were static and a corresponding static member exists.",
+                groupId, memberId);
+        }
+
+        for (String memberId : currentMemberIds) {
+            if (newTargetAssignment.containsKey(memberId)) {
+                // The member has been in the group the whole time.
+                continue;
+            }
+
+            if (!staticMemberIdRemapping.containsKey(memberId)) {
+                log.debug("[GroupId {}] Member {} is new and will receive an empty target assignment or has no target assignment.",
+                    groupId, memberId);
+            }
+        }
     }
 
     protected abstract A emptyMemberAssignment();
