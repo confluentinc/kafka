@@ -36,6 +36,10 @@ import java.util.Set;
  * Records are only created for members which have a new target assignment. If
  * their assignment did not change, no new record is needed.
  *
+ * When a member is deleted, it is assumed that its target assignment record
+ * is deleted as part of the member deletion process. In other words, this class
+ * does not yield a tombstone for removed members.
+ *
  * @param <A> The member's target assignment type.
  */
 public abstract class TargetAssignmentRecordsBuilder<A> {
@@ -244,16 +248,6 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
             }
         }
 
-        // Tombstone assignments for members that are no longer in the group.
-        // This will always be a no-op in practice since the group coordinator will tombstone target
-        // assignments for members as soon as they leave the group. We leave it in to avoid making
-        // assumptions about caller behavior.
-        for (String memberId : currentTargetAssignment.keySet()) {
-            if (!currentMemberIds.contains(memberId)) {
-                records.add(newTargetAssignmentTombstoneRecord(groupId, memberId));
-            }
-        }
-
         // Bump the target assignment epoch.
         records.add(newTargetAssignmentMetadataRecord(
             groupId,
@@ -331,11 +325,6 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
         A memberAssignment
     );
 
-    protected abstract CoordinatorRecord newTargetAssignmentTombstoneRecord(
-        String groupId,
-        String memberId
-    );
-
     protected abstract CoordinatorRecord newTargetAssignmentMetadataRecord(
         String groupId,
         int assignmentEpoch,
@@ -363,17 +352,6 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
                 groupId,
                 memberId,
                 memberAssignment.partitions()
-            );
-        }
-
-        @Override
-        protected CoordinatorRecord newTargetAssignmentTombstoneRecord(
-            String groupId,
-            String memberId
-        ) {
-            return GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentTombstoneRecord(
-                groupId,
-                memberId
             );
         }
 
@@ -416,17 +394,6 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
         }
 
         @Override
-        protected CoordinatorRecord newTargetAssignmentTombstoneRecord(
-            String groupId,
-            String memberId
-        ) {
-            return GroupCoordinatorRecordHelpers.newShareGroupTargetAssignmentTombstoneRecord(
-                groupId,
-                memberId
-            );
-        }
-
-        @Override
         protected CoordinatorRecord newTargetAssignmentMetadataRecord(
             String groupId,
             int assignmentEpoch,
@@ -461,17 +428,6 @@ public abstract class TargetAssignmentRecordsBuilder<A> {
                 groupId,
                 memberId,
                 memberAssignment
-            );
-        }
-
-        @Override
-        protected CoordinatorRecord newTargetAssignmentTombstoneRecord(
-            String groupId,
-            String memberId
-        ) {
-            return StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentTombstoneRecord(
-                groupId,
-                memberId
             );
         }
 
