@@ -14,7 +14,7 @@ elasticsearch==7.17.6
 charset-normalizer==2.0.6
 click==8.0.1
 debugpy==1.4.3
-flake8==3.9.2
+flake8==7.3.0
 Flask==2.2.5
 Flask-HTTPAuth==4.4.0
 google-api-core==2.0.1
