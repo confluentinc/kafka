@@ -346,41 +346,56 @@ public class TargetAssignmentRecordsBuilderTest {
 
     @Test
     public void testStaticMemberAndMemberIdConflict() {
-        Uuid topicId = Uuid.randomUuid();
+        // This scenario will never happen when using the official Java client and may be forbidden
+        // in the future.
+        Uuid topicId1 = Uuid.randomUuid();
+        Uuid topicId2 = Uuid.randomUuid();
 
         List<CoordinatorRecord> records =
             new TargetAssignmentRecordsBuilder.ConsumerTargetAssignmentRecordsBuilder(LOG, "my-group")
                 .withTargetAssignmentMetadata(new TargetAssignmentMetadata(20, 12345L))
-                // Member 2 is still around but member 3 has its instance id now.
-                .withCurrentMemberIds(Set.of("member-1", "member-2", "member-3"))
-                .withPreviousStaticMembers(Map.of("instance-id", "member-2"))
-                .withCurrentStaticMembers(Map.of("instance-id", "member-3"))
+                // instance-id-1 has "moved" from member 1 to member 2.
+                //   member 1 has been around the whole time and member 2 is new.
+                // instance-id-2 has "moved" from member 3 to member 4.
+                //   member 3 left and member 4 has been around the whole time.
+                .withCurrentMemberIds(Set.of("member-1", "member-2", "member-4"))
+                .withPreviousStaticMembers(Map.of("instance-id-1", "member-1", "instance-id-2", "member-3"))
+                .withCurrentStaticMembers(Map.of("instance-id-1", "member-2", "instance-id-2", "member-4"))
                 .withCurrentTargetAssignment(Map.of(
                     "member-1", new Assignment(mkAssignment(
-                        mkTopicAssignment(topicId, 0, 1, 2)
+                        mkTopicAssignment(topicId1, 0, 1, 2)
                     )),
-                    "member-2", new Assignment(mkAssignment(
-                        mkTopicAssignment(topicId, 3, 4, 5)
+                    // member-3's assignment was removed when they left.
+                    "member-4", new Assignment(mkAssignment(
+                        mkTopicAssignment(topicId2, 3, 4, 5)
                     ))
                 ))
                 .withNewTargetAssignment(Map.of(
                     "member-1", new Assignment(mkAssignment(
-                        mkTopicAssignment(topicId, 0, 1, 2)
+                        mkTopicAssignment(topicId1, 0, 1, 2, 3)
                     )),
-                    "member-2", new Assignment(mkAssignment(
-                        mkTopicAssignment(topicId, 3, 4, 5, 6)
+                    "member-3", new Assignment(mkAssignment(
+                        mkTopicAssignment(topicId2, 0, 1, 2, 3)
+                    )),
+                    "member-4", new Assignment(mkAssignment(
+                        mkTopicAssignment(topicId2, 4, 5, 6, 7)
                     ))
                 ))
                 .build();
 
         assertUnorderedRecordsEquals(List.of(
             List.of(
-                // Member 2 gets the target assignment.
-                GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord("my-group", "member-2", mkAssignment(
-                    mkTopicAssignment(topicId, 3, 4, 5, 6)
+                // Member 1 gets the target assignment.
+                GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord("my-group", "member-1", mkAssignment(
+                    mkTopicAssignment(topicId1, 0, 1, 2, 3)
                 )),
-                // Member 3 does not get member 2's target assignment.
-                GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord("my-group", "member-3", mkAssignment())
+                // Member 2 does not get member 1's target assignment.
+                GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord("my-group", "member-2", mkAssignment()),
+                // Member 3 gets nothing because it is no longer in the group.
+                // Member 4 gets the target assignment.
+                GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord("my-group", "member-4", mkAssignment(
+                    mkTopicAssignment(topicId2, 4, 5, 6, 7)
+                ))
             ),
             List.of(GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord("my-group", 20, 12345L))
         ), records);
