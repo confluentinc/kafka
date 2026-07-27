@@ -65,14 +65,22 @@
       "inline": ["while [ ! -f /var/lib/cloud/instance/boot-finished ]; do echo 'Waiting for cloud-init...'; sleep 1; done"]
     },
     {
+      "type": "file",
+      "source": "../vagrant/cloudwatch-agent-configuration.json",
+      "destination": "/tmp/cloudwatch-agent-configuration.json"
+    },
+    {
       "environment_vars": [
         "JDK_MAJOR={{ user `jdk_version` }}",
-        "JDK_ARCH={{ user `jdk_arch` }}"
+        "JDK_ARCH={{ user `jdk_arch` }}",
+        "SEMAPHORE_JOB_ID={{ user `JOB_ID` }}",
+        "ENABLE_CLOUDWATCH={{ user `enable_cloudwatch` }}"
       ],
       "execute_command": "echo 'packer' | {{ .Vars }} sudo -E -S bash '{{ .Path }}'",
       "type": "shell",
       "scripts": [
-        "../vagrant/base.sh"
+        "../vagrant/base.sh",
+        "../vagrant/cloudwatch-agent-setup.sh"
       ]
     }
   ]
