@@ -2735,7 +2735,6 @@ project(':tools') {
     testImplementation project(':connect:api')
     testImplementation project(':connect:runtime')
     testImplementation testFixtures(project(':connect:runtime'))
-    testImplementation project(':storage:storage-api').sourceSets.main.output
     testImplementation testFixtures(project(':storage'))
     testImplementation project(':streams')
     testImplementation project(':streams').sourceSets.test.output
@@ -4205,6 +4204,7 @@ gradle.projectsEvaluated {
     'metadata': ':metadata',
     'raft': ':raft',
     'connect/runtime': ':connect:runtime',
+    'core': ':core',
   ]
   allprojects { proj ->
     proj.configurations.all { config ->
