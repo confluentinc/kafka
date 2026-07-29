@@ -10,8 +10,8 @@
     "linux_distro": "ubuntu",
     "jdk_version": "8",
     "jdk_arch": "x64",
-    "enable_ena_driver_install": "true"
-
+    "enable_ena_driver_install": "true",
+    "enable_uptycs": "false"
   },
   "builders": [{
     "type": "amazon-ebs",
@@ -75,6 +75,36 @@
       "type": "shell",
       "scripts": [
         "../vagrant/base.sh"
+      ]
+    },
+    {
+      "type": "file",
+      "source": "/tmp/uptycs-protect.deb",
+      "destination": "/tmp/uptycs-protect.deb"
+    },
+    {
+      "type": "file",
+      "source": "../vagrant/install-uptycs-sensor.sh",
+      "destination": "/tmp/install-uptycs-sensor.sh"
+    },
+    {
+      "type": "file",
+      "source": "../vagrant/uptycs-sensor-install.service",
+      "destination": "/tmp/uptycs-sensor-install.service"
+    },
+    {
+      "type": "file",
+      "source": "../vagrant/osqueryd-resource-limits.conf",
+      "destination": "/tmp/osqueryd-resource-limits.conf"
+    },
+    {
+      "environment_vars": [
+        "ENABLE_UPTYCS={{ user `enable_uptycs` }}"
+      ],
+      "execute_command": "echo 'packer' | {{ .Vars }} sudo -E -S bash '{{ .Path }}'",
+      "type": "shell",
+      "scripts": [
+        "../vagrant/stage-uptycs-sensor.sh"
       ]
     }
   ]
