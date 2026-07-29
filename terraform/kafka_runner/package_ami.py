@@ -56,7 +56,7 @@ def compute_packer_hash(**extras):
     def with_extension(extension):
         return glob.glob(os.path.join(dirname, '*.%s' % extension))
 
-    file_list = with_extension('sh') + with_extension('json') + [
+    file_list = with_extension('sh') + with_extension('json') + with_extension('service') + with_extension('conf') + [
         os.path.join(BASE_KAFKA_DIR, "resources/requirements.txt")]
 
     logging.info('Files considered for packer_hash: %s', ', '.join(file_list))
