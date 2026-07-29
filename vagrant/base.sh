@@ -215,9 +215,9 @@ if [ ! -e /mnt ]; then
 fi
 chmod a+rwx /mnt
 
-# Run ntpdate once to sync to ntp servers
+# Run ntpdate once to sync to ntp servers (absent on Ubuntu 22+; timesyncd already syncs)
 # use -u option to avoid port collision in case ntp daemon is already running
-ntpdate -u pool.ntp.org
+command -v ntpdate >/dev/null 2>&1 && ntpdate -u pool.ntp.org || true
 # Install ntp daemon - it will automatically start on boot
 apt-get -y install ntp
 
