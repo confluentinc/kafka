@@ -58,6 +58,9 @@ def compute_packer_hash(**extras):
 
     file_list = with_extension('sh') + with_extension('json') + with_extension('service') + with_extension('conf') + [
         os.path.join(BASE_KAFKA_DIR, "resources/requirements.txt")]
+    # When baking Uptycs, hash the staged sensor deb so a new sensor build busts the base-AMI cache.
+    if str(extras.get('enable_uptycs', '')).lower() == 'true' and os.path.exists('/tmp/uptycs-protect.deb'):
+        file_list = file_list + ['/tmp/uptycs-protect.deb']
 
     logging.info('Files considered for packer_hash: %s', ', '.join(file_list))
     logging.info('Extras considered for packer_hash: %s', extras)
