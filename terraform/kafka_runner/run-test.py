@@ -264,7 +264,8 @@ def main():
                     ssh_account=ssh_account,
                     instance_name=args.instance_name,
                     jdk_version=args.jdk_version,
-                    jdk_arch=args.jdk_arch
+                    jdk_arch=args.jdk_arch,
+                    enable_uptycs=args.enable_uptycs
                 )
             else:
                 logging.info(f"using existing ami: {args.existing_ami}")

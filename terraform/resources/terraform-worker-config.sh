@@ -1,6 +1,7 @@
 # Check AMI_ID present or not as env variable if not then set
+# Ubuntu 22.04 (jammy) — systemd base required by the Uptycs EDR bake (DPA-3337)
 AMI_ID() {
-  echo "ami-5189a661"
+  echo "ami-021c7f7dcbd49b417"
 }
 
 if [ -z "${AMI_ID}" ]; then

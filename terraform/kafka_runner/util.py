@@ -172,6 +172,7 @@ def parse_args():
     parser.add_argument("--nightly", action="store_true", default=False, help="Mark this as a nightly run")
     parser.add_argument("--new-globals", action="store", type=str, default=None, help="Additional global params to be passed in ducktape")
     parser.add_argument("--arm-image", action="store_true", help="load the ARM based image of specified distro")
+    parser.add_argument("--enable-uptycs", action="store", type=parse_bool, default=False, help="Bake the Uptycs EDR sensor into the worker AMI (DPA-3337)")
     parser.add_argument("--existing-ami", action="store", type=str, default=None, help="AMI ID to use for the instance, skipping ami creation")
     args, rest = parser.parse_known_args(sys.argv[1:])
 
