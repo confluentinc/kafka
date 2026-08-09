@@ -1569,10 +1569,6 @@ project(':metadata') {
     implementation project(':server-common')
     implementation project(':clients')
     implementation project(':raft')
-    // commons-io is a transitive dependency not needed by SubnetUtils/SubnetUtils6
-    implementation(libs.commonsNet) {
-      exclude group: 'commons-io', module: 'commons-io'
-    }
     implementation libs.jacksonDatabind
     implementation libs.metrics
     implementation libs.slf4jApi
@@ -2095,6 +2091,10 @@ project(':clients') {
     implementation libs.opentelemetryProto
     implementation libs.protobuf
     implementation libs.slf4jApi
+    // commons-io is a transitive dependency not needed by SubnetUtils/SubnetUtils6
+    implementation(libs.commonsNet) {
+      exclude group: 'commons-io', module: 'commons-io'
+    }
 
     // libraries which should be added as runtime dependencies in generated pom.xml should be defined here:
     shadowed libs.zstd
@@ -2161,6 +2161,7 @@ project(':clients') {
     // KIP-714: move shaded dependencies to a shaded location
     relocate('io.opentelemetry.proto', 'org.apache.kafka.shaded.io.opentelemetry.proto')
     relocate('com.google.protobuf', 'org.apache.kafka.shaded.com.google.protobuf')
+    relocate('org.apache.commons.net', 'org.apache.kafka.shaded.org.apache.commons.net')
 
     // dependencies excluded from the final jar, since they are declared as runtime dependencies
     dependencies {
