@@ -65,7 +65,7 @@ echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH JDK_FULL=$JDK_FULL"
 
 if [ -z `which javac` ]; then
     apt-get -y update
-    apt-get install -y software-properties-common python-software-properties binutils java-common
+    apt-get install -y software-properties-common binutils java-common
 
     echo "===> Installing JDK..." 
 
@@ -215,9 +215,9 @@ if [ ! -e /mnt ]; then
 fi
 chmod a+rwx /mnt
 
-# Run ntpdate once to sync to ntp servers
+# Run ntpdate once to sync to ntp servers (absent on Ubuntu 22+; timesyncd already syncs)
 # use -u option to avoid port collision in case ntp daemon is already running
-ntpdate -u pool.ntp.org
+command -v ntpdate >/dev/null 2>&1 && ntpdate -u pool.ntp.org || true
 # Install ntp daemon - it will automatically start on boot
 apt-get -y install ntp
 
