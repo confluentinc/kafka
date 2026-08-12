@@ -6,10 +6,10 @@ locals {
     "Owner": "ce-kafka",
     "role": "ce-kafka",
     "cflt_environment": "devel",
-    "cflt_partition": "onprem",
+    "cflt_partition": "operational-tools",
     "cflt_managed_by": "iac",
-    "cflt_managed_id": "ce-kafka",
-    "cflt_service": "ce-kafka"
+    "cflt_managed_id": "kafka",
+    "cflt_service": "kafka-system-test"
   }
 }
 
