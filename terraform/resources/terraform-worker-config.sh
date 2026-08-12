@@ -1,6 +1,7 @@
 # Check AMI_ID present or not as env variable if not then set
+# Ubuntu 22.04 (jammy) — Nitro-compatible base (ENA + NVMe) required for modern instances (c6a). DPA-3043.
 AMI_ID() {
-  echo "ami-5189a661"
+  echo "ami-021c7f7dcbd49b417"
 }
 
 if [ -z "${AMI_ID}" ]; then
