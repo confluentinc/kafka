@@ -221,6 +221,18 @@ command -v ntpdate >/dev/null 2>&1 && ntpdate -u pool.ntp.org || true
 # Install ntp daemon - it will automatically start on boot
 apt-get -y install ntp
 
+# Force legacy "eth0" NIC naming. Ubuntu 22.04 on Nitro (c6a/c7) uses predictable names
+# (ens5), but kafka trogdor network-fault tests (network_degrade, round_trip_fault) target
+# eth0. net.ifnames=0 restores eth0; cloud-init regenerates netplan for it on boot. DPA-3043.
+if [ -f /etc/default/grub ]; then
+    if grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
+        sed -i 's/^GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 net.ifnames=0 biosdevname=0"/' /etc/default/grub
+    else
+        echo 'GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"' >> /etc/default/grub
+    fi
+    update-grub
+fi
+
 # Increase the ulimit
 mkdir -p /etc/security/limits.d
 echo "* soft nofile 128000" >> /etc/security/limits.d/nofile.conf
