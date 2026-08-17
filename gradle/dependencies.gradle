@@ -72,7 +72,7 @@ versions += [
   javassist: "3.29.2-GA",
   jetty: "12.0.34",
   jersey: "3.1.11",
-  jline: "3.25.1",
+  jline: "4.2.1",
   jmh: "1.37",
   hamcrest: "2.2",
   scalaLogging: "3.9.5",
