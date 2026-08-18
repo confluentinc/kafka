@@ -122,6 +122,7 @@ public final class InteractiveShell implements AutoCloseable {
     }
 
     public int screenWidth() {
+        // notice
         return terminal.getWidth();
     }
 
