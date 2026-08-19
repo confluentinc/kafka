@@ -25,7 +25,10 @@ terraform {
 provider "aws" {
   region = var.ec2_region
   default_tags {
-    tags = local.common_tags
+    # local.common_tags = static cflt_* etc.; var.kst_tags = per-run kst-*
+    # cost-classification tags (DPA-2804), so instances and their volumes are
+    # tagged at creation. Empty map by default, so plans without it still apply.
+    tags = merge(local.common_tags, var.kst_tags)
   }
 }
 
