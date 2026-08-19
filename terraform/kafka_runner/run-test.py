@@ -20,6 +20,53 @@ from terraform.kafka_runner.util import INSTANCE_TYPE, ABS_KAFKA_DIR, JOB_ID, AW
 from terraform.kafka_runner.util import setup_virtualenv, parse_args, parse_bool
 from ssh_checkers.aws_checker import aws_ssh_checker
 
+def derive_kst_tags(args, env=None):
+    """kst-* cost-classification tags for this run (DPA-2804).
+
+    Applied at `terraform apply` via var.kst_tags -> the provider default_tags, so
+    they land on the worker instances and their volumes at creation. Values come
+    from the Semaphore / config.sh environment and run args; anything we cannot
+    determine is "unknown" (an empty tag reads as untagged in Cost Explorer).
+    """
+    env = os.environ if env is None else env
+
+    bucket_key = env.get("BUCKET_KEY", "")
+    if not bucket_key:
+        task = "unknown"
+    elif "branch-builder" in bucket_key:
+        task = "branch-builder"
+    else:
+        task = "scheduler-system-test-kafka"
+
+    # KST_BRANCH is the pre-rewrite value the trunk pipeline exports before it
+    # rewrites KAFKA_BRANCH trunk->master; fall back to KAFKA_BRANCH otherwise.
+    branch = env.get("KST_BRANCH") or env.get("KAFKA_BRANCH") or "unknown"
+
+    jdk_arch = (getattr(args, "jdk_arch", "") or "").lower()
+    if jdk_arch in ("aarch64", "arm64"):
+        arch = "arm64"
+    elif jdk_arch in ("x64", "x86", "amd64", "x86_64"):
+        arch = "x86"
+    else:
+        arch = "unknown"
+
+    workflow_url = getattr(args, "build_url", "") or env.get("SEMAPHORE_WORKFLOW_URL", "")
+    if not workflow_url:
+        wf_id = env.get("SEMAPHORE_WORKFLOW_ID")
+        workflow_url = (
+            "https://semaphore.ci.confluent.io/workflows/{}".format(wf_id)
+            if wf_id else "unknown"
+        )
+
+    return {
+        "kst-task": task,
+        "kst-branch": branch,
+        "kst-arch": arch,
+        "kst-SemaphoreTask": env.get("SEMAPHORE_TASK_NAME") or "unknown",
+        "kst-SemaphoreWorkflowURL": workflow_url,
+    }
+
+
 class KafkaRunner:
     kafka_dir = ABS_KAFKA_DIR
     cluster_file_name = f"{kafka_dir}/tf-cluster.json"
@@ -165,7 +212,8 @@ class KafkaRunner:
             "build_url": self.args.build_url,
             "subnet_id": IPV6_SUBNET_ID if IS_IPV6_RUN else IPV4_SUBNET_ID,
             "ipv6_address_count": 1 if IS_IPV6_RUN else 0,
-            "job_id": JOB_ID
+            "job_id": JOB_ID,
+            "kst_tags": derive_kst_tags(self.args)
         }
         with open(self.tf_variables_file, 'w') as f:
             json.dump(vars, f)
