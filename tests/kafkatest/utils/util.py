@@ -30,25 +30,98 @@ def _kafka_jar_versions(proc_string):
         - kafka-streams-1.0.0-SNAPSHOT.jar
         - kafka-streams-0.11.0.0-SNAPSHOT.jar
     """
+    versions=[]
 
+    #
+    # 5 kafka_#.#-*-SNAPSHOT.jar permutations
+    #
+    # 2 possible kafka_#.#-#.#.#[.#]-SNAPSHOT.jar matches:
     # Pattern example: kafka_2.11-1.0.0-SNAPSHOT.jar (we have to be careful not to partially match the 4 segment version string)
-    versions = re.findall("kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+)[\.-][a-zA-z]", proc_string)
-
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+)-SNAPSHOT\.jar", proc_string))
     # Pattern example: kafka_2.11-0.11.0.0-SNAPSHOT.jar
-    versions.extend(re.findall("kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", proc_string))
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)-SNAPSHOT\.jar", proc_string))
 
-    # Pattern example: kafka-1.0.0/bin/../libs/* (i.e. the JARs are not listed explicitly, we have to be careful not to
-    # partially match the 4 segment version)
-    versions.extend(re.findall("kafka-([0-9]+\.[0-9]+\.[0-9]+)/", proc_string))
+    # no nano version possibility for kafka_#.#-*-SNAPSHOT.jar
+    # no nano version with -ccs suffix possibility for kafka_#.#-*-SNAPSHOT.jar
+    # no -ccs release possibility for kafka_#.#-*-SNAPSHOT.jar
 
-    # Pattern example: kafka-0.11.0.0/bin/../libs/* (i.e. the JARs are not listed explicitly)
-    versions.extend(re.findall("kafka-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", proc_string))
+    #
+    # 5 kafka_#.#-*#.jar permutations
+    #
+    # 2 possible kafka_#.#-#.#.#[.#].jar matches:
+    # Pattern example: kafka_2.11-1.1.1.jar (we have to be careful not to partially match the 4 segment version string)
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+)\.jar", proc_string))
+    # Pattern example: kafka_2.11-0.10.0.1.jar
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.jar", proc_string))
 
-    # Pattern example: kafka-streams-1.0.0-SNAPSHOT.jar (we have to be careful not to partially match the 4 segment version string)
-    versions.extend(re.findall("kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+)[\.-][a-zA-z]", proc_string))
+    # nano version possibility kafka_#.#-#.#.#-#.jar matches:
+    # Pattern example: kafka_2.13-6.2.0-0.jar
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)\.jar", proc_string))
 
+    # nano version with -ccs suffix possibility kafka_#.#-#.#.#-#.jar matches:
+    # Pattern example: kafka_2.13-6.2.0-0-ccs.jar
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)-ccs\.jar", proc_string))
+
+    # -ccs release possibility kafka_#.#-#.#.#-ccs.jar matches:
+    # Pattern example: kafka_2.13-6.2.0-ccs.jar
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+-ccs)\.jar", proc_string))
+
+    # Pattern example: kafka_2.11-1.0.0-ccs-cp1.jar
+    versions.extend(re.findall(r"kafka_[0-9]+\.[0-9]+-([0-9]+\.[0-9]+\.[0-9]+)-ccs-cp[0-9]+\.jar", proc_string))
+    #
+    # 5 kafka-#.#.#*/bin/.../libs/* permutations
+    #
+    # 2 possible kafka-#.#.#[.#]/bin/../libs/* matches (i.e. the JARs are not listed explicitly):
+    # Pattern example: kafka-1.0.0/bin/../libs/* (we have to be careful not to partially match the 4 segment version)
+    versions.extend(re.findall(r"kafka-([0-9]+\.[0-9]+\.[0-9]+)/", proc_string))
+    # Pattern example: kafka-0.11.0.0/bin/../libs/*
+    versions.extend(re.findall(r"kafka-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/", proc_string))
+
+    # nano-version possibility kafka-#.#.#-#/bin/../libs/* matches (i.e. the JARs are not listed explicitly)
+    # Pattern example: kafka-6.0.0-0/bin/../libs/*
+    versions.extend(re.findall(r"kafka-([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)/", proc_string))
+
+    # nano-version with -ccs suffix possibility kafka-#.#.#-#/bin/../libs/* matches (i.e. the JARs are not listed explicitly)
+    # Pattern example: kafka-6.0.0-0-ccs/bin/../libs/*
+    versions.extend(re.findall(r"kafka-([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)-ccs/", proc_string))
+
+    # -ccs release possibility kafka-#.#.#-ccs/bin/../libs/* matches (i.e. the JARs are not listed explicitly)
+    # Pattern example: kafka-6.0.0-ccs/bin/../libs/*
+    versions.extend(re.findall(r"kafka-([0-9]+\.[0-9]+\.[0-9]+-ccs)/", proc_string))
+
+    #
+    # 5 kafka-<component>#.#.#*-SNAPSHOT.jar permutations
+    #
+    # 2 possible kafka-<component>-#.#.#[.#]-SNAPSHOT.jar matches
+    # Pattern example: kafka-streams-1.0.0-SNAPSHOT.jar (we have to be careful not to partially match the 4 segment version)
+    versions.extend(re.findall(r"kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+)-SNAPSHOT\.jar", proc_string))
     # Pattern example: kafka-streams-0.11.0.0-SNAPSHOT.jar
-    versions.extend(re.findall("kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", proc_string))
+    versions.extend(re.findall(r"kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)-SNAPSHOT\.jar", proc_string))
+
+    # no nano version possibility for kafka-<component>#.#.#*-SNAPSHOT.jar
+    # no nano version with -ccs suffix possibility for kafka-<component>#.#.#*-SNAPSHOT.jar
+    # no -ccs release possibility for kafka-<component>#.#.#*-SNAPSHOT.jar
+
+    #
+    # 5 kafka-<component>-*# permutations
+    #
+    # 2 possible kafka-<component>-#.#.#[.#].jar matches
+    # Pattern example: kafka-streams-1.0.0.jar (we have to be careful not to partially match the 4 segment version)
+    versions.extend(re.findall(r"kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+)\.jar", proc_string))
+    # Pattern example: kafka-streams-0.11.0.0.jar
+    versions.extend(re.findall(r"kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.jar", proc_string))
+
+    # nano-version possibility kafka-<component>-#.#.#-#.jar
+    # Pattern example: kafka-streams-6.2.0-0.jar
+    versions.extend(re.findall(r"kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)\.jar", proc_string))
+
+    # nano-version with -ccs suffix possibility kafka-<component>-#.#.#-#-ccs.jar
+    # Pattern example: kafka-streams-6.2.0-0-ccs.jar
+    versions.extend(re.findall(r"kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)-ccs\.jar", proc_string))
+
+    # -ccs release possibility kafka-<component>-#.#.#-ccs.jar
+    # Pattern example: kafka-streams-6.2.0-ccs.jar
+    versions.extend(re.findall(r"kafka-[a-z]+-([0-9]+\.[0-9]+\.[0-9]+-ccs)\.jar", proc_string))
 
     return set(versions)
 
@@ -61,11 +134,17 @@ def is_version(node, version_list, proc_grep_string="kafka", logger=None):
     assert len(lines) == 1
     psLine = lines[0]
 
-    versions = _kafka_jar_versions(psLine)
-    r = versions == {str(v) for v in version_list}
+    # this pattern captures just the number and optionally the build number
+    # When collecting version info from the jars, we get a lot more version info
+    # then the amount stored in the test, to avoid issues, we use this pattern
+    pattern = re.compile(r"([0-9]+\.[0-9]+\.[0-9]+)(\.[0-9]+)?(-[0-9]+)?")
+
+    jar_versions = {pattern.match(v).group() for v in _kafka_jar_versions(psLine)}
+    node_versions = {pattern.match(str(v)).group() for v in version_list}
+    r = jar_versions == node_versions
     if not r and logger is not None:
         logger.warning("%s: %s version mismatch: expected %s, actual %s, ps line %s" % \
-                       (str(node), proc_grep_string, version_list, versions, psLine))
+                       (str(node), proc_grep_string, node_versions, jar_versions, psLine))
     return r
 
 
