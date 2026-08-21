@@ -21,13 +21,7 @@ from terraform.kafka_runner.util import setup_virtualenv, parse_args, parse_bool
 from ssh_checkers.aws_checker import aws_ssh_checker
 
 def derive_kst_tags(args, env=None):
-    """kst-* cost-classification tags for this run (DPA-2804).
-
-    Applied at `terraform apply` via var.kst_tags -> the provider default_tags, so
-    they land on the worker instances and their volumes at creation. Values come
-    from the Semaphore / config.sh environment and run args; anything we cannot
-    determine is "unknown" (an empty tag reads as untagged in Cost Explorer).
-    """
+    """kst-* cost-classification tags for this run (DPA-2804), applied via var.kst_tags."""
     env = os.environ if env is None else env
 
     bucket_key = env.get("BUCKET_KEY", "")
@@ -38,8 +32,7 @@ def derive_kst_tags(args, env=None):
     else:
         task = "scheduler-system-test-kafka"
 
-    # KST_BRANCH is the pre-rewrite value the trunk pipeline exports before it
-    # rewrites KAFKA_BRANCH trunk->master; fall back to KAFKA_BRANCH otherwise.
+    # KST_BRANCH = the trunk pipeline's pre-rewrite value (trunk->master); else KAFKA_BRANCH.
     branch = env.get("KST_BRANCH") or env.get("KAFKA_BRANCH") or "unknown"
 
     jdk_arch = (getattr(args, "jdk_arch", "") or "").lower()
@@ -62,8 +55,6 @@ def derive_kst_tags(args, env=None):
         "kst-task": task,
         "kst-branch": branch,
         "kst-arch": arch,
-        # Semaphore exports no task/scheduler-name var; the pipeline name is the
-        # closest task identity that always exists (e.g. "CCS Kafka Branch Builder").
         "kst-SemaphoreTask": env.get("SEMAPHORE_PIPELINE_NAME") or "unknown",
         "kst-SemaphoreWorkflowURL": workflow_url,
     }
