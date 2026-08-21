@@ -62,7 +62,9 @@ def derive_kst_tags(args, env=None):
         "kst-task": task,
         "kst-branch": branch,
         "kst-arch": arch,
-        "kst-SemaphoreTask": env.get("SEMAPHORE_TASK_NAME") or "unknown",
+        # Semaphore exports no task/scheduler-name var; the pipeline name is the
+        # closest task identity that always exists (e.g. "CCS Kafka Branch Builder").
+        "kst-SemaphoreTask": env.get("SEMAPHORE_PIPELINE_NAME") or "unknown",
         "kst-SemaphoreWorkflowURL": workflow_url,
     }
 
