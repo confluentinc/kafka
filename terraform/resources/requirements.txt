@@ -44,7 +44,7 @@ pyasn1==0.4.8
 pycodestyle==2.7.0
 pycparser==2.21
 pycryptodome==3.19.1
-pyflakes==2.3.1
+pyflakes==3.4.0
 pyjks==20.0.0
 pyparsing==3.0.9
 pytest==6.2.5
