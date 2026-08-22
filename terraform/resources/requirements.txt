@@ -42,7 +42,7 @@ protobuf==4.24.4
 py==1.10.0
 pyasn1==0.4.8
 pycodestyle==2.7.0
-pycparser==2.21
+pycparser==3.0
 pycryptodome==3.19.1
 pyflakes==2.3.1
 pyjks==20.0.0
