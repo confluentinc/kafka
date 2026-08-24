@@ -50,7 +50,10 @@ Jenkinsfile   (CK-only; usually doesn't exist upstream so it won't even show as 
 ```
 
 **Never auto-resolve a conflict outside this list, and never trust the list blindly** — always
-look at the actual conflict hunk first (see Step 3).
+look at the actual conflict hunk first (see Step 3). The override list above is one *known*
+conflict shape, not the only one that can occur. Anything else is an **unknown conflict**: stop
+and get the user's input on how to resolve it (see Step 3) rather than guessing or reusing the
+version-upgrade rationale for something it doesn't apply to.
 
 ## Step 1 — Determine branches to check
 
@@ -116,24 +119,36 @@ cd "<scratchpad-dir>/ak-ck-merge-$NODOT"
 git merge "apache-kafka/$AK_BRANCH"
 ```
 
-This will conflict. For **each** conflicting file:
+This will conflict. Go file by file and keep a running note of *how* each one was resolved — you
+need that record verbatim for the commit message and PR body later, so don't paraphrase it away.
+
+For **each** conflicting file:
 1. Look at the hunk: `grep -n -A2 -B2 '^<<<<<<<\|^=======\|^>>>>>>>' <file>`.
 2. If it's on the known-override list above **and** the hunk shows only a version/snapshot string
-   differing (nothing else): `git checkout --ours -- <file> && git add <file>`.
-3. Otherwise — **stop**. Do not guess. Show the user the hunk and ask how to resolve it, or hand
-   the worktree over for them to resolve manually.
+   differing (nothing else): `git checkout --ours -- <file> && git add <file>`, and note it as
+   `<file> - kept CK version (ignore AK version bump)`.
+3. Otherwise, this is an **unknown conflict** — do not guess, and do not label it with the
+   version-upgrade rationale, because that's very likely not what's actually happening. Stop and
+   ask the user how to resolve it: show them the hunk (AskUserQuestion works well if there's a
+   short menu of sensible resolutions — keep ours/keep theirs/manual edit — otherwise just ask in
+   conversation). Resolve it exactly as they direct, `git add` it, and note it as
+   `<file> - <one-line summary of what the user actually decided>`, in their own terms — not a
+   restatement of the version-upgrade note.
 
-Once every conflict is staged, commit with a message matching house convention exactly:
+Once every conflict is staged and noted, build the `Conflicts:` block from that per-file record —
+**every file gets its own resolution note; never write one blanket line covering all of them**.
+If every conflict genuinely was the known version-bump pattern, the block will end up looking like
+PR #2076's; that's a consequence of what actually happened, not a template to fill in by default.
+Commit with a message matching house convention:
 
 ```bash
 git commit -m "$(cat <<EOF
 Merge remote-tracking branch 'apache-kafka/$AK_BRANCH' into ccs/$CK_BRANCH
 
 Conflicts:
-	<file1>
-	<file2>
-	...
-	- ignore AK version upgrades
+	<file1> - kept CK version (ignore AK version bump)
+	<file2> - kept CK version (ignore AK version bump)
+	<file3> - <actual resolution for this one, only if it differed>
 EOF
 )"
 ```
@@ -192,14 +207,13 @@ gh pr create --repo confluentinc/kafka \
   --title "Merge remote-tracking branch 'apache-kafka/$AK_BRANCH' into ccs/$CK_BRANCH" \
   --body "$(cat <<EOF
 Conflicts:
-	<file1>
-	<file2>
-	...
-	- ignore AK version upgrades
+$CONFLICTS_BLOCK
 EOF
 )"
 ```
-Report the PR URL back to the user.
+`$CONFLICTS_BLOCK` is the exact same per-file resolution record you built for the commit message
+in Step 3 — reuse it verbatim, don't re-derive or re-summarize it. Report the PR URL back to the
+user.
 
 ## Step 6 — Cleanup
 
@@ -213,7 +227,9 @@ git worktree remove "<scratchpad-dir>/ak-ck-merge-$NODOT"
   same six files, CK side `8.4.0-0-ccs`, AK side `4.4.0`.
 - [PR #2076](https://github.com/confluentinc/kafka/pull/2076): manual merge of `apache-kafka/4.3`
   into `ccs/4.3` on 2026-06-30, same six-file conflict list, head branch `omkreddy-26-Jun30-43-1`,
-  base `4.3`, no labels, body is just the `Conflicts:` block.
+  base `4.3`, no labels. Its body is just the file list plus one blanket "ignore AK version
+  upgrades" line — that's correct *there* because all six conflicts really were that pattern, not
+  because the note is a fixed part of the template (see Step 3).
 
 ## Notes
 
