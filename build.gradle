@@ -319,6 +319,7 @@ if (repo != null) {
         'CONTRIBUTING.md',
         'PULL_REQUEST_TEMPLATE.md',
         '.github/**',
+        '.claude/**',
         'gradlew',
         'gradlew.bat',
         'gradle/wrapper/gradle-wrapper.properties',
