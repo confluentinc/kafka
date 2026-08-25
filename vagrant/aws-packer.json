@@ -36,7 +36,9 @@
       "distro": "{{user `linux_distro`}}",
       "cflt_managed_by": "iac",
       "cflt_managed_id": "kafka",
-      "cflt_service": "kafka-system-test"
+      "cflt_service": "kafka-system-test",
+      "cflt_environment": "devel",
+      "cflt_partition": "operational-tools"
     },
     "tags": {
       "Owner": "ce-kafka",
@@ -46,12 +48,28 @@
       "CreatedBy": "kafka-system-test",
       "cflt_managed_by": "iac",
       "cflt_managed_id": "kafka",
-      "cflt_service": "kafka-system-test"
+      "cflt_service": "kafka-system-test",
+      "cflt_environment": "devel",
+      "cflt_partition": "operational-tools"
+    },
+    "snapshot_tags": {
+      "Owner": "ce-kafka",
+      "Service": "ce-kafka",
+      "Type": "Base",
+      "role": "ce-kafka",
+      "CreatedBy": "kafka-system-test",
+      "cflt_managed_by": "iac",
+      "cflt_managed_id": "kafka",
+      "cflt_service": "kafka-system-test",
+      "cflt_environment": "devel",
+      "cflt_partition": "operational-tools"
     },
     "run_volume_tags": {
       "cflt_managed_by": "iac",
       "cflt_managed_id": "kafka",
-      "cflt_service": "kafka-system-test"
+      "cflt_service": "kafka-system-test",
+      "cflt_environment": "devel",
+      "cflt_partition": "operational-tools"
     },
     "launch_block_device_mappings": [{
       "device_name": "/dev/sda1",
