@@ -439,6 +439,77 @@ public class GroupCoordinatorShardCompactionReplayTest {
     }
 
     /**
+     * Streams -> classic offline downgrade. Related bugs: KAFKA-19862, KAFKA-20254
+     *
+     * WARNING: this test currently FAILS and is kept only as a record of a compaction-safety gap in the
+     * streams group deletion path. GroupMetadataManager.replay(StreamsGroupMetadataKey, null) rejects the
+     * group-delete tombstone with "did not receive StreamsGroupTargetAssignmentMetadataValue tombstone"
+     * (the assignmentEpoch != -1 check) unless the StreamsGroupTargetAssignmentMetadata tombstone was also
+     * replayed. Because the streams initial rebalance delay writes StreamsGroupMetadata before any target
+     * assignment, a concurrent-compaction window can retain the group-delete tombstone (its early value
+     * survives) while compacting away the target-assignment-metadata tombstone, so the load throws. This
+     * is the same class of bug as KAFKA-19862; the consumer group deletion path has no such check. The
+     * test should pass once the streams loader check is softened, at which point it can move to the main
+     * branch.
+     *
+     * Scenario:
+     *  Streams group created and rebalanced
+     *  Streams offset commit
+     *  Group is shut down (all members leave), leaving an empty streams group
+     *  Group restarts with the classic protocol, tombstoning the streams group
+     */
+    @Test
+    public void testStreamsGroupOfflineDowngradeToClassicGroup() throws Exception {
+        String groupId = "streams-downgrade-group";
+
+        // A streams group is created and members join and rebalance.
+        String streamsMemberA = Uuid.randomUuid().toString();
+        replay.prepareStreamsAssignment(Map.of(streamsMemberA, replay.tasks(0, 1, 2, 3, 4, 5)));
+        Map<String, StreamsMemberState> members = new LinkedHashMap<>();
+        replay.joinStreamsMember(groupId, streamsMemberA, "process-a", members);
+        replay.completeStreamsGroupRebalance(groupId, members);
+        assertEquals(Group.GroupType.STREAMS, replay.groupType(groupId));
+
+        // Offset commit
+        replay.commitOffset(groupId, FOO_TOPIC_NAME, 0, 10L);
+
+        // Member B joins and the group rebalances.
+        String streamsMemberB = Uuid.randomUuid().toString();
+        replay.prepareStreamsAssignment(Map.of(
+            streamsMemberA, replay.tasks(0, 1, 2),
+            streamsMemberB, replay.tasks(3, 4, 5)));
+        replay.waitForAssignmentInterval();
+        replay.joinStreamsMember(groupId, streamsMemberB, "process-b", members);
+        replay.completeStreamsGroupRebalance(groupId, members);
+
+        // The group is shut down for offline downgrade to classic. Both members leave, one at a time,
+        // leaving an empty streams group.
+        replay.prepareStreamsAssignment(Map.of(streamsMemberB, replay.tasks(0, 1, 2, 3, 4, 5)));
+        replay.waitForAssignmentInterval();
+        replay.leaveStreamsMember(groupId, streamsMemberA, members);
+        replay.completeStreamsGroupRebalance(groupId, members);
+        replay.leaveStreamsMember(groupId, streamsMemberB, members);
+
+        // Group restarts with the classic protocol. The leftover streams group is tombstoned.
+        JoinGroupResponseData joinResponseA = replay.joinFirstClassicMember(groupId);
+        assertEquals(Group.GroupType.CLASSIC, replay.groupType(groupId));
+        String classicMemberA = joinResponseA.memberId();
+        replay.syncClassicMember(groupId, classicMemberA, joinResponseA.generationId(), Map.of(
+            classicMemberA, List.of(
+                new TopicPartition(FOO_TOPIC_NAME, 0),
+                new TopicPartition(FOO_TOPIC_NAME, 1),
+                new TopicPartition(FOO_TOPIC_NAME, 2),
+                new TopicPartition(FOO_TOPIC_NAME, 3),
+                new TopicPartition(FOO_TOPIC_NAME, 4),
+                new TopicPartition(FOO_TOPIC_NAME, 5))
+        ));
+        replay.commitOffset(groupId, FOO_TOPIC_NAME, 1, 20L);
+
+        // Verify partitions can be reloaded cleanly from log.
+        assertCompactedVariantsLoadCleanly();
+    }
+
+    /**
      * Replays every compacted variant of the captured log through a fresh coordinator and asserts that
      * each one loads without throwing. Each variant cleans a single contiguous window of record batches,
      * modelling the three ways a load can observe compaction:
