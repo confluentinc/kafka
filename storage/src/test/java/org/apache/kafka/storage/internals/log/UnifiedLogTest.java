@@ -3142,6 +3142,37 @@ public class UnifiedLogTest {
     }
 
     /**
+     * End-to-end produce-path enforcement of the per-record decompressed-body-size limit
+     * (max.decompressed.message.bytes): a record that is tiny gzip-compressed on the wire (well
+     * under max.message.bytes) but whose declared decompressed body exceeds the configured limit is
+     * rejected as an invalid record before the body is allocated. A small compressed record and an
+     * equally-large uncompressed record are unaffected.
+     */
+    @Test
+    public void testAppendCompressedRecordExceedingMaxDecompressedMessageBytesIsRejected() throws IOException {
+        LogConfig logConfig = new LogTestUtils.LogConfigBuilder()
+                .maxDecompressedMessageBytes(100)
+                .build();
+        log = createLog(logDir, logConfig);
+
+        MemoryRecords oversizedCompressed = MemoryRecords.withRecords(Compression.gzip().build(),
+                new SimpleRecord("key".getBytes(), new byte[1000]));
+        InvalidRecordException e = assertThrows(InvalidRecordException.class,
+                () -> log.appendAsLeader(oversizedCompressed, 0));
+        assertTrue(e.getMessage().contains("exceeds the configured maximum record size"),
+                "expected the configured-maximum guard, got: " + e.getMessage());
+        assertEquals(0, log.logEndOffset(), "a rejected record must not be appended");
+
+        // The limit bounds only the decompressed per-record body; uncompressed records are bounded
+        // on the wire by max.message.bytes.
+        log.appendAsLeader(MemoryRecords.withRecords(Compression.gzip().build(),
+                new SimpleRecord("key".getBytes(), new byte[64])), 0);
+        log.appendAsLeader(MemoryRecords.withRecords(Compression.NONE,
+                new SimpleRecord("key".getBytes(), new byte[1000])), 0);
+        assertEquals(2, log.logEndOffset());
+    }
+
+    /**
      * We have a max size limit on message appends, check that it is properly enforced by appending a message larger than the
      * setting and checking that an exception is thrown.
      */

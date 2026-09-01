@@ -241,6 +241,15 @@ public interface RecordBatch extends Iterable<Record> {
     CloseableIterator<Record> streamingIterator(BufferSupplier decompressionBufferSupplier);
 
     /**
+     * Variant of {@link #streamingIterator(BufferSupplier)} that rejects any record whose declared
+     * (decompressed) body size exceeds {@code maxRecordBodySize} before allocating the body buffer.
+     * The single-argument overload passes {@link Records#SOFT_MAX_ARRAY_LENGTH} (no effective limit).
+     *
+     * @return The closeable iterator
+     */
+    CloseableIterator<Record> streamingIterator(BufferSupplier decompressionBufferSupplier, int maxRecordBodySize);
+
+    /**
      * Check whether this is a control batch (i.e. whether the control bit is set in the batch attributes).
      * For magic versions prior to 2, this is always false.
      *

@@ -138,7 +138,17 @@ public class MemoryRecords extends AbstractRecords {
      * @return A FilterResult with a summary of the output (for metrics) and potentially an overflow buffer
      */
     public FilterResult filterTo(RecordFilter filter, ByteBuffer destinationBuffer, BufferSupplier decompressionBufferSupplier) {
-        return filterTo(batches(), filter, destinationBuffer, decompressionBufferSupplier);
+        return filterTo(filter, destinationBuffer, decompressionBufferSupplier, Records.SOFT_MAX_ARRAY_LENGTH);
+    }
+
+    /**
+     * Variant of {@link #filterTo(RecordFilter, ByteBuffer, BufferSupplier)} that rejects any record whose declared
+     * (decompressed) body size exceeds {@code maxRecordBodySize}. The overload without the configured limit decodes
+     * with {@link Records#SOFT_MAX_ARRAY_LENGTH} (no effective limit).
+     */
+    public FilterResult filterTo(RecordFilter filter, ByteBuffer destinationBuffer, BufferSupplier decompressionBufferSupplier,
+                                 int maxRecordBodySize) {
+        return filterTo(batches(), filter, destinationBuffer, decompressionBufferSupplier, maxRecordBodySize);
     }
 
     /**
@@ -146,7 +156,8 @@ public class MemoryRecords extends AbstractRecords {
      * to the delete horizon of the tombstones or txn markers which are present in the batch.
      */
     private static FilterResult filterTo(Iterable<MutableRecordBatch> batches, RecordFilter filter,
-                                         ByteBuffer destinationBuffer, BufferSupplier decompressionBufferSupplier) {
+                                         ByteBuffer destinationBuffer, BufferSupplier decompressionBufferSupplier,
+                                         int maxRecordBodySize) {
         FilterResult filterResult = new FilterResult(destinationBuffer);
         SingleByteBufferOutputStream bufferOutputStream = new SingleByteBufferOutputStream(destinationBuffer);
         for (MutableRecordBatch batch : batches) {
@@ -160,7 +171,7 @@ public class MemoryRecords extends AbstractRecords {
                 continue;
 
             final BatchFilterResult iterationResult = filterBatch(batch, decompressionBufferSupplier, filterResult,
-                filter);
+                filter, maxRecordBodySize);
             List<Record> retainedRecords = iterationResult.retainedRecords;
             boolean containsTombstones = iterationResult.containsTombstones;
             boolean writeOriginalBatch = iterationResult.writeOriginalBatch;
@@ -217,8 +228,9 @@ public class MemoryRecords extends AbstractRecords {
     private static BatchFilterResult filterBatch(RecordBatch batch,
                                                  BufferSupplier decompressionBufferSupplier,
                                                  FilterResult filterResult,
-                                                 RecordFilter filter) {
-        try (final CloseableIterator<Record> iterator = batch.streamingIterator(decompressionBufferSupplier)) {
+                                                 RecordFilter filter,
+                                                 int maxRecordBodySize) {
+        try (final CloseableIterator<Record> iterator = batch.streamingIterator(decompressionBufferSupplier, maxRecordBodySize)) {
             long maxOffset = -1;
             boolean containsTombstones = false;
             // Convert records with old record versions

@@ -1156,7 +1156,7 @@ public class UnifiedLog implements AutoCloseable {
                                         config().messageTimestampBeforeMaxMs,
                                         config().messageTimestampAfterMaxMs,
                                         leaderEpoch,
-                                        origin
+                                        origin, config().maxDecompressedMessageBytes()
                                 );
                                 LogValidator.ValidationResult validateAndOffsetAssignResult = validator.validateMessagesAndAssignOffsets(offset,
                                         validatorMetricsRecorder,
