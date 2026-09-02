@@ -55,3 +55,9 @@ variable "security_group" {
   description = "security group id"
   default = "sg-03364f9fef903b17d"
 }
+
+variable "kst_tags" {
+  type        = map(string)
+  default     = {}
+  description = "Per-run kst-* cost-classification tags (DPA-2804), merged into default_tags by the provider."
+}
