@@ -55,6 +55,18 @@ conflict shape, not the only one that can occur. Anything else is an **unknown c
 and get the user's input on how to resolve it (see Step 3) rather than guessing or reusing the
 version-upgrade rationale for something it doesn't apply to.
 
+**A second conflict shape worth recognizing (still not auto-resolvable): third-party dependency
+pins.** CK sometimes bumps a shared dependency (jetty, lz4, jackson, ...) independently of AK, via
+its own internal security process (Jira project `KSECURITY`, e.g. "KSECURITY-2864: bump lz4 to
+1.11.1"), usually to land a CVE fix ahead of upstream. If AK later bumps the *same* dependency
+further (a normal `KAFKA-...` hygiene commit), you get a real conflict on that line — but it's
+**not** the identity-version-string pattern above, so the "keep CK version" override never applies
+here either. Don't guess: `git blame`/`git log -- <file>` on the CK side to see whether the
+CK value traces to a `KSECURITY-*` commit (it'll name the CVE), compare that to what the AK-side
+bump commit says, and put both in front of the user — whether AK's version is strictly newer than
+CK's pin is relevant context, but not something to decide unilaterally, since it's a security
+judgment call.
+
 ## Step 1 — Determine branches to check
 
 If the user gave an explicit branch or pasted a Semaphore job/workflow URL, use just that.
@@ -62,8 +74,16 @@ Otherwise derive the tracked set from `confluentinc/kafka`:
 
 ```bash
 git fetch origin --prune
-git ls-remote --heads origin | grep -oE '[0-9]+\.[0-9]+$' | sort -t. -k1,1n -k2,2n | tail -4
+git ls-remote --heads origin | awk '{print $2}' | sed 's#refs/heads/##' \
+  | grep -E '^[0-9]+\.[0-9]+$' | sort -t. -k1,1n -k2,2n | tail -4
 ```
+Anchor the regex to the **full** branch name (`^...$`), not just a trailing match — this fork also
+carries other branches that merely *end* in `N.M` (old CP/date-tagged branches, feature branches),
+and a suffix-only grep (e.g. `grep -oE '[0-9]+\.[0-9]+$'` on the raw `ls-remote` line) pulls in
+false positives like `10.1`, `11.0`, `21.4` that aren't release branches at all. Verified on this
+repo on 2026-09-04: suffix-match top-4 was `10.1 10.2 11.0 21.4` (garbage); full-name-match top-4
+was the real `4.1 4.2 4.3 4.4`.
+
 Tracked set = `master` + those four. For each, `AK_BRANCH` = `trunk` if `CK_BRANCH == master`,
 else identical to `CK_BRANCH`.
 
@@ -230,6 +250,16 @@ git worktree remove "<scratchpad-dir>/ak-ck-merge-$NODOT"
   base `4.3`, no labels. Its body is just the file list plus one blanket "ignore AK version
   upgrades" line — that's correct *there* because all six conflicts really were that pattern, not
   because the note is a fixed part of the template (see Step 3).
+- [PR #2158](https://github.com/confluentinc/kafka/pull/2158): manual merge of `apache-kafka/4.2`
+  into `ccs/4.2` on 2026-09-04 — the dependency-pin conflict shape, not the identity-version-string
+  one. Conflicts were in `LICENSE-binary` and `gradle/dependencies.gradle`: CK had pinned
+  `jetty` to `12.0.36` (KSECURITY-2859/2796/2844/2845/2846/2848, multiple jetty CVEs) and `lz4` to
+  `1.11.1` (KSECURITY-2864, CVE-2026-59949) via its own security-bump commits; AK's `4.2` branch
+  had since bumped the same libs further, to `12.0.37` (KAFKA-20840) and `1.11.2` (KAFKA-20936).
+  Asked the user rather than guessing; they chose to take AK's newer versions both times (a strictly
+  newer patch release of a lib CK had pinned for a CVE should carry that fix forward, and holding
+  at CK's exact pin would just re-conflict on every future sync). Head branch
+  `omkreddy-26-Sep4-42-1`, base `4.2`.
 
 ## Notes
 
