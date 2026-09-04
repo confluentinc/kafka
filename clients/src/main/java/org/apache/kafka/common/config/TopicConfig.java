@@ -140,11 +140,13 @@ public class TopicConfig {
     public static final String MAX_DECOMPRESSED_MESSAGE_BYTES_DOC = "The maximum decompressed size, in bytes, of a " +
         "single record the broker will accept; larger records are rejected with an " +
         "<code>InvalidRecordException</code>. It is enforced where the broker decompresses records: produce " +
-        "validation of compressed batches and log compaction. Unlike <code>max.message.bytes</code>, which bounds " +
-        "the compressed batch on the wire, this bounds the decompressed size of an individual record. Lowering it " +
-        "below the size of already-stored records makes compaction of affected partitions fail until it is raised " +
-        "again. The default imposes no limit beyond the largest record the broker could allocate anyway; set a " +
-        "smaller value to enforce a per-record cap.";
+        "validation of compressed batches, log compaction, and offset lookups by timestamp or max timestamp against " +
+        "the local log or remote storage. " +
+        "Unlike <code>max.message.bytes</code>, which bounds the compressed batch on the wire, this bounds the " +
+        "decompressed size of an individual record. Lowering it below the size of already-stored records makes " +
+        "compaction and timestamp offset lookups of affected partitions fail until it is raised again. The " +
+        "default imposes no limit beyond the largest record the broker could allocate anyway; set a smaller value " +
+        "to enforce a per-record cap.";
 
     public static final String INDEX_INTERVAL_BYTES_CONFIG = "index.interval.bytes";
     public static final String INDEX_INTERVAL_BYTES_DOC = "This setting controls how frequently Kafka " +

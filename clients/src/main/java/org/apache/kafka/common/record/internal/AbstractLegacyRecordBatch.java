@@ -313,13 +313,12 @@ public abstract class AbstractLegacyRecordBatch extends AbstractRecordBatch impl
                 throw new CorruptRecordException(String.format("Record size is less than the minimum record overhead (%d)", LegacyRecord.RECORD_OVERHEAD_V0));
             if (size > maxMessageSize)
                 throw new CorruptRecordException(String.format("Record size exceeds the largest allowable message size (%d).", maxMessageSize));
-            // The maxMessageSize guard above is bypassed on the compressed deep-decode path, which
-            // constructs this stream with maxMessageSize = Integer.MAX_VALUE. Reject, before
-            // allocating, any inner record whose declared size exceeds the configured per-record
-            // maximum. maxRecordBodySize never exceeds SOFT_MAX_ARRAY_LENGTH (the default here, and
-            // the config's upper bound), so this also stops an adversarial inner size from
-            // triggering an OutOfMemoryError (see the equivalent guard in DefaultRecord for the
-            // V2 format).
+            // The maxMessageSize check above does not bound the allocation on the compressed deep-decode
+            // path, where maxMessageSize can be up to Integer.MAX_VALUE. Reject, before allocating, any
+            // inner record whose declared size exceeds the configured per-record maximum. maxRecordBodySize
+            // never exceeds SOFT_MAX_ARRAY_LENGTH (the default here, and the config's upper bound), so this
+            // also stops an adversarial inner size from triggering an OutOfMemoryError (see the equivalent
+            // guard in DefaultRecord for the V2 format).
             if (size > maxRecordBodySize)
                 throw new InvalidRecordException("Invalid record size: " + size +
                     " exceeds the configured maximum record size of " + maxRecordBodySize + ".");

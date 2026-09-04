@@ -134,7 +134,6 @@ public class ServerConfigs {
     public static final ConfigDef CONFIG_DEF =  new ConfigDef()
             .define(BROKER_ID_CONFIG, INT, BROKER_ID_DEFAULT, HIGH, BROKER_ID_DOC)
             .define(MESSAGE_MAX_BYTES_CONFIG, INT, ServerLogConfigs.MAX_MESSAGE_BYTES_DEFAULT, atLeast(0), HIGH, MESSAGE_MAX_BYTES_DOC)
-            .defineInternal(TopicConfig.MAX_DECOMPRESSED_MESSAGE_BYTES_CONFIG, INT, ServerLogConfigs.MAX_DECOMPRESSED_MESSAGE_BYTES_DEFAULT, between(1, Records.SOFT_MAX_ARRAY_LENGTH), MEDIUM, TopicConfig.MAX_DECOMPRESSED_MESSAGE_BYTES_DOC)
             .define(NUM_IO_THREADS_CONFIG, INT, NUM_IO_THREADS_DEFAULT, atLeast(1), HIGH, NUM_IO_THREADS_DOC)
             .define(NUM_REPLICA_ALTER_LOG_DIRS_THREADS_CONFIG, INT, null, HIGH, NUM_REPLICA_ALTER_LOG_DIRS_THREADS_DOC)
             .define(BACKGROUND_THREADS_CONFIG, INT, BACKGROUND_THREADS_DEFAULT, atLeast(1), HIGH, BACKGROUND_THREADS_DOC)
@@ -164,5 +163,7 @@ public class ServerConfigs {
             // This indicates whether unreleased APIs should be advertised by this node.
             .defineInternal(UNSTABLE_API_VERSIONS_ENABLE_CONFIG, BOOLEAN, false, HIGH)
             // This indicates whether unreleased MetadataVersions should be enabled on this node.
-            .defineInternal(UNSTABLE_FEATURE_VERSIONS_ENABLE_CONFIG, BOOLEAN, false, HIGH);
+            .defineInternal(UNSTABLE_FEATURE_VERSIONS_ENABLE_CONFIG, BOOLEAN, false, HIGH)
+            // Bounds the declared decompressed size of a single record wherever the broker decompresses records.
+            .defineInternal(TopicConfig.MAX_DECOMPRESSED_MESSAGE_BYTES_CONFIG, INT, ServerLogConfigs.MAX_DECOMPRESSED_MESSAGE_BYTES_DEFAULT, between(1, Records.SOFT_MAX_ARRAY_LENGTH), MEDIUM, TopicConfig.MAX_DECOMPRESSED_MESSAGE_BYTES_DOC);
 }

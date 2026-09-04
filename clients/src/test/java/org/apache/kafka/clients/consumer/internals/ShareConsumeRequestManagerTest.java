@@ -58,6 +58,7 @@ import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.record.internal.DefaultRecordBatch;
 import org.apache.kafka.common.record.internal.MemoryRecords;
+import org.apache.kafka.common.record.internal.Records;
 import org.apache.kafka.common.record.internal.MemoryRecordsBuilder;
 import org.apache.kafka.common.record.internal.Record;
 import org.apache.kafka.common.record.internal.RecordBatch;
@@ -2061,7 +2062,7 @@ public class ShareConsumeRequestManagerTest {
             protected boolean shouldRetainRecord(RecordBatch recordBatch, Record record) {
                 return record.key() != null;
             }
-        }, ByteBuffer.allocate(1024), BufferSupplier.NO_CACHING);
+        }, ByteBuffer.allocate(1024), BufferSupplier.NO_CACHING, Records.SOFT_MAX_ARRAY_LENGTH);
         result.outputBuffer().flip();
         MemoryRecords compactedRecords = MemoryRecords.readableRecords(result.outputBuffer());
 

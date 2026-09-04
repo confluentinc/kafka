@@ -1509,7 +1509,7 @@ public class UnifiedLogTest {
             public boolean shouldRetainRecord(RecordBatch recordBatch, Record record) {
                 return !record.hasKey();
             }
-        }, filtered, BufferSupplier.NO_CACHING);
+        }, filtered, BufferSupplier.NO_CACHING, Records.SOFT_MAX_ARRAY_LENGTH);
         filtered.flip();
         MemoryRecords filteredRecords = MemoryRecords.readableRecords(filtered);
 
@@ -1561,7 +1561,7 @@ public class UnifiedLogTest {
             @Override public boolean shouldRetainRecord(RecordBatch recordBatch, Record record) {
                 return false;
             }
-        }, filtered, BufferSupplier.NO_CACHING);
+        }, filtered, BufferSupplier.NO_CACHING, Records.SOFT_MAX_ARRAY_LENGTH);
         filtered.flip();
         MemoryRecords filteredRecords = MemoryRecords.readableRecords(filtered);
 
@@ -1614,7 +1614,7 @@ public class UnifiedLogTest {
             @Override public boolean shouldRetainRecord(RecordBatch recordBatch, Record record) {
                 return !record.hasKey();
             }
-        }, filtered, BufferSupplier.NO_CACHING);
+        }, filtered, BufferSupplier.NO_CACHING, Records.SOFT_MAX_ARRAY_LENGTH);
         filtered.flip();
         MemoryRecords filteredRecords = MemoryRecords.readableRecords(filtered);
 
@@ -6141,5 +6141,54 @@ public class UnifiedLogTest {
         assertTrue(exception.getMessage().contains("smaller than the last seen epoch"));
         assertTrue(exception.getMessage().contains(String.valueOf(originalEpoch)));
         assertTrue(exception.getMessage().contains(String.valueOf(bumpedEpoch)));
+    }
+
+
+    @Test
+    public void testFetchOffsetByTimestampRejectsCompressedRecordExceedingMaxDecompressedMessageBytes() throws IOException {
+        LogConfig logConfig = new LogTestUtils.LogConfigBuilder()
+                .maxDecompressedMessageBytes(100)
+                .build();
+        log = createLog(logDir, logConfig);
+        long firstTimestamp = mockTime.milliseconds();
+        long secondTimestamp = firstTimestamp + 1;
+        Compression gzip = Compression.gzip().build();
+        // appendAsFollower bypasses produce validation, so the oversized record becomes durable
+        log.appendAsFollower(MemoryRecords.withRecords(0L, gzip, 0,
+                new SimpleRecord(firstTimestamp, "key".getBytes(), new byte[10])), 0);
+        log.appendAsFollower(MemoryRecords.withRecords(1L, gzip, 0,
+                new SimpleRecord(secondTimestamp, "key".getBytes(), new byte[1000])), 0);
+
+        // A lookup that only decompresses the small record succeeds
+        assertEquals(new OffsetResultHolder(new FileRecords.TimestampAndOffset(firstTimestamp, 0L, Optional.of(0))),
+                log.fetchOffsetByTimestamp(firstTimestamp, Optional.empty()));
+        // A lookup that has to decompress the oversized record is rejected before its body is allocated
+        InvalidRecordException e = assertThrows(InvalidRecordException.class,
+                () -> log.fetchOffsetByTimestamp(secondTimestamp, Optional.empty()));
+        assertTrue(e.getMessage().contains("exceeds the configured maximum record size of 100"), e.getMessage());
+    }
+
+    @Test
+    public void testFetchOffsetByMaxTimestampRejectsCompressedRecordExceedingMaxDecompressedMessageBytes() throws IOException {
+        LogConfig logConfig = new LogTestUtils.LogConfigBuilder()
+                .maxDecompressedMessageBytes(100)
+                .build();
+        log = createLog(logDir, logConfig);
+        long firstTimestamp = mockTime.milliseconds();
+        Compression gzip = Compression.gzip().build();
+        // appendAsFollower bypasses produce validation, so the oversized records become durable
+        log.appendAsFollower(MemoryRecords.withRecords(0L, gzip, 0,
+                new SimpleRecord(firstTimestamp, "key".getBytes(), new byte[1000])), 0);
+        log.appendAsFollower(MemoryRecords.withRecords(1L, gzip, 0,
+                new SimpleRecord(firstTimestamp + 1, "key".getBytes(), new byte[10])), 0);
+        // Resolving MAX_TIMESTAMP only decompresses the batch holding the max timestamp, here the small one
+        assertEquals(new OffsetResultHolder(new FileRecords.TimestampAndOffset(firstTimestamp + 1, 1L, Optional.of(0))),
+                log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP, Optional.empty()));
+        // Once the oversized batch holds the max timestamp, the lookup is rejected before its body is allocated
+        log.appendAsFollower(MemoryRecords.withRecords(2L, gzip, 0,
+                new SimpleRecord(firstTimestamp + 2, "key".getBytes(), new byte[1000])), 0);
+        InvalidRecordException e = assertThrows(InvalidRecordException.class,
+                () -> log.fetchOffsetByTimestamp(ListOffsetsRequest.MAX_TIMESTAMP, Optional.empty()));
+        assertTrue(e.getMessage().contains("exceeds the configured maximum record size of 100"), e.getMessage());
     }
 }

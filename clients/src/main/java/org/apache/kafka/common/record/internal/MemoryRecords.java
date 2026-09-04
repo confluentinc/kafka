@@ -128,6 +128,9 @@ public class MemoryRecords extends AbstractRecords {
     /**
      * Filter the records into the provided ByteBuffer.
      *
+     * Note: This method is also used to convert the first timestamp of the batch (which is usually the timestamp of the first record)
+     * to the delete horizon of the tombstones or txn markers which are present in the batch.
+     *
      * @param filter                      The filter function
      * @param destinationBuffer           The byte buffer to write the filtered records to
      * @param decompressionBufferSupplier The supplier of ByteBuffer(s) used for decompression if supported. For small
@@ -135,32 +138,17 @@ public class MemoryRecords extends AbstractRecords {
      *                                    dominate the cost of decompressing and iterating over the records in the
      *                                    batch. As such, a supplier that reuses buffers will have a significant
      *                                    performance impact.
+     * @param maxRecordBodySize           The maximum declared (decompressed) body size of a single record; a record
+     *                                    exceeding it is rejected with an {@link org.apache.kafka.common.InvalidRecordException}
+     *                                    before its body is allocated. Pass {@link Records#SOFT_MAX_ARRAY_LENGTH} for
+     *                                    no limit beyond the array-length ceiling.
      * @return A FilterResult with a summary of the output (for metrics) and potentially an overflow buffer
-     */
-    public FilterResult filterTo(RecordFilter filter, ByteBuffer destinationBuffer, BufferSupplier decompressionBufferSupplier) {
-        return filterTo(filter, destinationBuffer, decompressionBufferSupplier, Records.SOFT_MAX_ARRAY_LENGTH);
-    }
-
-    /**
-     * Variant of {@link #filterTo(RecordFilter, ByteBuffer, BufferSupplier)} that rejects any record whose declared
-     * (decompressed) body size exceeds {@code maxRecordBodySize}. The overload without the configured limit decodes
-     * with {@link Records#SOFT_MAX_ARRAY_LENGTH} (no effective limit).
      */
     public FilterResult filterTo(RecordFilter filter, ByteBuffer destinationBuffer, BufferSupplier decompressionBufferSupplier,
                                  int maxRecordBodySize) {
-        return filterTo(batches(), filter, destinationBuffer, decompressionBufferSupplier, maxRecordBodySize);
-    }
-
-    /**
-     * Note: This method is also used to convert the first timestamp of the batch (which is usually the timestamp of the first record)
-     * to the delete horizon of the tombstones or txn markers which are present in the batch.
-     */
-    private static FilterResult filterTo(Iterable<MutableRecordBatch> batches, RecordFilter filter,
-                                         ByteBuffer destinationBuffer, BufferSupplier decompressionBufferSupplier,
-                                         int maxRecordBodySize) {
         FilterResult filterResult = new FilterResult(destinationBuffer);
         SingleByteBufferOutputStream bufferOutputStream = new SingleByteBufferOutputStream(destinationBuffer);
-        for (MutableRecordBatch batch : batches) {
+        for (MutableRecordBatch batch : batches()) {
             final BatchRetentionResult batchRetentionResult = filter.checkBatchRetention(batch);
             final boolean containsMarkerForEmptyTxn = batchRetentionResult.containsMarkerForEmptyTxn;
             final BatchRetention batchRetention = batchRetentionResult.batchRetention;

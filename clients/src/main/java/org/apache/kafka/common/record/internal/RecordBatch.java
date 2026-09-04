@@ -262,12 +262,15 @@ public interface RecordBatch extends Iterable<Record> {
      * noted:
      * 1) that the earliest offset will return if there are multi records having same (max) timestamp
      * 2) it always returns None if the {@link RecordBatch#magic()} is equal to {@link RecordBatch#MAGIC_VALUE_V0}
+     * @param maxRecordBodySize The maximum declared (decompressed) body size of a single record; a compressed record
+     *                          exceeding it is rejected with an InvalidRecordException before its body is allocated.
+     *                          Pass {@link Records#SOFT_MAX_ARRAY_LENGTH} for no limit beyond the array-length ceiling.
      * @return offset of max timestamp
      */
-    default Optional<Long> offsetOfMaxTimestamp() {
+    default Optional<Long> offsetOfMaxTimestamp(int maxRecordBodySize) {
         if (magic() == RecordBatch.MAGIC_VALUE_V0) return Optional.empty();
         long maxTimestamp = maxTimestamp();
-        try (CloseableIterator<Record> iter = streamingIterator(BufferSupplier.create())) {
+        try (CloseableIterator<Record> iter = streamingIterator(BufferSupplier.create(), maxRecordBodySize)) {
             while (iter.hasNext()) {
                 Record record = iter.next();
                 if (maxTimestamp == record.timestamp()) return Optional.of(record.offset());

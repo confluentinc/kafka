@@ -44,6 +44,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Stream;
 
@@ -639,6 +640,19 @@ public class DefaultRecordBatchTest {
             assertTrue(ex.getMessage().contains("exceeds the configured maximum record size"),
                 "expected the configured-maximum guard, got: " + ex.getMessage());
         }
+    }
+
+    // offsetOfMaxTimestamp decompresses the batch on the broker when it resolves ListOffsets MAX_TIMESTAMP to an
+    // exact offset, so it honours the same per-record limit as the compressed iterators.
+    @Test
+    public void testOffsetOfMaxTimestampEnforcesConfiguredMaxRecordBodySize() {
+        DefaultRecordBatch batch = recordBatchWithValueSize(1000);
+
+        assertEquals(Optional.of(0L), batch.offsetOfMaxTimestamp(10_000));
+
+        InvalidRecordException ex = assertThrows(InvalidRecordException.class, () -> batch.offsetOfMaxTimestamp(100));
+        assertTrue(ex.getMessage().contains("exceeds the configured maximum record size"),
+            "expected the configured-maximum guard, got: " + ex.getMessage());
     }
 
     private static DefaultRecordBatch recordBatchWithValueSize(int valueSize) {
