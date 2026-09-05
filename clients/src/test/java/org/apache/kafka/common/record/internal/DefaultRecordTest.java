@@ -105,7 +105,7 @@ public class DefaultRecordTest {
         // test for input stream input
         try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buffer.asReadOnlyBuffer())) {
             assertThrows(InvalidRecordException.class,
-                () -> DefaultRecord.readFrom(inpStream, baseOffset, baseTimestamp, baseSequence, null));
+                () -> DefaultRecord.readFrom(inpStream, baseOffset, baseTimestamp, baseSequence, null, Records.SOFT_MAX_ARRAY_LENGTH));
         }
         // test for buffer input
         assertThrows(InvalidRecordException.class,
@@ -471,7 +471,7 @@ public class DefaultRecordTest {
 
         // test for input stream input
         try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buffer.asReadOnlyBuffer())) {
-            DefaultRecord record = DefaultRecord.readFrom(inpStream, baseOffset, baseTimestamp, RecordBatch.NO_SEQUENCE, null);
+            DefaultRecord record = DefaultRecord.readFrom(inpStream, baseOffset, baseTimestamp, RecordBatch.NO_SEQUENCE, null, Records.SOFT_MAX_ARRAY_LENGTH);
             assertNotNull(record);
             assertEquals(RecordBatch.NO_SEQUENCE, record.sequence());
         }
@@ -526,7 +526,7 @@ public class DefaultRecordTest {
         byte[] rec = recordWithForgedBodySize(declaredBodySize);
         try (InputStream in = new ByteBufferInputStream(ByteBuffer.wrap(rec))) {
             InvalidRecordException ex = assertThrows(InvalidRecordException.class,
-                () -> DefaultRecord.readFrom(in, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+                () -> DefaultRecord.readFrom(in, 0L, 0L, RecordBatch.NO_SEQUENCE, null, Records.SOFT_MAX_ARRAY_LENGTH));
             assertTrue(ex.getMessage().contains(expectedMessage),
                 "expected '" + expectedMessage + "', got: " + ex.getMessage());
         }
@@ -543,7 +543,7 @@ public class DefaultRecordTest {
         byte[] rec = recordWithForgedBodySize(declaredBodySize);
         try (InputStream in = new ByteBufferInputStream(ByteBuffer.wrap(rec))) {
             InvalidRecordException ex = assertThrows(InvalidRecordException.class,
-                () -> DefaultRecord.readPartiallyFrom(in, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+                () -> DefaultRecord.readPartiallyFrom(in, 0L, 0L, RecordBatch.NO_SEQUENCE, null, Records.SOFT_MAX_ARRAY_LENGTH));
             assertTrue(ex.getMessage().contains(expectedMessage),
                 "expected '" + expectedMessage + "', got: " + ex.getMessage());
         }
@@ -602,7 +602,7 @@ public class DefaultRecordTest {
     private static void assertPartiallyDecodingRecordsFromBufferThrowsInvalidRecordException(ByteBuffer buf) throws IOException {
         try (InputStream inputStream = new ByteBufferInputStream(buf)) {
             assertThrows(InvalidRecordException.class,
-                () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+                () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null, Records.SOFT_MAX_ARRAY_LENGTH));
         }
     }
 
@@ -610,7 +610,7 @@ public class DefaultRecordTest {
         // test for input stream input
         try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buf.asReadOnlyBuffer())) {
             assertThrows(InvalidRecordException.class,
-                () -> DefaultRecord.readFrom(inpStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+                () -> DefaultRecord.readFrom(inpStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null, Records.SOFT_MAX_ARRAY_LENGTH));
         }
         // test for buffer input
         assertThrows(InvalidRecordException.class,

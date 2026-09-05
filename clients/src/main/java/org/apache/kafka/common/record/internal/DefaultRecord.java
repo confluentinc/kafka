@@ -277,19 +277,11 @@ public class DefaultRecord implements Record {
         return result;
     }
 
-    public static DefaultRecord readFrom(InputStream input,
-                                         long baseOffset,
-                                         long baseTimestamp,
-                                         int baseSequence,
-                                         Long logAppendTime) throws IOException {
-        return readFrom(input, baseOffset, baseTimestamp, baseSequence, logAppendTime, Records.SOFT_MAX_ARRAY_LENGTH);
-    }
-
     /**
      * Decode a record from the (decompressed) stream, rejecting any record whose declared body size
      * exceeds {@code maxRecordBodySize} before allocating the body buffer. Callers that do not
-     * enforce a configured limit use the overload without it, which passes
-     * {@link Records#SOFT_MAX_ARRAY_LENGTH} — effectively the array-length allocation limit.
+     * enforce a configured limit pass {@link Records#SOFT_MAX_ARRAY_LENGTH}, effectively the
+     * array-length allocation limit.
      */
     public static DefaultRecord readFrom(InputStream input,
                                          long baseOffset,
@@ -381,15 +373,6 @@ public class DefaultRecord implements Record {
         } catch (BufferUnderflowException | IllegalArgumentException e) {
             throw new InvalidRecordException("Found invalid record structure", e);
         }
-    }
-
-    public static PartialDefaultRecord readPartiallyFrom(InputStream input,
-                                                         long baseOffset,
-                                                         long baseTimestamp,
-                                                         int baseSequence,
-                                                         Long logAppendTime) throws IOException {
-        return readPartiallyFrom(input, baseOffset, baseTimestamp, baseSequence, logAppendTime,
-            Records.SOFT_MAX_ARRAY_LENGTH);
     }
 
     /**
