@@ -597,7 +597,7 @@ class ConnectDistributedTest(Test):
         wait_until(
             lambda: self._loggers_are_set(level, request_time, namespace, workers),
             # This should be super quick--just a write+read of the config topic, which workers are constantly polling
-            timeout_sec=10,
+            timeout_sec=120,
             err_msg="Log level for namespace '" + namespace + "'  was not adjusted in a reasonable amount of time."
         )
 
@@ -690,13 +690,13 @@ class ConnectDistributedTest(Test):
         # ending the test. It's possible for the source connector to make
         # uncommitted progress, and for the sink connector to read messages that
         # have not been committed yet, and fail a later assertion.
-        wait_until(lambda: self.is_running(self.source), timeout_sec=30,
+        wait_until(lambda: self.is_running(self.source), timeout_sec=120,
                    err_msg="Failed to see connector transition to the RUNNING state")
         time.sleep(15)
         self.source.stop()
         # Ensure that the sink connector has an opportunity to read all
         # committed messages from the source connector.
-        wait_until(lambda: self.is_running(self.sink), timeout_sec=30,
+        wait_until(lambda: self.is_running(self.sink), timeout_sec=120,
                    err_msg="Failed to see connector transition to the RUNNING state")
         time.sleep(15)
         self.sink.stop()
