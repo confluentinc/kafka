@@ -94,6 +94,11 @@ for %%i in ("%BASE_DIR%\libs\*") do (
 	call :concat "%%i"
 )
 
+rem CONFLUENT: classpath addition for releases with LSB-style layout
+for %%i in ("%BASE_DIR%\share\java\kafka\*") do (
+	call :concat "%%i"
+)
+
 rem Classpath addition for core
 for %%i in ("%BASE_DIR%\core\build\libs\kafka_%SCALA_BINARY_VERSION%*.jar") do (
 	call :concat "%%i"
