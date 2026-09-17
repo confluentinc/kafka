@@ -102,7 +102,7 @@ versions += [
   javassist: "3.29.2-GA",
   jetty: "9.4.63",
   jersey: "2.47",
-  jline: "3.25.1",
+  jline: "3.30.17",
   jmh: "1.37",
   hamcrest: "2.2",
   scalaLogging: "3.9.5",
