@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URL;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,13 +59,26 @@ public class JaasOptionsUtils {
     }
 
     public static Map<String, Object> getOptions(String saslMechanism, List<AppConfigurationEntry> jaasConfigEntries) {
-        if (!OAuthBearerLoginModule.OAUTHBEARER_MECHANISM.equals(saslMechanism))
+        validateOAuthMechanismAndNonNullJaasConfig(saslMechanism, jaasConfigEntries);
+        return Collections.unmodifiableMap(jaasConfigEntries.get(0).getOptions());
+    }
+
+    public static void validateOAuthMechanismAndNonNullJaasConfig(
+            String saslMechanism,
+            List<AppConfigurationEntry> jaasConfigEntries
+    ) {
+        if (!OAuthBearerLoginModule.OAUTHBEARER_MECHANISM.equals(saslMechanism)) {
             throw new IllegalArgumentException(String.format("Unexpected SASL mechanism: %s", saslMechanism));
+        }
 
-        if (Objects.requireNonNull(jaasConfigEntries).size() != 1 || jaasConfigEntries.get(0) == null)
-            throw new IllegalArgumentException(String.format("Must supply exactly 1 non-null JAAS mechanism configuration (size was %d)", jaasConfigEntries.size()));
-
-        return Map.copyOf(jaasConfigEntries.get(0).getOptions());
+        if (Objects.requireNonNull(jaasConfigEntries).size() != 1 || jaasConfigEntries.get(0) == null) {
+            throw new IllegalArgumentException(
+                    String.format(
+                            "Must supply exactly 1 non-null JAAS mechanism configuration (size was %d)",
+                            jaasConfigEntries.size()
+                    )
+            );
+        }
     }
 
     public boolean containsKey(String name) {
