@@ -53,7 +53,7 @@ versions += [
   apacheda: "1.0.2",
   apacheds: "2.0.0-M24",
   argparse4j: "0.7.0",
-  bcpkix: "1.78.1",
+  bcpkix: "1.86",
   // Version >=3.1.2 includes an improvement to prevent hash DOS attacks,
   // but currently, tests are failing in >=3.1.2. Therefore, we are temporarily using version 3.1.1.
   // The failing tests should be fixed under KAFKA-18089, allowing us to upgrade to >=3.1.2.
@@ -70,7 +70,7 @@ versions += [
   jackson: "2.18.9",
   jacoco: "0.8.10",
   javassist: "3.29.2-GA",
-  jetty: "12.0.34",
+  jetty: "12.0.39",
   jersey: "3.1.11",
   jline: "3.30.17",
   jmh: "1.37",
