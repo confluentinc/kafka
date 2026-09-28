@@ -1,0 +1,96 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "root"
+  },
+  "metrics": {
+    "namespace": "system-test-ccs-kafka",
+    "aggregation_dimensions": [
+      [
+        "InstanceId"
+      ]
+    ],
+    "append_dimensions": {
+      "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+      "ImageId": "${aws:ImageId}",
+      "InstanceId": "${aws:InstanceId}",
+      "InstanceType": "${aws:InstanceType}"
+    },
+    "metrics_collected": {
+      "cpu": {
+        "append_dimensions": {
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+        },
+        "measurement": [
+          "usage_idle",
+          "usage_iowait",
+          "usage_user"
+        ],
+        "metrics_collection_interval": 60,
+        "totalcpu": true
+      },
+      "disk": {
+        "append_dimensions": {
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+        },
+        "measurement": [
+          "used_percent",
+          "inodes_free"
+        ],
+        "metrics_collection_interval": 60,
+        "resources": [
+          "*"
+        ]
+      },
+      "diskio": {
+        "append_dimensions": {
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+        },
+        "measurement": [
+          "io_time",
+          "write_bytes",
+          "read_bytes",
+          "writes",
+          "reads"
+        ],
+        "metrics_collection_interval": 60,
+        "resources": [
+          "*"
+        ]
+      },
+      "mem": {
+        "append_dimensions": {
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+        },
+        "measurement": [
+          "mem_used_percent"
+        ],
+        "metrics_collection_interval": 60
+      },
+      "netstat": {
+        "append_dimensions": {
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+        },
+        "measurement": [
+          "tcp_established",
+          "tcp_time_wait"
+        ],
+        "metrics_collection_interval": 60
+      },
+      "statsd": {
+        "metrics_aggregation_interval": 60,
+        "metrics_collection_interval": 60,
+        "service_address": ":8125"
+      },
+      "swap": {
+        "append_dimensions": {
+          "SemaphoreJobId": "${SEMAPHORE_JOB_ID}"
+        },
+        "measurement": [
+          "swap_used_percent"
+        ],
+        "metrics_collection_interval": 60
+      }
+    }
+  }
+}
