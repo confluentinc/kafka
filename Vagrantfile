@@ -31,6 +31,8 @@ num_workers = 0 # Generic workers that get the code, but don't start any service
 ram_megabytes = 1280
 base_box = "ubuntu/trusty64"
 
+semaphore_job_id = ENV['SEMAPHORE_JOB_ID']
+
 # EC2
 ec2_access_key = ENV['AWS_ACCESS_KEY']
 ec2_secret_key = ENV['AWS_SECRET_KEY']
@@ -41,7 +43,6 @@ ec2_keypair_file = nil
 ec2_region = "us-east-1"
 ec2_az = nil # Uses set by AWS
 ec2_ami = "ami-29ebb519"
-ec2_instance_type = "m3.medium"
 ec2_spot_instance = ENV['SPOT_INSTANCE'] ? ENV['SPOT_INSTANCE'] == 'true' : true
 ec2_spot_max_price = "0.113"  # On-demand price for instance type
 ec2_user = "ubuntu"
@@ -51,7 +52,7 @@ ec2_subnet_id = nil
 # Only override this by setting it to false if you're running in a VPC and you
 # are running Vagrant from within that VPC as well.
 ec2_associate_public_ip = nil
-ec2_iam_instance_profile_name = nil
+ec2_iam_instance_profile_name = "semaphore-access"
 
 ebs_volume_type = 'gp3'
 
@@ -63,6 +64,7 @@ if File.exist?(local_config_file) then
   eval(File.read(local_config_file), binding, "Vagrantfile.local")
 end
 
+ec2_instance_type = "c4.xlarge"
 # override any instance type set by Vagrantfile.local or above via an environment variable
 if ENV['INSTANCE_TYPE'] then
   ec2_instance_type = ENV['INSTANCE_TYPE']
@@ -161,7 +163,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     node.vm.provider :aws do |aws|
       aws.tags = {
         'Name' => ec2_instance_name_prefix + "-" + Socket.gethostname + "-" + name,
-        'JenkinsBuildUrl' => ENV['BUILD_URL']
+        'role' => 'ce-kafka',
+        'Owner' => 'ce-kafka',
+        'JenkinsBuildUrl' => ENV['BUILD_URL'],
+        'SemaphoreWorkflowUrl' => ENV['SEMAPHORE_WORKFLOW_URL'],
+        'SemaphoreJobId' => ENV['SEMAPHORE_JOB_ID'],
+        'cflt_environment' => 'devel',
+        'cflt_partition' => 'onprem',
+        'cflt_managed_by' => 'iac',
+        'cflt_managed_id' => 'kafka',
+        'cflt_service' => 'kafka'
       }
     end
   end
@@ -210,6 +221,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       name_node(worker, name, ec2_instance_name_prefix)
       ip_address = "192.168.50." + (100 + i).to_s
       assign_local_ip(worker, ip_address)
+      worker.vm.provision "file", source: "vagrant/cloudwatch-agent-configuration.json", destination: "/tmp/cloudwatch-agent-configuration.json"
+      worker.vm.provision "shell", path: "vagrant/cloudwatch-agent-setup.sh", env: {"SEMAPHORE_JOB_ID" => semaphore_job_id}
       worker.vm.provision "shell", path: "vagrant/base.sh", env: {"JDK_MAJOR" => jdk_major, "JDK_FULL" => jdk_full}
     end
   }

@@ -38,10 +38,12 @@ fetch_jdk_tgz() {
 
 JDK_MAJOR="${JDK_MAJOR:-8}"
 JDK_FULL="${JDK_FULL:-8u202-linux-x64}"
+echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH"
+export DEBIAN_FRONTEND=noninteractive
 
 if [ -z `which javac` ]; then
     apt-get -y update
-    apt-get install -y software-properties-common python-software-properties binutils java-common
+    apt-get install -y software-properties-common binutils java-common
 
     echo "===> Installing JDK..." 
 
@@ -94,7 +96,8 @@ get_kafka() {
 }
 
 # Install Kibosh
-apt-get update -y && apt-get install -y git cmake pkg-config libfuse-dev
+apt-get update -y && apt-get install -y git cmake pkg-config libfuse-dev ca-certificates
+update-ca-certificates --fresh
 pushd /opt
 rm -rf /opt/kibosh
 git clone -q  https://github.com/confluentinc/kibosh.git
@@ -178,7 +181,17 @@ chmod a+rwx /mnt
 
 # Run ntpdate once to sync to ntp servers
 # use -u option to avoid port collision in case ntp daemon is already running
-ntpdate -u pool.ntp.org
+command -v ntpdate >/dev/null 2>&1 && ntpdate -u pool.ntp.org || true
+
+# Force legacy "eth0" NIC naming (jammy/Nitro default ens5; kafka trogdor net-fault tests target eth0). DPA-3043
+if [ -f /etc/default/grub ]; then
+    if grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
+        sed -i 's/^GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 net.ifnames=0 biosdevname=0"/' /etc/default/grub
+    else
+        echo 'GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"' >> /etc/default/grub
+    fi
+    update-grub
+fi
 # Install ntp daemon - it will automatically start on boot
 apt-get -y install ntp
 
