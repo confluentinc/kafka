@@ -608,6 +608,48 @@ public final class Utils {
     }
 
     /**
+     * Create a string representation of an array joined by the given separator
+     * @param strs The array of items
+     * @param separator The separator
+     * @return The string representation.
+     */
+    @Deprecated
+    public static <T> String join(T[] strs, String separator) {
+        return join(Arrays.asList(strs), separator);
+    }
+
+    /**
+     * Create a string representation of a collection joined by the given separator
+     * @param collection The list of items
+     * @param separator The separator
+     * @return The string representation.
+     */
+    @Deprecated
+    public static <T> String join(Collection<T> collection, String separator) {
+        Objects.requireNonNull(collection);
+        return mkString(collection.stream(), "", "", separator);
+    }
+
+    /**
+     * Create a string representation of a stream surrounded by `begin` and `end` and joined by `separator`.
+     *
+     * @return The string representation.
+     */
+    public static <T> String mkString(Stream<T> stream, String begin, String end, String separator) {
+        Objects.requireNonNull(stream);
+        StringBuilder sb = new StringBuilder();
+        sb.append(begin);
+        Iterator<T> iter = stream.iterator();
+        while (iter.hasNext()) {
+            sb.append(iter.next());
+            if (iter.hasNext())
+                sb.append(separator);
+        }
+        sb.append(end);
+        return sb.toString();
+    }
+
+    /**
      *  Converts a {@code Map} class into a string, concatenating keys and values
      *  Example:
      *      {@code mkString({ key: "hello", keyTwo: "hi" }, "|START|", "|END|", "=", ",")
