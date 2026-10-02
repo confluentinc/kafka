@@ -1854,8 +1854,7 @@ public class ReplicationControlManagerTest {
                 () -> replicationControl.createPartitions(requestContext, oneLargePartition)
         );
         assertEquals(
-            "Excessively large number of additional partitions per request: topic 'foo' would bring the " +
-                "total additional partitions in this request to 2147483645, exceeding the maximum of 10000.",
+            "Excessively large number of additional partitions per request.",
             t.getMessage()
         );
 
