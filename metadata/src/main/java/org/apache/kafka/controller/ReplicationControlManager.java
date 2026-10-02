@@ -1240,10 +1240,8 @@ public class ReplicationControlManager {
 
     /**
      * Validates that a batch of partition changes will create at most {@value MAX_PARTITIONS_PER_BATCH} additional partitions.
-     * Exceeding this number of partitions per batch has led to out-of-memory-exceptions.
-     * Validation fails earlier to avoid allocating memory.
      *
-     * @param topics a batch of new partitions to create.
+     * @param topicsToCreate a batch of new partitions to create.
      *
      * @throws PolicyViolationException if total number of partitions exceeds {@value MAX_PARTITIONS_PER_BATCH}.
      */
