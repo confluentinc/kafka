@@ -4497,7 +4497,14 @@ public class GroupMetadataManager {
 
             if (executor.schedule(
                 targetAssignmentUpdateKey,
-                buildTargetAssignment::get,
+                () -> {
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return buildTargetAssignment.get();
+                },
                 (result, exception) -> handleOffloadedConsumerTargetAssignmentResult(
                     groupId,
                     groupEpoch,
@@ -4709,7 +4716,14 @@ public class GroupMetadataManager {
         if (offloadAssignor) {
             if (executor.schedule(
                 targetAssignmentUpdateKey,
-                buildTargetAssignment::get,
+                () -> {
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return buildTargetAssignment.get();
+                },
                 (result, exception) -> handleOffloadedShareTargetAssignmentResult(
                     groupId,
                     groupEpoch,
@@ -4976,7 +4990,14 @@ public class GroupMetadataManager {
 
             if (executor.schedule(
                 targetAssignmentUpdateKey,
-                buildTargetAssignment::get,
+                () -> {
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return buildTargetAssignment.get();
+                },
                 (result, exception) -> handleOffloadedStreamsTargetAssignmentResult(
                     groupId,
                     groupEpoch,
