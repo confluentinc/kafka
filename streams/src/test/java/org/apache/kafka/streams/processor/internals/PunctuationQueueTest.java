@@ -22,6 +22,8 @@ import org.apache.kafka.streams.processor.Punctuator;
 import org.apache.kafka.test.MockProcessorNode;
 import org.junit.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -143,6 +145,27 @@ public class PunctuationQueueTest {
 
         queue.maybePunctuate(now + 200L, PunctuationType.STREAM_TIME, processorNodePunctuator);
         assertEquals(1, node.mockProcessor.punctuatedStreamTime().size());
+        assertFalse(queue.canPunctuate(Long.MAX_VALUE));
+    }
+
+    @Test(timeout = 30_000)
+    public void shouldNotSpinInfinitelyWhenStreamTimeReachesMaxValue() {
+        final PunctuationSchedule sched = new PunctuationSchedule(node, 0L, 100L, punctuator);
+        queue.schedule(sched);
+
+        final AtomicInteger punctuateCount = new AtomicInteger(0);
+        final ProcessorNodePunctuator processorNodePunctuator = (node, timestamp, type, punctuator) -> {
+            // Fail loudly rather than hang the build if the schedule is re-armed and loops.
+            if (punctuateCount.incrementAndGet() > 10) {
+                throw new IllegalStateException(
+                    "maybePunctuate() looped: a single stream-time advance triggered more than 10 punctuations");
+            }
+            punctuator.punctuate(timestamp);
+        };
+
+        queue.maybePunctuate(Long.MAX_VALUE, PunctuationType.STREAM_TIME, processorNodePunctuator);
+
+        assertEquals(1, punctuateCount.get());
         assertFalse(queue.canPunctuate(Long.MAX_VALUE));
     }
 
