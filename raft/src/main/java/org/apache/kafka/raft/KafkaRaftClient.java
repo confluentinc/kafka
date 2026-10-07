@@ -1266,7 +1266,7 @@ public class KafkaRaftClient<T> implements RaftClient<T> {
             return new FetchSnapshotResponseData().setErrorCode(Errors.INCONSISTENT_CLUSTER_ID.code());
         }
 
-        if (data.topics().size() != 1 && data.topics().get(0).partitions().size() != 1) {
+        if (!hasValidTopicPartition(data)) {
             return FetchSnapshotResponse.withTopLevelError(Errors.INVALID_REQUEST);
         }
 
@@ -1370,7 +1370,7 @@ public class KafkaRaftClient<T> implements RaftClient<T> {
             return handleTopLevelError(topLevelError, responseMetadata);
         }
 
-        if (data.topics().size() != 1 && data.topics().get(0).partitions().size() != 1) {
+        if (!hasValidTopicPartition(data)) {
             return false;
         }
 
