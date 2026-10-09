@@ -86,7 +86,9 @@ class LeaderElectionCommandErrorTest {
   def testInvalidBroker(): Unit = {
     val e = assertThrows(classOf[AdminCommandFailedException], () => LeaderElectionCommand.run(
       Array(
-        "--bootstrap-server", "example.com:1234",
+        // RFC 5737 TEST-NET-1 (192.0.2.0/24): a non-routable literal IP, so the test needs no DNS
+        // and still gets a connection timeout (example.com is not resolvable in CI).
+        "--bootstrap-server", "192.0.2.1:9092",
         "--election-type", "unclean",
         "--all-topic-partitions"
       ),
