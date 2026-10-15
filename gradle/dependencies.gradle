@@ -92,7 +92,7 @@ versions += [
   jackson: "2.18.9",
   jacoco: "0.8.10",
   javassist: "3.29.2-GA",
-  // A range rather than a pin. 9.4.59 and later are Webtide patches that only
+  // A range rather than a pin. 9.4.59 and later are patched releases that only
   // internal CodeArtifact carries, so a build without access to it resolves the
   // newest Jetty 9.4 release on Maven Central instead of failing. The upper bound
   // is what holds internal builds on the patched version, so moving to a newer
