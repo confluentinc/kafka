@@ -1298,7 +1298,6 @@ project(':core') {
       // It is safer to use from `apacheds` since that is the implementation.
       exclude module: 'mina-core'
     }
-    testImplementation libs.apachedsCoreApi
     testImplementation (libs.apachedsInterceptorKerberos) {
       exclude module: 'bcprov-jdk15on'
     }
@@ -2873,8 +2872,6 @@ project(':trogdor') {
     implementation libs.jacksonJakartarsJsonProvider
     implementation libs.jerseyContainerServlet
     implementation libs.jerseyHk2
-    implementation libs.jaxbApi // Jersey dependency that was available in the JDK before Java 9
-    implementation libs.activation // Jersey dependency that was available in the JDK before Java 9
     implementation (libs.jettyServer) {
       exclude group: 'org.slf4j', module: 'slf4j-api'
     }
@@ -3897,8 +3894,6 @@ project(':connect:runtime') {
     implementation libs.jacksonJakartarsJsonProvider
     implementation libs.jerseyContainerServlet
     implementation libs.jerseyHk2
-    implementation libs.jaxbApi // Jersey dependency that was available in the JDK before Java 9
-    implementation libs.activation // Jersey dependency that was available in the JDK before Java 9
     implementation (libs.jettyServer) {
       exclude group: 'org.slf4j', module: 'slf4j-api'
     }
@@ -3943,8 +3938,6 @@ project(':connect:runtime') {
     testImplementation project(':test-common:test-common-util')
     testImplementation project(':test-common:test-common-runtime')
     testImplementation project(':raft')
-    testImplementation project(':server-common')
-    testImplementation project(':server')
     testImplementation project(':group-coordinator')
     testImplementation project(':storage')
     testImplementation project(':connect:test-plugins')
@@ -4142,8 +4135,6 @@ project(':connect:mirror') {
     implementation libs.slf4jApi
     implementation libs.jerseyContainerServlet
     implementation libs.jerseyHk2
-    implementation libs.jaxbApi // Jersey dependency that was available in the JDK before Java 9
-    implementation libs.activation // Jersey dependency that was available in the JDK before Java 9
     implementation (libs.jettyServer) {
       exclude group: 'org.slf4j', module: 'slf4j-api'
     }
