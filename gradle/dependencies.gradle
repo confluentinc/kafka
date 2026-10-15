@@ -109,7 +109,12 @@ versions += [
   jackson: "2.18.9",
   jacoco: "0.8.10",
   javassist: "3.29.2-GA",
-  jetty: "9.4.65",
+  // A range rather than a pin. 9.4.59 and later are patched releases that only
+  // internal CodeArtifact carries, so a build without access to it resolves the
+  // newest Jetty 9.4 release on Maven Central instead of failing. The upper bound
+  // is what holds internal builds on the patched version, so moving to a newer
+  // patch means moving the bound with it.
+  jetty: "[9.4.58.v20250814,9.4.66)",
   jersey: "2.39.1",
   jline: "3.30.17",
   jmh: "1.37",
