@@ -11,6 +11,13 @@
 
 set -ex
 
+if [ "${ENABLE_CLOUDWATCH,,}" = "false" ]; then
+  echo "Cloudwatch is disabled, skipping setup"
+  exit 0
+else
+  echo "CloudWatch setup enabled, installing amazon-cloudwatch-agent..."
+fi
+
 architecture=arm64
 arch=$(uname -m)
 
