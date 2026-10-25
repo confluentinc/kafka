@@ -15,6 +15,6 @@
 # limitations under the License.
 #
 
-jira==3.8.0
-jproperties==2.1.1
-PyGithub==2.4.0
+jira==3.10.5
+jproperties==2.1.2
+PyGithub==2.10.0
