@@ -4977,6 +4977,9 @@ public class GroupMetadataManager {
 
         TaskAssignor assignor = streamsGroupAssignor(group.groupId(), true);
 
+        // Use the same metadata image throughout.
+        CoordinatorMetadataImage metadataImage = this.metadataImage;
+
         long groupSpecStartTimeMs = time.milliseconds();
         org.apache.kafka.coordinator.group.api.streams.assignor.GroupSpec groupSpec =
             new org.apache.kafka.coordinator.group.streams.GroupSpecBuilder(assignmentConfigs)
