@@ -170,7 +170,7 @@ versions += [
   zookeeper: "3.8.7",
   // When updating the zstd version, please do as well in docker/native/native-image-configs/resource-config.json
   // Also make sure the compression levels in org.apache.kafka.common.record.CompressionType are still valid
-  zstd: "1.5.6-4",
+  zstd: "1.5.7-14",
   junitPlatform: "1.10.2"
 ]
 
