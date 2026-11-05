@@ -4797,14 +4797,6 @@ public class GroupMetadataManager {
                 return new CoordinatorResult<>(List.of());
             }
 
-            if (shareGroup.assignmentEpoch() >= targetAssignmentEpoch) {
-                // The assignment epoch is already caught up.
-                // Writing this record would backslide it.
-                log.info("[GroupId {}] Discarding stale offloaded target assignment for epoch {} (current assignment epoch is {}).",
-                    groupId, targetAssignmentEpoch, shareGroup.assignmentEpoch());
-                return new CoordinatorResult<>(List.of());
-            }
-
             TargetAssignmentRecordsBuilder<Assignment> assignmentRecordsBuilder =
                 new TargetAssignmentRecordsBuilder.ShareTargetAssignmentRecordsBuilder(log, groupId)
                     .withTargetAssignmentMetadata(result.targetAssignmentMetadata())
