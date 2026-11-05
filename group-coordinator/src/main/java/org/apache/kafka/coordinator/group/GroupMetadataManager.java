@@ -3853,7 +3853,7 @@ public class GroupMetadataManager {
         }
 
         // 1. There is no ongoing refresh for the group.
-        String key = group.groupId() + "-regex";
+        String key = "regex-" + group.groupId();
         if (executor.isScheduled(key)) {
             return updateRegularExpressionStatus;
         }
@@ -10677,7 +10677,7 @@ public class GroupMetadataManager {
      * @return the target assignment update key.
      */
     static String groupTargetAssignmentUpdateKey(String groupId) {
-        return groupId + "-assignor";
+        return "assign-" + groupId;
     }
 
     // Visibility for testing

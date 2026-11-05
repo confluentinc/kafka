@@ -26836,7 +26836,7 @@ public class GroupMetadataManagerTest {
         assertEquals(
             List.of(
                 new MockCoordinatorExecutor.ExecutorResult<>(
-                    groupId + "-regex",
+                    "regex-" + groupId,
                     new CoordinatorResult<>(List.of(
                         // The resolution of the new regex is persisted.
                         GroupCoordinatorRecordHelpers.newConsumerGroupRegularExpressionRecord(
@@ -26943,7 +26943,7 @@ public class GroupMetadataManagerTest {
         assertEquals(1, tasks.size());
 
         MockCoordinatorExecutor.ExecutorResult<CoordinatorRecord> task = tasks.get(0);
-        assertEquals(groupId + "-regex", task.key());
+        assertEquals("regex-" + groupId, task.key());
         assertRecordsEquals(
             List.of(
                 // The resolution of the new regex is persisted.
@@ -27096,7 +27096,7 @@ public class GroupMetadataManagerTest {
         assertRecordsEquals(expectedRecords, result.records());
 
         // The task is scheduled.
-        assertTrue(context.executor.isScheduled(groupId + "-regex"));
+        assertTrue(context.executor.isScheduled("regex-" + groupId));
 
         // The member updates its regex before the resolution of the previous one completes.
         result = context.consumerGroupHeartbeat(
@@ -27137,7 +27137,7 @@ public class GroupMetadataManagerTest {
         assertRecordsEquals(expectedRecords, result.records());
 
         // The task is still scheduled.
-        assertTrue(context.executor.isScheduled(groupId + "-regex"));
+        assertTrue(context.executor.isScheduled("regex-" + groupId));
         assertEquals(1, context.executor.size());
 
         // Execute the pending tasks.
@@ -27146,7 +27146,7 @@ public class GroupMetadataManagerTest {
 
         // The pending task was a no-op.
         MockCoordinatorExecutor.ExecutorResult<CoordinatorRecord> task = tasks.get(0);
-        assertEquals(groupId + "-regex", task.key());
+        assertEquals("regex-" + groupId, task.key());
         assertRecordsEquals(List.of(), task.result().records());
 
         // The member heartbeats again. It triggers a new resolution.
@@ -27165,7 +27165,7 @@ public class GroupMetadataManagerTest {
             result.response()
         );
 
-        assertTrue(context.executor.isScheduled(groupId + "-regex"));
+        assertTrue(context.executor.isScheduled("regex-" + groupId));
         assertEquals(1, context.executor.size());
 
         // Execute pending tasks.
@@ -27173,7 +27173,7 @@ public class GroupMetadataManagerTest {
         assertEquals(1, tasks.size());
 
         task = tasks.get(0);
-        assertEquals(groupId + "-regex", task.key());
+        assertEquals("regex-" + groupId, task.key());
         assertRecordsEquals(
             List.of(
                 // The resolution of the new regex is persisted.
@@ -27283,7 +27283,7 @@ public class GroupMetadataManagerTest {
                 .setMemberEpoch(10));
 
         // The task is NOT scheduled.
-        assertFalse(context.executor.isScheduled(groupId + "-regex"));
+        assertFalse(context.executor.isScheduled("regex-" + groupId));
 
         // Advance past the batching interval.
         context.sleep(11000L);
@@ -27296,7 +27296,7 @@ public class GroupMetadataManagerTest {
                 .setMemberEpoch(10));
 
         // The task is scheduled.
-        assertTrue(context.executor.isScheduled(groupId + "-regex"));
+        assertTrue(context.executor.isScheduled("regex-" + groupId));
 
         // Execute the pending tasks.
         List<MockCoordinatorExecutor.ExecutorResult<CoordinatorRecord>> tasks = context.processTasks();
@@ -27304,7 +27304,7 @@ public class GroupMetadataManagerTest {
 
         // Execute pending tasks.
         MockCoordinatorExecutor.ExecutorResult<CoordinatorRecord> task = tasks.get(0);
-        assertEquals(groupId + "-regex", task.key());
+        assertEquals("regex-" + groupId, task.key());
 
         assertUnorderedRecordsEquals(
             List.of(
@@ -27836,7 +27836,7 @@ public class GroupMetadataManagerTest {
         assertEquals(
             List.of(
                 new MockCoordinatorExecutor.ExecutorResult<>(
-                    groupId + "-regex",
+                    "regex-" + groupId,
                     new CoordinatorResult<>(List.of(
                         // The resolution of the new regex is persisted.
                         GroupCoordinatorRecordHelpers.newConsumerGroupRegularExpressionRecord(
@@ -28059,7 +28059,7 @@ public class GroupMetadataManagerTest {
         assertEquals(
             List.of(
                 new MockCoordinatorExecutor.ExecutorResult<>(
-                    groupId + "-regex",
+                    "regex-" + groupId,
                     new CoordinatorResult<>(List.of(
                         // The resolution of the new regex is persisted.
                         GroupCoordinatorRecordHelpers.newConsumerGroupRegularExpressionRecord(
@@ -28299,7 +28299,7 @@ public class GroupMetadataManagerTest {
         assertEquals(1, tasks.size());
 
         MockCoordinatorExecutor.ExecutorResult<CoordinatorRecord> task = tasks.get(0);
-        assertEquals(groupId + "-regex", task.key());
+        assertEquals("regex-" + groupId, task.key());
         assertRecordsEquals(
             List.of(
                 // The resolution of the new regex is persisted.
@@ -31966,16 +31966,16 @@ public class GroupMetadataManagerTest {
 
         // Assignor and regex resolution are scheduled on executor.
         assertTrue(context.executor.isScheduled(GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId)));
-        assertTrue(context.executor.isScheduled(groupId + "-regex"));
+        assertTrue(context.executor.isScheduled("regex-" + groupId));
 
         // Simulate a failed write to the log.
         context.rollback();
         assertTrue(context.executor.isScheduled(GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId)));
-        assertTrue(context.executor.isScheduled(groupId + "-regex"));
+        assertTrue(context.executor.isScheduled("regex-" + groupId));
 
         // The regex resolution runs and bumps the group epoch to the same value.
         // The stale assignor run is cancelled.
-        context.processTask(groupId + "-regex");
+        context.processTask("regex-" + groupId);
         assertEquals(List.of(GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId)), context.executor.cancelledTasks());
     }
 
