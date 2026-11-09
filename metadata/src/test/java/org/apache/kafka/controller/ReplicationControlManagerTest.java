@@ -1758,7 +1758,7 @@ public class ReplicationControlManagerTest {
         ControllerRequestContext requestContext = anonymousContextFor(ApiKeys.CREATE_PARTITIONS);
 
         // A single extremely large, existing topic should trip the error.
-        List<CreatePartitionsTopic> oneLargePartition = singletonList(
+        List<CreatePartitionsTopic> oneLargePartition = Arrays.asList(
             new CreatePartitionsTopic().
                 setName("foo").
                 setCount(Integer.MAX_VALUE).
@@ -1774,7 +1774,7 @@ public class ReplicationControlManagerTest {
         );
 
         // Negative counts are ignored.
-        List<CreatePartitionsTopic> negativeOnly = singletonList(
+        List<CreatePartitionsTopic> negativeOnly = Arrays.asList(
             new CreatePartitionsTopic().
                 setName("foo").
                 setCount(Integer.MIN_VALUE).
@@ -1783,7 +1783,7 @@ public class ReplicationControlManagerTest {
         ControllerResult<List<CreatePartitionsTopicResult>> r1 =
             replicationControl.createPartitions(requestContext, negativeOnly);
         assertEquals(
-            singletonList(
+            Arrays.asList(
                 new CreatePartitionsTopicResult().
                     setName("foo").
                     setErrorCode(INVALID_PARTITIONS.code()).
@@ -1793,7 +1793,7 @@ public class ReplicationControlManagerTest {
         );
 
         // Negative and positive counts do not sum together.
-        List<CreatePartitionsTopic> positiveAndNegative = asList(
+        List<CreatePartitionsTopic> positiveAndNegative = Arrays.asList(
             new CreatePartitionsTopic().
                 setName("foo").
                 setCount(3).
@@ -1813,7 +1813,7 @@ public class ReplicationControlManagerTest {
         );
 
         // Do not throw if additional partitions exactly equals ReplicationControlManager.MAX_PARTITIONS_PER_BATCH
-        List<CreatePartitionsTopic> exactlyAtLimit = asList(
+        List<CreatePartitionsTopic> exactlyAtLimit = Arrays.asList(
             new CreatePartitionsTopic().
                 setName("foo").
                 setCount(initialPartitions + 1).
@@ -1830,7 +1830,7 @@ public class ReplicationControlManagerTest {
         ControllerResult<List<CreatePartitionsTopicResult>> r2 =
             replicationControl.createPartitions(requestContext, exactlyAtLimit);
         assertEquals(
-            asList(
+            Arrays.asList(
                 new CreatePartitionsTopicResult().
                     setName("foo").
                     setErrorCode(NONE.code()),
@@ -1846,7 +1846,7 @@ public class ReplicationControlManagerTest {
 
         // Topics which do not exist do not count towards the limit.
         // Topics which attempt to reduce the number of partitions do not count towards the total.
-        List<CreatePartitionsTopic> errorResultsDontCount = asList(
+        List<CreatePartitionsTopic> errorResultsDontCount = Arrays.asList(
             new CreatePartitionsTopic().
                 setName("foo").
                 setCount(initialPartitions + ReplicationControlManager.MAX_PARTITIONS_PER_BATCH).
@@ -1859,15 +1859,15 @@ public class ReplicationControlManagerTest {
                 setName("bar").
                 setCount(initialPartitions - 1).
                 setAssignments(
-                    singletonList(
-                        new CreatePartitionsAssignment().setBrokerIds(asList(1, 2))
+                    Arrays.asList(
+                        new CreatePartitionsAssignment().setBrokerIds(Arrays.asList(1, 2))
                     )
                 )
         );
         ControllerResult<List<CreatePartitionsTopicResult>> r3 =
             replicationControl.createPartitions(requestContext, errorResultsDontCount);
         assertEquals(
-            asList(
+            Arrays.asList(
                 new CreatePartitionsTopicResult().
                     setName("foo").
                     setErrorCode(NONE.code()),
