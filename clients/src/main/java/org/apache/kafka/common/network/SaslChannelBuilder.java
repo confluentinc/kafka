@@ -100,6 +100,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
 
     private SslFactory sslFactory;
     private Map<String, ?> configs;
+    private volatile int maxUnsentPostHandshakeMessages;
     private KerberosShortNamer kerberosShortNamer;
 
     public SaslChannelBuilder(ConnectionMode connectionMode,
@@ -144,6 +145,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     public void configure(Map<String, ?> configs) throws KafkaException {
         try {
             this.configs = configs;
+            this.maxUnsentPostHandshakeMessages = SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs);
             if (connectionMode == ConnectionMode.SERVER) {
                 createServerCallbackHandlers(configs);
                 createConnectionsMaxReauthMsMap(configs);
@@ -205,8 +207,10 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
 
     @Override
     public void reconfigure(Map<String, ?> configs) {
-        if (this.securityProtocol == SecurityProtocol.SASL_SSL)
+        if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             sslFactory.reconfigure(configs);
+            this.maxUnsentPostHandshakeMessages = SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs);
+        }
     }
 
     @Override
@@ -268,7 +272,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             return SslTransportLayer.create(id, key,
                 sslFactory.createSslEngine(socketChannel.socket()),
-                metadataRegistry, SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs));
+                metadataRegistry, maxUnsentPostHandshakeMessages);
         } else {
             return new PlaintextTransportLayer(key);
         }

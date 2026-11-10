@@ -33,6 +33,7 @@ import org.apache.kafka.common.config.provider.FileConfigProvider
 import org.apache.kafka.common.config.types.Password
 import org.apache.kafka.common.config.{AbstractConfig, ConfigException, SaslConfigs, SslConfigs}
 import org.apache.kafka.common.metrics.{JmxReporter, Metrics}
+import org.apache.kafka.common.config.internals.BrokerSecurityConfigs
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.raft.QuorumConfig
 import org.apache.kafka.network.SocketServerConfigs
@@ -326,6 +327,22 @@ class DynamicBrokerConfigTest {
   }
 
   @Test
+  def testUnsentPostHandshakeMessageLimitConfig(): Unit = {
+    // The limit on unsent TLS post-handshake messages is read by SslTransportLayer, so unlike the keystore and
+    // truststore configs in DYNAMIC_SECURITY_CONFIGS it can be updated without a listener prefix and at the default
+    // cluster level, as well as per listener.
+    val name = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG
+    Seq(name, s"listener.name.external.$name").foreach { prop =>
+      verifyConfigUpdate(prop, "10", perBrokerConfig = true, expectFailure = false)
+      verifyConfigUpdate(prop, "10", perBrokerConfig = false, expectFailure = false)
+      verifyConfigUpdate(prop, "0", perBrokerConfig = true, expectFailure = true)
+      verifyConfigUpdate(prop, "0", perBrokerConfig = false, expectFailure = true)
+      verifyConfigUpdate(prop, "16385", perBrokerConfig = true, expectFailure = true)
+      verifyConfigUpdate(prop, "16385", perBrokerConfig = false, expectFailure = true)
+    }
+  }
+
+  @Test
   def testConnectionRateQuota(): Unit = {
     verifyConfigUpdate(SocketServerConfigs.MAX_CONNECTION_CREATION_RATE_CONFIG, "110", perBrokerConfig = true, expectFailure = false)
     verifyConfigUpdate(SocketServerConfigs.MAX_CONNECTION_CREATION_RATE_CONFIG, "120", perBrokerConfig = false, expectFailure = false)
@@ -448,6 +465,9 @@ class DynamicBrokerConfigTest {
     when(kafkaServer.config).thenReturn(oldConfig)
 
     props.put(SocketServerConfigs.LISTENERS_CONFIG, "PLAINTEXT://hostname:9092,SASL_PLAINTEXT://hostname:9093")
+    new DynamicListenerConfig(kafkaServer).validateReconfiguration(KafkaConfig(props))
+
+    props.put(s"listener.name.plaintext.${BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG}", "10")
     new DynamicListenerConfig(kafkaServer).validateReconfiguration(KafkaConfig(props))
 
     // it is illegal to update non-reconfiguable configs of existent listeners

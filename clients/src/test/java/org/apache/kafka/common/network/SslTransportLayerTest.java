@@ -1702,11 +1702,17 @@ public class SslTransportLayerTest {
         verifyServerClosesConnectionOnUnsentKeyUpdateResponses(args, 4);
     }
 
-    @Test
-    public void testClientIgnoresMaxUnsentPostHandshakeMessages() {
-        Map<String, Object> configs = Collections.singletonMap(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, "4");
-        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES,
-            SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.CLIENT, configs));
+    @ParameterizedTest
+    @ArgumentsSource(SslTransportLayerArgumentsProvider.class)
+    public void testReconfigureMaxUnsentPostHandshakeMessages(Args args) throws Exception {
+        try (SslChannelBuilder channelBuilder = new SslChannelBuilder(ConnectionMode.SERVER, null, false, new LogContext())) {
+            channelBuilder.configure(args.sslServerConfigs);
+            Map<String, Object> newConfigs = new HashMap<>(args.sslServerConfigs);
+            newConfigs.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, 4);
+            channelBuilder.validateReconfiguration(newConfigs);
+            channelBuilder.reconfigure(newConfigs);
+            assertEquals(4, channelBuilder.maxUnsentPostHandshakeMessages);
+        }
     }
 
     private void verifyServerClosesConnectionOnUnsentKeyUpdateResponses(Args args, int max) throws Exception {

@@ -99,7 +99,8 @@ object DynamicBrokerConfig {
     DynamicProducerStateManagerConfig ++
     DynamicRemoteLogConfig.ReconfigurableConfigs
 
-  private val ClusterLevelListenerConfigs = Set(SocketServerConfigs.MAX_CONNECTIONS_CONFIG, SocketServerConfigs.MAX_CONNECTION_CREATION_RATE_CONFIG, SocketServerConfigs.NUM_NETWORK_THREADS_CONFIG)
+  private val ClusterLevelListenerConfigs = Set(SocketServerConfigs.MAX_CONNECTIONS_CONFIG, SocketServerConfigs.MAX_CONNECTION_CREATION_RATE_CONFIG, SocketServerConfigs.NUM_NETWORK_THREADS_CONFIG,
+    BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG)
   private val PerBrokerConfigs = (DynamicSecurityConfigs ++ DynamicListenerConfig.ReconfigurableConfigs).diff(
     ClusterLevelListenerConfigs)
   private val ListenerMechanismConfigs = Set(SaslConfigs.SASL_JAAS_CONFIG,
@@ -174,7 +175,7 @@ object DynamicBrokerConfig {
   }
 
   private def securityConfigsWithoutListenerPrefix(props: Properties): Set[String] = {
-    DynamicSecurityConfigs.filter(props.containsKey)
+    DynamicSecurityConfigs.filter(props.containsKey).diff(SslConfigs.BROKER_WIDE_RECONFIGURABLE_CONFIGS.asScala)
   }
 
   private[server] def validateConfigTypes(props: Properties): Unit = {
