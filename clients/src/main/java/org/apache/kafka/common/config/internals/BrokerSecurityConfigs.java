@@ -144,6 +144,12 @@ public class BrokerSecurityConfigs {
     public static final String ALLOWED_SASL_OAUTHBEARER_FILES_CONFIG = "org.apache.kafka.sasl.oauthbearer.allowed.files";
     public static final String ALLOWED_SASL_OAUTHBEARER_FILES_DEFAULT = "";
 
+    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG = "ssl.max.unsent.post.handshake.messages";
+    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_DOC = "The maximum number of times the broker can receive "
+        + "TLS post-handshake messages that need a response, such as KeyUpdate, while the responses to earlier ones are still "
+        + "unsent because the peer is not reading them. The connection is closed when this is exceeded.";
+    public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 16;
+
     public static final ConfigDef CONFIG_DEF =  new ConfigDef()
             // General Security Configuration
             .define(BrokerSecurityConfigs.CONNECTIONS_MAX_REAUTH_MS_CONFIG, LONG, BrokerSecurityConfigs.DEFAULT_CONNECTIONS_MAX_REAUTH_MS, MEDIUM, BrokerSecurityConfigs.CONNECTIONS_MAX_REAUTH_MS_DOC)
@@ -175,6 +181,7 @@ public class BrokerSecurityConfigs {
             .define(SslConfigs.SSL_SECURE_RANDOM_IMPLEMENTATION_CONFIG, STRING, null, LOW, SslConfigs.SSL_SECURE_RANDOM_IMPLEMENTATION_DOC)
             .define(SslConfigs.SSL_CIPHER_SUITES_CONFIG, LIST, List.of(), ConfigDef.ValidList.anyNonDuplicateValues(true, false), MEDIUM, SslConfigs.SSL_CIPHER_SUITES_DOC)
             .define(SslConfigs.SSL_ENGINE_FACTORY_CLASS_CONFIG, CLASS, null, LOW, SslConfigs.SSL_ENGINE_FACTORY_CLASS_DOC)
+            .define(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, INT, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES, ConfigDef.Range.atLeast(1), LOW, BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_DOC)
 
             // Sasl Configuration
             .define(BrokerSecurityConfigs.SASL_MECHANISM_INTER_BROKER_PROTOCOL_CONFIG, STRING, SaslConfigs.DEFAULT_SASL_MECHANISM, MEDIUM, BrokerSecurityConfigs.SASL_MECHANISM_INTER_BROKER_PROTOCOL_DOC)
