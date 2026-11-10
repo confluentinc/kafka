@@ -20,6 +20,7 @@ import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SecurityConfig;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.ConnectionMode;
 import org.apache.kafka.common.security.TestSecurityConfig;
@@ -45,6 +46,7 @@ import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -251,6 +253,27 @@ public abstract class SslFactoryTest {
         // Verify that the builder is not recreated if modification time cannot be determined
         keyStoreFile.setLastModified(System.currentTimeMillis() + 20000);
         Files.delete(keyStoreFile.toPath());
+        sslFactory.reconfigure(newSslConfig);
+        assertSame(sslEngineFactory, sslFactory.sslEngineFactory(), "SslEngineFactory recreated unnecessarily");
+    }
+
+    /**
+     * Tests that changing only the limit on unsent TLS post-handshake messages, which SslTransportLayer reads, does not
+     * recreate the SslEngineFactory, which would reload the keystore and truststore.
+     */
+    @Test
+    public void testReconfigurationOfUnsentPostHandshakeMessageLimit() throws Exception {
+        File trustStoreFile = TestUtils.tempFile("truststore", ".jks");
+        Map<String, Object> sslConfig = sslConfigsBuilder(ConnectionMode.SERVER)
+                .createNewTrustStore(trustStoreFile)
+                .build();
+        SslFactory sslFactory = new SslFactory(ConnectionMode.SERVER);
+        sslFactory.configure(sslConfig);
+        SslEngineFactory sslEngineFactory = sslFactory.sslEngineFactory();
+
+        Map<String, Object> newSslConfig = new HashMap<>(sslConfig);
+        newSslConfig.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, 7);
+        sslFactory.validateReconfiguration(newSslConfig);
         sslFactory.reconfigure(newSslConfig);
         assertSame(sslEngineFactory, sslFactory.sslEngineFactory(), "SslEngineFactory recreated unnecessarily");
     }

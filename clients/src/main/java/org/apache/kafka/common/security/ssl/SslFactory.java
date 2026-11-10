@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -53,6 +54,10 @@ import javax.net.ssl.SSLException;
 
 public class SslFactory implements Reconfigurable, Closeable {
     private static final Logger log = LoggerFactory.getLogger(SslFactory.class);
+    // Reconfigurable SSL configs read by SslTransportLayer rather than the SslEngineFactory, so changing only these
+    // must not rebuild the SslEngineFactory, which reloads the keystore and truststore.
+    private static final Set<String> TRANSPORT_LAYER_CONFIGS = Set.of(
+            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG);
 
     private final ConnectionMode connectionMode;
     private final String clientAuthConfigOverride;
@@ -152,7 +157,9 @@ public class SslFactory implements Reconfigurable, Closeable {
             throw new IllegalStateException("SslFactory has not been configured.");
         }
         Map<String, Object> nextConfigs = new HashMap<>(sslEngineFactoryConfig);
-        copyMapEntries(nextConfigs, newConfigs, reconfigurableConfigs());
+        Set<String> engineReconfigurableConfigs = new HashSet<>(reconfigurableConfigs());
+        engineReconfigurableConfigs.removeAll(TRANSPORT_LAYER_CONFIGS);
+        copyMapEntries(nextConfigs, newConfigs, engineReconfigurableConfigs);
         if (clientAuthConfigOverride != null) {
             nextConfigs.put(BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG, clientAuthConfigOverride);
         }

@@ -17,6 +17,7 @@
 package org.apache.kafka.common.network;
 
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.memory.MemoryPool;
@@ -46,7 +47,7 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     private Map<String, ?> configs;
     private SslPrincipalMapper sslPrincipalMapper;
     // Visible for testing
-    int maxUnsentPostHandshakeMessages;
+    volatile int maxUnsentPostHandshakeMessages;
 
     /**
      * Constructs an SSL channel builder. ListenerName is provided only
@@ -89,6 +90,7 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     @Override
     public void reconfigure(Map<String, ?> configs) {
         sslFactory.reconfigure(configs);
+        this.maxUnsentPostHandshakeMessages = maxUnsentPostHandshakeMessages(connectionMode, configs);
     }
 
     @Override
@@ -128,10 +130,15 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
 
     static int maxUnsentPostHandshakeMessages(ConnectionMode connectionMode, Map<String, ?> configs) {
         // Clients don't define the config, so a value set there is unparsed.
-        Object value = configs.get(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG);
+        String config = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG;
+        Object value = configs.get(config);
         if (connectionMode == ConnectionMode.CLIENT || value == null)
             return BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES;
-        return (Integer) value;
+        int max = (Integer) value;
+        int limit = BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES;
+        if (max < 1 || max > limit)
+            throw new ConfigException(config, max, "Value must be between 1 and " + limit);
+        return max;
     }
 
     /**
