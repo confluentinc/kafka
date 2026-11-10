@@ -46,6 +46,8 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     private SslFactory sslFactory;
     private Map<String, ?> configs;
     private SslPrincipalMapper sslPrincipalMapper;
+    // Visible for testing
+    int maxUnsentPostHandshakeMessages;
 
     /**
      * Constructs an SSL channel builder. ListenerName is provided only
@@ -68,6 +70,7 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
                 sslPrincipalMapper = SslPrincipalMapper.fromRules(sslPrincipalMappingRules);
             this.sslFactory = new SslFactory(connectionMode, null, isInterBrokerListener);
             this.sslFactory.configure(this.configs);
+            this.maxUnsentPostHandshakeMessages = maxUnsentPostHandshakeMessages(connectionMode, configs);
         } catch (KafkaException e) {
             throw e;
         } catch (Exception e) {
@@ -122,7 +125,15 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     protected SslTransportLayer buildTransportLayer(SslFactory sslFactory, String id, SelectionKey key, ChannelMetadataRegistry metadataRegistry) throws IOException {
         SocketChannel socketChannel = (SocketChannel) key.channel();
         return SslTransportLayer.create(id, key, sslFactory.createSslEngine(socketChannel.socket()),
-            metadataRegistry);
+            metadataRegistry, maxUnsentPostHandshakeMessages);
+    }
+
+    static int maxUnsentPostHandshakeMessages(ConnectionMode connectionMode, Map<String, ?> configs) {
+        // Clients don't define the config, so a value set there is unparsed.
+        Object value = configs.get(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG);
+        if (connectionMode == ConnectionMode.CLIENT || value == null)
+            return BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES;
+        return (Integer) value;
     }
 
     /**

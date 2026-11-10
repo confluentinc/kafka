@@ -1447,7 +1447,7 @@ public class SslTransportLayerTest {
             private final AtomicInteger numDelayedFlushesRemaining;
 
             public TestSslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine) {
-                super(channelId, key, sslEngine, new DefaultChannelMetadataRegistry());
+                super(channelId, key, sslEngine, new DefaultChannelMetadataRegistry(), maxUnsentPostHandshakeMessages);
                 this.netReadBufSize = new ResizeableBufferSize(netReadBufSizeOverride);
                 this.netWriteBufSize = new ResizeableBufferSize(netWriteBufSizeOverride);
                 this.appBufSize = new ResizeableBufferSize(appBufSizeOverride);
@@ -1689,8 +1689,28 @@ public class SslTransportLayerTest {
     @ParameterizedTest
     @ArgumentsSource(SslTransportLayerArgumentsProvider.class)
     public void testServerClosesConnectionOnUnsentKeyUpdateResponses(Args args) throws Exception {
+        verifyServerClosesConnectionOnUnsentKeyUpdateResponses(args, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES);
+    }
+
+    /**
+     * Tests that the limit on unsent responses to TLSv1.3 post-handshake messages can be configured.
+     */
+    @ParameterizedTest
+    @ArgumentsSource(SslTransportLayerArgumentsProvider.class)
+    public void testServerClosesConnectionOnConfiguredUnsentKeyUpdateResponses(Args args) throws Exception {
+        args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, 4);
+        verifyServerClosesConnectionOnUnsentKeyUpdateResponses(args, 4);
+    }
+
+    @Test
+    public void testClientIgnoresMaxUnsentPostHandshakeMessages() {
+        Map<String, Object> configs = Collections.singletonMap(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, "4");
+        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES,
+            SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.CLIENT, configs));
+    }
+
+    private void verifyServerClosesConnectionOnUnsentKeyUpdateResponses(Args args, int max) throws Exception {
         AtomicReference<SSLEngine> serverEngine = new AtomicReference<>();
-        int max = SslTransportLayer.MAX_UNSENT_POST_HANDSHAKE_RESPONSES;
         boolean renegotiation = !args.tlsProtocol.equals("TLSv1.3");
         assertEquals(renegotiation, sendKeyUpdates(args, true, serverEngine, max + 1));
         assertTrue(sendKeyUpdates(args, true, serverEngine, max + 2));
@@ -1704,7 +1724,7 @@ public class SslTransportLayerTest {
     @ArgumentsSource(SslTransportLayerArgumentsProvider.class)
     public void testServerResetsUnsentKeyUpdateResponsesOnWrite(Args args) throws Exception {
         AtomicReference<SSLEngine> serverEngine = new AtomicReference<>();
-        int max = SslTransportLayer.MAX_UNSENT_POST_HANDSHAKE_RESPONSES;
+        int max = BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES;
         boolean renegotiation = !args.tlsProtocol.equals("TLSv1.3");
         assertEquals(renegotiation, sendKeyUpdates(args, true, serverEngine, max + 1, max));
     }

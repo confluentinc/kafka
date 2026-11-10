@@ -268,7 +268,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             return SslTransportLayer.create(id, key,
                 sslFactory.createSslEngine(socketChannel.socket()),
-                metadataRegistry);
+                metadataRegistry, SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs));
         } else {
             return new PlaintextTransportLayer(key);
         }

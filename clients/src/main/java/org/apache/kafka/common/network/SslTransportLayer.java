@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.common.network;
 
+import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.errors.SslAuthenticationException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.ByteBufferUnmapper;
@@ -73,9 +74,6 @@ public class SslTransportLayer implements TransportLayer {
     }
 
     private static final String TLS13 = "TLSv1.3";
-    // Responses to TLSv1.3 post-handshake messages, such as KeyUpdate, that may be pending while earlier output is
-    // unsent. The JDK engine keeps a response per message rather than coalescing them.
-    static final int MAX_UNSENT_POST_HANDSHAKE_RESPONSES = 16;
 
     private final String channelId;
     private final SSLEngine sslEngine;
@@ -93,17 +91,27 @@ public class SslTransportLayer implements TransportLayer {
     private ByteBuffer appReadBuffer;
     private ByteBuffer fileChannelBuffer;
     private boolean hasBytesBuffered;
+    // Bounds the responses to TLSv1.3 post-handshake messages, such as KeyUpdate, that may be pending while earlier
+    // output is unsent. The JDK engine keeps a response per message rather than coalescing them.
+    private final int maxUnsentPostHandshakeResponses;
     private int unsentPostHandshakeResponses;
 
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
-                                           ChannelMetadataRegistry metadataRegistry) throws IOException {
-        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry);
+                                           ChannelMetadataRegistry metadataRegistry,
+                                           int maxUnsentPostHandshakeResponses) throws IOException {
+        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry, maxUnsentPostHandshakeResponses);
     }
 
     // Prefer `create`, only use this in tests
     SslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine,
                       ChannelMetadataRegistry metadataRegistry) {
+        this(channelId, key, sslEngine, metadataRegistry, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES);
+    }
+
+    SslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine,
+                      ChannelMetadataRegistry metadataRegistry, int maxUnsentPostHandshakeResponses) {
         this.channelId = channelId;
+        this.maxUnsentPostHandshakeResponses = maxUnsentPostHandshakeResponses;
         this.key = key;
         this.socketChannel = (SocketChannel) key.channel();
         this.sslEngine = sslEngine;
@@ -671,7 +679,7 @@ public class SslTransportLayer implements TransportLayer {
         HandshakeStatus status = HandshakeStatus.NEED_WRAP;
         while (status == HandshakeStatus.NEED_WRAP) {
             if (!flush(netWriteBuffer)) {
-                if (++unsentPostHandshakeResponses > MAX_UNSENT_POST_HANDSHAKE_RESPONSES) {
+                if (++unsentPostHandshakeResponses > maxUnsentPostHandshakeResponses) {
                     log.debug("Closing channel {} since the peer is not reading responses to TLS post-handshake messages", channelId);
                     throw new SSLException("Too many unsent responses to TLS post-handshake messages");
                 }
