@@ -15,7 +15,7 @@
 
 import re
 
-from ducktape.mark import parametrize
+from ducktape.mark import ignore, parametrize
 from ducktape.mark.resource import cluster
 from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
