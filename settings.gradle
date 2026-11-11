@@ -18,40 +18,27 @@ plugins {
     id 'com.gradle.common-custom-user-data-gradle-plugin' version '2.0.2'
 }
 
-def isGithubActions = System.getenv('GITHUB_ACTIONS') != null
-def currentJvm = JavaVersion.current()
+// CONFLUENT
+// Due to licensing issues with Gradle Enterprise, we must disable the enterprise features here. 
+// When merging changes to develocity from AK, ensure we keep these features disabled.
+// See more discussion here https://github.com/apache/kafka/pull/13676#issuecomment-1599025907
 
 develocity {
-    server = "https://develocity.apache.org"
-    projectId = "kafka"
     buildScan {
-        uploadInBackground = !isGithubActions
-        publishing.onlyIf { it.authenticated }
-        obfuscation {
-            // This obfuscates the IP addresses of the build machine in the build scan.
-            // Alternatively, the build scan will provide the hostname for troubleshooting host-specific issues.
-            ipAddresses { addresses -> addresses.collect { address -> "0.0.0.0"} }
+        publishing.onlyIf { false }
+    }
+
+    buildCache {
+        local {
+            enabled = false
         }
-        if (isGithubActions) {
-            tag "github"
-        } else {
-            tag "local"
+
+        remote(develocity.buildCache) {
+            enabled = false
         }
-        tag "JDK$currentJvm"
     }
 }
 
-buildCache {
-    local {
-        // This allows the build cache to be used locally or on GitHub Actions.
-        // Using the cache on GH should be safe since each job is run on a new VM
-        enabled = true
-    }
-
-    remote(develocity.buildCache) {
-        enabled = false
-    }
-}
 
 include 'clients',
     'connect:api',
