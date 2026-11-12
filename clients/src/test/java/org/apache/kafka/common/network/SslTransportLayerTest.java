@@ -2167,13 +2167,33 @@ public class SslTransportLayerTest {
         AtomicReference<SSLEngineResult.HandshakeStatus> serverHandshakeStatus = new AtomicReference<>();
         AtomicBoolean serverHasPendingWrites = new AtomicBoolean();
         AtomicLong serverBytesWritten = new AtomicLong();
-        assertNull(sendRecordsStartingKeyUpdates(false, serverHandshakeStatus, serverHasPendingWrites,
+        assertNull(sendRecordsStartingKeyUpdates(false, false, serverHandshakeStatus, serverHasPendingWrites,
             serverBytesWritten, maxDeferred - 1));
         assertEquals(SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING, serverHandshakeStatus.get());
         assertTrue(serverHasPendingWrites.get());
         assertEquals(0, serverBytesWritten.get());
-        assertNull(sendRecordsStartingKeyUpdates(false, serverHandshakeStatus, serverHasPendingWrites,
+        assertNull(sendRecordsStartingKeyUpdates(false, false, serverHandshakeStatus, serverHasPendingWrites,
             serverBytesWritten, maxDeferred));
+        assertFalse(serverHasPendingWrites.get());
+        assertTrue(serverBytesWritten.get() > 0);
+    }
+
+    /**
+     * Tests that a server sends a TLSv1.3 KeyUpdate its SSL engine starts once while reading a record with data, as the
+     * JDK does at {@code jdk.tls.keyLimits} once fixed, while it has no data of its own to send, once it reads half the
+     * limit on unsent messages of records with data after it, but not before.
+     */
+    @Test
+    public void testServerSendsKeyUpdateStartedOnceOnReadWithoutDataToSend() throws Exception {
+        int maxDeferred = MAX_UNSENT_POST_HANDSHAKE_MESSAGES / 2;
+        AtomicBoolean serverHasPendingWrites = new AtomicBoolean();
+        AtomicLong serverBytesWritten = new AtomicLong();
+        assertNull(sendRecordsStartingKeyUpdates(false, true, new AtomicReference<>(), serverHasPendingWrites,
+            serverBytesWritten, maxDeferred));
+        assertTrue(serverHasPendingWrites.get());
+        assertEquals(0, serverBytesWritten.get());
+        assertNull(sendRecordsStartingKeyUpdates(false, true, new AtomicReference<>(), serverHasPendingWrites,
+            serverBytesWritten, maxDeferred + 1));
         assertFalse(serverHasPendingWrites.get());
         assertTrue(serverBytesWritten.get() > 0);
     }
@@ -2185,7 +2205,7 @@ public class SslTransportLayerTest {
      */
     @Test
     public void testServerKeepsConnectionOnKeyUpdatesStartedOnReadWhileReading() throws Exception {
-        assertNull(sendRecordsStartingKeyUpdates(false, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
+        assertNull(sendRecordsStartingKeyUpdates(false, false, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
             4 * MAX_UNSENT_POST_HANDSHAKE_MESSAGES));
     }
 
@@ -2196,10 +2216,10 @@ public class SslTransportLayerTest {
     @Test
     public void testServerClosesConnectionOnKeyUpdatesStartedOnReadWhileNotReading() throws Exception {
         int max = MAX_UNSENT_POST_HANDSHAKE_MESSAGES;
-        assertNull(sendRecordsStartingKeyUpdates(true, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
+        assertNull(sendRecordsStartingKeyUpdates(true, false, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
             max));
         SSLException closeCause = assertInstanceOf(SSLException.class,
-            sendRecordsStartingKeyUpdates(true, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
+            sendRecordsStartingKeyUpdates(true, false, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
                 max + 1));
         assertEquals(SslTransportLayer.UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE, closeCause.getMessage());
     }
@@ -2320,17 +2340,17 @@ public class SslTransportLayerTest {
 
     /**
      * Connects a client to a server over TLSv1.3 whose SSL engine starts a KeyUpdate requesting an update for each
-     * record with data it unwraps, as the JDK does past {@code jdk.tls.keyLimits} until the peer updates its key. Then
-     * bypasses the client's transport layer, which is not polled again, to send {@code records} messages, each in its
-     * own record, and polls the server until it receives them. If {@code blockServerWrites} is set, the server cannot
-     * write to the socket. Sets {@code serverHandshakeStatus} to the server engine's status,
-     * {@code serverBytesWritten} to the bytes the server wrote to the socket while receiving them and
-     * {@code serverHasPendingWrites} to whether the server has output unsent once it receives them, if it did not
-     * close the connection.
+     * record with data it unwraps, as the JDK does past {@code jdk.tls.keyLimits} until the peer updates its key, or
+     * only for the first if {@code startOnce} is set. Then bypasses the client's transport layer, which is not polled
+     * again, to send {@code records} messages, each in its own record, and polls the server until it receives them. If
+     * {@code blockServerWrites} is set, the server cannot write to the socket. Sets {@code serverHandshakeStatus} to the
+     * server engine's status, {@code serverBytesWritten} to the bytes the server wrote to the socket while receiving
+     * them and {@code serverHasPendingWrites} to whether the server has output unsent once it receives them, if it did
+     * not close the connection.
      *
      * @return the exception the server closed the connection with, or null if it did not close it
      */
-    private static Exception sendRecordsStartingKeyUpdates(boolean blockServerWrites,
+    private static Exception sendRecordsStartingKeyUpdates(boolean blockServerWrites, boolean startOnce,
                                                            AtomicReference<SSLEngineResult.HandshakeStatus> serverHandshakeStatus,
                                                            AtomicBoolean serverHasPendingWrites,
                                                            AtomicLong serverBytesWritten,
@@ -2344,6 +2364,8 @@ public class SslTransportLayerTest {
                     result.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING)
                 return result;
             sslEngine.beginHandshake();
+            if (startOnce)
+                startKeyUpdates.set(false);
             return new SSLEngineResult(result.getStatus(), sslEngine.getHandshakeStatus(), result.bytesConsumed(),
                 result.bytesProduced());
         });

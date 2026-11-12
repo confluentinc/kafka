@@ -146,7 +146,8 @@ public class BrokerSecurityConfigs {
 
     public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG = "ssl.max.unsent.post.handshake.messages";
     public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_DOC = "Maximum number of unsent TLS post-handshake messages, such as KeyUpdates. "
-        + "Those caused by records with data wait for the next write until half this many are unsent, and the rest are sent right away. "
+        + "Those caused by records with data wait for the next write until half this many are unsent or records with data are read after them, "
+        + "and the rest are sent right away. "
         + "The connection closes above this. Clients always use the default. Applies to new connections.";
     public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 2048;
     public static final int MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 16384;

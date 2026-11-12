@@ -95,6 +95,8 @@ public class SslTransportLayer implements TransportLayer {
     private final int maxUnsentPostHandshakeMessages;
     // Post-handshake messages wrapped since netWriteBuffer was last fully flushed.
     private int unsentPostHandshakeMessages;
+    // Records with data read while post-handshake messages are unsent.
+    private int recordsReadWithUnsentPostHandshakeMessages;
     private boolean netWriteBufferGrownForPostHandshakeMessages;
 
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
@@ -267,6 +269,7 @@ public class SslTransportLayer implements TransportLayer {
             return false;
         // Callers pass netWriteBuffer, so it is empty and every post-handshake message was sent.
         unsentPostHandshakeMessages = 0;
+        recordsReadWithUnsentPostHandshakeMessages = 0;
         maybeShrinkNetWriteBuffer();
         return true;
     }
@@ -633,8 +636,13 @@ public class SslTransportLayer implements TransportLayer {
 
                 if (unwrapResult.getStatus() == Status.OK) {
                     read += readFromAppBuffer(dst);
-                    if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP)
-                        writePostHandshakeMessages(unwrapResult.bytesProduced() > 0);
+                    boolean hasData = unwrapResult.bytesProduced() > 0;
+                    if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP) {
+                        writePostHandshakeMessages(hasData);
+                    } else if (hasData && unsentPostHandshakeMessages > 0) {
+                        recordsReadWithUnsentPostHandshakeMessages++;
+                        maybeFlushPostHandshakeMessages(true);
+                    }
                 } else if (unwrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
                     int currentApplicationBufferSize = applicationBufferSize();
                     appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
@@ -682,8 +690,9 @@ public class SslTransportLayer implements TransportLayer {
     /**
      * Wraps the TLSv1.3 post-handshake messages the engine produces while reading, such as KeyUpdate responses and the
      * KeyUpdates the JDK starts past {@code jdk.tls.keyLimits}, into netWriteBuffer after any output still unsent, and
-     * flushes them when safe or once half the limit are unsent. A record can carry many messages, and the engine would
-     * otherwise keep them all until the next write. Closes the connection if too many are unsent.
+     * flushes them when safe or once half the limit are unsent or records with data are read after them. A record can
+     * carry many messages, and the engine would otherwise keep them all until the next write. Closes the connection if
+     * too many are unsent.
      */
     private void writePostHandshakeMessages(boolean hasData) throws IOException {
         handshakeStatus = HandshakeStatus.NEED_WRAP;
@@ -741,8 +750,9 @@ public class SslTransportLayer implements TransportLayer {
         // Replies to records without data, such as a peer's KeyUpdates, are safe to send while the peer writes.
         boolean safeToSend = !hasData;
         // Sending these can fail a peer partway through writing a record, but waiting for write() lets a peer that
-        // sends without reading, such as a producer using acks=0, reach the limit.
-        boolean tooManyUnsent = unsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2;
+        // sends without reading, such as a producer using acks=0, reach the limit, or never receive them.
+        boolean tooManyUnsent = unsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2 ||
+            recordsReadWithUnsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2;
         if (safeToSend || tooManyUnsent)
             flush(netWriteBuffer);
     }
