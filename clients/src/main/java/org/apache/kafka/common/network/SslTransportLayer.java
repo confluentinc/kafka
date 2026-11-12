@@ -696,6 +696,8 @@ public class SslTransportLayer implements TransportLayer {
             if (result.getStatus() != Status.OK)
                 throw new IllegalStateException("Unexpected status " + result.getStatus() + " wrapping TLS post-handshake response");
             status = handshakeStatus;
+            if (result.bytesProduced() == 0 && status == HandshakeStatus.NEED_WRAP)
+                throw new IllegalStateException("No progress wrapping TLS post-handshake response");
         }
         unsentPostHandshakeResponses = 0;
     }
