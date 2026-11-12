@@ -145,11 +145,10 @@ public class BrokerSecurityConfigs {
     public static final String ALLOWED_SASL_OAUTHBEARER_FILES_DEFAULT = "";
 
     public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG = "ssl.max.unsent.post.handshake.messages";
-    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_DOC = "The maximum number of times the broker can receive "
-        + "TLS post-handshake messages that need a response, such as KeyUpdate, while the responses to earlier ones are still "
-        + "unsent because the peer is not reading them. The connection is closed when this is exceeded. "
-        + "Clients always use the default. Applies to new connections.";
-    public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 16;
+    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_DOC = "Maximum number of unsent TLS post-handshake messages, such as KeyUpdates. "
+        + "Those caused by records with data wait for the next write until half this many are unsent, and the rest are sent right away. "
+        + "The connection closes above this. Clients always use the default. Applies to new connections.";
+    public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 2048;
     public static final int MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 16384;
 
     public static final ConfigDef CONFIG_DEF =  new ConfigDef()
