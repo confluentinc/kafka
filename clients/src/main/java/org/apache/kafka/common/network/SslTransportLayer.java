@@ -93,28 +93,34 @@ public class SslTransportLayer implements TransportLayer {
     private ByteBuffer fileChannelBuffer;
     private boolean hasBytesBuffered;
     private final int maxUnsentPostHandshakeMessages;
+    private final long heldPostHandshakeMessagesMaxReadBytes;
     // Post-handshake messages wrapped since netWriteBuffer was last fully flushed.
     private int unsentPostHandshakeMessages;
-    // Records with data read while post-handshake messages are unsent.
-    private int recordsReadWithUnsentPostHandshakeMessages;
+    // Bytes of data read while post-handshake messages are unsent.
+    private long bytesReadWithUnsentPostHandshakeMessages;
     private boolean netWriteBufferGrownForPostHandshakeMessages;
 
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
                                            ChannelMetadataRegistry metadataRegistry,
-                                           int maxUnsentPostHandshakeMessages) throws IOException {
-        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry, maxUnsentPostHandshakeMessages);
+                                           int maxUnsentPostHandshakeMessages,
+                                           long heldPostHandshakeMessagesMaxReadBytes) throws IOException {
+        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry, maxUnsentPostHandshakeMessages,
+            heldPostHandshakeMessagesMaxReadBytes);
     }
 
     // Prefer `create`, only use this in tests
     SslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine,
                       ChannelMetadataRegistry metadataRegistry) {
-        this(channelId, key, sslEngine, metadataRegistry, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES);
+        this(channelId, key, sslEngine, metadataRegistry, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES,
+            BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES);
     }
 
     SslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine,
-                      ChannelMetadataRegistry metadataRegistry, int maxUnsentPostHandshakeMessages) {
+                      ChannelMetadataRegistry metadataRegistry, int maxUnsentPostHandshakeMessages,
+                      long heldPostHandshakeMessagesMaxReadBytes) {
         this.channelId = channelId;
         this.maxUnsentPostHandshakeMessages = maxUnsentPostHandshakeMessages;
+        this.heldPostHandshakeMessagesMaxReadBytes = heldPostHandshakeMessagesMaxReadBytes;
         this.key = key;
         this.socketChannel = (SocketChannel) key.channel();
         this.sslEngine = sslEngine;
@@ -269,7 +275,7 @@ public class SslTransportLayer implements TransportLayer {
             return false;
         // Callers pass netWriteBuffer, so it is empty and every post-handshake message was sent.
         unsentPostHandshakeMessages = 0;
-        recordsReadWithUnsentPostHandshakeMessages = 0;
+        bytesReadWithUnsentPostHandshakeMessages = 0;
         maybeShrinkNetWriteBuffer();
         return true;
     }
@@ -640,7 +646,7 @@ public class SslTransportLayer implements TransportLayer {
                     if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP) {
                         writePostHandshakeMessages(hasData);
                     } else if (hasData && unsentPostHandshakeMessages > 0) {
-                        recordsReadWithUnsentPostHandshakeMessages++;
+                        bytesReadWithUnsentPostHandshakeMessages += unwrapResult.bytesProduced();
                         maybeFlushPostHandshakeMessages(true);
                     }
                 } else if (unwrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
@@ -690,9 +696,9 @@ public class SslTransportLayer implements TransportLayer {
     /**
      * Wraps the TLSv1.3 post-handshake messages the engine produces while reading, such as KeyUpdate responses and the
      * KeyUpdates the JDK starts past {@code jdk.tls.keyLimits}, into netWriteBuffer after any output still unsent, and
-     * flushes them when safe or once half the limit are unsent or records with data are read after them. A record can
-     * carry many messages, and the engine would otherwise keep them all until the next write. Closes the connection if
-     * too many are unsent.
+     * flushes them when safe, once half the limit are unsent or once enough data is read after them. A record can carry
+     * many messages, and the engine would otherwise keep them all until the next write. Closes the connection if too
+     * many are unsent.
      */
     private void writePostHandshakeMessages(boolean hasData) throws IOException {
         handshakeStatus = HandshakeStatus.NEED_WRAP;
@@ -751,9 +757,9 @@ public class SslTransportLayer implements TransportLayer {
         boolean safeToSend = !hasData;
         // Sending these can fail a peer partway through writing a record, but waiting for write() lets a peer that
         // sends without reading, such as a producer using acks=0, reach the limit, or never receive them.
-        boolean tooManyUnsent = unsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2 ||
-            recordsReadWithUnsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2;
-        if (safeToSend || tooManyUnsent)
+        boolean tooManyUnsent = unsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2;
+        boolean heldTooLong = bytesReadWithUnsentPostHandshakeMessages >= heldPostHandshakeMessagesMaxReadBytes;
+        if (safeToSend || tooManyUnsent || heldTooLong)
             flush(netWriteBuffer);
     }
 

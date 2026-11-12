@@ -116,6 +116,9 @@ public class SslTransportLayerTest {
 
     private static final int BUFFER_SIZE = 4 * 1024;
     private static final int MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 16;
+    // The data in each record wrapMessage writes
+    private static final int MESSAGE_BYTES = 14;
+    private static final long HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES = 10 * MESSAGE_BYTES;
     // The size of SslTransportLayer's file channel buffer
     private static final int TRANSFER_SIZE = 32 * 1024;
     private static final Time TIME = Time.SYSTEM;
@@ -1798,7 +1801,8 @@ public class SslTransportLayerTest {
             private final AtomicInteger numDelayedFlushesRemaining;
 
             public TestSslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine) {
-                super(channelId, key, sslEngine, new DefaultChannelMetadataRegistry(), maxUnsentPostHandshakeMessages);
+                super(channelId, key, sslEngine, new DefaultChannelMetadataRegistry(), maxUnsentPostHandshakeMessages,
+                    heldPostHandshakeMessagesMaxReadBytes);
                 this.netReadBufSize = new ResizeableBufferSize(netReadBufSizeOverride);
                 this.netWriteBufSize = new ResizeableBufferSize(netWriteBufSizeOverride);
                 this.appBufSize = new ResizeableBufferSize(appBufSizeOverride);
@@ -2180,20 +2184,20 @@ public class SslTransportLayerTest {
 
     /**
      * Tests that a server sends a TLSv1.3 KeyUpdate its SSL engine starts once while reading a record with data, as the
-     * JDK does at {@code jdk.tls.keyLimits} once fixed, while it has no data of its own to send, once it reads half the
-     * limit on unsent messages of records with data after it, but not before.
+     * JDK does at {@code jdk.tls.keyLimits} once fixed, while it has no data of its own to send, once it reads
+     * {@code ssl.held.post.handshake.messages.max.read.bytes} of data after it, but not before.
      */
     @Test
     public void testServerSendsKeyUpdateStartedOnceOnReadWithoutDataToSend() throws Exception {
-        int maxDeferred = MAX_UNSENT_POST_HANDSHAKE_MESSAGES / 2;
+        int recordsAfter = (int) (HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES / MESSAGE_BYTES);
         AtomicBoolean serverHasPendingWrites = new AtomicBoolean();
         AtomicLong serverBytesWritten = new AtomicLong();
         assertNull(sendRecordsStartingKeyUpdates(false, true, new AtomicReference<>(), serverHasPendingWrites,
-            serverBytesWritten, maxDeferred));
+            serverBytesWritten, recordsAfter));
         assertTrue(serverHasPendingWrites.get());
         assertEquals(0, serverBytesWritten.get());
         assertNull(sendRecordsStartingKeyUpdates(false, true, new AtomicReference<>(), serverHasPendingWrites,
-            serverBytesWritten, maxDeferred + 1));
+            serverBytesWritten, 1 + recordsAfter));
         assertFalse(serverHasPendingWrites.get());
         assertTrue(serverBytesWritten.get() > 0);
     }
@@ -2231,9 +2235,11 @@ public class SslTransportLayerTest {
             channelBuilder.configure(args.sslServerConfigs);
             Map<String, Object> newConfigs = new HashMap<>(args.sslServerConfigs);
             newConfigs.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, 4);
+            newConfigs.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 5L);
             channelBuilder.validateReconfiguration(newConfigs);
             channelBuilder.reconfigure(newConfigs);
             assertEquals(4, channelBuilder.maxUnsentPostHandshakeMessages);
+            assertEquals(5L, channelBuilder.heldPostHandshakeMessagesMaxReadBytes);
         }
     }
 
@@ -2357,6 +2363,8 @@ public class SslTransportLayerTest {
                                                            int records) throws Exception {
         Args args = new Args("TLSv1.3", false);
         args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, MAX_UNSENT_POST_HANDSHAKE_MESSAGES);
+        args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG,
+            HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES);
         AtomicBoolean startKeyUpdates = new AtomicBoolean();
         UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> wrapUnwrap(sslEngine, (src, dst) -> {
             SSLEngineResult result = sslEngine.unwrap(src, dst);
@@ -2379,7 +2387,7 @@ public class SslTransportLayerTest {
             SSLEngine engine = connection.clientEngine;
             ByteBuffer out = ByteBuffer.allocate(records * engine.getSession().getPacketBufferSize());
             for (int i = 0; i < records; i++)
-                wrapMessage(engine, 10, out);
+                wrapMessage(engine, MESSAGE_BYTES - 4, out);
             out.flip();
             long serverBytesWrittenBefore = connection.serverBytesWritten.get();
             peerWrite(connection.clientChannel, out);

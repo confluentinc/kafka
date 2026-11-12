@@ -273,6 +273,7 @@ public abstract class SslFactoryTest {
 
         Map<String, Object> newSslConfig = new HashMap<>(sslConfig);
         newSslConfig.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, 7);
+        newSslConfig.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 7L);
         sslFactory.validateReconfiguration(newSslConfig);
         sslFactory.reconfigure(newSslConfig);
         assertSame(sslEngineFactory, sslFactory.sslEngineFactory(), "SslEngineFactory recreated unnecessarily");

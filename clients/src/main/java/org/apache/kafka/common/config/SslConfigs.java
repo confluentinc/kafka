@@ -158,14 +158,16 @@ public class SslConfigs {
             SslConfigs.SSL_KEYSTORE_CERTIFICATE_CHAIN_CONFIG,
             SslConfigs.SSL_KEYSTORE_KEY_CONFIG,
             SslConfigs.SSL_TRUSTSTORE_CERTIFICATES_CONFIG,
-            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG);
+            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG,
+            BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG);
 
     /**
      * Broker-wide SSL configs that can be dynamically updated without a listener prefix.
      * They can also be overridden per listener.
      */
     public static final Set<String> BROKER_WIDE_RECONFIGURABLE_CONFIGS = Set.of(
-            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG);
+            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG,
+            BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG);
 
     public static final Set<String> NON_RECONFIGURABLE_CONFIGS = Set.of(
             BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG,

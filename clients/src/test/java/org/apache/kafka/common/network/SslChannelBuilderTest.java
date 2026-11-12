@@ -44,4 +44,17 @@ class SslChannelBuilderTest {
         assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES,
             SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.CLIENT, Map.of(config, "abc")));
     }
+
+    @Test
+    void testHeldPostHandshakeMessagesMaxReadBytes() {
+        String config = BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG;
+        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES,
+            SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(ConnectionMode.SERVER, Map.of()));
+        assertEquals(0L, SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(ConnectionMode.SERVER, Map.of(config, 0L)));
+        assertThrows(ConfigException.class,
+            () -> SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(ConnectionMode.SERVER, Map.of(config, -1L)));
+        // Clients don't define the config, so they ignore a value set there.
+        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES,
+            SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(ConnectionMode.CLIENT, Map.of(config, "abc")));
+    }
 }

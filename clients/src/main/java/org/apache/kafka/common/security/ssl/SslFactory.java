@@ -57,7 +57,8 @@ public class SslFactory implements Reconfigurable, Closeable {
     // Reconfigurable SSL configs read by SslTransportLayer rather than the SslEngineFactory, so changing only these
     // must not rebuild the SslEngineFactory, which reloads the keystore and truststore.
     private static final Set<String> TRANSPORT_LAYER_CONFIGS = Set.of(
-            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG);
+            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG,
+            BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG);
 
     private final ConnectionMode connectionMode;
     private final String clientAuthConfigOverride;

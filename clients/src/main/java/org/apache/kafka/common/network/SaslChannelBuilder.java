@@ -99,6 +99,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     private SslFactory sslFactory;
     private Map<String, ?> configs;
     private volatile int maxUnsentPostHandshakeMessages;
+    private volatile long heldPostHandshakeMessagesMaxReadBytes;
     private KerberosShortNamer kerberosShortNamer;
 
     public SaslChannelBuilder(ConnectionMode connectionMode,
@@ -142,6 +143,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         try {
             this.configs = configs;
             this.maxUnsentPostHandshakeMessages = SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs);
+            this.heldPostHandshakeMessagesMaxReadBytes = SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(connectionMode, configs);
             if (connectionMode == ConnectionMode.SERVER) {
                 createServerCallbackHandlers(configs);
                 createConnectionsMaxReauthMsMap(configs);
@@ -206,6 +208,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             sslFactory.reconfigure(configs);
             this.maxUnsentPostHandshakeMessages = SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs);
+            this.heldPostHandshakeMessagesMaxReadBytes = SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(connectionMode, configs);
         }
     }
 
@@ -268,7 +271,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             return SslTransportLayer.create(id, key,
                 sslFactory.createSslEngine(socketChannel.socket()),
-                metadataRegistry, maxUnsentPostHandshakeMessages);
+                metadataRegistry, maxUnsentPostHandshakeMessages, heldPostHandshakeMessagesMaxReadBytes);
         } else {
             return new PlaintextTransportLayer(key);
         }

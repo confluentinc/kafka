@@ -428,6 +428,13 @@ class DynamicBrokerConfigTest {
       verifyConfigUpdate(prop, "16385", perBrokerConfig = true, expectFailure = true)
       verifyConfigUpdate(prop, "16385", perBrokerConfig = false, expectFailure = true)
     }
+    val heldName = BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG
+    Seq(heldName, s"listener.name.external.$heldName").foreach { prop =>
+      verifyConfigUpdate(prop, "0", perBrokerConfig = true, expectFailure = false)
+      verifyConfigUpdate(prop, "0", perBrokerConfig = false, expectFailure = false)
+      verifyConfigUpdate(prop, "-1", perBrokerConfig = true, expectFailure = true)
+      verifyConfigUpdate(prop, "-1", perBrokerConfig = false, expectFailure = true)
+    }
   }
 
   @Test
