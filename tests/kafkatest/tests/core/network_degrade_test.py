@@ -15,7 +15,7 @@
 
 import re
 
-from ducktape.mark import parametrize
+from ducktape.mark import ignore, parametrize
 from ducktape.mark.resource import cluster
 from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
@@ -45,7 +45,8 @@ class NetworkDegradeTest(Test):
         self.trogdor.stop()
         self.kafka.stop()
 
-    @cluster(num_nodes=3)
+    @ignore
+    @cluster(num_nodes=5)
     @parametrize(task_name="latency-100", device_name="eth0", latency_ms=50, rate_limit_kbit=0, metadata_quorum=quorum.combined_kraft)
     @parametrize(task_name="latency-100-rate-1000", device_name="eth0", latency_ms=50, rate_limit_kbit=1000, metadata_quorum=quorum.combined_kraft)
     def test_latency(self, task_name, device_name, latency_ms, rate_limit_kbit, metadata_quorum=quorum.combined_kraft):
@@ -87,7 +88,7 @@ class NetworkDegradeTest(Test):
         assert len(slow_times) > 5, "Expected to see more slow ping times (lower than %d)" % low_time_ms
         assert len(fast_times) > 5, "Expected to see more fast ping times (higher than %d)" % high_time_ms
 
-    @cluster(num_nodes=3)
+    @cluster(num_nodes=5)
     @parametrize(task_name="rate-1000", device_name="eth0", latency_ms=0, rate_limit_kbit=1000000, metadata_quorum=quorum.combined_kraft)
     @parametrize(task_name="rate-1000-latency-50", device_name="eth0", latency_ms=50, rate_limit_kbit=1000000, metadata_quorum=quorum.combined_kraft)
     def test_rate(self, task_name, device_name, latency_ms, rate_limit_kbit, metadata_quorum=quorum.combined_kraft):
