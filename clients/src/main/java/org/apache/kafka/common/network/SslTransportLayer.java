@@ -723,6 +723,8 @@ public class SslTransportLayer implements TransportLayer {
             handshakeStatus = result.getHandshakeStatus();
             if (handshakeStatus == HandshakeStatus.NEED_TASK)
                 handshakeStatus = runDelegatedTasks();
+            if (result.bytesProduced() == 0 && handshakeStatus == HandshakeStatus.NEED_WRAP)
+                throw new IllegalStateException("No progress wrapping TLS post-handshake message");
         }
         maybeFlushPostHandshakeMessages(hasData);
     }

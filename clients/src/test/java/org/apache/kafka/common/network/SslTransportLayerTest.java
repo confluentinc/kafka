@@ -20,7 +20,6 @@ import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.config.types.Password;
-import org.apache.kafka.common.errors.SslAuthenticationException;
 import org.apache.kafka.common.errors.InvalidConfigurationException;
 import org.apache.kafka.common.memory.MemoryPool;
 import org.apache.kafka.common.message.ApiMessageType;
@@ -2228,6 +2227,35 @@ public class SslTransportLayerTest {
         assertEquals(SslTransportLayer.UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE, closeCause.getMessage());
     }
 
+    /**
+     * Tests that a server closes the connection instead of looping when its SSL engine wraps a post-handshake message
+     * without producing anything while still needing to wrap.
+     */
+    @Test
+    public void testServerClosesConnectionOnPostHandshakeWrapWithoutProgress() throws Exception {
+        Args args = new Args("TLSv1.3", false);
+        AtomicBoolean stallWraps = new AtomicBoolean();
+        AtomicInteger stalledWraps = new AtomicInteger();
+        UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> {
+            Answer<Object> delegate = AdditionalAnswers.delegatesTo(sslEngine);
+            return mock(SSLEngine.class, invocation -> {
+                if (!stallWraps.get() || !invocation.getMethod().getName().equals("wrap") ||
+                        invocation.getArguments().length != 2 || ((ByteBuffer) invocation.getArgument(0)).hasRemaining())
+                    return delegate.answer(invocation);
+                if (stalledWraps.incrementAndGet() > 100)
+                    throw new AssertionError("Server kept wrapping without progress");
+                return new SSLEngineResult(SSLEngineResult.Status.OK, SSLEngineResult.HandshakeStatus.NEED_WRAP, 0, 0);
+            });
+        };
+        try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
+                args.sslClientConfigs, serverEngineWrapper)) {
+            stallWraps.set(true);
+            writeKeyUpdates(connection, 1);
+            Exception closeCause = assertInstanceOf(IllegalStateException.class, connection.pollServer(1));
+            assertEquals("No progress wrapping TLS post-handshake message", closeCause.getMessage());
+        }
+    }
+
     @ParameterizedTest
     @ArgumentsSource(SslTransportLayerArgumentsProvider.class)
     public void testReconfigureMaxUnsentPostHandshakeMessages(Args args) throws Exception {
@@ -2471,7 +2499,7 @@ public class SslTransportLayerTest {
                         public int read(ByteBuffer dst) throws IOException {
                             try {
                                 return super.read(dst);
-                            } catch (IOException | SslAuthenticationException e) {
+                            } catch (IOException | RuntimeException e) {
                                 serverCloseCause.set(e);
                                 throw e;
                             }
