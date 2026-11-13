@@ -64,5 +64,5 @@ psutil==5.9.0
 gnupg==2.3.1
 selenium==4.14.0
 distro==1.9.0
-jwcrypto==1.5.6
+jwcrypto==1.5.7
 python-jwt==4.0.0
