@@ -2202,6 +2202,27 @@ public class SslTransportLayerTest {
     }
 
     /**
+     * Tests that a server counts the data in records that start a TLSv1.3 KeyUpdate themselves, as the JDK does for
+     * every record past {@code jdk.tls.keyLimits} until the peer updates its key, so it sends held KeyUpdates once
+     * {@code ssl.held.post.handshake.messages.max.read.bytes} of data are read after them, but not before.
+     */
+    @Test
+    public void testServerSendsKeyUpdatesStartedOnEveryRecordAfterHeldMaxReadBytes() throws Exception {
+        int recordsAfter = 3;
+        long maxReadBytes = recordsAfter * MESSAGE_BYTES;
+        assertTrue(1 + recordsAfter < MAX_UNSENT_POST_HANDSHAKE_MESSAGES / 2);
+        AtomicBoolean serverHasPendingWrites = new AtomicBoolean();
+        AtomicLong serverBytesWritten = new AtomicLong();
+        assertNull(sendRecordsStartingKeyUpdates(false, false, maxReadBytes, new AtomicReference<>(),
+            serverHasPendingWrites, serverBytesWritten, recordsAfter));
+        assertTrue(serverHasPendingWrites.get());
+        assertEquals(0, serverBytesWritten.get());
+        assertNull(sendRecordsStartingKeyUpdates(false, false, maxReadBytes, new AtomicReference<>(),
+            serverHasPendingWrites, serverBytesWritten, 1 + recordsAfter));
+        assertTrue(serverBytesWritten.get() > 0);
+    }
+
+    /**
      * Tests that a server keeps the connection when a peer reading the KeyUpdates its SSL engine starts while reading
      * sends more records than the limit on unsent messages before the server next writes, as a large produce request
      * may.
@@ -2389,10 +2410,20 @@ public class SslTransportLayerTest {
                                                            AtomicBoolean serverHasPendingWrites,
                                                            AtomicLong serverBytesWritten,
                                                            int records) throws Exception {
+        return sendRecordsStartingKeyUpdates(blockServerWrites, startOnce, HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES,
+            serverHandshakeStatus, serverHasPendingWrites, serverBytesWritten, records);
+    }
+
+    private static Exception sendRecordsStartingKeyUpdates(boolean blockServerWrites, boolean startOnce,
+                                                           long heldPostHandshakeMessagesMaxReadBytes,
+                                                           AtomicReference<SSLEngineResult.HandshakeStatus> serverHandshakeStatus,
+                                                           AtomicBoolean serverHasPendingWrites,
+                                                           AtomicLong serverBytesWritten,
+                                                           int records) throws Exception {
         Args args = new Args("TLSv1.3", false);
         args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, MAX_UNSENT_POST_HANDSHAKE_MESSAGES);
         args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG,
-            HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES);
+            heldPostHandshakeMessagesMaxReadBytes);
         AtomicBoolean startKeyUpdates = new AtomicBoolean();
         UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> wrapUnwrap(sslEngine, (src, dst) -> {
             SSLEngineResult result = sslEngine.unwrap(src, dst);

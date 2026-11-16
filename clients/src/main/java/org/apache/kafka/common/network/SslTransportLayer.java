@@ -643,12 +643,12 @@ public class SslTransportLayer implements TransportLayer {
                 if (unwrapResult.getStatus() == Status.OK) {
                     read += readFromAppBuffer(dst);
                     boolean hasData = unwrapResult.bytesProduced() > 0;
-                    if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP) {
-                        writePostHandshakeMessages(hasData);
-                    } else if (hasData && unsentPostHandshakeMessages > 0) {
+                    if (hasData && unsentPostHandshakeMessages > 0)
                         bytesReadWithUnsentPostHandshakeMessages += unwrapResult.bytesProduced();
+                    if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP)
+                        writePostHandshakeMessages(hasData);
+                    else if (hasData && unsentPostHandshakeMessages > 0)
                         maybeFlushPostHandshakeMessages(true);
-                    }
                 } else if (unwrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
                     int currentApplicationBufferSize = applicationBufferSize();
                     appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
@@ -760,9 +760,14 @@ public class SslTransportLayer implements TransportLayer {
         // Sending these can fail a peer partway through writing a record, but waiting for write() lets a peer that
         // sends without reading, such as a producer using acks=0, reach the limit, or never receive them.
         boolean tooManyUnsent = unsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2;
-        boolean heldTooLong = bytesReadWithUnsentPostHandshakeMessages >= heldPostHandshakeMessagesMaxReadBytes;
-        if (safeToSend || tooManyUnsent || heldTooLong)
+        if (safeToSend || tooManyUnsent) {
             flush(netWriteBuffer);
+        } else if (bytesReadWithUnsentPostHandshakeMessages >= heldPostHandshakeMessagesMaxReadBytes) {
+            int unsent = unsentPostHandshakeMessages;
+            long bytesRead = bytesReadWithUnsentPostHandshakeMessages;
+            if (flush(netWriteBuffer))
+                log.info("Sent {} held TLS post-handshake messages after reading {} bytes of data", unsent, bytesRead);
+        }
     }
 
     // A connection the server never writes to, such as from a producer using acks=0, would otherwise keep it grown.
