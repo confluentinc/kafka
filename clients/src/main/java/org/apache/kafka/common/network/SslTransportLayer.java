@@ -101,6 +101,11 @@ public class SslTransportLayer implements TransportLayer {
     private boolean netWriteBufferGrownForPostHandshakeMessages;
 
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
+                                           ChannelMetadataRegistry metadataRegistry) throws IOException {
+        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry);
+    }
+
+    public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
                                            ChannelMetadataRegistry metadataRegistry,
                                            int maxUnsentPostHandshakeMessages,
                                            long heldPostHandshakeMessagesMaxReadBytes) throws IOException {
@@ -716,8 +721,7 @@ public class SslTransportLayer implements TransportLayer {
             if (result.getStatus() != Status.OK)
                 throw new IllegalStateException("Unexpected status " + result.getStatus() + " wrapping TLS post-handshake message");
             if (++unsentPostHandshakeMessages > maxUnsentPostHandshakeMessages) {
-                log.info("Closing channel {} since {} TLS post-handshake messages are unsent", channelId,
-                    unsentPostHandshakeMessages);
+                log.info("Closing channel since {} TLS post-handshake messages are unsent", unsentPostHandshakeMessages);
                 throw new SSLException(UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
             }
             handshakeStatus = result.getHandshakeStatus();
