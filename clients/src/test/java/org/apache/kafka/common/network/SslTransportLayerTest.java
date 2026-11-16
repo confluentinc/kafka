@@ -2223,6 +2223,20 @@ public class SslTransportLayerTest {
     }
 
     /**
+     * Tests that a server sends a TLSv1.3 KeyUpdate its SSL engine starts while reading a record with data right away
+     * when {@code ssl.held.post.handshake.messages.max.read.bytes} is 0.
+     */
+    @Test
+    public void testServerSendsKeyUpdateStartedOnReadRightAwayWithZeroHeldMaxReadBytes() throws Exception {
+        AtomicBoolean serverHasPendingWrites = new AtomicBoolean();
+        AtomicLong serverBytesWritten = new AtomicLong();
+        assertNull(sendRecordsStartingKeyUpdates(false, true, 0, new AtomicReference<>(),
+            serverHasPendingWrites, serverBytesWritten, 1));
+        assertFalse(serverHasPendingWrites.get());
+        assertTrue(serverBytesWritten.get() > 0);
+    }
+
+    /**
      * Tests that a server keeps the connection when a peer reading the KeyUpdates its SSL engine starts while reading
      * sends more records than the limit on unsent messages before the server next writes, as a large produce request
      * may.

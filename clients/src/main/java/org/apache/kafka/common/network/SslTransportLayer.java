@@ -766,7 +766,8 @@ public class SslTransportLayer implements TransportLayer {
         boolean tooManyUnsent = unsentPostHandshakeMessages >= maxUnsentPostHandshakeMessages / 2;
         if (safeToSend || tooManyUnsent) {
             flush(netWriteBuffer);
-        } else if (bytesReadWithUnsentPostHandshakeMessages >= heldPostHandshakeMessagesMaxReadBytes) {
+        } else if (unsentPostHandshakeMessages > 0 &&
+                bytesReadWithUnsentPostHandshakeMessages >= heldPostHandshakeMessagesMaxReadBytes) {
             int unsent = unsentPostHandshakeMessages;
             long bytesRead = bytesReadWithUnsentPostHandshakeMessages;
             if (flush(netWriteBuffer))

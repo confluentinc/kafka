@@ -154,7 +154,8 @@ public class BrokerSecurityConfigs {
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG = "ssl.held.post.handshake.messages.max.read.bytes";
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_DOC = "Maximum bytes of data read while TLS post-handshake messages, "
         + "such as KeyUpdates, wait for the next write. They are sent once this many are read. "
-        + "0 sends them right away, and " + Long.MAX_VALUE + " holds them until the next write. "
+        + "0 sends them right away, and Long.MAX_VALUE turns this limit off, so a peer that is never written to "
+        + "may not receive them. "
         + "Clients always use the default. Applies to new connections.";
     public static final long DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES = 10L * 1024 * 1024 * 1024;
 
