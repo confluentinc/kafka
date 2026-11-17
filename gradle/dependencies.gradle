@@ -70,7 +70,7 @@ versions += [
   jackson: "2.18.11",
   jacoco: "0.8.10",
   javassist: "3.29.2-GA",
-  jetty: "12.0.39",
+  jetty: "12.0.41",
   jersey: "3.1.11",
   jline: "3.30.17",
   jmh: "1.37",
