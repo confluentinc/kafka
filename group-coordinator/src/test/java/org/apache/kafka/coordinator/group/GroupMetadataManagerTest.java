@@ -35890,7 +35890,8 @@ public class GroupMetadataManagerTest {
     @Test
     public void testStreamsGroupAsyncTargetAssignmentRescheduledOnAssignorFailure() {
         String groupId = "fooup";
-        String memberId = Uuid.randomUuid().toString();
+        String memberId1 = Uuid.randomUuid().toString();
+        String memberId2 = Uuid.randomUuid().toString();
 
         String subtopology = "subtopology";
         Uuid fooTopicId = Uuid.randomUuid();
@@ -35908,19 +35909,36 @@ public class GroupMetadataManagerTest {
             .addTopic(fooTopicId, fooTopicName, 6)
             .buildCoordinatorMetadataImage();
 
+        long groupMetadataHash = computeGroupHash(Map.of(
+            fooTopicName, computeTopicHash(fooTopicName, metadataImage)));
+
+        StreamsGroupMember member1 = streamsGroupMemberBuilderWithDefaults(memberId1)
+            .setMemberEpoch(10)
+            .setPreviousMemberEpoch(10)
+            .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithCommonEpoch(TaskRole.ACTIVE, 10,
+                TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2, 3, 4, 5)))
+            .build();
+
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
+            .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
+                .withMember(member1)
+                .withTopology(StreamsTopology.fromHeartbeatRequest(topology))
+                .withTargetAssignment(memberId1, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+                    TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2, 3, 4, 5)))
+                .withTargetAssignmentEpoch(10)
+                .withMetadataHash(groupMetadataHash))
             .build();
 
-        // Member joins the group and gets no assignment yet.
+        // Member 2 joins the group and gets no assignment yet.
         context.streamsGroupHeartbeat(
             new StreamsGroupHeartbeatRequestData()
                 .setGroupId(groupId)
-                .setMemberId(memberId)
+                .setMemberId(memberId2)
                 .setMemberEpoch(0)
                 .setProcessId("process-id")
                 .setRebalanceTimeoutMs(1500)
@@ -35947,17 +35965,17 @@ public class GroupMetadataManagerTest {
         // The next assignment is not started automatically.
         assertFalse(context.executor.isScheduled(GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId)));
 
-        // Member heartbeats again.
+        // Member 2 heartbeats again.
         CoordinatorResult<StreamsGroupHeartbeatResult, CoordinatorRecord> result = context.streamsGroupHeartbeat(
             new StreamsGroupHeartbeatRequestData()
                 .setGroupId(groupId)
-                .setMemberId(memberId)
-                .setMemberEpoch(1));
+                .setMemberId(memberId2)
+                .setMemberEpoch(10));
 
         assertResponseEquals(
             new StreamsGroupHeartbeatResponseData()
-                .setMemberId(memberId)
-                .setMemberEpoch(1)
+                .setMemberId(memberId2)
+                .setMemberEpoch(10)
                 .setHeartbeatIntervalMs(5000)
                 .setTaskOffsetIntervalMs(60_000)
                 .setAcceptableRecoveryLag(10_000),
@@ -35971,7 +35989,8 @@ public class GroupMetadataManagerTest {
     @Test
     public void testStreamsGroupAsyncTargetAssignmentRescheduledOnFailedWrite() {
         String groupId = "fooup";
-        String memberId = Uuid.randomUuid().toString();
+        String memberId1 = Uuid.randomUuid().toString();
+        String memberId2 = Uuid.randomUuid().toString();
 
         String subtopology = "subtopology";
         Uuid fooTopicId = Uuid.randomUuid();
@@ -35986,19 +36005,36 @@ public class GroupMetadataManagerTest {
             .addTopic(fooTopicId, fooTopicName, 6)
             .buildCoordinatorMetadataImage();
 
+        long groupMetadataHash = computeGroupHash(Map.of(
+            fooTopicName, computeTopicHash(fooTopicName, metadataImage)));
+
+        StreamsGroupMember member1 = streamsGroupMemberBuilderWithDefaults(memberId1)
+            .setMemberEpoch(10)
+            .setPreviousMemberEpoch(10)
+            .setAssignedTasks(TaskAssignmentTestUtil.mkTasksTupleWithCommonEpoch(TaskRole.ACTIVE, 10,
+                TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2, 3, 4, 5)))
+            .build();
+
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
+            .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
+                .withMember(member1)
+                .withTopology(StreamsTopology.fromHeartbeatRequest(topology))
+                .withTargetAssignment(memberId1, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+                    TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2, 3, 4, 5)))
+                .withTargetAssignmentEpoch(10)
+                .withMetadataHash(groupMetadataHash))
             .build();
 
-        // Member joins the group and gets no assignment yet.
+        // Member 2 joins the group and gets no assignment yet.
         context.streamsGroupHeartbeat(
             new StreamsGroupHeartbeatRequestData()
                 .setGroupId(groupId)
-                .setMemberId(memberId)
+                .setMemberId(memberId2)
                 .setMemberEpoch(0)
                 .setProcessId("process-id")
                 .setRebalanceTimeoutMs(1500)
@@ -36013,27 +36049,33 @@ public class GroupMetadataManagerTest {
 
         // Assignor completes on executor.
         assignor.prepareGroupAssignment(Map.of(
-            memberId, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
-                TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2, 3, 4, 5)
+            memberId1, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+                TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2)
+            ),
+            memberId2, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+                TaskAssignmentTestUtil.mkTasks(subtopology, 3, 4, 5)
             )
         ));
 
         // The target assignment is written.
         List<MockCoordinatorExecutor.ExecutorResult<CoordinatorRecord>> tasks = context.processTasks();
-        assertEquals(
+        assertEquals(1, tasks.size());
+        assertEquals(GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId), tasks.get(0).key());
+        assertUnorderedRecordsEquals(
             List.of(
-                new MockCoordinatorExecutor.ExecutorResult<>(
-                    GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId),
-                    new CoordinatorResult<>(List.of(
-                        StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord(groupId, memberId,
-                            TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
-                                TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2, 3, 4, 5)
-                            )),
-                        StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentMetadataRecord(groupId, 2, context.time.milliseconds())
-                    ))
-                )
+                List.of(
+                    StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord(groupId, memberId1,
+                        TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+                            TaskAssignmentTestUtil.mkTasks(subtopology, 0, 1, 2)
+                        )),
+                    StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentRecord(groupId, memberId2,
+                        TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
+                            TaskAssignmentTestUtil.mkTasks(subtopology, 3, 4, 5)
+                        ))
+                ),
+                List.of(StreamsCoordinatorRecordHelpers.newStreamsGroupTargetAssignmentMetadataRecord(groupId, 11, context.time.milliseconds()))
             ),
-            tasks
+            tasks.get(0).result().records()
         );
 
         // Simulate a failed write to the log.
@@ -36042,12 +36084,12 @@ public class GroupMetadataManagerTest {
         // The next assignment is not started automatically.
         assertFalse(context.executor.isScheduled(GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId)));
 
-        // Member heartbeats again.
+        // Member 2 heartbeats again.
         context.streamsGroupHeartbeat(
             new StreamsGroupHeartbeatRequestData()
                 .setGroupId(groupId)
-                .setMemberId(memberId)
-                .setMemberEpoch(1));
+                .setMemberId(memberId2)
+                .setMemberEpoch(10));
 
         // The next assignor run is scheduled.
         assertTrue(context.executor.isScheduled(GroupMetadataManager.groupTargetAssignmentUpdateKey(groupId)));
