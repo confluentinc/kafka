@@ -20738,6 +20738,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(Map.of(memberId, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
@@ -21137,6 +21138,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(Map.of(memberId, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
@@ -21237,6 +21239,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         // Member joins the streams group.
@@ -21326,6 +21329,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         // Member joins the streams group.
@@ -21422,6 +21426,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         // Member joins the streams group.
@@ -21521,6 +21526,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroup(
                 new StreamsGroupBuilder(groupId, 10)
                     .withTopology(StreamsTopology.fromHeartbeatRequest(topology1))
@@ -21715,6 +21721,7 @@ public class GroupMetadataManagerTest {
         long metadataHash = computeGroupHash(Map.of(fooTopicName, computeTopicHash(fooTopicName, metadataImage)));
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
@@ -21815,6 +21822,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
@@ -21947,6 +21955,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(newMetadataImage)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
@@ -22072,6 +22081,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(new MetadataImageBuilder()
                 .addTopic(fooTopicId, fooTopicName, 6)
@@ -22243,6 +22253,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(fooTopicId, fooTopicName, 2)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         // Prepare new assignment for the group.
@@ -22317,6 +22328,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(fooTopicId, fooTopicName, 2)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(
@@ -22381,6 +22393,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(fooTopicId, fooTopicName, 2)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(
@@ -22431,6 +22444,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(fooTopicId, fooTopicName, 2)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         // Prepare new assignment for the group.
@@ -22504,6 +22518,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(fooTopicId, fooTopicName, 2)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 1000)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         CoordinatorResult<StreamsGroupHeartbeatResult, CoordinatorRecord> result;
@@ -22589,6 +22604,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(fooTopicId, fooTopicName, 2)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 1000)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10))
             .build();
 
@@ -22657,6 +22673,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
@@ -23215,6 +23232,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(barTopicId, barTopicName, 3)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         // Member 1 joins the streams group. The request fails because the
@@ -23250,6 +23268,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
@@ -23369,6 +23388,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
@@ -23495,6 +23515,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(new MetadataImageBuilder()
                 .addTopic(fooTopicId, fooTopicName, 6)
@@ -23581,6 +23602,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(Map.of(memberId, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
@@ -23657,6 +23679,7 @@ public class GroupMetadataManagerTest {
                 .addTopic(fooTopicId, fooTopicName, 3)
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(Map.of(memberId1, TaskAssignmentTestUtil.mkTasksTuple(TaskRole.ACTIVE,
@@ -23831,6 +23854,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(
@@ -24089,6 +24113,7 @@ public class GroupMetadataManagerTest {
                         .addTopic(fooTopicId, fooTopicName, 2)
                         .buildCoordinatorMetadataImage())
                 .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+                .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
                 .build();
 
         // Prepare new assignment for the group.
@@ -24165,6 +24190,7 @@ public class GroupMetadataManagerTest {
                         .buildCoordinatorMetadataImage())
                 .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
                 .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+                .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
                 .build();
 
         // Prepare assignment for first member
@@ -24259,6 +24285,7 @@ public class GroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_NUM_STANDBY_REPLICAS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
                 .withMember(streamsGroupMemberBuilderWithDefaults(memberId)
                     .setState(org.apache.kafka.coordinator.group.streams.MemberState.STABLE)
@@ -24362,6 +24389,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .withStreamsGroup(new StreamsGroupBuilder(groupId, 10)
@@ -24488,6 +24516,7 @@ public class GroupMetadataManagerTest {
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
         ClassicGroup classicGroup = new ClassicGroup(
             new LogContext(),
@@ -24944,6 +24973,7 @@ public class GroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(new MetadataImageBuilder()
                 .addTopic(fooTopicId, fooTopicName, 6)
@@ -25333,6 +25363,7 @@ public class GroupMetadataManagerTest {
                 .addRacks()
                 .buildCoordinatorMetadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(
@@ -35153,6 +35184,7 @@ public class GroupMetadataManagerTest {
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 5000)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(metadataImage)
             .build();

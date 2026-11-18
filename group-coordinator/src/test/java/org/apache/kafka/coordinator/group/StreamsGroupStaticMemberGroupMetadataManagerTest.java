@@ -355,6 +355,7 @@ class StreamsGroupStaticMemberGroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_MAX_SIZE_CONFIG, maxSize)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(topic.metadataImage())
@@ -515,6 +516,7 @@ class StreamsGroupStaticMemberGroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(topic.metadataImage())
             .withStreamsGroup(new StreamsGroupBuilder(groupId, groupEpoch)
@@ -1350,6 +1352,7 @@ class StreamsGroupStaticMemberGroupMetadataManagerTest {
 
         MockTaskAssignor assignor = new MockTaskAssignor("sticky");
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(topic.metadataImage())
             .withStreamsGroup(new StreamsGroupBuilder(groupId, groupEpoch)
@@ -2215,6 +2218,7 @@ class StreamsGroupStaticMemberGroupMetadataManagerTest {
             .withStreamsGroupTaskAssignors(List.of(assignor))
             .withMetadataImage(topic.metadataImage())
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
 
         assignor.prepareGroupAssignment(Map.of(memberId, topic.targetAssignment(0, 1, 2, 3)));
@@ -2342,6 +2346,7 @@ class StreamsGroupStaticMemberGroupMetadataManagerTest {
                 .withTargetAssignment(oldMemberId, targetAssignment)
                 .withLastAssignmentConfigs(getDefaultAssignmentConfigs()))
             .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_INITIAL_REBALANCE_DELAY_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.STREAMS_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, false)
             .build();
         
         assertEquals(0, context.groupMetadataManager.streamsGroup(groupId).endpointInformationEpoch());
