@@ -16,6 +16,7 @@
  */
 package kafka.log
 
+import com.yammer.metrics.core.Meter
 import java.io.DataOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
@@ -1488,8 +1489,11 @@ class LogValidatorTest {
     checkOffsets(result.validatedRecords, 0)
   }
 
+  // 3.6 has no TestUtils.meterCountOpt, so inline it: a meter that is not registered counts as 0
   private def invalidOffsetRecordCount: Long =
-    meterCount(s"${BrokerTopicStats.InvalidOffsetOrSequenceRecordsPerSec}")
+    KafkaYammerMetrics.defaultRegistry.allMetrics.asScala.collectFirst {
+      case (name, meter: Meter) if name.getMBeanName.endsWith(s"${BrokerTopicStats.InvalidOffsetOrSequenceRecordsPerSec}") => meter.count
+    }.getOrElse(0L)
 
   private def newLogValidator(records: MemoryRecords,
                               sourceCompression: CompressionType,
