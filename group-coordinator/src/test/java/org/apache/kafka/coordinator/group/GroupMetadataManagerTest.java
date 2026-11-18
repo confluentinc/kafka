@@ -33640,8 +33640,8 @@ public class GroupMetadataManagerTest {
             .buildCoordinatorMetadataImage();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .build();
@@ -34135,8 +34135,8 @@ public class GroupMetadataManagerTest {
             .buildCoordinatorMetadataImage();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .build();
@@ -34201,8 +34201,8 @@ public class GroupMetadataManagerTest {
             .buildCoordinatorMetadataImage();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .build();
@@ -34290,8 +34290,8 @@ public class GroupMetadataManagerTest {
             .build();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .withShareGroup(new ShareGroupBuilder(groupId, 10)
@@ -34353,8 +34353,8 @@ public class GroupMetadataManagerTest {
             .buildCoordinatorMetadataImage();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .build();
@@ -34427,8 +34427,8 @@ public class GroupMetadataManagerTest {
             .build();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .withShareGroup(new ShareGroupBuilder(groupId, 10)
@@ -34480,8 +34480,8 @@ public class GroupMetadataManagerTest {
             .buildCoordinatorMetadataImage();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .withShareGroup(new ShareGroupBuilder(groupId, 10)
@@ -34534,8 +34534,8 @@ public class GroupMetadataManagerTest {
             .buildCoordinatorMetadataImage();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .build();
@@ -34927,8 +34927,8 @@ public class GroupMetadataManagerTest {
             .buildCoordinatorMetadataImage();
 
         GroupMetadataManagerTestContext context = new GroupMetadataManagerTestContext.Builder()
-            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNMENT_INTERVAL_MS_CONFIG, 0)
+            .withConfig(GroupCoordinatorConfig.SHARE_GROUP_ASSIGNOR_OFFLOAD_ENABLE_CONFIG, true)
             .withShareGroupAssignor(assignor)
             .withMetadataImage(metadataImage)
             .build();
