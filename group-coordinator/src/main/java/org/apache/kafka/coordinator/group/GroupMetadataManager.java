@@ -4699,8 +4699,9 @@ public class GroupMetadataManager {
             );
         updatedMembersAndTargetAssignment.addOrUpdateMember(updatedMember.memberId(), updatedMember);
 
-        // Use the same metadata image throughout.
-        CoordinatorMetadataImage metadataImage = this.metadataImage;
+        // Capture the current metadata image, since metadata updates may replace it while an
+        // offloaded assignor run is in flight.
+        CoordinatorMetadataImage assignmentMetadataImage = this.metadataImage;
 
         long groupSpecStartTimeMs = time.milliseconds();
         GroupSpec groupSpec = new GroupSpecBuilder.ShareGroupSpecBuilder()
@@ -4709,7 +4710,7 @@ public class GroupMetadataManager {
             .withTargetAssignment(updatedMembersAndTargetAssignment.targetAssignment())
             .withTopicAssignablePartitionsMap(initializedTopicPartitions)
             .withInvertedTargetAssignment(group.invertedTargetAssignment())
-            .withMetadataImage(metadataImage)
+            .withMetadataImage(assignmentMetadataImage)
             .withAssignorOffload(offloadAssignor)
             .build();
         long groupSpecTimeMs = time.milliseconds() - groupSpecStartTimeMs;
@@ -4719,7 +4720,7 @@ public class GroupMetadataManager {
             TargetAssignmentBuilder.TargetAssignmentResult assignmentResult =
                 new TargetAssignmentBuilder(groupEpoch, shareGroupAssignor)
                     .withTime(time)
-                    .withMetadataImage(metadataImage)
+                    .withMetadataImage(assignmentMetadataImage)
                     .withGroupSpec(groupSpec)
                     .build();
             long assignorTimeMs = time.milliseconds() - assignorStartTimeMs;
