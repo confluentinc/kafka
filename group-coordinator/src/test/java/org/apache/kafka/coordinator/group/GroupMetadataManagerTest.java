@@ -14175,8 +14175,10 @@ public class GroupMetadataManagerTest {
      * Tests the upgrade of a classic group at generation 0 when a new member joins with the consumer
      * protocol.
      *
-     * The classic group is rebalancing, so the upgraded group epoch is bumped to 1 before the new member
-     * bumps it to 2. No protocol has been selected yet, so the classic members take their subscriptions
+     * No generation has completed, so like a new group, the upgraded group starts with an empty target
+     * assignment at epoch 1 and no member gets epoch 0, which is reserved for joining members. The
+     * classic group is rebalancing, so the upgraded group epoch is bumped to 2 before the new member
+     * bumps it to 3. No protocol has been selected yet, so the classic members take their subscriptions
      * from their first protocol.
      *
      * @see #testConsumerGroupHeartbeatWithClassicGroupAtGenerationZeroFromExistingStaticMember()
@@ -14255,8 +14257,8 @@ public class GroupMetadataManagerTest {
         );
 
         ConsumerGroupMember expectedMember1 = new ConsumerGroupMember.Builder(memberId1)
-            .setMemberEpoch(0)
-            .setPreviousMemberEpoch(0)
+            .setMemberEpoch(1)
+            .setPreviousMemberEpoch(1)
             .setClientId("client-id")
             .setClientHost("client-host")
             .setSubscribedTopicNames(List.of(fooTopicName))
@@ -14270,8 +14272,8 @@ public class GroupMetadataManagerTest {
             .build();
 
         ConsumerGroupMember expectedMember2 = new ConsumerGroupMember.Builder(memberId2)
-            .setMemberEpoch(0)
-            .setPreviousMemberEpoch(0)
+            .setMemberEpoch(1)
+            .setPreviousMemberEpoch(1)
             .setClientId("client-id")
             .setClientHost("client-host")
             .setSubscribedTopicNames(List.of(fooTopicName))
@@ -14285,7 +14287,7 @@ public class GroupMetadataManagerTest {
             .build();
 
         ConsumerGroupMember expectedMember3 = new ConsumerGroupMember.Builder(memberId3)
-            .setMemberEpoch(2)
+            .setMemberEpoch(3)
             .setPreviousMemberEpoch(0)
             .setClientId(DEFAULT_CLIENT_ID)
             .setClientHost(DEFAULT_CLIENT_ADDRESS.toString())
@@ -14301,18 +14303,18 @@ public class GroupMetadataManagerTest {
 
             GroupCoordinatorRecordHelpers.newConsumerGroupMemberSubscriptionRecord(groupId, expectedMember1),
             GroupCoordinatorRecordHelpers.newConsumerGroupMemberSubscriptionRecord(groupId, expectedMember2),
-            // The classic group is rebalancing, so the upgraded group epoch is bumped to 1.
-            GroupCoordinatorRecordHelpers.newConsumerGroupEpochRecord(groupId, 1, groupHash),
+            // The classic group is rebalancing, so the upgraded group epoch is bumped to 2.
+            GroupCoordinatorRecordHelpers.newConsumerGroupEpochRecord(groupId, 2, groupHash),
             GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord(groupId, memberId1, Map.of()),
             GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord(groupId, memberId2, Map.of()),
-            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 0, 0),
+            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 1, 0),
             GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, expectedMember1),
             GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, expectedMember2),
 
             GroupCoordinatorRecordHelpers.newConsumerGroupMemberSubscriptionRecord(groupId, expectedMember3),
-            GroupCoordinatorRecordHelpers.newConsumerGroupEpochRecord(groupId, 2, groupHash),
+            GroupCoordinatorRecordHelpers.newConsumerGroupEpochRecord(groupId, 3, groupHash),
             GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord(groupId, memberId3, Map.of()),
-            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 2, context.time.milliseconds()),
+            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 3, context.time.milliseconds()),
             GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, expectedMember3)
         );
 
@@ -14320,7 +14322,7 @@ public class GroupMetadataManagerTest {
         assertEquals(
             new ConsumerGroupHeartbeatResponseData()
                 .setMemberId(memberId3)
-                .setMemberEpoch(2)
+                .setMemberEpoch(3)
                 .setHeartbeatIntervalMs(5000)
                 .setAssignment(new ConsumerGroupHeartbeatResponseData.Assignment()),
             result.response()
@@ -14341,7 +14343,7 @@ public class GroupMetadataManagerTest {
         assertEquals(
             new JoinGroupResponseData()
                 .setMemberId(memberId2)
-                .setGenerationId(2)
+                .setGenerationId(3)
                 .setProtocolType("consumer")
                 .setProtocolName("range"),
             joinResult.joinFuture.get()
@@ -14878,10 +14880,11 @@ public class GroupMetadataManagerTest {
      * Tests the upgrade of a classic group at generation 0 by a static member that restarts with the
      * consumer protocol.
      *
-     * The classic group is rebalancing, so the upgraded group epoch is bumped to 1. The static member
-     * replaces itself with the same subscription, so nothing else bumps the group epoch and the member
-     * gets epoch 1, not epoch 0, which is reserved for joining members. No protocol has been selected
-     * yet, so the classic members take their subscriptions from their first protocol.
+     * No generation has completed, so like a new group, the upgraded group starts with an empty target
+     * assignment at epoch 1 and no member gets epoch 0, which is reserved for joining members. The
+     * classic group is rebalancing, so the upgraded group epoch is bumped to 2. The static member
+     * replaces itself with the same subscription, so nothing else bumps the group epoch. No protocol
+     * has been selected yet, so the classic members take their subscriptions from their first protocol.
      *
      * @see #testConsumerGroupHeartbeatWithClassicGroupAtGenerationZero()
      * @see "ConsumerProtocolMigrationTest#testUpgradeFromClassicGroupAtGenerationZeroFromExistingStaticMember()"
@@ -14961,8 +14964,8 @@ public class GroupMetadataManagerTest {
 
         ConsumerGroupMember expectedMember1 = new ConsumerGroupMember.Builder(memberId1)
             .setInstanceId(instanceId1)
-            .setMemberEpoch(0)
-            .setPreviousMemberEpoch(0)
+            .setMemberEpoch(1)
+            .setPreviousMemberEpoch(1)
             .setClientId("client-id")
             .setClientHost("client-host")
             .setSubscribedTopicNames(List.of(fooTopicName))
@@ -14976,8 +14979,8 @@ public class GroupMetadataManagerTest {
             .build();
 
         ConsumerGroupMember expectedMember2 = new ConsumerGroupMember.Builder(memberId2)
-            .setMemberEpoch(0)
-            .setPreviousMemberEpoch(0)
+            .setMemberEpoch(1)
+            .setPreviousMemberEpoch(1)
             .setClientId("client-id")
             .setClientHost("client-host")
             .setSubscribedTopicNames(List.of(fooTopicName))
@@ -15002,7 +15005,7 @@ public class GroupMetadataManagerTest {
             .build();
 
         ConsumerGroupMember expectedFinalMember1 = new ConsumerGroupMember.Builder(expectedUpdatedMember1)
-            .setMemberEpoch(1)
+            .setMemberEpoch(2)
             .build();
         long groupHash = computeGroupHash(Map.of(fooTopicName, computeTopicHash(fooTopicName, metadataImage)));
 
@@ -15011,11 +15014,11 @@ public class GroupMetadataManagerTest {
 
             GroupCoordinatorRecordHelpers.newConsumerGroupMemberSubscriptionRecord(groupId, expectedMember1),
             GroupCoordinatorRecordHelpers.newConsumerGroupMemberSubscriptionRecord(groupId, expectedMember2),
-            // The classic group is rebalancing, so the upgraded group epoch is bumped to 1.
-            GroupCoordinatorRecordHelpers.newConsumerGroupEpochRecord(groupId, 1, groupHash),
+            // The classic group is rebalancing, so the upgraded group epoch is bumped to 2.
+            GroupCoordinatorRecordHelpers.newConsumerGroupEpochRecord(groupId, 2, groupHash),
             GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord(groupId, memberId1, Map.of()),
             GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentRecord(groupId, memberId2, Map.of()),
-            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 0, 0),
+            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 1, 0),
             GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, expectedMember1),
             GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, expectedMember2),
 
@@ -15028,7 +15031,7 @@ public class GroupMetadataManagerTest {
             GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, expectedReplacingMember1),
 
             GroupCoordinatorRecordHelpers.newConsumerGroupMemberSubscriptionRecord(groupId, expectedUpdatedMember1),
-            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 1, context.time.milliseconds()),
+            GroupCoordinatorRecordHelpers.newConsumerGroupTargetAssignmentMetadataRecord(groupId, 2, context.time.milliseconds()),
             GroupCoordinatorRecordHelpers.newConsumerGroupCurrentAssignmentRecord(groupId, expectedFinalMember1)
         );
 
@@ -15036,7 +15039,7 @@ public class GroupMetadataManagerTest {
         assertEquals(
             new ConsumerGroupHeartbeatResponseData()
                 .setMemberId(newMemberId1)
-                .setMemberEpoch(1)
+                .setMemberEpoch(2)
                 .setHeartbeatIntervalMs(5000)
                 .setAssignment(new ConsumerGroupHeartbeatResponseData.Assignment()),
             result.response()
@@ -15057,7 +15060,7 @@ public class GroupMetadataManagerTest {
         assertEquals(
             new JoinGroupResponseData()
                 .setMemberId(memberId2)
-                .setGenerationId(1)
+                .setGenerationId(2)
                 .setProtocolType("consumer")
                 .setProtocolName("range"),
             joinResult.joinFuture.get()
