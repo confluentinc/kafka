@@ -144,12 +144,13 @@ public class BrokerSecurityConfigs {
     public static final String ALLOWED_SASL_OAUTHBEARER_FILES_CONFIG = "org.apache.kafka.sasl.oauthbearer.allowed.files";
     public static final String ALLOWED_SASL_OAUTHBEARER_FILES_DEFAULT = "";
 
-    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG = "ssl.max.unsent.post.handshake.messages";
-    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_DOC = "Maximum number of unsent TLS post-handshake messages, such as KeyUpdates. "
-        + "Those caused by records with data wait for the next write until half this many are unsent, and the rest are sent right away. "
+    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG = "ssl.max.unsent.post.handshake.bytes";
+    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_DOC = "Maximum bytes of unsent TLS post-handshake messages, such as KeyUpdates, "
+        + "which the JDK wraps in 43 bytes each. "
+        + "Those caused by records with data wait for the next write until half this many bytes are unsent, and the rest are sent right away. "
         + "The connection closes above this. Clients always use the default. Applies to new connections.";
-    public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 2048;
-    public static final int MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES = 16384;
+    public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES = 86 * 1024;
+    public static final int MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES = 1024 * 1024;
 
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG = "ssl.held.post.handshake.messages.max.read.bytes";
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_DOC = "Maximum bytes of data read while TLS post-handshake messages, "
@@ -190,7 +191,7 @@ public class BrokerSecurityConfigs {
             .define(SslConfigs.SSL_SECURE_RANDOM_IMPLEMENTATION_CONFIG, STRING, null, LOW, SslConfigs.SSL_SECURE_RANDOM_IMPLEMENTATION_DOC)
             .define(SslConfigs.SSL_CIPHER_SUITES_CONFIG, LIST, List.of(), ConfigDef.ValidList.anyNonDuplicateValues(true, false), MEDIUM, SslConfigs.SSL_CIPHER_SUITES_DOC)
             .define(SslConfigs.SSL_ENGINE_FACTORY_CLASS_CONFIG, CLASS, null, LOW, SslConfigs.SSL_ENGINE_FACTORY_CLASS_DOC)
-            .define(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, INT, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES, ConfigDef.Range.between(1, BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES), LOW, BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_DOC)
+            .define(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG, INT, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES, ConfigDef.Range.between(1, BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES), LOW, BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_DOC)
             .define(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, LONG, BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES, ConfigDef.Range.atLeast(0), LOW, BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_DOC)
 
             // Sasl Configuration

@@ -98,7 +98,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
 
     private SslFactory sslFactory;
     private Map<String, ?> configs;
-    private volatile int maxUnsentPostHandshakeMessages;
+    private volatile int maxUnsentPostHandshakeBytes;
     private volatile long heldPostHandshakeMessagesMaxReadBytes;
     private KerberosShortNamer kerberosShortNamer;
 
@@ -142,7 +142,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     public void configure(Map<String, ?> configs) throws KafkaException {
         try {
             this.configs = configs;
-            this.maxUnsentPostHandshakeMessages = SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs);
+            this.maxUnsentPostHandshakeBytes = SslChannelBuilder.maxUnsentPostHandshakeBytes(connectionMode, configs);
             this.heldPostHandshakeMessagesMaxReadBytes = SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(connectionMode, configs);
             if (connectionMode == ConnectionMode.SERVER) {
                 createServerCallbackHandlers(configs);
@@ -207,7 +207,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     public void reconfigure(Map<String, ?> configs) {
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             sslFactory.reconfigure(configs);
-            this.maxUnsentPostHandshakeMessages = SslChannelBuilder.maxUnsentPostHandshakeMessages(connectionMode, configs);
+            this.maxUnsentPostHandshakeBytes = SslChannelBuilder.maxUnsentPostHandshakeBytes(connectionMode, configs);
             this.heldPostHandshakeMessagesMaxReadBytes = SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(connectionMode, configs);
         }
     }
@@ -271,7 +271,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             return SslTransportLayer.create(id, key,
                 sslFactory.createSslEngine(socketChannel.socket()),
-                metadataRegistry, maxUnsentPostHandshakeMessages, heldPostHandshakeMessagesMaxReadBytes);
+                metadataRegistry, maxUnsentPostHandshakeBytes, heldPostHandshakeMessagesMaxReadBytes);
         } else {
             return new PlaintextTransportLayer(key);
         }

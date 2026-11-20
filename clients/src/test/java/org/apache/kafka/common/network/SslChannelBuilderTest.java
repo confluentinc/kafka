@@ -29,20 +29,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class SslChannelBuilderTest {
 
     @Test
-    void testMaxUnsentPostHandshakeMessages() {
-        String config = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG;
-        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES,
-            SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.SERVER, Map.of()));
-        assertEquals(10, SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.SERVER, Map.of(config, 10)));
+    void testMaxUnsentPostHandshakeBytes() {
+        String config = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG;
+        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES,
+            SslChannelBuilder.maxUnsentPostHandshakeBytes(ConnectionMode.SERVER, Map.of()));
+        assertEquals(10, SslChannelBuilder.maxUnsentPostHandshakeBytes(ConnectionMode.SERVER, Map.of(config, 10)));
         assertThrows(ConfigException.class,
-            () -> SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.SERVER, Map.of(config, 0)));
-        int max = BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES;
-        assertEquals(max, SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.SERVER, Map.of(config, max)));
+            () -> SslChannelBuilder.maxUnsentPostHandshakeBytes(ConnectionMode.SERVER, Map.of(config, 0)));
+        int max = BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES;
+        assertEquals(max, SslChannelBuilder.maxUnsentPostHandshakeBytes(ConnectionMode.SERVER, Map.of(config, max)));
         assertThrows(ConfigException.class,
-            () -> SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.SERVER, Map.of(config, max + 1)));
+            () -> SslChannelBuilder.maxUnsentPostHandshakeBytes(ConnectionMode.SERVER, Map.of(config, max + 1)));
         // Clients don't define the config, so they ignore a value set there.
-        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES,
-            SslChannelBuilder.maxUnsentPostHandshakeMessages(ConnectionMode.CLIENT, Map.of(config, "abc")));
+        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES,
+            SslChannelBuilder.maxUnsentPostHandshakeBytes(ConnectionMode.CLIENT, Map.of(config, "abc")));
     }
 
     @Test

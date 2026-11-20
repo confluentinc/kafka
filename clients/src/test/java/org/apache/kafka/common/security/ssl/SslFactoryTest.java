@@ -258,7 +258,7 @@ public abstract class SslFactoryTest {
     }
 
     /**
-     * Tests that changing only the limit on unsent TLS post-handshake messages, which SslTransportLayer reads, does not
+     * Tests that changing only the limit on unsent TLS post-handshake bytes, which SslTransportLayer reads, does not
      * recreate the SslEngineFactory, which would reload the keystore and truststore.
      */
     @Test
@@ -272,7 +272,7 @@ public abstract class SslFactoryTest {
         SslEngineFactory sslEngineFactory = sslFactory.sslEngineFactory();
 
         Map<String, Object> newSslConfig = new HashMap<>(sslConfig);
-        newSslConfig.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_MESSAGES_CONFIG, 7);
+        newSslConfig.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG, 7);
         newSslConfig.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 7L);
         sslFactory.validateReconfiguration(newSslConfig);
         sslFactory.reconfigure(newSslConfig);
