@@ -16,7 +16,6 @@
 import sys
 import glob
 from xml.etree import ElementTree
-from junitparser import JUnitXml
 
 
 def count_test_results(xml_files):
@@ -32,9 +31,8 @@ def count_test_results(xml_files):
         failures = 0
         rerun_failures = 0
         try:
-            xml = JUnitXml.fromfile(junit_xml_file)
-            passed = xml.tests - xml.failures - xml.skipped
-            skipped = xml.skipped
+            tests, xml_failures, skipped = read_suite_totals(junit_xml_file)
+            passed = tests - xml_failures - skipped
 
             context = ElementTree.iterparse(junit_xml_file, events=("start", "end"))
             failures, rerun_failures = parse_failures_and_rerun_tests(context)
@@ -44,7 +42,7 @@ def count_test_results(xml_files):
 
         except Exception as e:
             print(f"Unexpected error while processing test xml for {junit_xml_file}: {e}")
-            failures += failures
+            failures += 1
 
         total_passed += passed
         total_failures += failures
@@ -52,6 +50,19 @@ def count_test_results(xml_files):
         total_skipped += skipped
 
     return total_passed, total_failures, total_rerun_failures, total_skipped
+
+def read_suite_totals(junit_xml_file):
+    # Read the totals from the <testsuite> attributes with the standard-library parser. junitparser
+    # parses with lxml, which rejects a CDATA section over 10 MB ("CData section too big found"),
+    # so a test that logged that much output made its whole result file unreadable.
+    tests = failures = skipped = 0
+    for _, elem in ElementTree.iterparse(junit_xml_file, events=("start",)):
+        if elem.tag == "testsuite":
+            tests += int(elem.get("tests", 0))
+            failures += int(elem.get("failures", 0))
+            skipped += int(elem.get("skipped", 0))
+    return tests, failures, skipped
+
 
 def parse_failures_and_rerun_tests(context):
     failures = 0
@@ -82,7 +93,7 @@ def main():
           f"Skipped: {skipped}")
 
     if rerun_failures > 0 or failures > 0:
-        sys.exit(rerun_failures + failures)
+        sys.exit(1)
 
 
 
