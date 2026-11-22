@@ -44,7 +44,7 @@ def count_test_results(xml_files):
 
         except Exception as e:
             print(f"Unexpected error while processing test xml for {junit_xml_file}: {e}")
-            failures += failures
+            failures += 1
 
         total_passed += passed
         total_failures += failures
@@ -82,7 +82,7 @@ def main():
           f"Skipped: {skipped}")
 
     if rerun_failures > 0 or failures > 0:
-        sys.exit(rerun_failures + failures)
+        sys.exit(1)
 
 
 
