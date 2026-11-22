@@ -597,6 +597,12 @@ subprojects {
     }
   }
 
+  // Merge Gradle test retries into one <testcase> (Surefire format: <flakyFailure> when the retry passed,
+  // <rerunFailure> when it failed again), which is what scripts/check_test_failures.py reads.
+  tasks.withType(Test).configureEach {
+    reports.junitXml.mergeReruns = true
+  }
+
   test {
 
     doFirst {
