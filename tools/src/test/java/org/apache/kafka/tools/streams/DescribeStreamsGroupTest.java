@@ -137,9 +137,10 @@ public class DescribeStreamsGroupTest {
     @Test
     public void testDescribeStreamsGroupWithStateAndVerboseOptions() throws Exception {
         final List<String> expectedHeader = Arrays.asList("GROUP", "COORDINATOR", "(ID)", "STATE", "GROUP-EPOCH", "TARGET-ASSIGNMENT-EPOCH", "#MEMBERS");
-        final Set<List<String>> expectedRows = Set.of(Arrays.asList(APP_ID, "", "", "Stable", "3", "3", "2"));
+        final Set<List<String>> expectedRows = Set.of(Arrays.asList(APP_ID, "", "", "Stable", "", "", "2"));
         // The coordinator is not deterministic, so we don't care about it.
-        final List<Integer> dontCares = List.of(1, 2);
+        // The GROUP-EPOCH and TARGET-ASSIGNMENT-EPOCH can vary due to rebalance timing, so we don't care about them either.
+        final List<Integer> dontCares = List.of(1, 2, 4, 5);
 
         validateDescribeOutput(
             Arrays.asList("--bootstrap-server", cluster.bootstrapServers(), "--describe", "--state", "--verbose"), expectedHeader, expectedRows, dontCares);
@@ -164,10 +165,11 @@ public class DescribeStreamsGroupTest {
     public void testDescribeStreamsGroupWithMembersAndVerboseOptions() throws Exception {
         final List<String> expectedHeader = List.of("GROUP", "TARGET-ASSIGNMENT-EPOCH", "TOPOLOGY-EPOCH", "MEMBER", "MEMBER-PROTOCOL", "MEMBER-EPOCH", "PROCESS", "CLIENT-ID", "ASSIGNMENTS");
         final Set<List<String>> expectedRows = Set.of(
-            List.of(APP_ID, "3", "0", "", "streams", "3", "", "", "ACTIVE:", "0:[0,1];", "TARGET-ACTIVE:", "0:[0,1];"),
-            List.of(APP_ID, "3", "0", "", "streams", "3", "", "", "ACTIVE:", "1:[0,1];", "TARGET-ACTIVE:", "1:[0,1];"));
+            List.of(APP_ID, "", "0", "", "streams", "", "", "", "ACTIVE:", "0:[0,1];", "TARGET-ACTIVE:", "0:[0,1];"),
+            List.of(APP_ID, "", "0", "", "streams", "", "", "", "ACTIVE:", "1:[0,1];", "TARGET-ACTIVE:", "1:[0,1];"));
         // The member and process names as well as client-id are not deterministic, so we don't care about them.
-        final List<Integer> dontCares = List.of(3, 6, 7);
+        // The TARGET-ASSIGNMENT-EPOCH and MEMBER-EPOCH can vary due to rebalance timing, so we don't care about them either.
+        final List<Integer> dontCares = List.of(1, 3, 5, 6, 7);
 
         validateDescribeOutput(
             Arrays.asList("--bootstrap-server", cluster.bootstrapServers(), "--describe", "--members", "--verbose"), expectedHeader, expectedRows, dontCares);
