@@ -537,6 +537,12 @@ subprojects {
   // Gradle will run each test class, so we exclude the suites to avoid redundantly running the tests twice.
   def testsToExclude = ['**/*Suite.class']
 
+  // Merge Gradle test retries into one <testcase> (Surefire format: <flakyFailure> when the retry passed,
+  // <rerunFailure> when it failed again), which is what scripts/check_test_failures.py reads.
+  tasks.withType(Test).configureEach {
+    reports.junitXml.mergeReruns = true
+  }
+
   test {
     ext {
       isGithubActions = System.getenv('GITHUB_ACTIONS') != null
