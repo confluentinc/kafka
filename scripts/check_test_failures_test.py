@@ -61,7 +61,7 @@ class ParseFailuresTest(unittest.TestCase):
     def test_failed_on_retry_too_is_a_failure(self):
         self.assertEqual((0, 1), parse(suite(case("a()", FAILURE, RERUN_FAILURE))))
 
-    def test_same_display_name_twice_counts_each_failure(self):
+    def test_later_pass_with_same_name_does_not_cancel_a_failure(self):
         self.assertEqual((1, 0), parse(suite(case("[1] x", FAILURE), case("[1] x"))))
 
 
