@@ -408,10 +408,15 @@ class ZkMigrationFailoverTest extends Logging {
         case None => false
       }, "waiting for 3001 to claim ZK leadership")
 
+      // Writing 1000 topics to ZK (driver 1 in dual-write, then driver 2's KRaft-to-ZK sync) takes ~8s in
+      // isolation and can exceed the default 15s wait when the full test suite runs in parallel forks.
+      var topicCount = 0
       TestUtils.waitUntilTrue(() => {
-        val topics = zkClient.getAllTopicsInCluster(false)
-        topics.size == 1000
-      }, "waiting for topics to be created in ZK.")
+        topicCount = zkClient.getAllTopicsInCluster(false).size
+        topicCount == 1000
+      }, s"waiting for topics to be created in ZK. Found $topicCount of 1000 topics." +
+        s" Driver 1 wrote ${topicClient1.createdTopics.size}, driver 2 wrote ${topicClient2.createdTopics.size}.",
+        waitTimeMs = 60000)
 
       assertTrue(topicClient1.createdTopics.nonEmpty, "Expect first leader to write some topics")
       assertTrue(topicClient2.createdTopics.nonEmpty, "Expect second leader to write some topics")
