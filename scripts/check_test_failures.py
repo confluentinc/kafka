@@ -44,7 +44,7 @@ def count_test_results(xml_files):
 
         except Exception as e:
             print(f"Unexpected error while processing test xml for {junit_xml_file}: {e}")
-            failures += failures
+            failures += 1
 
         total_passed += passed
         total_failures += failures
@@ -54,21 +54,23 @@ def count_test_results(xml_files):
     return total_passed, total_failures, total_rerun_failures, total_skipped
 
 def parse_failures_and_rerun_tests(context):
-    failures = 0
-    rerun_failures = 0
+    # Gradle's test-retry plugin writes every attempt as its own <testcase> with the same classname and
+    # name, so a test that failed and then passed on retry appears as a failed testcase followed by a
+    # passing one. Only the last attempt of each test decides whether it counts as a failure.
+    last_attempt = {}
     for event, elem in context:
         if event == "start" and elem.tag == "testcase":
             testcase_has_failure = False
             testcase_has_rerun_failure = False
         elif event == "end" and elem.tag == "testcase":
-            if testcase_has_failure and not testcase_has_rerun_failure:
-                failures += 1
-            elif testcase_has_rerun_failure:
-                rerun_failures += 1
+            key = (elem.get("classname"), elem.get("name"))
+            last_attempt[key] = (testcase_has_failure, testcase_has_rerun_failure)
         elif event == "end" and elem.tag == "failure":
             testcase_has_failure = True
         elif event == "end" and (elem.tag == "rerunFailure" or elem.tag == "rerunError"):
             testcase_has_rerun_failure = True
+    failures = sum(1 for failed, rerun_failed in last_attempt.values() if failed and not rerun_failed)
+    rerun_failures = sum(1 for _, rerun_failed in last_attempt.values() if rerun_failed)
     return failures, rerun_failures
 
 def main():
@@ -82,7 +84,7 @@ def main():
           f"Skipped: {skipped}")
 
     if rerun_failures > 0 or failures > 0:
-        sys.exit(rerun_failures + failures)
+        sys.exit(1)
 
 
 
