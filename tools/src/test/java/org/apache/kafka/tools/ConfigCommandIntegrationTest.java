@@ -115,7 +115,7 @@ public class ConfigCommandIntegrationTest {
     }
 
     @ClusterTest
-    public void testNullStatusOnKraftCommandAlterGroup() {
+    public void testNullStatusOnKraftCommandAlterGroup() throws InterruptedException {
         Stream<String> command = Stream.concat(quorumArgs(), Stream.of(
             "--entity-type", "groups",
             "--entity-name", "group",
@@ -130,13 +130,16 @@ public class ConfigCommandIntegrationTest {
         message = captureStandardOut(run(command));
         assertEquals("Completed updating config for group group.", message);
 
-        // A non-existent group with dynamic configs can be described
-        command = Stream.concat(quorumArgs(), Stream.of(
-            "--entity-type", "groups",
-            "--describe"));
-        message = captureStandardOut(run(command));
-        assertTrue(message.contains("Dynamic configs for group group are:"));
-        assertTrue(message.contains("consumer.session.timeout.ms=50000 sensitive=false synonyms={DYNAMIC_GROUP_CONFIG:consumer.session.timeout.ms=50000}"));
+        // Wait for the config change to propagate — incrementalAlterConfigs returns
+        // when the controller accepts the request, not when describeConfigs reflects it.
+        TestUtils.waitForCondition(() -> {
+            Stream<String> describeCmd = Stream.concat(quorumArgs(), Stream.of(
+                "--entity-type", "groups",
+                "--describe"));
+            String describeMsg = captureStandardOut(run(describeCmd));
+            return describeMsg.contains("Dynamic configs for group group are:")
+                && describeMsg.contains("consumer.session.timeout.ms=50000 sensitive=false synonyms={DYNAMIC_GROUP_CONFIG:consumer.session.timeout.ms=50000}");
+        }, "group config should contain consumer.session.timeout.ms=50000");
 
         command = Stream.concat(quorumArgs(), Stream.of(
             "--entity-type", "groups",
@@ -184,7 +187,7 @@ public class ConfigCommandIntegrationTest {
     }
 
     @ClusterTest
-    public void testNullStatusOnKraftCommandAlterClientMetrics() {
+    public void testNullStatusOnKraftCommandAlterClientMetrics() throws InterruptedException {
         Stream<String> command = Stream.concat(quorumArgs(), Stream.of(
                 "--entity-type", "client-metrics",
                 "--entity-name", "cm",
@@ -199,12 +202,16 @@ public class ConfigCommandIntegrationTest {
         message = captureStandardOut(run(command));
         assertEquals("Completed updating config for client-metric cm.", message);
 
-        command = Stream.concat(quorumArgs(), Stream.of(
-            "--entity-type", "client-metrics",
-            "--describe"));
-        message = captureStandardOut(run(command));
-        assertTrue(message.contains("Dynamic configs for client-metric cm are:"));
-        assertTrue(message.contains("metrics=org.apache sensitive=false synonyms={DYNAMIC_CLIENT_METRICS_CONFIG:metrics=org.apache}"));
+        // Wait for the config change to propagate — incrementalAlterConfigs returns
+        // when the controller accepts the request, not when describeConfigs reflects it.
+        TestUtils.waitForCondition(() -> {
+            Stream<String> describeCmd = Stream.concat(quorumArgs(), Stream.of(
+                "--entity-type", "client-metrics",
+                "--describe"));
+            String describeMsg = captureStandardOut(run(describeCmd));
+            return describeMsg.contains("Dynamic configs for client-metric cm are:")
+                && describeMsg.contains("metrics=org.apache sensitive=false synonyms={DYNAMIC_CLIENT_METRICS_CONFIG:metrics=org.apache}");
+        }, "client-metric config should contain metrics=org.apache");
 
         command = Stream.concat(quorumArgs(), Stream.of(
             "--entity-type", "client-metrics",
@@ -227,12 +234,16 @@ public class ConfigCommandIntegrationTest {
                     "--alter", "--add-config", "cleanup.policy=[delete,compact]"));
             String message = captureStandardOut(run(command));
             assertEquals("Completed updating config for topic topic.", message);
-            command = Stream.concat(quorumArgs(), Stream.of(
-                    "--entity-type", "topics",
-                    "--entity-name", "topic",
-                    "--describe"));
-            message = captureStandardOut(run(command));
-            assertTrue(message.contains("cleanup.policy=delete,compact"), "Config entry was not added correctly");
+            // Wait for the config change to propagate — incrementalAlterConfigs returns
+            // when the controller accepts the request, not when describeConfigs reflects it.
+            TestUtils.waitForCondition(() -> {
+                Stream<String> describeCmd = Stream.concat(quorumArgs(), Stream.of(
+                        "--entity-type", "topics",
+                        "--entity-name", "topic",
+                        "--describe"));
+                String describeMsg = captureStandardOut(run(describeCmd));
+                return describeMsg.contains("cleanup.policy=delete,compact");
+            }, "Config entry was not added correctly");
         }
     }
 
@@ -298,7 +309,7 @@ public class ConfigCommandIntegrationTest {
     }
 
     @ClusterTest
-    public void testAlterStreamsGroupNumOfStandbyReplicas() {
+    public void testAlterStreamsGroupNumOfStandbyReplicas() throws InterruptedException {
         // Verify the initial config
         Stream<String> command = Stream.concat(quorumArgs(), Stream.of(
             "--entity-type", "groups",
@@ -315,13 +326,16 @@ public class ConfigCommandIntegrationTest {
         message = captureStandardOut(run(command));
         assertEquals("Completed updating config for group group.", message);
 
-        // Verify the updated config
-        command = Stream.concat(quorumArgs(), Stream.of(
-            "--entity-type", "groups",
-            "--entity-name", "group",
-            "--describe"));
-        message = captureStandardOut(run(command));
-        assertTrue(message.contains("streams.num.standby.replicas=1"));
+        // Wait for the config change to propagate — incrementalAlterConfigs returns
+        // when the controller accepts the request, not when describeConfigs reflects it.
+        TestUtils.waitForCondition(() -> {
+            Stream<String> describeCmd = Stream.concat(quorumArgs(), Stream.of(
+                "--entity-type", "groups",
+                "--entity-name", "group",
+                "--describe"));
+            String describeMsg = captureStandardOut(run(describeCmd));
+            return describeMsg.contains("streams.num.standby.replicas=1");
+        }, "streams.num.standby.replicas should have been updated to 1");
     }
 
     private void verifyGroupConfigUpdate(List<String> alterOpts) throws Exception {
