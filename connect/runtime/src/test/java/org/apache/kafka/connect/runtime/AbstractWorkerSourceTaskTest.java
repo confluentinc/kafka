@@ -40,6 +40,7 @@ import org.apache.kafka.connect.runtime.errors.ErrorHandlingMetrics;
 import org.apache.kafka.connect.runtime.errors.ErrorReporter;
 import org.apache.kafka.connect.runtime.errors.RetryWithToleranceOperator;
 import org.apache.kafka.connect.runtime.errors.RetryWithToleranceOperatorTest;
+import org.apache.kafka.connect.runtime.isolation.PluginDiscoveryMode;
 import org.apache.kafka.connect.runtime.isolation.Plugins;
 import org.apache.kafka.connect.runtime.standalone.StandaloneConfig;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -56,6 +57,7 @@ import org.apache.kafka.connect.util.TopicAdmin;
 import org.apache.kafka.connect.util.TopicCreationGroup;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.AdditionalAnswers;
@@ -143,7 +145,8 @@ public class AbstractWorkerSourceTaskTest {
     private final ConnectorTaskId taskId = new ConnectorTaskId("job", 0);
     private final ConnectorTaskId taskId1 = new ConnectorTaskId("job", 1);
 
-    private Plugins plugins;
+    // Shared across tests: workerProps() is constant, so the plugin scan only needs to run once.
+    private static Plugins plugins;
     private WorkerConfig config;
     private SourceConnectorConfig sourceConfig;
     private MockConnectMetrics metrics;
@@ -151,21 +154,26 @@ public class AbstractWorkerSourceTaskTest {
 
     private AbstractWorkerSourceTask workerTask;
 
+    @BeforeClass
+    public static void setupClass() {
+        plugins = new Plugins(workerProps());
+    }
+
     @Before
     public void setup() {
         Map<String, String> workerProps = workerProps();
-        plugins = new Plugins(workerProps);
         config = new StandaloneConfig(workerProps);
         sourceConfig = new SourceConnectorConfig(plugins, sourceConnectorPropsWithGroups(), true);
         metrics = new MockConnectMetrics();
     }
 
-    private Map<String, String> workerProps() {
+    private static Map<String, String> workerProps() {
         Map<String, String> props = new HashMap<>();
         props.put("key.converter", "org.apache.kafka.connect.json.JsonConverter");
         props.put("value.converter", "org.apache.kafka.connect.json.JsonConverter");
         props.put("offset.storage.file.filename", "/tmp/connect.offsets");
         props.put(TOPIC_CREATION_ENABLE_CONFIG, "true");
+        props.put(WorkerConfig.PLUGIN_DISCOVERY_CONFIG, PluginDiscoveryMode.SERVICE_LOAD.toString());
         return props;
     }
 

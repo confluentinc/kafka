@@ -34,6 +34,7 @@ import org.apache.kafka.connect.integration.MonitorableSourceConnector;
 import org.apache.kafka.connect.runtime.ConnectMetrics.MetricGroup;
 import org.apache.kafka.connect.runtime.errors.ErrorHandlingMetrics;
 import org.apache.kafka.connect.runtime.errors.RetryWithToleranceOperatorTest;
+import org.apache.kafka.connect.runtime.isolation.PluginDiscoveryMode;
 import org.apache.kafka.connect.runtime.isolation.Plugins;
 import org.apache.kafka.connect.runtime.standalone.StandaloneConfig;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -56,6 +57,7 @@ import org.apache.kafka.connect.util.TopicAdmin;
 import org.apache.kafka.connect.util.TopicCreationGroup;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -137,7 +139,8 @@ public class ExactlyOnceWorkerSourceTaskTest {
     private final ConnectorTaskId taskId = new ConnectorTaskId("job", 0);
     private WorkerConfig config;
     private SourceConnectorConfig sourceConfig;
-    private Plugins plugins;
+    // Shared across tests: plugin discovery ignores the topic-creation flag, the only prop that varies.
+    private static Plugins plugins;
     private MockConnectMetrics metrics;
     @Mock private ErrorHandlingMetrics errorHandlingMetrics;
     private Time time;
@@ -190,10 +193,14 @@ public class ExactlyOnceWorkerSourceTaskTest {
         this.taskStarted = false;
     }
 
+    @BeforeClass
+    public static void setupClass() {
+        plugins = new Plugins(workerProps(false));
+    }
+
     @Before
     public void setup() throws Exception {
-        Map<String, String> workerProps = workerProps();
-        plugins = new Plugins(workerProps);
+        Map<String, String> workerProps = workerProps(enableTopicCreation);
         config = new StandaloneConfig(workerProps);
         sourceConfig = new SourceConnectorConfig(plugins, sourceConnectorProps(), true);
         metrics = new MockConnectMetrics();
@@ -239,7 +246,7 @@ public class ExactlyOnceWorkerSourceTaskTest {
         if (metrics != null) metrics.stop();
     }
 
-    private Map<String, String> workerProps() {
+    private static Map<String, String> workerProps(boolean enableTopicCreation) {
         Map<String, String> props = new HashMap<>();
         props.put("key.converter", "org.apache.kafka.connect.json.JsonConverter");
         props.put("value.converter", "org.apache.kafka.connect.json.JsonConverter");
@@ -249,6 +256,7 @@ public class ExactlyOnceWorkerSourceTaskTest {
         props.put("internal.value.converter.schemas.enable", "false");
         props.put("offset.storage.file.filename", "/tmp/connect.offsets");
         props.put(TOPIC_CREATION_ENABLE_CONFIG, String.valueOf(enableTopicCreation));
+        props.put(WorkerConfig.PLUGIN_DISCOVERY_CONFIG, PluginDiscoveryMode.SERVICE_LOAD.toString());
         return props;
     }
 
