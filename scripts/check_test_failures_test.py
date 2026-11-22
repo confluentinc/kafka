@@ -16,17 +16,12 @@
 import io
 import os
 import sys
-import types
+import tempfile
 import unittest
 from xml.etree import ElementTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-if "junitparser" not in sys.modules:
-    try:
-        import junitparser  # noqa: F401
-    except ImportError:
-        sys.modules["junitparser"] = types.SimpleNamespace(JUnitXml=None)
-from check_test_failures import parse_failures_and_rerun_tests
+from check_test_failures import parse_failures_and_rerun_tests, read_suite_totals
 
 
 def parse(xml):
@@ -63,6 +58,25 @@ class ParseFailuresTest(unittest.TestCase):
 
     def test_later_pass_with_same_name_does_not_cancel_a_failure(self):
         self.assertEqual((1, 0), parse(suite(case("[1] x", FAILURE), case("[1] x"))))
+
+
+class ReadSuiteTotalsTest(unittest.TestCase):
+    def totals(self, xml):
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False) as f:
+            f.write(xml)
+        self.addCleanup(os.remove, f.name)
+        return read_suite_totals(f.name)
+
+    def test_totals_come_from_testsuite_attributes(self):
+        xml = '<testsuite name="org.example.SomeTest" tests="5" failures="1" errors="0" skipped="2"></testsuite>'
+        self.assertEqual((5, 1, 2), self.totals(xml))
+
+    def test_output_over_ten_megabytes_is_readable(self):
+        # lxml (used by junitparser) refuses CDATA sections over 10 MB.
+        output = "x" * (11 * 1024 * 1024)
+        xml = ('<testsuite name="org.example.SomeTest" tests="1" failures="0" errors="0" skipped="0">'
+               + case("a()") + f"<system-out><![CDATA[{output}]]></system-out></testsuite>")
+        self.assertEqual((1, 0, 0), self.totals(xml))
 
 
 if __name__ == "__main__":
