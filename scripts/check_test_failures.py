@@ -82,7 +82,7 @@ def main():
           f"Skipped: {skipped}")
 
     if rerun_failures > 0 or failures > 0:
-        sys.exit(rerun_failures + failures)
+        sys.exit(1)
 
 
 
