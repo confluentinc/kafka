@@ -609,7 +609,7 @@ public class QuorumControllerTest {
         List<Integer> brokersToKeepUnfenced = Arrays.asList(1);
         List<Integer> brokersToFence = Arrays.asList(2, 3);
         short replicationFactor = (short) allBrokers.size();
-        long sessionTimeoutMillis = 300;
+        long sessionTimeoutMillis = 2000;
 
         try (
             LocalLogManagerTestEnv logEnv = new LocalLogManagerTestEnv.Builder(1).build();
@@ -643,6 +643,13 @@ public class QuorumControllerTest {
                     "Broker " + brokerId + " should have been fenced");
             });
 
+            ConfigRecord configRecord = new ConfigRecord()
+                .setResourceType(BROKER.id())
+                .setResourceName("")
+                .setName(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG)
+                .setValue("2");
+            RecordTestUtils.replayAll(active.configurationControl(), singletonList(new ApiMessageAndVersion(configRecord, (short) 0)));
+
             // Unfence all brokers and create a topic foo (min ISR 2)
             sendBrokerHeartbeatToUnfenceBrokers(active, allBrokers, brokerEpochs);
             CreateTopicsRequestData createTopicsRequestData = new CreateTopicsRequestData().setTopics(
@@ -659,12 +666,6 @@ public class QuorumControllerTest {
             assertEquals(Errors.NONE, Errors.forCode(createTopicsResponseData.topics().find("bar").errorCode()));
             Uuid topicIdFoo = createTopicsResponseData.topics().find("foo").topicId();
             Uuid topicIdBar = createTopicsResponseData.topics().find("bar").topicId();
-            ConfigRecord configRecord = new ConfigRecord()
-                .setResourceType(BROKER.id())
-                .setResourceName("")
-                .setName(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG)
-                .setValue("2");
-            RecordTestUtils.replayAll(active.configurationControl(), singletonList(new ApiMessageAndVersion(configRecord, (short) 0)));
 
             // Fence brokers
             TestUtils.waitForCondition(() -> {
@@ -694,6 +695,16 @@ public class QuorumControllerTest {
             sendBrokerHeartbeatToUnfenceBrokers(active, brokersToKeepUnfenced, brokerEpochs);
 
             // Verify the isr and elr for the topic partition
+            TestUtils.waitForCondition(
+                () -> {
+                    sendBrokerHeartbeatToUnfenceBrokers(active, brokersToKeepUnfenced, brokerEpochs);
+                    PartitionRegistration partition = active.replicationControl().getPartition(topicIdFoo, 0);
+                    return partition.isr.length == 1 && partition.isr[0] == 1;
+                },
+                sessionTimeoutMillis * 3,
+                "The ISR for " + topicIdFoo + " did not become 1 within expected time. Current status:" +
+                        active.replicationControl().getPartition(topicIdFoo, 0).toString()
+            );
             PartitionRegistration partition = active.replicationControl().getPartition(topicIdFoo, 0);
             assertArrayEquals(new int[]{1}, partition.isr, partition.toString());
 
