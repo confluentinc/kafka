@@ -89,7 +89,7 @@ versions += [
   gradle: "8.2.1",
   grgit: "4.1.1",
   httpclient: "4.5.14",
-  jackson: "2.18.11",
+  jackson: "2.18.12",
   jacoco: "0.8.10",
   javassist: "3.29.2-GA",
   // A range rather than a pin. 9.4.59 and later are patched releases that only
@@ -156,7 +156,7 @@ versions += [
   swaggerJaxrs2: "2.2.8",
   zinc: "1.9.2",
   zookeeper: "3.8.7",
-  zstd: "1.5.5-1"
+  zstd: "1.5.7-17"
 ]
 
 libs += [
