@@ -258,8 +258,8 @@ public abstract class SslFactoryTest {
     }
 
     /**
-     * Tests that changing only the limit on unsent TLS post-handshake bytes, which SslTransportLayer reads, does not
-     * recreate the SslEngineFactory, which would reload the keystore and truststore.
+     * Tests that changing only the limits on TLS post-handshake messages, which SslTransportLayer reads and the
+     * SslEngineFactory never sees, does not recreate the SslEngineFactory, which would reload the keystore and truststore.
      */
     @Test
     public void testReconfigurationOfUnsentPostHandshakeMessageLimit() throws Exception {

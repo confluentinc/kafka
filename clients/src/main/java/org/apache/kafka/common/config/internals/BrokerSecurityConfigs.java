@@ -26,6 +26,7 @@ import org.apache.kafka.common.security.authenticator.DefaultKafkaPrincipalBuild
 import org.apache.kafka.common.utils.Utils;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.apache.kafka.common.config.ConfigDef.Importance.HIGH;
 import static org.apache.kafka.common.config.ConfigDef.Importance.LOW;
@@ -147,7 +148,8 @@ public class BrokerSecurityConfigs {
     public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG = "ssl.max.unsent.post.handshake.bytes";
     public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_DOC = "Maximum bytes of unsent TLS post-handshake messages, such as KeyUpdates, "
         + "which the JDK wraps in 43 bytes each. "
-        + "Those caused by records with data wait for the next write until half this many bytes are unsent, and the rest are sent right away. "
+        + "Those caused by records with data wait for the next write, as described for ssl.held.post.handshake.messages.max.read.bytes, "
+        + "until 16 of them, or half this many bytes, are unsent. The rest are sent right away. "
         + "The connection closes above this. Clients always use the default. Applies to new connections.";
     public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES = 86 * 1024;
     public static final int MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES = 1024 * 1024;
@@ -155,10 +157,21 @@ public class BrokerSecurityConfigs {
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG = "ssl.held.post.handshake.messages.max.read.bytes";
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_DOC = "Maximum bytes of data read while TLS post-handshake messages, "
         + "such as KeyUpdates, wait for the next write. They are sent once this many are read. "
+        + "Those caused by records with data wait so that a peer, such as librdkafka with OpenSSL, does not receive them "
+        + "while writing, which can fail its connection. "
         + "0 sends them right away, and Long.MAX_VALUE turns this limit off, so a peer that is never written to "
-        + "may not receive them. "
+        + "may not receive them. Bytes of any of them that the socket does not take wait for the next write, "
+        + "or for a read that sends them, which is harmless since the peer does not wait for them. "
         + "Clients always use the default. Applies to new connections.";
     public static final long DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES = 10L * 1024 * 1024 * 1024;
+
+    /**
+     * SSL configs read by SslTransportLayer rather than the SSL engine factory. Channel builders reconfigure them
+     * without rebuilding the factory, and they can be updated per broker, at the default cluster level, or per listener.
+     */
+    public static final Set<String> SSL_TRANSPORT_LAYER_RECONFIGURABLE_CONFIGS = Set.of(
+            SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG,
+            SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG);
 
     public static final ConfigDef CONFIG_DEF =  new ConfigDef()
             // General Security Configuration

@@ -38,8 +38,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable {
+    // The SSL engine factory's configs, plus those SslTransportLayer reads, which the factory never sees.
+    static final Set<String> RECONFIGURABLE_CONFIGS = Stream.concat(
+            SslConfigs.RECONFIGURABLE_CONFIGS.stream(),
+            BrokerSecurityConfigs.SSL_TRANSPORT_LAYER_RECONFIGURABLE_CONFIGS.stream())
+        .collect(Collectors.toUnmodifiableSet());
+
     private final ListenerName listenerName;
     private final boolean isInterBrokerListener;
     private final ConnectionMode connectionMode;
@@ -82,12 +90,13 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
 
     @Override
     public Set<String> reconfigurableConfigs() {
-        return SslConfigs.RECONFIGURABLE_CONFIGS;
+        return RECONFIGURABLE_CONFIGS;
     }
 
     @Override
     public void validateReconfiguration(Map<String, ?> configs) {
         sslFactory.validateReconfiguration(configs);
+        validatePostHandshakeConfigs(connectionMode, configs);
     }
 
     @Override
@@ -130,6 +139,14 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
         SocketChannel socketChannel = (SocketChannel) key.channel();
         return SslTransportLayer.create(id, key, sslFactory.createSslEngine(socketChannel.socket()),
             metadataRegistry, maxUnsentPostHandshakeBytes, heldPostHandshakeMessagesMaxReadBytes);
+    }
+
+    /**
+     * Throws a ConfigException if the SslTransportLayer configs in {@code configs} are invalid.
+     */
+    static void validatePostHandshakeConfigs(ConnectionMode connectionMode, Map<String, ?> configs) {
+        maxUnsentPostHandshakeBytes(connectionMode, configs);
+        heldPostHandshakeMessagesMaxReadBytes(connectionMode, configs);
     }
 
     static int maxUnsentPostHandshakeBytes(ConnectionMode connectionMode, Map<String, ?> configs) {

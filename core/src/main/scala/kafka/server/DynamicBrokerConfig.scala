@@ -27,6 +27,7 @@ import kafka.server.DynamicBrokerConfig._
 import kafka.utils.Logging
 import org.apache.kafka.common.{Endpoint, Reconfigurable}
 import org.apache.kafka.common.config.{ConfigDef, ConfigException, ConfigResource, SslConfigs}
+import org.apache.kafka.common.config.internals.BrokerSecurityConfigs
 import org.apache.kafka.common.metadata.{ConfigRecord, MetadataRecordType}
 import org.apache.kafka.common.metrics.{Metrics, MetricsReporter}
 import org.apache.kafka.common.network.{ListenerName, ListenerReconfigurable}
@@ -759,7 +760,9 @@ class DynamicListenerConfig(server: KafkaBroker) extends BrokerReconfigurable wi
       def immutableListenerConfigs(kafkaConfig: KafkaConfig, prefix: String): Map[String, AnyRef] = {
         kafkaConfig.originalsWithPrefix(prefix, true).asScala.filter { case (key, _) =>
           // skip the reconfigurable configs
-          !JDynamicBrokerConfig.DYNAMIC_SECURITY_CONFIGS.contains(key) && !SocketServer.LISTENER_RECONFIGURABLE_CONFIGS.contains(key) && !DataPlaneAcceptor.ListenerReconfigurableConfigs.contains(key)
+          !JDynamicBrokerConfig.DYNAMIC_SECURITY_CONFIGS.contains(key) && !SocketServer.LISTENER_RECONFIGURABLE_CONFIGS.contains(key) &&
+            !DataPlaneAcceptor.ListenerReconfigurableConfigs.contains(key) &&
+            !BrokerSecurityConfigs.SSL_TRANSPORT_LAYER_RECONFIGURABLE_CONFIGS.contains(key)
         }
       }
       if (immutableListenerConfigs(newConfig, listenerName.configPrefix) != immutableListenerConfigs(oldConfig, listenerName.configPrefix))

@@ -146,10 +146,7 @@ public class DynamicBrokerConfig {
     }
 
     public static Set<String> securityConfigsWithoutListenerPrefix(Properties props) {
-        return DYNAMIC_SECURITY_CONFIGS.stream()
-                .filter(props::containsKey)
-                .filter(c -> !SslConfigs.BROKER_WIDE_RECONFIGURABLE_CONFIGS.contains(c))
-                .collect(Collectors.toSet());
+        return DYNAMIC_SECURITY_CONFIGS.stream().filter(props::containsKey).collect(Collectors.toSet());
     }
 
     public static void validateConfigTypes(Properties props) {
@@ -269,7 +266,11 @@ public class DynamicBrokerConfig {
                 SocketServerConfigs.MAX_CONNECTION_CREATION_RATE_CONFIG,
 
                 // Network threads
-                SocketServerConfigs.NUM_NETWORK_THREADS_CONFIG);
+                SocketServerConfigs.NUM_NETWORK_THREADS_CONFIG,
+
+                // SslTransportLayer configs
+                BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG,
+                BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG);
     }
 
     public static class DynamicRemoteLogConfig {

@@ -416,9 +416,9 @@ class DynamicBrokerConfigTest {
 
   @Test
   def testUnsentPostHandshakeBytesLimitConfig(): Unit = {
-    // The limit on unsent TLS post-handshake bytes is read by SslTransportLayer, so unlike the keystore and
-    // truststore configs in DYNAMIC_SECURITY_CONFIGS it can be updated without a listener prefix and at the default
-    // cluster level, as well as per listener.
+    // The limits on TLS post-handshake messages are read by SslTransportLayer, not the SSL engine factory, so unlike
+    // the keystore and truststore configs in DYNAMIC_SECURITY_CONFIGS, and like max.connections, they can be updated
+    // without a listener prefix and at the default cluster level, as well as per listener.
     val name = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG
     Seq(name, s"listener.name.external.$name").foreach { prop =>
       verifyConfigUpdate(prop, "10", perBrokerConfig = true, expectFailure = false)

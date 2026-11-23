@@ -17,6 +17,7 @@
 package org.apache.kafka.common.network;
 
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.config.types.Password;
@@ -1843,15 +1844,15 @@ public class SslTransportLayerTest {
             }
 
             @Override
-            protected boolean flush(ByteBuffer buf) throws IOException {
-                if (!buf.hasRemaining())
-                    return super.flush(buf);
+            protected boolean flushNetWriteBuffer() throws IOException {
+                if (!netWriteBuffer().hasRemaining())
+                    return super.flushNetWriteBuffer();
                 if (numFlushesRemaining.decrementAndGet() == 0 && !ready())
                     flushFailureAction.run();
                 else if (numDelayedFlushesRemaining.getAndDecrement() != 0)
                     return false;
                 resetDelayedFlush();
-                return super.flush(buf);
+                return super.flushNetWriteBuffer();
             }
 
             @Override
@@ -2325,12 +2326,112 @@ public class SslTransportLayerTest {
         }
     }
 
+    /**
+     * Tests that a server sends a TLSv1.3 post-handshake message when its SSL engine first wraps nothing because it
+     * needs to run a task, rather than closing the connection for making no progress.
+     */
+    @Test
+    public void testServerSendsPostHandshakeMessageAfterWrapNeedingTask() throws Exception {
+        Args args = new Args("TLSv1.3", false);
+        AtomicBoolean needTask = new AtomicBoolean();
+        UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> {
+            Answer<Object> delegate = AdditionalAnswers.delegatesTo(sslEngine);
+            return mock(SSLEngine.class, invocation -> {
+                if (invocation.getMethod().getName().equals("wrap") && invocation.getArguments().length == 2 &&
+                        !((ByteBuffer) invocation.getArgument(0)).hasRemaining() && needTask.getAndSet(false))
+                    return new SSLEngineResult(SSLEngineResult.Status.OK, SSLEngineResult.HandshakeStatus.NEED_TASK, 0, 0);
+                return delegate.answer(invocation);
+            });
+        };
+        try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
+                args.sslClientConfigs, serverEngineWrapper)) {
+            needTask.set(true);
+            long serverBytesWrittenBefore = connection.serverBytesWritten.get();
+            writeKeyUpdates(connection, 1);
+            assertNull(connection.pollServer(1));
+            assertFalse(needTask.get(), "Server did not wrap the KeyUpdate response");
+            assertTrue(connection.serverBytesWritten.get() > serverBytesWrittenBefore);
+            assertFalse(connection.serverTransportLayer.get().hasPendingWrites());
+        }
+    }
+
+    /**
+     * Tests that a server sends the TLSv1.3 KeyUpdates its SSL engine starts while reading records with data, as the
+     * JDK does past {@code jdk.tls.keyLimits} until the peer updates its key, once a few are held, so that a peer that
+     * reads them, updates its key, and fails a connection after 32 KeyUpdates in a row, as BoringSSL does, keeps it.
+     */
+    @Test
+    public void testServerSendsFewKeyUpdatesStartedOnReadInARow() throws Exception {
+        int boringSslMaxKeyUpdates = 32;
+        Args args = new Args("TLSv1.3", false);
+        AtomicBoolean startKeyUpdates = new AtomicBoolean();
+        UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> wrapUnwrap(sslEngine, (src, dst) -> {
+            SSLEngineResult result = sslEngine.unwrap(src, dst);
+            if (!startKeyUpdates.get() || result.getStatus() != SSLEngineResult.Status.OK || result.bytesProduced() == 0 ||
+                    result.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING)
+                return result;
+            sslEngine.beginHandshake();
+            return new SSLEngineResult(result.getStatus(), sslEngine.getHandshakeStatus(), result.bytesConsumed(),
+                result.bytesProduced());
+        });
+        try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
+                args.sslClientConfigs, serverEngineWrapper)) {
+            startKeyUpdates.set(true);
+            SSLEngine engine = connection.clientEngine;
+            int packetBufferSize = engine.getSession().getPacketBufferSize();
+            ByteBuffer in = ByteBuffer.allocate(4 * packetBufferSize);
+            ByteBuffer appData = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
+            int keyUpdatesInARow = 0;
+            int records = 0;
+            // The peer sends records one at a time, reading what the server sends after each, until it receives
+            // KeyUpdates and updates its key, which stops the server's engine from starting more.
+            while (startKeyUpdates.get()) {
+                assertTrue(records < boringSslMaxKeyUpdates, "Server held the KeyUpdates it started");
+                ByteBuffer out = ByteBuffer.allocate(packetBufferSize);
+                wrapMessage(engine, MESSAGE_BYTES - 4, out);
+                out.flip();
+                peerWrite(connection.clientChannel, out);
+                records++;
+                assertNull(connection.pollServer(1));
+
+                connection.clientChannel.read(in);
+                in.flip();
+                while (in.hasRemaining()) {
+                    SSLEngineResult result = engine.unwrap(in, appData);
+                    if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW)
+                        break;
+                    assertEquals(SSLEngineResult.Status.OK, result.getStatus());
+                    assertEquals(0, result.bytesProduced(), "Server sent data");
+                    keyUpdatesInARow++;
+                    startKeyUpdates.set(false);
+                }
+                in.compact();
+            }
+            assertEquals(SslTransportLayer.MAX_HELD_POST_HANDSHAKE_MESSAGES, records);
+            assertTrue(keyUpdatesInARow > 0 && keyUpdatesInARow <= boringSslMaxKeyUpdates,
+                "Peer received " + keyUpdatesInARow + " KeyUpdates in a row");
+        }
+    }
+
     @ParameterizedTest
     @ArgumentsSource(SslTransportLayerArgumentsProvider.class)
     public void testReconfigureMaxUnsentPostHandshakeBytes(Args args) throws Exception {
         try (SslChannelBuilder channelBuilder = new SslChannelBuilder(ConnectionMode.SERVER, null, false)) {
             channelBuilder.configure(args.sslServerConfigs);
+            assertTrue(channelBuilder.reconfigurableConfigs().containsAll(SslConfigs.RECONFIGURABLE_CONFIGS));
+            assertTrue(channelBuilder.reconfigurableConfigs().containsAll(
+                BrokerSecurityConfigs.SSL_TRANSPORT_LAYER_RECONFIGURABLE_CONFIGS));
             Map<String, Object> newConfigs = new HashMap<>(args.sslServerConfigs);
+            for (Map.Entry<String, Object> invalid : List.<Map.Entry<String, Object>>of(
+                    Map.entry(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG, 0),
+                    Map.entry(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG,
+                        BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES + 1),
+                    Map.entry(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, -1L))) {
+                Map<String, Object> invalidConfigs = new HashMap<>(newConfigs);
+                invalidConfigs.put(invalid.getKey(), invalid.getValue());
+                assertThrows(ConfigException.class, () -> channelBuilder.validateReconfiguration(invalidConfigs),
+                    invalid.toString());
+            }
             newConfigs.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG, 4);
             newConfigs.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 5L);
             channelBuilder.validateReconfiguration(newConfigs);
@@ -2563,14 +2664,14 @@ public class SslTransportLayerTest {
                     TestSslTransportLayer transportLayer = new TestSslTransportLayer(id, key,
                             serverEngineWrapper.apply(sslEngine)) {
                         @Override
-                        protected boolean flush(ByteBuffer buf) throws IOException {
-                            if (blockServerWrites.get() && buf.hasRemaining())
+                        protected boolean flushNetWriteBuffer() throws IOException {
+                            if (blockServerWrites.get() && netWriteBuffer().hasRemaining())
                                 return false;
-                            int remaining = buf.remaining();
+                            int remaining = netWriteBuffer().remaining();
                             try {
-                                return super.flush(buf);
+                                return super.flushNetWriteBuffer();
                             } finally {
-                                serverBytesWritten.addAndGet(remaining - buf.remaining());
+                                serverBytesWritten.addAndGet(remaining - netWriteBuffer().remaining());
                             }
                         }
 
