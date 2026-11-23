@@ -97,8 +97,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
 
     private SslFactory sslFactory;
     private Map<String, ?> configs;
-    private volatile int maxUnsentPostHandshakeBytes;
-    private volatile long heldPostHandshakeMessagesMaxReadBytes;
+    private volatile SslTransportLayer.PostHandshakeLimits postHandshakeLimits;
     private KerberosShortNamer kerberosShortNamer;
 
     public SaslChannelBuilder(ConnectionMode connectionMode,
@@ -141,8 +140,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     public void configure(Map<String, ?> configs) throws KafkaException {
         try {
             this.configs = configs;
-            this.maxUnsentPostHandshakeBytes = SslChannelBuilder.maxUnsentPostHandshakeBytes(connectionMode, configs);
-            this.heldPostHandshakeMessagesMaxReadBytes = SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(connectionMode, configs);
+            this.postHandshakeLimits = SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
             if (connectionMode == ConnectionMode.SERVER) {
                 createServerCallbackHandlers(configs);
                 createConnectionsMaxReauthMsMap(configs);
@@ -200,7 +198,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
             } catch (IllegalStateException e) {
                 throw new ConfigException("SASL reconfiguration failed due to " + e);
             }
-            SslChannelBuilder.validatePostHandshakeConfigs(connectionMode, configs);
+            SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
         }
     }
 
@@ -208,8 +206,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     public void reconfigure(Map<String, ?> configs) {
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             sslFactory.reconfigure(configs);
-            this.maxUnsentPostHandshakeBytes = SslChannelBuilder.maxUnsentPostHandshakeBytes(connectionMode, configs);
-            this.heldPostHandshakeMessagesMaxReadBytes = SslChannelBuilder.heldPostHandshakeMessagesMaxReadBytes(connectionMode, configs);
+            this.postHandshakeLimits = SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
         }
     }
 
@@ -272,7 +269,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             return SslTransportLayer.create(id, key,
                 sslFactory.createSslEngine(socketChannel.socket()),
-                metadataRegistry, maxUnsentPostHandshakeBytes, heldPostHandshakeMessagesMaxReadBytes);
+                metadataRegistry, postHandshakeLimits);
         } else {
             return new PlaintextTransportLayer(key);
         }

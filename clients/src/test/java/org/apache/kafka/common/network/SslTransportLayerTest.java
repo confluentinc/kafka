@@ -1805,8 +1805,7 @@ public class SslTransportLayerTest {
             private final AtomicInteger numDelayedFlushesRemaining;
 
             public TestSslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine) {
-                super(channelId, key, sslEngine, new DefaultChannelMetadataRegistry(), maxUnsentPostHandshakeBytes,
-                    heldPostHandshakeMessagesMaxReadBytes);
+                super(channelId, key, sslEngine, new DefaultChannelMetadataRegistry(), postHandshakeLimits);
                 this.netReadBufSize = new ResizeableBufferSize(netReadBufSizeOverride);
                 this.netWriteBufSize = new ResizeableBufferSize(netWriteBufSizeOverride);
                 this.appBufSize = new ResizeableBufferSize(appBufSizeOverride);
@@ -2407,7 +2406,7 @@ public class SslTransportLayerTest {
                 }
                 in.compact();
             }
-            assertEquals(SslTransportLayer.MAX_HELD_POST_HANDSHAKE_MESSAGES, records);
+            assertEquals(SslTransportLayer.PostHandshakeLimits.MAX_HELD_MESSAGES, records);
             assertTrue(keyUpdatesInARow > 0 && keyUpdatesInARow <= boringSslMaxKeyUpdates,
                 "Peer received " + keyUpdatesInARow + " KeyUpdates in a row");
         }
@@ -2436,8 +2435,8 @@ public class SslTransportLayerTest {
             newConfigs.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 5L);
             channelBuilder.validateReconfiguration(newConfigs);
             channelBuilder.reconfigure(newConfigs);
-            assertEquals(4, channelBuilder.maxUnsentPostHandshakeBytes);
-            assertEquals(5L, channelBuilder.heldPostHandshakeMessagesMaxReadBytes);
+            assertEquals(4, channelBuilder.postHandshakeLimits.maxUnsentBytes);
+            assertEquals(5L, channelBuilder.postHandshakeLimits.heldMessagesMaxReadBytes);
         }
     }
 

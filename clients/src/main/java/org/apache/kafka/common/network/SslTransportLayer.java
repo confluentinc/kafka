@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.common.network;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.errors.SslAuthenticationException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -34,6 +35,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.security.Principal;
+import java.util.Map;
 
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
@@ -75,9 +77,6 @@ public class SslTransportLayer implements TransportLayer {
 
     private static final String TLS13 = "TLSv1.3";
     static final String UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE = "Too many unsent TLS post-handshake messages";
-    // Held post-handshake messages are sent once this many are unsent, half the 32 KeyUpdates in a row BoringSSL
-    // accepts, leaving room for those started before the peer receives them and updates its keys.
-    static final int MAX_HELD_POST_HANDSHAKE_MESSAGES = 16;
 
     private final String channelId;
     private final SSLEngine sslEngine;
@@ -95,8 +94,7 @@ public class SslTransportLayer implements TransportLayer {
     private ByteBuffer appReadBuffer;
     private ByteBuffer fileChannelBuffer;
     private boolean hasBytesBuffered;
-    private final int maxUnsentPostHandshakeBytes;
-    private final long heldPostHandshakeMessagesMaxReadBytes;
+    private final PostHandshakeLimits postHandshakeLimits;
     // Bytes of post-handshake messages wrapped since netWriteBuffer was last fully flushed.
     private int unsentPostHandshakeBytes;
     // Post-handshake messages wrapped since netWriteBuffer was last fully flushed.
@@ -105,6 +103,62 @@ public class SslTransportLayer implements TransportLayer {
     private long bytesReadWithUnsentPostHandshakeMessages;
     private boolean netWriteBufferGrownForPostHandshakeMessages;
 
+    /**
+     * Limits on TLS post-handshake messages, from {@link BrokerSecurityConfigs#SSL_TRANSPORT_LAYER_RECONFIGURABLE_CONFIGS}.
+     */
+    public static final class PostHandshakeLimits {
+        // Held post-handshake messages are sent once this many are unsent, half the 32 KeyUpdates in a row BoringSSL
+        // accepts, leaving room for those started before the peer receives them and updates its keys.
+        static final int MAX_HELD_MESSAGES = 16;
+
+        static final PostHandshakeLimits DEFAULT = new PostHandshakeLimits(
+            BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES,
+            BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES);
+
+        final int maxUnsentBytes;
+        final long heldMessagesMaxReadBytes;
+
+        PostHandshakeLimits(int maxUnsentBytes, long heldMessagesMaxReadBytes) {
+            this.maxUnsentBytes = maxUnsentBytes;
+            this.heldMessagesMaxReadBytes = heldMessagesMaxReadBytes;
+        }
+
+        /**
+         * Returns the limits set in {@code configs}, or the defaults for those not set. Clients don't define the
+         * configs, so they always use the defaults and ignore any value set there, which is unparsed.
+         *
+         * @throws ConfigException if a server's limit is out of range
+         */
+        public static PostHandshakeLimits fromConfigs(ConnectionMode connectionMode, Map<String, ?> configs) {
+            if (connectionMode == ConnectionMode.CLIENT)
+                return DEFAULT;
+            return new PostHandshakeLimits(maxUnsentBytes(configs), heldMessagesMaxReadBytes(configs));
+        }
+
+        private static int maxUnsentBytes(Map<String, ?> configs) {
+            String config = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG;
+            Object value = configs.get(config);
+            if (value == null)
+                return DEFAULT.maxUnsentBytes;
+            int max = (Integer) value;
+            int limit = BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES;
+            if (max < 1 || max > limit)
+                throw new ConfigException(config, max, "Value must be between 1 and " + limit);
+            return max;
+        }
+
+        private static long heldMessagesMaxReadBytes(Map<String, ?> configs) {
+            String config = BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG;
+            Object value = configs.get(config);
+            if (value == null)
+                return DEFAULT.heldMessagesMaxReadBytes;
+            long max = (Long) value;
+            if (max < 0)
+                throw new ConfigException(config, max, "Value must be at least 0");
+            return max;
+        }
+    }
+
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
                                            ChannelMetadataRegistry metadataRegistry) throws IOException {
         return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry);
@@ -112,25 +166,20 @@ public class SslTransportLayer implements TransportLayer {
 
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
                                            ChannelMetadataRegistry metadataRegistry,
-                                           int maxUnsentPostHandshakeBytes,
-                                           long heldPostHandshakeMessagesMaxReadBytes) throws IOException {
-        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry, maxUnsentPostHandshakeBytes,
-            heldPostHandshakeMessagesMaxReadBytes);
+                                           PostHandshakeLimits postHandshakeLimits) throws IOException {
+        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry, postHandshakeLimits);
     }
 
     // Prefer `create`, only use this in tests
     SslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine,
                       ChannelMetadataRegistry metadataRegistry) {
-        this(channelId, key, sslEngine, metadataRegistry, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES,
-            BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES);
+        this(channelId, key, sslEngine, metadataRegistry, PostHandshakeLimits.DEFAULT);
     }
 
     SslTransportLayer(String channelId, SelectionKey key, SSLEngine sslEngine,
-                      ChannelMetadataRegistry metadataRegistry, int maxUnsentPostHandshakeBytes,
-                      long heldPostHandshakeMessagesMaxReadBytes) {
+                      ChannelMetadataRegistry metadataRegistry, PostHandshakeLimits postHandshakeLimits) {
         this.channelId = channelId;
-        this.maxUnsentPostHandshakeBytes = maxUnsentPostHandshakeBytes;
-        this.heldPostHandshakeMessagesMaxReadBytes = heldPostHandshakeMessagesMaxReadBytes;
+        this.postHandshakeLimits = postHandshakeLimits;
         this.key = key;
         this.socketChannel = (SocketChannel) key.channel();
         this.sslEngine = sslEngine;
@@ -738,7 +787,7 @@ public class SslTransportLayer implements TransportLayer {
             if (!producedNothing) {
                 unsentPostHandshakeBytes += result.bytesProduced();
                 unsentPostHandshakeMessages++;
-                if (unsentPostHandshakeBytes > maxUnsentPostHandshakeBytes) {
+                if (unsentPostHandshakeBytes > postHandshakeLimits.maxUnsentBytes) {
                     log.info("Closing channel since {} bytes of TLS post-handshake messages are unsent", unsentPostHandshakeBytes);
                     throw new SSLException(UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
                 }
@@ -772,7 +821,7 @@ public class SslTransportLayer implements TransportLayer {
         int required = unsentBytes + packetSize;
         if (required > netWriteBuffer.capacity()) {
             // write() only adds output once netWriteBuffer is empty, so at most a record of it precedes the messages.
-            int maxCapacity = 2 * packetSize + maxUnsentPostHandshakeBytes;
+            int maxCapacity = 2 * packetSize + postHandshakeLimits.maxUnsentBytes;
             if (required > maxCapacity) {
                 log.info("Closing channel since {} bytes are unsent along with TLS post-handshake messages", unsentBytes);
                 throw new SSLException(UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
@@ -796,12 +845,12 @@ public class SslTransportLayer implements TransportLayer {
      * reply to go on, and they go out before anything the server writes later.
      */
     private void maybeFlushPostHandshakeMessages(boolean forceFlush) throws IOException {
-        boolean tooManyUnsent = unsentPostHandshakeMessages >= MAX_HELD_POST_HANDSHAKE_MESSAGES ||
-            unsentPostHandshakeBytes >= maxUnsentPostHandshakeBytes / 2;
+        boolean tooManyUnsent = unsentPostHandshakeMessages >= PostHandshakeLimits.MAX_HELD_MESSAGES ||
+            unsentPostHandshakeBytes >= postHandshakeLimits.maxUnsentBytes / 2;
         if (forceFlush || tooManyUnsent) {
             flushNetWriteBuffer();
         } else if (unsentPostHandshakeBytes > 0 &&
-                bytesReadWithUnsentPostHandshakeMessages >= heldPostHandshakeMessagesMaxReadBytes) {
+                bytesReadWithUnsentPostHandshakeMessages >= postHandshakeLimits.heldMessagesMaxReadBytes) {
             int unsent = unsentPostHandshakeBytes;
             long bytesRead = bytesReadWithUnsentPostHandshakeMessages;
             if (flushNetWriteBuffer())
