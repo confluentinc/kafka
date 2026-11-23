@@ -145,14 +145,17 @@ public class BrokerSecurityConfigs {
     public static final String ALLOWED_SASL_OAUTHBEARER_FILES_CONFIG = "org.apache.kafka.sasl.oauthbearer.allowed.files";
     public static final String ALLOWED_SASL_OAUTHBEARER_FILES_DEFAULT = "";
 
-    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG = "ssl.max.unsent.post.handshake.bytes";
-    public static final String SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_DOC = "Maximum bytes of unsent TLS post-handshake messages, such as KeyUpdates, "
-        + "which the JDK wraps in 43 bytes each. "
-        + "Those caused by records with data wait for the next write, as described for ssl.held.post.handshake.messages.max.read.bytes, "
-        + "until 16 of them, or half this many bytes, are unsent. The rest are sent right away. "
-        + "The connection closes above this. Clients always use the default. Applies to new connections.";
-    public static final int DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES = 86 * 1024;
-    public static final int MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES = 1024 * 1024;
+    public static final String SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG = "ssl.max.net.write.buffer.bytes";
+    public static final String SSL_MAX_NET_WRITE_BUFFER_BYTES_DOC = "Maximum size of a connection's TLS network write buffer. "
+        + "It holds a TLS record of output, and grows only for unsent TLS post-handshake messages, such as KeyUpdates, "
+        + "which the JDK wraps in 43 bytes each. Those caused by records with data wait for the next write, "
+        + "as described for ssl.held.post.handshake.messages.max.read.bytes, until 16 of them are unsent. "
+        + "The rest are sent right away. The engine needs room for a whole TLS record, about 16KB, to wrap each message, "
+        + "so the buffer must also fit that. The connection closes rather than grow the buffer past this. "
+        + "Clients always use the default. Applies to new connections.";
+    public static final int MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES = 64 * 1024;
+    public static final int DEFAULT_SSL_MAX_NET_WRITE_BUFFER_BYTES = 128 * 1024;
+    public static final int MAX_SSL_MAX_NET_WRITE_BUFFER_BYTES = 1024 * 1024;
 
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG = "ssl.held.post.handshake.messages.max.read.bytes";
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_DOC = "Maximum bytes of data read while TLS post-handshake messages, "
@@ -170,7 +173,7 @@ public class BrokerSecurityConfigs {
      * without rebuilding the factory, and they can be updated per broker, at the default cluster level, or per listener.
      */
     public static final Set<String> SSL_TRANSPORT_LAYER_RECONFIGURABLE_CONFIGS = Set.of(
-            SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG,
+            SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG,
             SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG);
 
     public static final ConfigDef CONFIG_DEF =  new ConfigDef()
@@ -204,7 +207,7 @@ public class BrokerSecurityConfigs {
             .define(SslConfigs.SSL_SECURE_RANDOM_IMPLEMENTATION_CONFIG, STRING, null, LOW, SslConfigs.SSL_SECURE_RANDOM_IMPLEMENTATION_DOC)
             .define(SslConfigs.SSL_CIPHER_SUITES_CONFIG, LIST, List.of(), ConfigDef.ValidList.anyNonDuplicateValues(true, false), MEDIUM, SslConfigs.SSL_CIPHER_SUITES_DOC)
             .define(SslConfigs.SSL_ENGINE_FACTORY_CLASS_CONFIG, CLASS, null, LOW, SslConfigs.SSL_ENGINE_FACTORY_CLASS_DOC)
-            .define(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG, INT, BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES, ConfigDef.Range.between(1, BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES), LOW, BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_DOC)
+            .define(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, INT, BrokerSecurityConfigs.DEFAULT_SSL_MAX_NET_WRITE_BUFFER_BYTES, ConfigDef.Range.between(BrokerSecurityConfigs.MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES, BrokerSecurityConfigs.MAX_SSL_MAX_NET_WRITE_BUFFER_BYTES), LOW, BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_DOC)
             .define(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, LONG, BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES, ConfigDef.Range.atLeast(0), LOW, BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_DOC)
 
             // Sasl Configuration

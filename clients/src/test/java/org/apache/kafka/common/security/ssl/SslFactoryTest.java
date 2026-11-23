@@ -272,7 +272,7 @@ public abstract class SslFactoryTest {
         SslEngineFactory sslEngineFactory = sslFactory.sslEngineFactory();
 
         Map<String, Object> newSslConfig = new HashMap<>(sslConfig);
-        newSslConfig.put(BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG, 7);
+        newSslConfig.put(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, 100 * 1024);
         newSslConfig.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 7L);
         sslFactory.validateReconfiguration(newSslConfig);
         sslFactory.reconfigure(newSslConfig);

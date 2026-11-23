@@ -27,43 +27,44 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class PostHandshakeLimitsTest {
+class SslTransportLayerLimitsTest {
 
     @Test
     void testDefaults() {
-        SslTransportLayer.PostHandshakeLimits limits = SslTransportLayer.PostHandshakeLimits.fromConfigs(ConnectionMode.SERVER, Map.of());
-        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES, limits.maxUnsentBytes);
+        SslTransportLayer.Limits limits = SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, Map.of());
+        assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_MAX_NET_WRITE_BUFFER_BYTES, limits.maxNetWriteBufferBytes);
         assertEquals(BrokerSecurityConfigs.DEFAULT_SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES,
             limits.heldMessagesMaxReadBytes);
     }
 
     @Test
-    void testMaxUnsentBytes() {
-        String config = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG;
-        assertEquals(10, maxUnsentBytes(Map.of(config, 10)));
-        assertThrows(ConfigException.class, () -> maxUnsentBytes(Map.of(config, 0)));
-        int max = BrokerSecurityConfigs.MAX_SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES;
-        assertEquals(max, maxUnsentBytes(Map.of(config, max)));
-        assertThrows(ConfigException.class, () -> maxUnsentBytes(Map.of(config, max + 1)));
+    void testMaxNetWriteBufferBytes() {
+        String config = BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG;
+        int min = BrokerSecurityConfigs.MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES;
+        assertEquals(min, maxNetWriteBufferBytes(Map.of(config, min)));
+        assertThrows(ConfigException.class, () -> maxNetWriteBufferBytes(Map.of(config, min - 1)));
+        int max = BrokerSecurityConfigs.MAX_SSL_MAX_NET_WRITE_BUFFER_BYTES;
+        assertEquals(max, maxNetWriteBufferBytes(Map.of(config, max)));
+        assertThrows(ConfigException.class, () -> maxNetWriteBufferBytes(Map.of(config, max + 1)));
     }
 
     @Test
     void testHeldMessagesMaxReadBytes() {
         String config = BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG;
-        assertEquals(0L, SslTransportLayer.PostHandshakeLimits.fromConfigs(ConnectionMode.SERVER, Map.of(config, 0L)).heldMessagesMaxReadBytes);
+        assertEquals(0L, SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, Map.of(config, 0L)).heldMessagesMaxReadBytes);
         assertThrows(ConfigException.class,
-            () -> SslTransportLayer.PostHandshakeLimits.fromConfigs(ConnectionMode.SERVER, Map.of(config, -1L)));
+            () -> SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, Map.of(config, -1L)));
     }
 
     @Test
     void testClientsUseDefaults() {
         // Clients don't define the configs, so they ignore values set there, which are unparsed.
-        assertSame(SslTransportLayer.PostHandshakeLimits.DEFAULT, SslTransportLayer.PostHandshakeLimits.fromConfigs(ConnectionMode.CLIENT, Map.of(
-            BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG, "abc",
+        assertSame(SslTransportLayer.Limits.DEFAULT, SslTransportLayer.Limits.fromConfigs(ConnectionMode.CLIENT, Map.of(
+            BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, "abc",
             BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, "abc")));
     }
 
-    private static int maxUnsentBytes(Map<String, ?> configs) {
-        return SslTransportLayer.PostHandshakeLimits.fromConfigs(ConnectionMode.SERVER, configs).maxUnsentBytes;
+    private static int maxNetWriteBufferBytes(Map<String, ?> configs) {
+        return SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, configs).maxNetWriteBufferBytes;
     }
 }

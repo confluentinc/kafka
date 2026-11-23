@@ -54,7 +54,7 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     private Map<String, ?> configs;
     private SslPrincipalMapper sslPrincipalMapper;
     // Visible for testing
-    volatile SslTransportLayer.PostHandshakeLimits postHandshakeLimits;
+    volatile SslTransportLayer.Limits limits;
 
     /**
      * Constructs an SSL channel builder. ListenerName is provided only
@@ -76,7 +76,7 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
                 sslPrincipalMapper = SslPrincipalMapper.fromRules(sslPrincipalMappingRules);
             this.sslFactory = new SslFactory(connectionMode, null, isInterBrokerListener);
             this.sslFactory.configure(this.configs);
-            this.postHandshakeLimits = SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
+            this.limits = SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
         } catch (KafkaException e) {
             throw e;
         } catch (Exception e) {
@@ -92,13 +92,13 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     @Override
     public void validateReconfiguration(Map<String, ?> configs) {
         sslFactory.validateReconfiguration(configs);
-        SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
+        SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
     }
 
     @Override
     public void reconfigure(Map<String, ?> configs) {
         sslFactory.reconfigure(configs);
-        this.postHandshakeLimits = SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
+        this.limits = SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
     }
 
     @Override
@@ -133,7 +133,7 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     protected SslTransportLayer buildTransportLayer(SslFactory sslFactory, String id, SelectionKey key, ChannelMetadataRegistry metadataRegistry) throws IOException {
         SocketChannel socketChannel = (SocketChannel) key.channel();
         return SslTransportLayer.create(id, key, sslFactory.createSslEngine(socketChannel.socket()),
-            metadataRegistry, postHandshakeLimits);
+            metadataRegistry, limits);
     }
 
     /**

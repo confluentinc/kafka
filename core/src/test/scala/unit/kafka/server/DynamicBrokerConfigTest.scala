@@ -415,16 +415,16 @@ class DynamicBrokerConfigTest {
   }
 
   @Test
-  def testUnsentPostHandshakeBytesLimitConfig(): Unit = {
+  def testPostHandshakeLimitConfigs(): Unit = {
     // The limits on TLS post-handshake messages are read by SslTransportLayer, not the SSL engine factory, so unlike
     // the keystore and truststore configs in DYNAMIC_SECURITY_CONFIGS, and like max.connections, they can be updated
     // without a listener prefix and at the default cluster level, as well as per listener.
-    val name = BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG
+    val name = BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG
     Seq(name, s"listener.name.external.$name").foreach { prop =>
-      verifyConfigUpdate(prop, "10", perBrokerConfig = true, expectFailure = false)
-      verifyConfigUpdate(prop, "10", perBrokerConfig = false, expectFailure = false)
-      verifyConfigUpdate(prop, "0", perBrokerConfig = true, expectFailure = true)
-      verifyConfigUpdate(prop, "0", perBrokerConfig = false, expectFailure = true)
+      verifyConfigUpdate(prop, "65536", perBrokerConfig = true, expectFailure = false)
+      verifyConfigUpdate(prop, "65536", perBrokerConfig = false, expectFailure = false)
+      verifyConfigUpdate(prop, "65535", perBrokerConfig = true, expectFailure = true)
+      verifyConfigUpdate(prop, "65535", perBrokerConfig = false, expectFailure = true)
       verifyConfigUpdate(prop, "1048577", perBrokerConfig = true, expectFailure = true)
       verifyConfigUpdate(prop, "1048577", perBrokerConfig = false, expectFailure = true)
     }
@@ -504,7 +504,7 @@ class DynamicBrokerConfigTest {
     props.put(SocketServerConfigs.LISTENERS_CONFIG, "PLAINTEXT://hostname:9092")
     new DynamicListenerConfig(kafkaServer).validateReconfiguration(KafkaConfig(props))
 
-    props.put(s"listener.name.plaintext.${BrokerSecurityConfigs.SSL_MAX_UNSENT_POST_HANDSHAKE_BYTES_CONFIG}", "10")
+    props.put(s"listener.name.plaintext.${BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG}", "65536")
     new DynamicListenerConfig(kafkaServer).validateReconfiguration(KafkaConfig(props))
 
     // it is illegal to update non-reconfigurable configs of existent listeners

@@ -97,7 +97,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
 
     private SslFactory sslFactory;
     private Map<String, ?> configs;
-    private volatile SslTransportLayer.PostHandshakeLimits postHandshakeLimits;
+    private volatile SslTransportLayer.Limits limits;
     private KerberosShortNamer kerberosShortNamer;
 
     public SaslChannelBuilder(ConnectionMode connectionMode,
@@ -140,7 +140,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     public void configure(Map<String, ?> configs) throws KafkaException {
         try {
             this.configs = configs;
-            this.postHandshakeLimits = SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
+            this.limits = SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
             if (connectionMode == ConnectionMode.SERVER) {
                 createServerCallbackHandlers(configs);
                 createConnectionsMaxReauthMsMap(configs);
@@ -198,7 +198,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
             } catch (IllegalStateException e) {
                 throw new ConfigException("SASL reconfiguration failed due to " + e);
             }
-            SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
+            SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
         }
     }
 
@@ -206,7 +206,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     public void reconfigure(Map<String, ?> configs) {
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             sslFactory.reconfigure(configs);
-            this.postHandshakeLimits = SslTransportLayer.PostHandshakeLimits.fromConfigs(connectionMode, configs);
+            this.limits = SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
         }
     }
 
@@ -269,7 +269,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
             return SslTransportLayer.create(id, key,
                 sslFactory.createSslEngine(socketChannel.socket()),
-                metadataRegistry, postHandshakeLimits);
+                metadataRegistry, limits);
         } else {
             return new PlaintextTransportLayer(key);
         }
