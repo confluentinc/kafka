@@ -1229,6 +1229,9 @@ public class LogManagerTest {
         } finally {
             logManager = null;
         }
+        // shutdown must remove every LogManager gauge: the gauges reference the LogManager, so a
+        // leftover one keeps the whole broker reachable from the static Yammer registry
+        assertEquals(Set.of(), allMetrics());
     }
 
     private static Set<MetricName> allMetrics() {
