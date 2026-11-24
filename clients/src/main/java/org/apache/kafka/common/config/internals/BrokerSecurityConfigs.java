@@ -148,9 +148,10 @@ public class BrokerSecurityConfigs {
     public static final String SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG = "ssl.max.net.write.buffer.bytes";
     public static final String SSL_MAX_NET_WRITE_BUFFER_BYTES_DOC = "Maximum size of a connection's TLS network write buffer. "
         + "It holds a TLS record of output, and grows only for unsent TLS post-handshake messages, such as KeyUpdates, "
-        + "which the JDK wraps in 43 bytes each. Those caused by records with data wait for the next write, "
-        + "as described for ssl.held.post.handshake.messages.max.read.bytes, until 16 of them are unsent. "
-        + "The rest are sent right away. The engine needs room for a whole TLS record, about 16KB, to wrap each message, "
+        + "which the JDK wraps in 43 bytes each. Those TLS post-handshake messages caused by records with data wait "
+        + "until the next write, until ssl.held.post.handshake.messages.max.read.bytes has since been read, "
+        + "or until 16 of them are unsent. Those caused by records without data are sent right away, if possible. "
+        + "The engine needs room for a whole TLS record, about 16KB, to wrap each message, "
         + "so the buffer must also fit that. The connection closes rather than grow the buffer past this. "
         + "Clients always use the default. Applies to new connections.";
     public static final int MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES = 64 * 1024;
@@ -159,9 +160,10 @@ public class BrokerSecurityConfigs {
 
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG = "ssl.held.post.handshake.messages.max.read.bytes";
     public static final String SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_DOC = "Maximum bytes of data read while TLS post-handshake messages, "
-        + "such as KeyUpdates, wait for the next write. They are sent once this many are read. "
-        + "Those caused by records with data wait so that a peer, such as librdkafka with OpenSSL, does not receive them "
-        + "while writing, which can fail its connection. "
+        + "such as KeyUpdates, wait for the next write. TLS post-handshake messages are sent once this many are read. "
+        + "Those caused by records with data are sent in batches to reduce the chance of failing the connection to a peer "
+        + "such as librdkafka with OpenSSL. OpenSSL has a bug that incorrectly mixes the sending of a KeyUpdate "
+        + "with a pending partial data write. "
         + "0 sends them right away, and Long.MAX_VALUE turns this limit off, so a peer that is never written to "
         + "may not receive them. Bytes of any of them that the socket does not take wait for the next write, "
         + "or for a read that sends them, which is harmless since the peer does not wait for them. "

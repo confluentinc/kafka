@@ -17,7 +17,6 @@
 package org.apache.kafka.common.network;
 
 import org.apache.kafka.common.KafkaException;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.config.types.Password;
@@ -1846,8 +1845,9 @@ public class SslTransportLayerTest {
 
             @Override
             protected boolean flushNetWriteBuffer() throws IOException {
-                if (!netWriteBuffer().hasRemaining())
+                if (!netWriteBuffer().hasRemaining()) {
                     return super.flushNetWriteBuffer();
+                }
                 if (numFlushesRemaining.decrementAndGet() == 0 && !ready())
                     flushFailureAction.run();
                 else if (numDelayedFlushesRemaining.getAndDecrement() != 0)
@@ -2084,8 +2084,9 @@ public class SslTransportLayerTest {
     public void testServerRespondsToKeyUpdateWithoutDataToSend(String tlsProtocol) throws Exception {
         AtomicReference<SSLEngineResult.HandshakeStatus> serverHandshakeStatus = new AtomicReference<>();
         assertCloseCause(tlsProtocol, null, sendKeyUpdates(tlsProtocol, false, false, serverHandshakeStatus, 1));
-        if (tlsProtocol.equals("TLSv1.3"))
+        if (tlsProtocol.equals("TLSv1.3")) {
             assertEquals(SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING, serverHandshakeStatus.get());
+        }
     }
 
     /**
@@ -2150,13 +2151,13 @@ public class SslTransportLayerTest {
             int packetBufferSize = connection.serverEngine.get().getSession().getPacketBufferSize();
             // The engine needs room for a whole packet to wrap each response, so the second one grows the buffer.
             connection.blockServerWrites.set(true);
-            writeKeyUpdates(connection, 2);
+            writeKeyUpdatesAndMessage(connection, 2);
             assertNull(connection.pollServer(1));
             assertTrue(transportLayer.netWriteBuffer().capacity() > packetBufferSize);
 
             connection.blockServerWrites.set(false);
             if (onRead) {
-                writeKeyUpdates(connection, 1);
+                writeKeyUpdatesAndMessage(connection, 1);
                 assertNull(connection.pollServer(1));
             } else {
                 connection.sendFromServer();
@@ -2183,12 +2184,12 @@ public class SslTransportLayerTest {
             assertTrue(maxNetWriteBufferBytes > 4 * packetBufferSize && maxNetWriteBufferBytes < 8 * packetBufferSize);
             int keyUpdates = (maxNetWriteBufferBytes - packetBufferSize) / KEY_UPDATE_RECORD_BYTES + 1;
             connection.blockServerWrites.set(true);
-            writeKeyUpdates(connection, keyUpdates);
+            writeKeyUpdatesAndMessage(connection, keyUpdates);
             assertNull(connection.pollServer(1));
             assertEquals(keyUpdates * KEY_UPDATE_RECORD_BYTES, transportLayer.netWriteBuffer().remaining());
             assertEquals(maxNetWriteBufferBytes, transportLayer.netWriteBuffer().capacity());
 
-            writeKeyUpdates(connection, 1);
+            writeKeyUpdatesAndMessage(connection, 1);
             Exception closeCause = assertInstanceOf(SSLException.class, connection.pollServer(1));
             assertEquals(SslTransportLayer.UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE, closeCause.getMessage());
         }
@@ -2274,21 +2275,24 @@ public class SslTransportLayerTest {
     }
 
     /**
-     * Tests that a server keeps the connection when a peer reading the KeyUpdates its SSL engine starts while reading
-     * sends more records than fit in netWriteBuffer before the server next writes, as a large produce request may.
+     * Tests that a server keeps the connection during a burst of records from a peer that reads what the server sends,
+     * when each record makes the server's SSL engine start a KeyUpdate. The burst has twice as many records as
+     * netWriteBuffer has room for KeyUpdates, so the server must send them as it reads, not wait for its next write.
+     * A large produce request may do this, since past {@code jdk.tls.keyLimits} the JDK starts a KeyUpdate for every
+     * record and the server writes nothing until the response.
      */
     @Test
-    public void testServerKeepsConnectionOnKeyUpdatesStartedOnReadWhileReading() throws Exception {
+    public void testServerKeepsConnectionOnKeyUpdatesStartedOnReadWhilePeerReading() throws Exception {
         assertNull(sendRecordsStartingKeyUpdates(false, false, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
             2 * MAX_UNSENT_KEY_UPDATES));
     }
 
     /**
-     * Tests that a server closes the connection when a peer keeps sending records that make its SSL engine start a
-     * KeyUpdate while not reading them, but not before.
+     * Tests that a server closes the connection once netWriteBuffer has no room for the next KeyUpdate its SSL engine
+     * starts while reading records from a peer that does not read what the server sends, but not before.
      */
     @Test
-    public void testServerClosesConnectionOnKeyUpdatesStartedOnReadWhileNotReading() throws Exception {
+    public void testServerClosesConnectionOnKeyUpdatesStartedOnReadWhilePeerNotReading() throws Exception {
         int max = MAX_UNSENT_KEY_UPDATES;
         assertNull(sendRecordsStartingKeyUpdates(true, false, new AtomicReference<>(), new AtomicBoolean(), new AtomicLong(),
             max));
@@ -2311,17 +2315,19 @@ public class SslTransportLayerTest {
             Answer<Object> delegate = AdditionalAnswers.delegatesTo(sslEngine);
             return mock(SSLEngine.class, invocation -> {
                 if (!stallWraps.get() || !invocation.getMethod().getName().equals("wrap") ||
-                        invocation.getArguments().length != 2 || ((ByteBuffer) invocation.getArgument(0)).hasRemaining())
+                        invocation.getArguments().length != 2 || ((ByteBuffer) invocation.getArgument(0)).hasRemaining()) {
                     return delegate.answer(invocation);
-                if (stalledWraps.incrementAndGet() > 100)
+                }
+                if (stalledWraps.incrementAndGet() > 100) {
                     throw new AssertionError("Server kept wrapping without progress");
+                }
                 return new SSLEngineResult(SSLEngineResult.Status.OK, SSLEngineResult.HandshakeStatus.NEED_WRAP, 0, 0);
             });
         };
         try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
                 args.sslClientConfigs, serverEngineWrapper)) {
             stallWraps.set(true);
-            writeKeyUpdates(connection, 1);
+            writeKeyUpdatesAndMessage(connection, 1);
             Exception closeCause = assertInstanceOf(IllegalStateException.class, connection.pollServer(1));
             assertEquals("No progress wrapping TLS post-handshake message", closeCause.getMessage());
         }
@@ -2339,15 +2345,16 @@ public class SslTransportLayerTest {
             Answer<Object> delegate = AdditionalAnswers.delegatesTo(sslEngine);
             return mock(SSLEngine.class, invocation -> {
                 if (overflowWraps.get() && invocation.getMethod().getName().equals("wrap") &&
-                        invocation.getArguments().length == 2 && !((ByteBuffer) invocation.getArgument(0)).hasRemaining())
+                        invocation.getArguments().length == 2 && !((ByteBuffer) invocation.getArgument(0)).hasRemaining()) {
                     return new SSLEngineResult(SSLEngineResult.Status.BUFFER_OVERFLOW, SSLEngineResult.HandshakeStatus.NEED_WRAP, 0, 0);
+                }
                 return delegate.answer(invocation);
             });
         };
         try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
                 args.sslClientConfigs, serverEngineWrapper)) {
             overflowWraps.set(true);
-            writeKeyUpdates(connection, 1);
+            writeKeyUpdatesAndMessage(connection, 1);
             Exception closeCause = assertInstanceOf(SSLException.class, connection.pollServer(1));
             assertEquals(SslTransportLayer.UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE, closeCause.getMessage());
         }
@@ -2365,8 +2372,9 @@ public class SslTransportLayerTest {
             Answer<Object> delegate = AdditionalAnswers.delegatesTo(sslEngine);
             return mock(SSLEngine.class, invocation -> {
                 if (invocation.getMethod().getName().equals("wrap") && invocation.getArguments().length == 2 &&
-                        !((ByteBuffer) invocation.getArgument(0)).hasRemaining() && needTask.getAndSet(false))
+                        !((ByteBuffer) invocation.getArgument(0)).hasRemaining() && needTask.getAndSet(false)) {
                     return new SSLEngineResult(SSLEngineResult.Status.OK, SSLEngineResult.HandshakeStatus.NEED_TASK, 0, 0);
+                }
                 return delegate.answer(invocation);
             });
         };
@@ -2374,7 +2382,7 @@ public class SslTransportLayerTest {
                 args.sslClientConfigs, serverEngineWrapper)) {
             needTask.set(true);
             long serverBytesWrittenBefore = connection.serverBytesWritten.get();
-            writeKeyUpdates(connection, 1);
+            writeKeyUpdatesAndMessage(connection, 1);
             assertNull(connection.pollServer(1));
             assertFalse(needTask.get(), "Server did not wrap the KeyUpdate response");
             assertTrue(connection.serverBytesWritten.get() > serverBytesWrittenBefore);
@@ -2395,8 +2403,9 @@ public class SslTransportLayerTest {
         UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> wrapUnwrap(sslEngine, (src, dst) -> {
             SSLEngineResult result = sslEngine.unwrap(src, dst);
             if (!startKeyUpdates.get() || result.getStatus() != SSLEngineResult.Status.OK || result.bytesProduced() == 0 ||
-                    result.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING)
+                    result.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
                 return result;
+            }
             sslEngine.beginHandshake();
             return new SSLEngineResult(result.getStatus(), sslEngine.getHandshakeStatus(), result.bytesConsumed(),
                 result.bytesProduced());
@@ -2425,8 +2434,9 @@ public class SslTransportLayerTest {
                 in.flip();
                 while (in.hasRemaining()) {
                     SSLEngineResult result = engine.unwrap(in, appData);
-                    if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW)
+                    if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
                         break;
+                    }
                     assertEquals(SSLEngineResult.Status.OK, result.getStatus());
                     assertEquals(0, result.bytesProduced(), "Server sent data");
                     keyUpdatesInARow++;
@@ -2449,17 +2459,6 @@ public class SslTransportLayerTest {
             assertTrue(channelBuilder.reconfigurableConfigs().containsAll(
                 BrokerSecurityConfigs.SSL_TRANSPORT_LAYER_RECONFIGURABLE_CONFIGS));
             Map<String, Object> newConfigs = new HashMap<>(args.sslServerConfigs);
-            for (Map.Entry<String, Object> invalid : List.<Map.Entry<String, Object>>of(
-                    Map.entry(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG,
-                        BrokerSecurityConfigs.MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES - 1),
-                    Map.entry(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG,
-                        BrokerSecurityConfigs.MAX_SSL_MAX_NET_WRITE_BUFFER_BYTES + 1),
-                    Map.entry(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, -1L))) {
-                Map<String, Object> invalidConfigs = new HashMap<>(newConfigs);
-                invalidConfigs.put(invalid.getKey(), invalid.getValue());
-                assertThrows(ConfigException.class, () -> channelBuilder.validateReconfiguration(invalidConfigs),
-                    invalid.toString());
-            }
             newConfigs.put(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, 200 * 1024);
             newConfigs.put(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 5L);
             channelBuilder.validateReconfiguration(newConfigs);
@@ -2475,8 +2474,9 @@ public class SslTransportLayerTest {
      * renegotiation request sent in place of a KeyUpdate.
      */
     private static void assertCloseCause(String tlsProtocol, String expectedMessage, Exception closeCause) {
-        if (!tlsProtocol.equals("TLSv1.3"))
+        if (!tlsProtocol.equals("TLSv1.3")) {
             expectedMessage = "Renegotiation is not supported";
+        }
         if (expectedMessage == null) {
             assertNull(closeCause);
         } else {
@@ -2504,14 +2504,16 @@ public class SslTransportLayerTest {
         args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, MAX_NET_WRITE_BUFFER_BYTES);
         AtomicInteger keyUpdatesToUnwrap = new AtomicInteger();
         UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> {
-            if (!oneRecord)
+            if (!oneRecord) {
                 return sslEngine;
+            }
             return wrapUnwrap(sslEngine, (src, dst) -> {
                 SSLEngineResult result = sslEngine.unwrap(src, dst);
                 while (result.getStatus() == SSLEngineResult.Status.OK && result.bytesProduced() == 0 &&
                         result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP &&
-                        keyUpdatesToUnwrap.decrementAndGet() > 0)
+                        keyUpdatesToUnwrap.decrementAndGet() > 0) {
                     result = sslEngine.unwrap(src, dst);
+                }
                 return result;
             });
         };
@@ -2533,11 +2535,12 @@ public class SslTransportLayerTest {
                 }
 
                 keyUpdatesToUnwrap.set(keyUpdateBatches[batch]);
-                writeKeyUpdates(connection, keyUpdateBatches[batch]);
+                writeKeyUpdatesAndMessage(connection, keyUpdateBatches[batch]);
 
                 Exception closeCause = connection.pollServer(1);
-                if (closeCause != null)
+                if (closeCause != null) {
                     return closeCause;
+                }
                 serverHandshakeStatus.set(connection.serverEngine.get().getHandshakeStatus());
             }
 
@@ -2545,8 +2548,8 @@ public class SslTransportLayerTest {
                 connection.startServerSend();
                 TestUtils.waitForCondition(() -> {
                     serverSelector.poll(10);
-                    connection.selector.poll(10);
-                    return !connection.selector.completedReceives().isEmpty();
+                    connection.clientSelector.poll(10);
+                    return !connection.clientSelector.completedReceives().isEmpty();
                 }, "Client did not receive the message");
             }
             return null;
@@ -2557,7 +2560,7 @@ public class SslTransportLayerTest {
      * Bypasses the client's transport layer to send {@code keyUpdates} KeyUpdates requesting an update, each in its
      * own record, or renegotiation requests before TLSv1.3, followed by a message.
      */
-    private static void writeKeyUpdates(RawTlsConnection connection, int keyUpdates) throws Exception {
+    private static void writeKeyUpdatesAndMessage(RawTlsConnection connection, int keyUpdates) throws Exception {
         SSLEngine engine = connection.clientEngine;
         ByteBuffer out = ByteBuffer.allocate(0);
         for (int i = 0; i < keyUpdates; i++) {
@@ -2574,16 +2577,8 @@ public class SslTransportLayerTest {
     }
 
     /**
-     * Connects a client to a server over TLSv1.3 whose SSL engine starts a KeyUpdate requesting an update for each
-     * record with data it unwraps, as the JDK does past {@code jdk.tls.keyLimits} until the peer updates its key, or
-     * only for the first if {@code startOnce} is set. Then bypasses the client's transport layer, which is not polled
-     * again, to send {@code records} messages, each in its own record, and polls the server until it receives them. If
-     * {@code blockServerWrites} is set, the server cannot write to the socket. Sets {@code serverHandshakeStatus} to the
-     * server engine's status, {@code serverBytesWritten} to the bytes the server wrote to the socket while receiving
-     * them and {@code serverHasPendingWrites} to whether the server has output unsent once it receives them, if it did
-     * not close the connection.
-     *
-     * @return the exception the server closed the connection with, or null if it did not close it
+     * Like the method below, with the server holding post-handshake messages for up to
+     * {@link #HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES} of data read.
      */
     private static Exception sendRecordsStartingKeyUpdates(boolean blockServerWrites, boolean startOnce,
                                                            AtomicReference<SSLEngineResult.HandshakeStatus> serverHandshakeStatus,
@@ -2594,6 +2589,19 @@ public class SslTransportLayerTest {
             serverHandshakeStatus, serverHasPendingWrites, serverBytesWritten, records);
     }
 
+    /**
+     * Connects a client to a server over TLSv1.3 whose SSL engine starts a KeyUpdate requesting an update for each
+     * record with data it unwraps, as the JDK does past {@code jdk.tls.keyLimits} until the peer updates its key, or
+     * only for the first if {@code startOnce} is set. Then bypasses the client's transport layer, which is not polled
+     * again, to send {@code records} messages, each in its own record, and polls the server until it receives them. The
+     * server holds post-handshake messages for up to {@code heldPostHandshakeMessagesMaxReadBytes} of data read. If
+     * {@code blockServerWrites} is set, the server cannot write to the socket. Sets {@code serverHandshakeStatus} to the
+     * server engine's status, {@code serverBytesWritten} to the bytes the server wrote to the socket while receiving
+     * them and {@code serverHasPendingWrites} to whether the server has output unsent once it receives them, if it did
+     * not close the connection.
+     *
+     * @return the exception the server closed the connection with, or null if it did not close it
+     */
     private static Exception sendRecordsStartingKeyUpdates(boolean blockServerWrites, boolean startOnce,
                                                            long heldPostHandshakeMessagesMaxReadBytes,
                                                            AtomicReference<SSLEngineResult.HandshakeStatus> serverHandshakeStatus,
@@ -2608,11 +2616,13 @@ public class SslTransportLayerTest {
         UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> wrapUnwrap(sslEngine, (src, dst) -> {
             SSLEngineResult result = sslEngine.unwrap(src, dst);
             if (!startKeyUpdates.get() || result.getStatus() != SSLEngineResult.Status.OK || result.bytesProduced() == 0 ||
-                    result.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING)
+                    result.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
                 return result;
+            }
             sslEngine.beginHandshake();
-            if (startOnce)
+            if (startOnce) {
                 startKeyUpdates.set(false);
+            }
             return new SSLEngineResult(result.getStatus(), sslEngine.getHandshakeStatus(), result.bytesConsumed(),
                 result.bytesProduced());
         });
@@ -2636,8 +2646,9 @@ public class SslTransportLayerTest {
             Exception closeCause = connection.pollServer(records);
             serverHandshakeStatus.set(serverEngine.getHandshakeStatus());
             serverBytesWritten.set(connection.serverBytesWritten.get() - serverBytesWrittenBefore);
-            if (closeCause == null)
+            if (closeCause == null) {
                 serverHasPendingWrites.set(connection.serverTransportLayer.get().hasPendingWrites());
+            }
             return closeCause;
         }
     }
@@ -2647,8 +2658,9 @@ public class SslTransportLayerTest {
      */
     private static ByteBuffer roomToWrap(SSLEngine engine, ByteBuffer out) {
         int packetBufferSize = engine.getSession().getPacketBufferSize();
-        if (out.remaining() >= packetBufferSize)
+        if (out.remaining() >= packetBufferSize) {
             return out;
+        }
         return Utils.ensureCapacity(out, Math.max(2 * out.capacity(), out.position() + packetBufferSize));
     }
 
@@ -2670,8 +2682,9 @@ public class SslTransportLayerTest {
     private static SSLEngine wrapUnwrap(SSLEngine sslEngine, Unwrap unwrap) {
         Answer<Object> delegate = AdditionalAnswers.delegatesTo(sslEngine);
         return mock(SSLEngine.class, invocation -> {
-            if (!invocation.getMethod().getName().equals("unwrap") || invocation.getArguments().length != 2)
+            if (!invocation.getMethod().getName().equals("unwrap") || invocation.getArguments().length != 2) {
                 return delegate.answer(invocation);
+            }
             return unwrap.unwrap(invocation.getArgument(0), invocation.getArgument(1));
         });
     }
@@ -2689,7 +2702,7 @@ public class SslTransportLayerTest {
         final AtomicReference<SSLEngine> serverEngine = new AtomicReference<>();
         final AtomicReference<SslTransportLayer> serverTransportLayer = new AtomicReference<>();
         final ServerSocketChannel serverSocket;
-        final Selector selector;
+        final Selector clientSelector;
         final Selector serverSelector;
         final SSLEngine clientEngine;
         final SocketChannel clientChannel;
@@ -2709,8 +2722,9 @@ public class SslTransportLayerTest {
                             serverEngineWrapper.apply(sslEngine)) {
                         @Override
                         protected boolean flushNetWriteBuffer() throws IOException {
-                            if (blockServerWrites.get() && netWriteBuffer().hasRemaining())
+                            if (blockServerWrites.get() && netWriteBuffer().hasRemaining()) {
                                 return false;
+                            }
                             int remaining = netWriteBuffer().remaining();
                             try {
                                 return super.flushNetWriteBuffer();
@@ -2747,21 +2761,21 @@ public class SslTransportLayerTest {
             clientChannelBuilder.configure(clientConfigs);
 
             serverSocket = ServerSocketChannel.open();
-            selector = new Selector(5000, new Metrics(), TIME, "MetricGroup", clientChannelBuilder, new LogContext());
+            clientSelector = new Selector(5000, new Metrics(), TIME, "MetricGroup", clientChannelBuilder, new LogContext());
             serverSelector = new Selector(5000, new Metrics(), TIME, "ServerMetricGroup", serverChannelBuilder,
                 new LogContext());
             try {
                 serverSocket.bind(new InetSocketAddress("localhost", 0));
                 String node = "0";
-                selector.connect(node, new InetSocketAddress("localhost", serverSocket.socket().getLocalPort()),
+                clientSelector.connect(node, new InetSocketAddress("localhost", serverSocket.socket().getLocalPort()),
                     BUFFER_SIZE, BUFFER_SIZE);
                 SocketChannel serverChannel = serverSocket.accept();
                 serverChannel.configureBlocking(false);
                 serverSelector.register(SERVER_ID, serverChannel);
                 TestUtils.waitForCondition(() -> {
-                    selector.poll(10);
+                    clientSelector.poll(10);
                     serverSelector.poll(10);
-                    return selector.isChannelReady(node) && serverSelector.isChannelReady(SERVER_ID);
+                    return clientSelector.isChannelReady(node) && serverSelector.isChannelReady(SERVER_ID);
                 }, "TLS handshake did not complete");
             } catch (Throwable e) {
                 try {
@@ -2792,8 +2806,9 @@ public class SslTransportLayerTest {
                     assertNotNull(serverCloseCause.get(), "Server disconnected without an exception");
                     return serverCloseCause.get();
                 }
-                if (received >= messages)
+                if (received >= messages) {
                     pollsAfterReceive--;
+                }
             }
             assertEquals(messages, received, "Server did not receive the messages");
             return null;
@@ -2819,7 +2834,7 @@ public class SslTransportLayerTest {
 
         @Override
         public void close() throws IOException {
-            selector.close();
+            clientSelector.close();
             serverSelector.close();
             serverSocket.close();
         }

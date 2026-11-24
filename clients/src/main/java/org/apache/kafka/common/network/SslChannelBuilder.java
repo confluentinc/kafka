@@ -92,7 +92,6 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
     @Override
     public void validateReconfiguration(Map<String, ?> configs) {
         sslFactory.validateReconfiguration(configs);
-        SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
     }
 
     @Override

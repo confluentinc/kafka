@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.common.network;
 
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.errors.SslAuthenticationException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -123,44 +122,19 @@ public class SslTransportLayer implements TransportLayer {
         }
 
         /**
-         * Returns the limits set in {@code configs}, or the defaults for those not set. Clients always use the defaults.
-         *
-         * @throws ConfigException if a server's limit is out of range
+         * Returns the limits set in {@code configs}, which {@link BrokerSecurityConfigs#CONFIG_DEF} has validated, or
+         * the defaults for those not set. Clients always use the defaults.
          */
         public static Limits fromConfigs(ConnectionMode connectionMode, Map<String, ?> configs) {
-            if (connectionMode == ConnectionMode.CLIENT)
+            if (connectionMode == ConnectionMode.CLIENT) {
                 return DEFAULT;
-            return new Limits(maxNetWriteBufferBytes(configs), heldMessagesMaxReadBytes(configs));
+            }
+            Integer maxNetWriteBufferBytes = (Integer) configs.get(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG);
+            Long heldMessagesMaxReadBytes = (Long) configs.get(BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG);
+            return new Limits(
+                maxNetWriteBufferBytes != null ? maxNetWriteBufferBytes : DEFAULT.maxNetWriteBufferBytes,
+                heldMessagesMaxReadBytes != null ? heldMessagesMaxReadBytes : DEFAULT.heldMessagesMaxReadBytes);
         }
-
-        private static int maxNetWriteBufferBytes(Map<String, ?> configs) {
-            String config = BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG;
-            Object value = configs.get(config);
-            if (value == null)
-                return DEFAULT.maxNetWriteBufferBytes;
-            int max = (Integer) value;
-            int min = BrokerSecurityConfigs.MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES;
-            int limit = BrokerSecurityConfigs.MAX_SSL_MAX_NET_WRITE_BUFFER_BYTES;
-            if (max < min || max > limit)
-                throw new ConfigException(config, max, "Value must be between " + min + " and " + limit);
-            return max;
-        }
-
-        private static long heldMessagesMaxReadBytes(Map<String, ?> configs) {
-            String config = BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG;
-            Object value = configs.get(config);
-            if (value == null)
-                return DEFAULT.heldMessagesMaxReadBytes;
-            long max = (Long) value;
-            if (max < 0)
-                throw new ConfigException(config, max, "Value must be at least 0");
-            return max;
-        }
-    }
-
-    public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
-                                           ChannelMetadataRegistry metadataRegistry) throws IOException {
-        return new SslTransportLayer(channelId, key, sslEngine, metadataRegistry);
     }
 
     public static SslTransportLayer create(String channelId, SelectionKey key, SSLEngine sslEngine,
@@ -328,8 +302,9 @@ public class SslTransportLayer implements TransportLayer {
         if (remaining > 0) {
             written = socketChannel.write(netWriteBuffer);
         }
-        if (written < remaining)
+        if (written < remaining) {
             return false;
+        }
         // Every post-handshake message was sent.
         unsentPostHandshakeMessages = 0;
         bytesReadWithUnsentPostHandshakeMessages = 0;
@@ -586,7 +561,9 @@ public class SslTransportLayer implements TransportLayer {
             handshakeStatus = runDelegatedTasks();
         }
 
-        if (doWrite) flushNetWriteBuffer();
+        if (doWrite) {
+            flushNetWriteBuffer();
+        }
         return result;
     }
 
@@ -700,13 +677,15 @@ public class SslTransportLayer implements TransportLayer {
                 if (unwrapResult.getStatus() == Status.OK) {
                     read += readFromAppBuffer(dst);
                     boolean hasData = unwrapResult.bytesProduced() > 0;
-                    if (hasData && unsentPostHandshakeMessages > 0)
+                    if (hasData && unsentPostHandshakeMessages > 0) {
                         bytesReadWithUnsentPostHandshakeMessages += unwrapResult.bytesProduced();
+                    }
                     // Replies to records without data, such as a peer's KeyUpdates, are safe to send while the peer writes.
-                    if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP)
+                    if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP) {
                         writePostHandshakeMessages(!hasData);
-                    else if (hasData && unsentPostHandshakeMessages > 0)
+                    } else if (hasData && unsentPostHandshakeMessages > 0) {
                         maybeFlushPostHandshakeMessages(false);
+                    }
                 } else if (unwrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
                     int currentApplicationBufferSize = applicationBufferSize();
                     appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
@@ -770,24 +749,29 @@ public class SslTransportLayer implements TransportLayer {
             } finally {
                 netWriteBuffer.flip();
             }
-            if (result.getStatus() == Status.CLOSED)
+            if (result.getStatus() == Status.CLOSED) {
                 throw new EOFException();
+            }
             if (result.getStatus() == Status.BUFFER_OVERFLOW) {
                 log.info("Closing channel since a TLS post-handshake message does not fit in the {} bytes free in netWriteBuffer",
                     netWriteBuffer.capacity() - netWriteBuffer.limit());
                 throw new SSLException(UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
             }
-            if (result.getStatus() != Status.OK)
+            if (result.getStatus() != Status.OK) {
                 throw new IllegalStateException("Unexpected status " + result.getStatus() + " wrapping TLS post-handshake message");
+            }
             boolean producedNothing = result.bytesProduced() == 0;
-            if (producedNothing && lastWrapProducedNothing)
+            if (producedNothing && lastWrapProducedNothing) {
                 throw new IllegalStateException("No progress wrapping TLS post-handshake message");
+            }
             lastWrapProducedNothing = producedNothing;
-            if (!producedNothing)
+            if (!producedNothing) {
                 unsentPostHandshakeMessages++;
+            }
             handshakeStatus = result.getHandshakeStatus();
-            if (handshakeStatus == HandshakeStatus.NEED_TASK)
+            if (handshakeStatus == HandshakeStatus.NEED_TASK) {
                 handshakeStatus = runDelegatedTasks();
+            }
         }
         maybeFlushPostHandshakeMessages(forceFlush);
     }
@@ -829,8 +813,9 @@ public class SslTransportLayer implements TransportLayer {
      */
     private void maybeFlushPostHandshakeMessages(boolean forceFlush) throws IOException {
         if (forceFlush || unsentPostHandshakeMessages >= Limits.MAX_HELD_MESSAGES ||
-                bytesReadWithUnsentPostHandshakeMessages >= limits.heldMessagesMaxReadBytes)
+                bytesReadWithUnsentPostHandshakeMessages >= limits.heldMessagesMaxReadBytes) {
             flushNetWriteBuffer();
+        }
     }
 
     // Called on every full flush, so a connection the server never writes to doesn't keep netWriteBuffer grown.
@@ -1217,8 +1202,9 @@ public class SslTransportLayer implements TransportLayer {
         if (state != State.READY)
             return 0;
 
-        if (!flushNetWriteBuffer())
+        if (!flushNetWriteBuffer()) {
             return 0;
+        }
 
         long channelSize;
         try {

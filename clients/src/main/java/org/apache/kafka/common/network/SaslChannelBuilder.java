@@ -198,7 +198,6 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
             } catch (IllegalStateException e) {
                 throw new ConfigException("SASL reconfiguration failed due to " + e);
             }
-            SslTransportLayer.Limits.fromConfigs(connectionMode, configs);
         }
     }
 
@@ -267,8 +266,7 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
     protected TransportLayer buildTransportLayer(String id, SelectionKey key, SocketChannel socketChannel,
                                                  ChannelMetadataRegistry metadataRegistry) throws IOException {
         if (this.securityProtocol == SecurityProtocol.SASL_SSL) {
-            return SslTransportLayer.create(id, key,
-                sslFactory.createSslEngine(socketChannel.socket()),
+            return SslTransportLayer.create(id, key, sslFactory.createSslEngine(socketChannel.socket()),
                 metadataRegistry, limits);
         } else {
             return new PlaintextTransportLayer(key);

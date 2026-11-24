@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.common.network;
 
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 
 import org.junit.jupiter.api.Test;
@@ -25,7 +24,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SslTransportLayerLimitsTest {
 
@@ -38,22 +36,12 @@ class SslTransportLayerLimitsTest {
     }
 
     @Test
-    void testMaxNetWriteBufferBytes() {
-        String config = BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG;
-        int min = BrokerSecurityConfigs.MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES;
-        assertEquals(min, maxNetWriteBufferBytes(Map.of(config, min)));
-        assertThrows(ConfigException.class, () -> maxNetWriteBufferBytes(Map.of(config, min - 1)));
-        int max = BrokerSecurityConfigs.MAX_SSL_MAX_NET_WRITE_BUFFER_BYTES;
-        assertEquals(max, maxNetWriteBufferBytes(Map.of(config, max)));
-        assertThrows(ConfigException.class, () -> maxNetWriteBufferBytes(Map.of(config, max + 1)));
-    }
-
-    @Test
-    void testHeldMessagesMaxReadBytes() {
-        String config = BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG;
-        assertEquals(0L, SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, Map.of(config, 0L)).heldMessagesMaxReadBytes);
-        assertThrows(ConfigException.class,
-            () -> SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, Map.of(config, -1L)));
+    void testConfiguredLimits() {
+        SslTransportLayer.Limits limits = SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, Map.of(
+            BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, BrokerSecurityConfigs.MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES,
+            BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, 0L));
+        assertEquals(BrokerSecurityConfigs.MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES, limits.maxNetWriteBufferBytes);
+        assertEquals(0L, limits.heldMessagesMaxReadBytes);
     }
 
     @Test
@@ -62,9 +50,5 @@ class SslTransportLayerLimitsTest {
         assertSame(SslTransportLayer.Limits.DEFAULT, SslTransportLayer.Limits.fromConfigs(ConnectionMode.CLIENT, Map.of(
             BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, "abc",
             BrokerSecurityConfigs.SSL_HELD_POST_HANDSHAKE_MESSAGES_MAX_READ_BYTES_CONFIG, "abc")));
-    }
-
-    private static int maxNetWriteBufferBytes(Map<String, ?> configs) {
-        return SslTransportLayer.Limits.fromConfigs(ConnectionMode.SERVER, configs).maxNetWriteBufferBytes;
     }
 }
