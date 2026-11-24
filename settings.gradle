@@ -20,6 +20,24 @@ pluginManagement {
     // every developer's main-build classpath, and each published artifact carries only
     // the classes its consumers need.
     includeBuild 'api-checker'
+
+    // Resolve Gradle plugins through the third-party-artifacts CodeArtifact repository, which proxies the
+    // Gradle Plugin Portal and Maven Central. The public hosts rate-limit CI agents (HTTP 429). Without a
+    // CodeArtifact token (mavenThirdPartyPassword) Gradle uses the Plugin Portal directly, as before.
+    repositories {
+        def codeArtifactToken = providers.gradleProperty('mavenThirdPartyPassword').orNull
+        if (codeArtifactToken) {
+            maven {
+                name = 'third-party-artifacts'
+                url = 'https://confluent-524708692776.d.codeartifact.us-west-2.amazonaws.com/maven/confluent-maven/'
+                credentials {
+                    username = providers.gradleProperty('mavenUsername').getOrElse('aws')
+                    password = codeArtifactToken
+                }
+            }
+        }
+        gradlePluginPortal()
+    }
 }
 
 plugins {
