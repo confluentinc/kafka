@@ -18,6 +18,17 @@ import java.nio.charset.StandardCharsets
 
 buildscript {
   repositories {
+    // CodeArtifact first, see pluginManagement in settings.gradle; Maven Central stays as the fallback.
+    if (findProperty('mavenThirdPartyPassword')) {
+      maven {
+        name = 'third-party-artifacts'
+        url = 'https://confluent-524708692776.d.codeartifact.us-west-2.amazonaws.com/maven/confluent-maven/'
+        credentials {
+          username = findProperty('mavenUsername') ?: 'aws'
+          password = findProperty('mavenThirdPartyPassword')
+        }
+      }
+    }
     mavenCentral()
   }
   apply from: "$rootDir/gradle/dependencies.gradle"
@@ -188,6 +199,17 @@ ext {
 allprojects {
 
   repositories {
+    // CodeArtifact first (Maven Central rate-limits CI agents with HTTP 429); Maven Central stays as the fallback.
+    if (findProperty('mavenThirdPartyPassword')) {
+      maven {
+        name = 'third-party-artifacts'
+        url = 'https://confluent-524708692776.d.codeartifact.us-west-2.amazonaws.com/maven/confluent-maven/'
+        credentials {
+          username = findProperty('mavenUsername') ?: 'aws'
+          password = findProperty('mavenThirdPartyPassword')
+        }
+      }
+    }
     mavenCentral()
   }
 
