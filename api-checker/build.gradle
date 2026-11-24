@@ -59,6 +59,17 @@ allprojects {
     ext.apiCheckerVersions = rootProject.apiCheckerVersions
 
     repositories {
+        // CodeArtifact first (the public hosts rate-limit CI agents with HTTP 429); public repositories stay as fallbacks.
+        if (findProperty('mavenThirdPartyPassword')) {
+            maven {
+                name = 'third-party-artifacts'
+                url = 'https://confluent-524708692776.d.codeartifact.us-west-2.amazonaws.com/maven/confluent-maven/'
+                credentials {
+                    username = findProperty('mavenUsername') ?: 'aws'
+                    password = findProperty('mavenThirdPartyPassword')
+                }
+            }
+        }
         gradlePluginPortal()
         mavenCentral()
     }
