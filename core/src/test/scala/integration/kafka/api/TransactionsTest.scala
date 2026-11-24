@@ -729,10 +729,20 @@ class TransactionsTest extends IntegrationTestHarness {
       // operations will cause it to reach Short.MaxValue - 1 before the timeout.
       txnCoordinator.transactionManager.getTransactionState(transactionalId).foreach { txnMetadataOpt =>
         txnMetadataOpt.foreach { epochAndMetadata =>
-          epochAndMetadata.transactionMetadata.inLock(() => {
-            epochAndMetadata.transactionMetadata.setProducerEpoch((Short.MaxValue - 2).toShort)
-            null // inLock expects a Supplier that returns a value
-          })
+          val metadata = epochAndMetadata.transactionMetadata
+          // abortTransaction() can return before the coordinator has finished the first abort with the
+          // current epoch. Changing the epoch under that in-flight transition makes it fail and the next
+          // producer then times out in initTransactions() (KAFKA-21588). Wait for COMPLETE_ABORT with no
+          // pending transition and set the epoch under the same lock.
+          waitUntilTrue(() => metadata.inLock(() => {
+            if (metadata.state() != org.apache.kafka.coordinator.transaction.TransactionState.COMPLETE_ABORT ||
+                metadata.pendingTransitionInProgress()) {
+              false
+            } else {
+              metadata.setProducerEpoch((Short.MaxValue - 2).toShort)
+              true
+            }
+          }), s"First abort did not complete for $transactionalId")
         }
       }
     } finally {
