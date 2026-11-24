@@ -24,7 +24,7 @@ buildscript {
         name = 'third-party-artifacts'
         url = 'https://confluent-524708692776.d.codeartifact.us-west-2.amazonaws.com/maven/confluent-maven/'
         credentials {
-          username = findProperty('mavenUsername') ?: 'aws'
+          username = 'aws'  // CodeArtifact tokens always authenticate as 'aws'; mavenUsername is the publishing user
           password = findProperty('mavenThirdPartyPassword')
         }
       }
@@ -201,7 +201,7 @@ allprojects {
         name = 'third-party-artifacts'
         url = 'https://confluent-524708692776.d.codeartifact.us-west-2.amazonaws.com/maven/confluent-maven/'
         credentials {
-          username = findProperty('mavenUsername') ?: 'aws'
+          username = 'aws'  // CodeArtifact tokens always authenticate as 'aws'; mavenUsername is the publishing user
           password = findProperty('mavenThirdPartyPassword')
         }
       }
