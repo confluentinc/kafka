@@ -61,10 +61,11 @@ elif [[ ! "$JDK_FULL" =~ ^[0-9]+(u[0-9]+|(\.[0-9]+)+)?-linux-(x64|aarch64)$ ]]; 
 fi
 
 echo "JDK_MAJOR=$JDK_MAJOR JDK_ARCH=$JDK_ARCH JDK_FULL=$JDK_FULL"
+export DEBIAN_FRONTEND=noninteractive
 
 if [ -z `which javac` ]; then
     apt-get -y update
-    apt-get install -y software-properties-common python-software-properties binutils java-common
+    apt-get install -y software-properties-common binutils java-common
 
     echo "===> Installing JDK..." 
 
@@ -117,7 +118,8 @@ get_kafka() {
 }
 
 # Install Kibosh
-apt-get update -y && apt-get install -y git cmake pkg-config libfuse-dev
+apt-get update -y && apt-get install -y git cmake pkg-config libfuse-dev ca-certificates
+update-ca-certificates --fresh
 pushd /opt
 rm -rf /opt/kibosh
 git clone -q  https://github.com/confluentinc/kibosh.git
@@ -211,11 +213,23 @@ if [ ! -e /mnt ]; then
 fi
 chmod a+rwx /mnt
 
-# Run ntpdate once to sync to ntp servers
+# Run ntpdate once to sync to ntp servers (absent on Ubuntu 22+; timesyncd already syncs)
 # use -u option to avoid port collision in case ntp daemon is already running
-ntpdate -u pool.ntp.org
+command -v ntpdate >/dev/null 2>&1 && ntpdate -u pool.ntp.org || true
 # Install ntp daemon - it will automatically start on boot
 apt-get -y install ntp
+
+# Force legacy "eth0" NIC naming. Ubuntu 22.04 on Nitro (c6a/c7) uses predictable names
+# (ens5), but kafka trogdor network-fault tests (network_degrade, round_trip_fault) target
+# eth0. net.ifnames=0 restores eth0; cloud-init regenerates netplan for it on boot. DPA-3043.
+if [ -f /etc/default/grub ]; then
+    if grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
+        sed -i 's/^GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 net.ifnames=0 biosdevname=0"/' /etc/default/grub
+    else
+        echo 'GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"' >> /etc/default/grub
+    fi
+    update-grub
+fi
 
 # Increase the ulimit
 mkdir -p /etc/security/limits.d
