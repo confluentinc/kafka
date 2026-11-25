@@ -89,17 +89,11 @@ public class SslTransportLayer implements TransportLayer {
     private State state;
     private SslAuthenticationException handshakeException;
     private ByteBuffer netReadBuffer;
-    private ByteBuffer netWriteBuffer;
+    private SslNetWriteBuffer netWriteBuffer;
     private ByteBuffer appReadBuffer;
     private ByteBuffer fileChannelBuffer;
     private boolean hasBytesBuffered;
     private final Limits limits;
-    // Post-handshake messages wrapped since netWriteBuffer was last fully flushed.
-    private int unsentPostHandshakeMessages;
-    // Bytes of data read while post-handshake messages are unsent.
-    private long bytesReadWithUnsentPostHandshakeMessages;
-    // Whether netWriteBuffer was grown for post-handshake messages, so it shrinks back once they are sent.
-    private boolean needShrinkNetWriteBuffer;
 
     /**
      * Limits on netWriteBuffer's size and on holding post-handshake messages, from
@@ -169,9 +163,8 @@ public class SslTransportLayer implements TransportLayer {
             throw new IllegalStateException("startHandshake() can only be called once, state " + state);
 
         this.netReadBuffer = ByteBuffer.allocate(netReadBufferSize());
-        this.netWriteBuffer = ByteBuffer.allocate(netWriteBufferSize());
+        this.netWriteBuffer = new SslNetWriteBuffer(this::netWriteBufferSize, limits, log);
         this.appReadBuffer = ByteBuffer.allocate(applicationBufferSize());
-        netWriteBuffer.limit(0);
         netReadBuffer.limit(0);
 
         state = State.HANDSHAKE;
@@ -238,16 +231,13 @@ public class SslTransportLayer implements TransportLayer {
                 if (!flushNetWriteBuffer()) {
                     throw new IOException("Remaining data in the network buffer, can't send SSL close message.");
                 }
-                //prep the buffer for the close message
-                netWriteBuffer.clear();
                 //perform the close, since we called sslEngine.closeOutbound
-                SSLEngineResult wrapResult = sslEngine.wrap(ByteUtils.EMPTY_BUF, netWriteBuffer);
+                SSLEngineResult wrapResult = netWriteBuffer.wrap(sslEngine, ByteUtils.EMPTY_BUF);
                 //we should be in a close state
                 if (wrapResult.getStatus() != SSLEngineResult.Status.CLOSED) {
                     throw new IOException("Unexpected status returned by SSLEngine.wrap, expected CLOSED, received " +
                             wrapResult.getStatus() + ". Will not send close message to peer.");
                 }
-                netWriteBuffer.flip();
                 flushNetWriteBuffer();
             }
         } catch (IOException ie) {
@@ -297,19 +287,7 @@ public class SslTransportLayer implements TransportLayer {
     * @throws IOException
     */
     protected boolean flushNetWriteBuffer() throws IOException {
-        int remaining = netWriteBuffer.remaining();
-        int written = 0;
-        if (remaining > 0) {
-            written = socketChannel.write(netWriteBuffer);
-        }
-        if (written < remaining) {
-            return false;
-        }
-        // Every post-handshake message was sent.
-        unsentPostHandshakeMessages = 0;
-        bytesReadWithUnsentPostHandshakeMessages = 0;
-        maybeShrinkNetWriteBuffer();
-        return true;
+        return netWriteBuffer.writeTo(socketChannel);
     }
 
     /**
@@ -413,14 +391,7 @@ public class SslTransportLayer implements TransportLayer {
                           channelId, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
                 handshakeResult = handshakeWrap(write);
                 if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
-                    int currentNetWriteBufferSize = netWriteBufferSize();
-                    netWriteBuffer.compact();
-                    netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, currentNetWriteBufferSize);
-                    netWriteBuffer.flip();
-                    if (netWriteBuffer.limit() >= currentNetWriteBufferSize) {
-                        throw new IllegalStateException("Buffer overflow when available data size (" + netWriteBuffer.limit() +
-                                                        ") >= network buffer size (" + currentNetWriteBufferSize + ")");
-                    }
+                    netWriteBuffer.growForRecord();
                 } else if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
                     throw new IllegalStateException("Should not have received BUFFER_UNDERFLOW during handshake WRAP.");
                 } else if (handshakeResult.getStatus() == Status.CLOSED) {
@@ -543,18 +514,8 @@ public class SslTransportLayer implements TransportLayer {
     */
     private SSLEngineResult handshakeWrap(boolean doWrite) throws IOException {
         log.trace("SSLHandshake handshakeWrap {}", channelId);
-        if (netWriteBuffer.hasRemaining())
-            throw new IllegalStateException("handshakeWrap called with netWriteBuffer not empty");
         //this should never be called with a network buffer that contains data
-        //so we can clear it here.
-        netWriteBuffer.clear();
-        SSLEngineResult result;
-        try {
-            result = sslEngine.wrap(ByteUtils.EMPTY_BUF, netWriteBuffer);
-        } finally {
-            //prepare the results to be written
-            netWriteBuffer.flip();
-        }
+        SSLEngineResult result = netWriteBuffer.wrap(sslEngine, ByteUtils.EMPTY_BUF);
         handshakeStatus = result.getHandshakeStatus();
         if (result.getStatus() == SSLEngineResult.Status.OK &&
             result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
@@ -677,14 +638,13 @@ public class SslTransportLayer implements TransportLayer {
                 if (unwrapResult.getStatus() == Status.OK) {
                     read += readFromAppBuffer(dst);
                     boolean hasData = unwrapResult.bytesProduced() > 0;
-                    if (hasData && unsentPostHandshakeMessages > 0) {
-                        bytesReadWithUnsentPostHandshakeMessages += unwrapResult.bytesProduced();
+                    if (hasData) {
+                        netWriteBuffer.dataRead(unwrapResult.bytesProduced());
                     }
-                    // Replies to records without data, such as a peer's KeyUpdates, are safe to send while the peer writes.
+                    // A record without data is the peer's post-handshake message, such as a KeyUpdate, that the engine
+                    // replies to. A record with data makes the engine start a KeyUpdate once its key has been used enough.
                     if (unwrapResult.getHandshakeStatus() == HandshakeStatus.NEED_WRAP) {
                         writePostHandshakeMessages(!hasData);
-                    } else if (hasData && unsentPostHandshakeMessages > 0) {
-                        maybeFlushPostHandshakeMessages(false);
                     }
                 } else if (unwrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
                     int currentApplicationBufferSize = applicationBufferSize();
@@ -724,6 +684,10 @@ public class SslTransportLayer implements TransportLayer {
             if (netread <= 0 || isClosed)
                 break;
         }
+        // Send the post-handshake messages wrapped above in one write, rather than one for each.
+        if (netWriteBuffer.shouldSendAfterRead()) {
+            flushNetWriteBuffer();
+        }
         updateBytesBuffered(readFromNetwork || read > 0);
         // If data has been read and unwrapped, return the data even if end-of-stream, channel will be closed
         // on a subsequent poll, see hasBytesBuffered().
@@ -733,28 +697,25 @@ public class SslTransportLayer implements TransportLayer {
     /**
      * Wraps the TLSv1.3 post-handshake messages the engine produces while reading, such as KeyUpdate responses, into
      * netWriteBuffer after its unsent bytes. Otherwise the engine would keep them all until the next write.
+     * {@link SslNetWriteBuffer} decides when they are sent.
      *
-     * @param forceFlush whether to send them right away, since the record that caused them carried no data
+     * @param replyToPeer whether they reply to the peer's post-handshake message, such as its KeyUpdate, rather than
+     *                    being KeyUpdates the engine started on its own
      */
-    private void writePostHandshakeMessages(boolean forceFlush) throws IOException {
+    private void writePostHandshakeMessages(boolean replyToPeer) throws IOException {
         handshakeStatus = HandshakeStatus.NEED_WRAP;
         // A wrap may produce nothing if the engine must run a task first, but not twice in a row.
         boolean lastWrapProducedNothing = false;
         while (handshakeStatus == HandshakeStatus.NEED_WRAP) {
-            maybeFlushPostHandshakeMessages(forceFlush);
-            makeRoomForPostHandshakeMessage();
-            SSLEngineResult result;
-            try {
-                result = sslEngine.wrap(ByteUtils.EMPTY_BUF, netWriteBuffer);
-            } finally {
-                netWriteBuffer.flip();
+            if (netWriteBuffer.shouldSendBeforePostHandshakeMessage()) {
+                flushNetWriteBuffer();
             }
+            SSLEngineResult result = netWriteBuffer.wrapPostHandshakeMessage(sslEngine, replyToPeer);
             if (result.getStatus() == Status.CLOSED) {
                 throw new EOFException();
             }
             if (result.getStatus() == Status.BUFFER_OVERFLOW) {
-                log.info("Closing channel since a TLS post-handshake message does not fit in the {} bytes free in netWriteBuffer",
-                    netWriteBuffer.capacity() - netWriteBuffer.limit());
+                log.info("Closing channel since a TLS post-handshake message does not fit in netWriteBuffer {}", netWriteBuffer);
                 throw new SSLException(UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
             }
             if (result.getStatus() != Status.OK) {
@@ -765,64 +726,10 @@ public class SslTransportLayer implements TransportLayer {
                 throw new IllegalStateException("No progress wrapping TLS post-handshake message");
             }
             lastWrapProducedNothing = producedNothing;
-            if (!producedNothing) {
-                unsentPostHandshakeMessages++;
-            }
             handshakeStatus = result.getHandshakeStatus();
             if (handshakeStatus == HandshakeStatus.NEED_TASK) {
                 handshakeStatus = runDelegatedTasks();
             }
-        }
-        maybeFlushPostHandshakeMessages(forceFlush);
-    }
-
-    /**
-     * Makes room in netWriteBuffer to wrap a record after its unsent bytes, growing it up to
-     * {@code ssl.max.net.write.buffer.bytes}. Closes the connection if that is not enough.
-     */
-    private void makeRoomForPostHandshakeMessage() throws SSLException {
-        int unsentBytes = netWriteBuffer.remaining();
-
-        // Move the unsent bytes to the start, without copying them if they are already there.
-        if (netWriteBuffer.position() > 0) {
-            netWriteBuffer.compact();
-        } else {
-            netWriteBuffer.limit(netWriteBuffer.capacity());
-            netWriteBuffer.position(unsentBytes);
-        }
-
-        // The engine needs room for a whole record. Doubling keeps the copies few.
-        int required = unsentBytes + netWriteBufferSize();
-        if (required > netWriteBuffer.capacity()) {
-            int maxCapacity = limits.maxNetWriteBufferBytes;
-            if (required > maxCapacity) {
-                log.info("Closing channel since {} bytes are unsent along with TLS post-handshake messages", unsentBytes);
-                throw new SSLException(UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
-            }
-            int newCapacity = Math.min(Math.max(required, 2 * netWriteBuffer.capacity()), maxCapacity);
-            netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, newCapacity);
-            needShrinkNetWriteBuffer = true;
-        }
-    }
-
-    /**
-     * We try to hold post-handshake messages until the next write(), because an OpenSSL peer fails if a KeyUpdate
-     * arrives while it is writing. We still send them once a few are held or enough data is read, so that a peer we
-     * never write to, such as a producer using acks=0, gets them too, and in short bursts, since BoringSSL fails after
-     * 32 KeyUpdates in a row. Bytes the socket doesn't take go out on the next flush.
-     */
-    private void maybeFlushPostHandshakeMessages(boolean forceFlush) throws IOException {
-        if (forceFlush || unsentPostHandshakeMessages >= Limits.MAX_HELD_MESSAGES ||
-                bytesReadWithUnsentPostHandshakeMessages >= limits.heldMessagesMaxReadBytes) {
-            flushNetWriteBuffer();
-        }
-    }
-
-    // Called on every full flush, so a connection the server never writes to doesn't keep netWriteBuffer grown.
-    private void maybeShrinkNetWriteBuffer() {
-        if (needShrinkNetWriteBuffer) {
-            netWriteBuffer = ByteBuffer.allocate(netWriteBufferSize()).flip();
-            needShrinkNetWriteBuffer = false;
         }
     }
 
@@ -895,9 +802,7 @@ public class SslTransportLayer implements TransportLayer {
 
         int written = 0;
         while (flushNetWriteBuffer() && src.hasRemaining()) {
-            netWriteBuffer.clear();
-            SSLEngineResult wrapResult = sslEngine.wrap(src, netWriteBuffer);
-            netWriteBuffer.flip();
+            SSLEngineResult wrapResult = netWriteBuffer.wrap(sslEngine, src);
 
             // reject renegotiation if TLS < 1.3, key updates for TLS 1.3 are allowed
             if (wrapResult.getHandshakeStatus() != HandshakeStatus.NOT_HANDSHAKING &&
@@ -910,8 +815,7 @@ public class SslTransportLayer implements TransportLayer {
                 written += wrapResult.bytesConsumed();
             } else if (wrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
                 // BUFFER_OVERFLOW means that the last `wrap` call had no effect, so we expand the buffer and try again
-                netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, netWriteBufferSize());
-                netWriteBuffer.position(netWriteBuffer.limit());
+                netWriteBuffer.growForRecord();
             } else if (wrapResult.getStatus() == Status.BUFFER_UNDERFLOW) {
                 throw new IllegalStateException("SSL BUFFER_UNDERFLOW during write");
             } else if (wrapResult.getStatus() == Status.CLOSED) {
@@ -1058,7 +962,7 @@ public class SslTransportLayer implements TransportLayer {
     }
 
     // Visibility for testing
-    ByteBuffer netWriteBuffer() {
+    SslNetWriteBuffer netWriteBuffer() {
         return netWriteBuffer;
     }
 
@@ -1159,8 +1063,7 @@ public class SslTransportLayer implements TransportLayer {
     private void clearWriteBuffer() {
         if (netWriteBuffer.hasRemaining())
             log.debug("Discarding write buffer {} since peer has disconnected", netWriteBuffer);
-        netWriteBuffer.position(0);
-        netWriteBuffer.limit(0);
+        netWriteBuffer.discard();
     }
 
     @Override

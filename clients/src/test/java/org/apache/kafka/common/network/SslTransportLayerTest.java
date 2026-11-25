@@ -42,6 +42,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.AdditionalAnswers;
 import org.mockito.stubbing.Answer;
@@ -2127,6 +2128,39 @@ public class SslTransportLayerTest {
     }
 
     /**
+     * Tests that a server sends the responses to TLSv1.3 KeyUpdates requesting an update from a peer that reads them
+     * in one socket write for each batch that fills netWriteBuffer at two packets, and one for the rest once it has
+     * unwrapped what it read, rather than one for each, whether they arrive in separate records or in one.
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testServerSendsKeyUpdateResponsesInBatches(boolean oneRecord) throws Exception {
+        int keyUpdates = 2 * MAX_UNSENT_KEY_UPDATES;
+        Args args = new Args("TLSv1.3", false);
+        args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, MAX_NET_WRITE_BUFFER_BYTES);
+        AtomicInteger keyUpdatesToUnwrap = new AtomicInteger(keyUpdates);
+        UnaryOperator<SSLEngine> serverEngineWrapper = oneRecord ? unwrapKeyUpdatesInOneCall(keyUpdatesToUnwrap) :
+            UnaryOperator.identity();
+        try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
+                args.sslClientConfigs, serverEngineWrapper)) {
+            assertEquals(PACKET_BUFFER_SIZE, connection.serverEngine.get().getSession().getPacketBufferSize());
+            long bytesWrittenBefore = connection.serverBytesWritten.get();
+            int writesBefore = connection.serverWrites.get();
+            writeKeyUpdatesAndMessage(connection, keyUpdates);
+            assertNull(connection.pollServer(1));
+
+            int responseBytes = keyUpdates * KEY_UPDATE_RECORD_BYTES;
+            assertEquals(responseBytes, connection.serverBytesWritten.get() - bytesWrittenBefore);
+            // Each batch is a packet of responses, sent before wrapping the next one would grow the buffer. A few more
+            // writes are allowed, since the server may read the KeyUpdates in several reads, and flushes after each.
+            int writes = connection.serverWrites.get() - writesBefore;
+            int maxWrites = responseBytes / PACKET_BUFFER_SIZE + 4;
+            assertTrue(writes <= maxWrites, "Server wrote " + writes + " times, more than " + maxWrites);
+            assertEquals(2 * PACKET_BUFFER_SIZE, connection.serverTransportLayer.get().netWriteBuffer().capacity());
+        }
+    }
+
+    /**
      * Tests that responses sent along with the server's own data no longer take room in netWriteBuffer. The server's
      * unsent message before the second batch is smaller than a KeyUpdate record, and takes the room of one.
      */
@@ -2139,21 +2173,25 @@ public class SslTransportLayerTest {
 
     /**
      * Tests that a server grows netWriteBuffer to hold the responses to TLSv1.3 KeyUpdates requesting an update while
-     * the peer is not reading them, and shrinks it back once it sends them, with its next data or on read.
+     * the peer is not reading them, and once it sends them, with its next data or on read, keeps a buffer that holds
+     * one batch of two packets, and shrinks one grown past it back to two packets.
      */
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    public void testServerShrinksNetWriteBufferOnceSent(boolean onRead) throws Exception {
+    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+    public void testServerShrinksNetWriteBufferOnceSent(boolean onRead, boolean growPastBatch) throws Exception {
         Args args = new Args("TLSv1.3", false);
         try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
                 args.sslClientConfigs, UnaryOperator.identity())) {
             SslTransportLayer transportLayer = connection.serverTransportLayer.get();
             int packetBufferSize = connection.serverEngine.get().getSession().getPacketBufferSize();
-            // The engine needs room for a whole packet to wrap each response, so the second one grows the buffer.
+            // The engine needs room for a whole packet to wrap each response, so the second one grows the buffer to
+            // two packets, and the first that does not fit after a packet of responses grows it past that.
+            int keyUpdates = growPastBatch ? packetBufferSize / KEY_UPDATE_RECORD_BYTES + 2 : 2;
             connection.blockServerWrites.set(true);
-            writeKeyUpdatesAndMessage(connection, 2);
+            writeKeyUpdatesAndMessage(connection, keyUpdates);
             assertNull(connection.pollServer(1));
-            assertTrue(transportLayer.netWriteBuffer().capacity() > packetBufferSize);
+            assertEquals(growPastBatch ? 4 * packetBufferSize : 2 * packetBufferSize,
+                transportLayer.netWriteBuffer().capacity());
 
             connection.blockServerWrites.set(false);
             if (onRead) {
@@ -2162,7 +2200,8 @@ public class SslTransportLayerTest {
             } else {
                 connection.sendFromServer();
             }
-            assertEquals(packetBufferSize, transportLayer.netWriteBuffer().capacity());
+            assertFalse(transportLayer.hasPendingWrites());
+            assertEquals(2 * packetBufferSize, transportLayer.netWriteBuffer().capacity());
         }
     }
 
@@ -2503,20 +2542,8 @@ public class SslTransportLayerTest {
         Args args = new Args(tlsProtocol, false);
         args.sslServerConfigs.put(BrokerSecurityConfigs.SSL_MAX_NET_WRITE_BUFFER_BYTES_CONFIG, MAX_NET_WRITE_BUFFER_BYTES);
         AtomicInteger keyUpdatesToUnwrap = new AtomicInteger();
-        UnaryOperator<SSLEngine> serverEngineWrapper = sslEngine -> {
-            if (!oneRecord) {
-                return sslEngine;
-            }
-            return wrapUnwrap(sslEngine, (src, dst) -> {
-                SSLEngineResult result = sslEngine.unwrap(src, dst);
-                while (result.getStatus() == SSLEngineResult.Status.OK && result.bytesProduced() == 0 &&
-                        result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP &&
-                        keyUpdatesToUnwrap.decrementAndGet() > 0) {
-                    result = sslEngine.unwrap(src, dst);
-                }
-                return result;
-            });
-        };
+        UnaryOperator<SSLEngine> serverEngineWrapper = oneRecord ? unwrapKeyUpdatesInOneCall(keyUpdatesToUnwrap) :
+            UnaryOperator.identity();
         try (RawTlsConnection connection = new RawTlsConnection(builder -> builder.configure(args.sslServerConfigs),
                 args.sslClientConfigs, serverEngineWrapper)) {
             assertEquals(tlsProtocol, connection.serverEngine.get().getSession().getProtocol());
@@ -2554,6 +2581,22 @@ public class SslTransportLayerTest {
             }
             return null;
         }
+    }
+
+    /**
+     * Returns a wrapper for the server's SSL engine that unwraps up to {@code keyUpdatesToUnwrap} KeyUpdates in one
+     * call, as it does when they share a record, so the engine queues a response for each before the server wraps any.
+     */
+    private static UnaryOperator<SSLEngine> unwrapKeyUpdatesInOneCall(AtomicInteger keyUpdatesToUnwrap) {
+        return sslEngine -> wrapUnwrap(sslEngine, (src, dst) -> {
+            SSLEngineResult result = sslEngine.unwrap(src, dst);
+            while (result.getStatus() == SSLEngineResult.Status.OK && result.bytesProduced() == 0 &&
+                    result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP &&
+                    keyUpdatesToUnwrap.decrementAndGet() > 0) {
+                result = sslEngine.unwrap(src, dst);
+            }
+            return result;
+        });
     }
 
     /**
@@ -2692,13 +2735,15 @@ public class SslTransportLayerTest {
     /**
      * A client connected to a server over TLS, whose SSL engine and socket a test uses to write to the server directly,
      * bypassing the client's transport layer. The server cannot write to the socket while {@link #blockServerWrites}
-     * is set, and {@link #serverBytesWritten} counts the bytes it writes to it.
+     * is set, {@link #serverBytesWritten} counts the bytes it writes to it, and {@link #serverWrites} the writes
+     * that sent any.
      */
     static class RawTlsConnection implements AutoCloseable {
         static final String SERVER_ID = "server";
 
         final AtomicBoolean blockServerWrites = new AtomicBoolean(false);
         final AtomicLong serverBytesWritten = new AtomicLong();
+        final AtomicInteger serverWrites = new AtomicInteger();
         final AtomicReference<SSLEngine> serverEngine = new AtomicReference<>();
         final AtomicReference<SslTransportLayer> serverTransportLayer = new AtomicReference<>();
         final ServerSocketChannel serverSocket;
@@ -2729,7 +2774,11 @@ public class SslTransportLayerTest {
                             try {
                                 return super.flushNetWriteBuffer();
                             } finally {
-                                serverBytesWritten.addAndGet(remaining - netWriteBuffer().remaining());
+                                int written = remaining - netWriteBuffer().remaining();
+                                serverBytesWritten.addAndGet(written);
+                                if (written > 0) {
+                                    serverWrites.incrementAndGet();
+                                }
                             }
                         }
 
