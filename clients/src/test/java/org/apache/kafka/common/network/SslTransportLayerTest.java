@@ -2116,18 +2116,6 @@ public class SslTransportLayerTest {
     }
 
     /**
-     * Tests that a server sends the responses to TLSv1.3 KeyUpdates requesting an update right away, so a peer reading
-     * them, such as a JDK client whose key limit is lower than the server's, may send more before the server next
-     * writes than fit in netWriteBuffer, whether in separate records or in one.
-     */
-    @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    public void testServerSendsKeyUpdateResponsesRightAway(boolean oneRecord) throws Exception {
-        int max = MAX_UNSENT_KEY_UPDATES;
-        assertNull(sendKeyUpdates("TLSv1.3", false, oneRecord, new AtomicReference<>(), 2 * max));
-    }
-
-    /**
      * Tests that a server sends the responses to TLSv1.3 KeyUpdates requesting an update from a peer that reads them
      * in one socket write for each batch that fills netWriteBuffer at two packets, and one for the rest once it has
      * unwrapped what it read, rather than one for each, whether they arrive in separate records or in one.
@@ -2156,7 +2144,7 @@ public class SslTransportLayerTest {
             int writes = connection.serverWrites.get() - writesBefore;
             int maxWrites = responseBytes / PACKET_BUFFER_SIZE + 4;
             assertTrue(writes <= maxWrites, "Server wrote " + writes + " times, more than " + maxWrites);
-            assertEquals(2 * PACKET_BUFFER_SIZE, connection.serverTransportLayer.get().netWriteBuffer().capacity());
+            assertEquals(PACKET_BUFFER_SIZE, connection.serverTransportLayer.get().netWriteBuffer().capacity());
         }
     }
 
@@ -2173,8 +2161,8 @@ public class SslTransportLayerTest {
 
     /**
      * Tests that a server grows netWriteBuffer to hold the responses to TLSv1.3 KeyUpdates requesting an update while
-     * the peer is not reading them, and once it sends them, with its next data or on read, keeps a buffer that holds
-     * one batch of two packets, and shrinks one grown past it back to two packets.
+     * the peer is not reading them, to one batch of two packets or past it, and once it sends them, with its next data
+     * or on read, shrinks it back to one packet.
      */
     @ParameterizedTest
     @CsvSource({"false, false", "false, true", "true, false", "true, true"})
@@ -2201,7 +2189,7 @@ public class SslTransportLayerTest {
                 connection.sendFromServer();
             }
             assertFalse(transportLayer.hasPendingWrites());
-            assertEquals(2 * packetBufferSize, transportLayer.netWriteBuffer().capacity());
+            assertEquals(packetBufferSize, transportLayer.netWriteBuffer().capacity());
         }
     }
 

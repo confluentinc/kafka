@@ -152,9 +152,9 @@ public class BrokerSecurityConfigs {
         + "until the next write, until ssl.held.post.handshake.messages.max.read.bytes has since been read, "
         + "or until 16 of them are unsent. Those caused by records without data are sent together once the read ends, "
         + "if the socket takes them. The engine needs room for a whole TLS record, about 16KB, to wrap each message, "
-        + "so the buffer keeps room for two TLS records, and sends what it holds rather than grow past that. "
+        + "so the buffer may grow to two TLS records, and sends what it holds rather than grow past that. "
         + "It grows further only while the socket does not take the bytes, and the connection closes rather than "
-        + "grow it past this. "
+        + "grow it past this. It shrinks back to one TLS record once the bytes are sent. "
         + "Clients always use the default. Applies to new connections.";
     public static final int MIN_SSL_MAX_NET_WRITE_BUFFER_BYTES = 64 * 1024;
     public static final int DEFAULT_SSL_MAX_NET_WRITE_BUFFER_BYTES = 128 * 1024;
@@ -166,7 +166,7 @@ public class BrokerSecurityConfigs {
         + "Those caused by records with data are sent in batches to reduce the chance of failing the connection to a peer "
         + "such as librdkafka with OpenSSL. OpenSSL has a bug that incorrectly mixes the sending of a KeyUpdate "
         + "with a pending partial data write. "
-        + "0 sends them once the read ends, and Long.MAX_VALUE turns this limit off, so a peer that is never written to "
+        + "0 sends them right away, and Long.MAX_VALUE turns this limit off, so a peer that is never written to "
         + "may not receive them. Bytes of any of them that the socket does not take wait for the next write, "
         + "or for a read that sends them, which is harmless since the peer does not wait for them. "
         + "Clients always use the default. Applies to new connections.";

@@ -35,7 +35,7 @@ type: docs
   * `ssl.principal.mapping.rules` now builds the principal name from the same full match that is used to check the rule. Previously, a rule that is not anchored with both `^` and `$`, or that uses alternation, could build the name from a shorter match or apply the replacement twice. For example, `RULE:CN=(.*?),OU=(.*?)/$1/` mapped `CN=bob,OU=eng` to `bobeng` instead of `bob`. Rules anchored with `^` and `$`, such as the documented examples, are not affected. If you use such rules, check that ACLs, quotas and `super.users` refer to the corrected principal names before upgrading.
   * Brokers now limit the memory that TLSv1.3 KeyUpdates and other post-handshake messages can use on a connection. Two new dynamic broker configs control this:
     * `ssl.max.net.write.buffer.bytes` (default 128 KiB) caps a connection's TLS write buffer. If a peer fills it by not reading, the broker closes the connection.
-    * `ssl.held.post.handshake.messages.max.read.bytes` (default 10 GiB) sets how much data the broker reads before it sends the KeyUpdates it is holding. Set it to 0 to send them at the end of each read. Holding them makes it less likely that OpenSSL clients, such as librdkafka, fail with `bad length`.
+    * `ssl.held.post.handshake.messages.max.read.bytes` (default 10 GiB) sets how much data the broker reads before it sends the KeyUpdates it is holding. Set it to 0 to send them right away. Holding them makes it less likely that OpenSSL clients, such as librdkafka, fail with `bad length`.
 
 ## Upgrading to 4.4.0
 

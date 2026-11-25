@@ -45,10 +45,10 @@ import javax.net.ssl.SSLException;
  *     using acks=0, gets them too.</li>
  *     <li>Replies to the peer's post-handshake messages, such as its KeyUpdates, which arrive in records without
  *     data. They are not held, and are sent once the read has unwrapped what it read.</li>
- *     <li>The engine needs room for a whole packet to wrap even a small message. The buffer may keep one batch of two
- *     packets, and a full batch is sent rather than grow past it. It grows further, up to
- *     {@code ssl.max.net.write.buffer.bytes}, only if the socket doesn't take the bytes, and shrinks back to two
- *     packets once they are sent.</li>
+ *     <li>The engine needs room for a whole packet to wrap even a small message. The buffer may grow to one batch of
+ *     two packets, and a full batch is sent rather than grow past it. It grows further, up to
+ *     {@code ssl.max.net.write.buffer.bytes}, only if the socket doesn't take the bytes, and shrinks back to one
+ *     packet once they are sent.</li>
  * </ul>
  *
  * <p>This class never writes to the socket on its own. {@link SslTransportLayer} asks
@@ -105,8 +105,8 @@ final class SslNetWriteBuffer {
     /**
      * Writes the unsent bytes to {@code channel}, non blocking.
      *
-     * @return true if every byte was sent. A buffer grown past {@link #desiredCapacity()} then shrinks back to it, so
-     *         a connection the server never writes to again doesn't keep the rest.
+     * @return true if every byte was sent. A buffer grown past a packet then shrinks back to one, so a connection
+     *         doesn't keep the room it needed for post-handshake messages.
      */
     boolean writeTo(WritableByteChannel channel) throws IOException {
         int remaining = buffer.remaining();
@@ -117,8 +117,9 @@ final class SslNetWriteBuffer {
         // Checked only after a growth, since asking the engine for its packet size on every write isn't free.
         if (grown) {
             grown = false;
-            if (buffer.capacity() > desiredCapacity()) {
-                buffer = emptyBuffer(desiredCapacity());
+            int size = packetSize.getAsInt();
+            if (buffer.capacity() > size) {
+                buffer = emptyBuffer(size);
             }
         }
         return true;
@@ -249,7 +250,7 @@ final class SslNetWriteBuffer {
     }
 
     /**
-     * The capacity the buffer keeps for post-handshake messages:
+     * The capacity a batch of post-handshake messages may use:
      * <pre>
      * desiredCapacity = packetSize    // free room the engine needs to wrap the next message
      *                 + packetSize    // unsent bytes: about 390 KeyUpdates of 43 bytes, or a partly sent record

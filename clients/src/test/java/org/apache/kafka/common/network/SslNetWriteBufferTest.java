@@ -205,30 +205,25 @@ public class SslNetWriteBufferTest {
         assertTrue(buffer.shouldSendAfterRead());
         assertTrue(buffer.writeTo(socket));
         assertEquals(messages * MESSAGE, socket.bytes);
-        assertEquals(2 * PACKET, buffer.capacity(), "A buffer of one batch is kept");
+        assertEquals(PACKET, buffer.capacity(), "The buffer shrinks back to a packet once sent");
     }
 
     @Test
     public void testGrowsWhileTheSocketTakesNothingThenCloses() throws IOException {
         socket.accept = 0;
-        int messages = 0;
-        SSLException e = null;
-        while (e == null) {
-            try {
-                wrapMessage(buffer, true);
-                messages++;
-            } catch (SSLException thrown) {
-                e = thrown;
-            }
+        // As many as fit in the max capacity along with a free packet.
+        int messages = (MAX_CAPACITY - PACKET) / MESSAGE + 1;
+        for (int i = 0; i < messages; i++) {
+            wrapMessage(buffer, true);
         }
+        SSLException e = assertThrows(SSLException.class, () -> wrapMessage(buffer, true));
         assertEquals(SslTransportLayer.UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE, e.getMessage());
-        assertEquals((MAX_CAPACITY - PACKET) / MESSAGE + 1, messages);
         assertEquals(MAX_CAPACITY, buffer.capacity());
         assertEquals(messages * MESSAGE, buffer.remaining(), "The unsent bytes are kept in read mode");
 
         socket.accept = Integer.MAX_VALUE;
         assertTrue(buffer.writeTo(socket));
-        assertEquals(2 * PACKET, buffer.capacity(), "A buffer grown past one batch shrinks back to one batch once sent");
+        assertEquals(PACKET, buffer.capacity(), "A grown buffer shrinks back to a packet once sent");
     }
 
     @Test
