@@ -14,27 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.server.config;
+package org.apache.kafka.common.errors;
 
 /**
- * Represents all the entities that can be configured.
+ * The request attempted to perform an operation on an invalid mirror.
+ * For example the mirror name is too long, contains invalid characters etc.
+ * This exception is not retriable because the operation won't suddenly become valid.
  */
-public enum ConfigType {
-    TOPIC("topics"),
-    CLIENT("clients"),
-    USER("users"),
-    BROKER("brokers"),
-    IP("ips"),
-    CLIENT_METRICS("client-metrics"),
-    GROUP("groups");
+public class InvalidMirrorException extends InvalidConfigurationException {
+    private static final long serialVersionUID = 1L;
 
-    private final String value;
-
-    ConfigType(String value) {
-        this.value = value;
-    }
-
-    public String value() {
-        return value;
+    public InvalidMirrorException(String message) {
+        super(message);
     }
 }

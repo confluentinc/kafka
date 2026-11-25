@@ -121,6 +121,7 @@ import java.util.stream.IntStream;
 
 import static org.apache.kafka.common.config.TopicConfig.SEGMENT_BYTES_CONFIG;
 import static org.apache.kafka.common.metadata.MetadataRecordType.CLEAR_ELR_RECORD;
+import static org.apache.kafka.common.metadata.MetadataRecordType.PARTITION_CHANGE_RECORD;
 import static org.apache.kafka.common.protocol.Errors.ELECTION_NOT_NEEDED;
 import static org.apache.kafka.common.protocol.Errors.ELIGIBLE_LEADERS_NOT_AVAILABLE;
 import static org.apache.kafka.common.protocol.Errors.INELIGIBLE_REPLICA;
@@ -1316,6 +1317,43 @@ public class ReplicationControlManagerTest {
     }
 
     @Test
+    public void testCreatePartitionsUsesReplicationFactorOfPartitionZero() {
+        ReplicationControlTestContext ctx = new ReplicationControlTestContext.Builder().build();
+        ReplicationControlManager replicationControl = ctx.replicationControl;
+        ctx.registerBrokers(0, 1, 2);
+        ctx.unfenceBrokers(0, 1, 2);
+        // The partitions are kept in a hash map. With 3 partitions, iterating over it does not
+        // start at partition 0, so this test fails if the controller uses the iterator's first
+        // partition instead of partition 0.
+        int[][] replicas = new int[3][];
+        for (int i = 0; i < replicas.length; i++) {
+            replicas[i] = new int[] {i % 3};
+        }
+        Uuid fooId = ctx.createTestTopic("foo", replicas).topicId();
+        // Increase the replication factor of partition 0 only.
+        ctx.replay(List.of(new ApiMessageAndVersion(new PartitionChangeRecord().
+            setTopicId(fooId).
+            setPartitionId(0).
+            setReplicas(List.of(0, 1, 2)).
+            setIsr(List.of(0, 1, 2)).
+            setDirectories(List.of(DirectoryId.UNASSIGNED, DirectoryId.UNASSIGNED, DirectoryId.UNASSIGNED)),
+            PARTITION_CHANGE_RECORD.highestSupportedVersion())));
+
+        ControllerRequestContext requestContext = anonymousContextFor(ApiKeys.CREATE_PARTITIONS);
+        ControllerResult<List<CreatePartitionsTopicResult>> result = replicationControl.createPartitions(
+            requestContext, List.of(new CreatePartitionsTopic().setName("foo").setCount(4).setAssignments(null)));
+        assertEquals(NONE.code(), result.response().get(0).errorCode());
+        ctx.replay(result.records());
+        assertEquals(3, replicationControl.getPartition(fooId, 3).replicas.length);
+
+        // Manual assignments are also validated against partition 0.
+        result = replicationControl.createPartitions(requestContext, List.of(new CreatePartitionsTopic().
+            setName("foo").setCount(5).setAssignments(List.of(
+                new CreatePartitionsAssignment().setBrokerIds(List.of(0))))));
+        assertEquals(INVALID_REPLICA_ASSIGNMENT.code(), result.response().get(0).errorCode());
+    }
+
+    @Test
     public void testCreatePartitionsWithMutationQuotaExceeded() {
         ReplicationControlTestContext ctx = new ReplicationControlTestContext.Builder().build();
         ReplicationControlManager replicationControl = ctx.replicationControl;
@@ -1714,7 +1752,7 @@ public class ReplicationControlManagerTest {
                         Uuid.fromString("TESTBROKER00001DIRAAAA"),
                         Uuid.fromString("TESTBROKER00003DIRAAAA")
                 )).
-                setLeader(3).
+                setLeader(3).setLeaderEpoch(1).
                 setRemovingReplicas(List.of()).
                 setAddingReplicas(List.of()), MetadataVersion.latestTesting().partitionChangeRecordVersion())),
             new AlterPartitionReassignmentsResponseData().setErrorMessage(null).setResponses(List.of(
@@ -2217,7 +2255,7 @@ public class ReplicationControlManagerTest {
         assertEquals(ControllerResult.atomicOf(List.of(new ApiMessageAndVersion(
                 new PartitionChangeRecord().setTopicId(barId).
                     setPartitionId(0).
-                    setLeader(4).
+                    setLeader(4).setLeaderEpoch(1).
                     setReplicas(List.of(2, 3, 4)).
                     setDirectories(List.of(
                             Uuid.fromString("TESTBROKER00002DIRAAAA"),
@@ -2608,13 +2646,13 @@ public class ReplicationControlManagerTest {
                     new PartitionChangeRecord().
                         setPartitionId(0).
                         setTopicId(fooId).
-                        setLeader(1),
+                        setLeader(1).setLeaderEpoch(1),
                     MetadataVersion.latestTesting().partitionChangeRecordVersion()),
                 new ApiMessageAndVersion(
                     new PartitionChangeRecord().
                         setPartitionId(2).
                         setTopicId(fooId).
-                        setLeader(0),
+                        setLeader(0).setLeaderEpoch(1),
                     MetadataVersion.latestTesting().partitionChangeRecordVersion())),
             election2Result.records());
     }
@@ -2657,7 +2695,7 @@ public class ReplicationControlManagerTest {
         PartitionChangeRecord expectedChangeRecord = new PartitionChangeRecord()
             .setPartitionId(0)
             .setTopicId(fooId)
-            .setLeader(1);
+            .setLeader(1).setLeaderEpoch(1);
         assertEquals(List.of(new ApiMessageAndVersion(expectedChangeRecord, MetadataVersion.latestTesting().partitionChangeRecordVersion())), balanceResult.records());
         assertTrue(replication.arePartitionLeadersImbalanced());
         assertFalse(balanceResult.response());
@@ -2689,7 +2727,8 @@ public class ReplicationControlManagerTest {
         expectedChangeRecord = new PartitionChangeRecord()
             .setPartitionId(2)
             .setTopicId(fooId)
-            .setLeader(0);
+            .setLeader(0)
+            .setLeaderEpoch(1);
         assertEquals(List.of(new ApiMessageAndVersion(expectedChangeRecord, MetadataVersion.latestTesting().partitionChangeRecordVersion())), balanceResult.records());
         assertFalse(replication.arePartitionLeadersImbalanced());
         assertFalse(balanceResult.response());
@@ -3174,10 +3213,10 @@ public class ReplicationControlManagerTest {
                 //   - b-1 which has been assigned to an offline directory.
                 new ApiMessageAndVersion(
                         new PartitionChangeRecord().setTopicId(topicA).setPartitionId(2).
-                                setIsr(List.of(2)).setLeader(2), recordVersion),
+                                setIsr(List.of(2)).setLeader(2).setLeaderEpoch(1), recordVersion),
                 new ApiMessageAndVersion(
                         new PartitionChangeRecord().setTopicId(topicB).setPartitionId(1).
-                                setIsr(List.of(2)).setLeader(2), recordVersion)
+                                setIsr(List.of(2)).setLeader(2).setLeaderEpoch(1), recordVersion)
         )), sortPartitionChangeRecords(controllerResult.records()));
 
         ctx.replay(controllerResult.records());
@@ -3233,9 +3272,9 @@ public class ReplicationControlManagerTest {
         assertEquals(
             sortPartitionChangeRecords(List.of(
                 new ApiMessageAndVersion(new PartitionChangeRecord().setTopicId(topicA).setPartitionId(0)
-                        .setLeader(b2).setIsr(List.of(b2)), partitionChangeRecordVersion),
+                        .setLeader(b2).setLeaderEpoch(1).setIsr(List.of(b2)), partitionChangeRecordVersion),
                 new ApiMessageAndVersion(new PartitionChangeRecord().setTopicId(topicB).setPartitionId(0)
-                        .setLeader(b2).setIsr(List.of(b2)), partitionChangeRecordVersion)
+                        .setLeader(b2).setLeaderEpoch(1).setIsr(List.of(b2)), partitionChangeRecordVersion)
             )),
             sortPartitionChangeRecords(filter(records, PartitionChangeRecord.class))
         );
