@@ -66,6 +66,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.stream.Stream;
 
@@ -74,6 +75,7 @@ import static java.util.Collections.singletonMap;
 import static org.apache.kafka.raft.KafkaRaftClient.RETRY_BACKOFF_BASE_MS;
 import static org.apache.kafka.raft.RaftUtil.binaryExponentialElectionBackoffMs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -629,6 +631,45 @@ public class RaftUtilTest {
         } else {
             assertEquals(backoffValueCap, returnedBackoffMs);
         }
+    }
+
+    @Test
+    public void testHasValidTopicPartitionFetchSnapshotRequest() {
+        FetchSnapshotRequestData data = RaftUtil.singletonFetchSnapshotRequest(
+            clusterId,
+            ReplicaKey.of(1, ReplicaKey.NO_DIRECTORY_ID),
+            topicPartition,
+            1,
+            new OffsetAndEpoch(10, 1),
+            1000,
+            10
+        );
+        assertTrue(RaftUtil.hasValidTopicPartition(data));
+
+        data.topics().get(0).setPartitions(List.of());
+        assertFalse(RaftUtil.hasValidTopicPartition(data));
+
+        data.setTopics(List.of());
+        assertFalse(RaftUtil.hasValidTopicPartition(data));
+    }
+
+    @Test
+    public void testHasValidTopicPartitionFetchSnapshotResponse() {
+        FetchSnapshotResponseData data = RaftUtil.singletonFetchSnapshotResponse(
+            listenerName,
+            (short) 0,
+            topicPartition,
+            1,
+            Endpoints.fromInetSocketAddresses(Map.of(listenerName, address)),
+            responsePartitionSnapshot -> responsePartitionSnapshot
+        );
+        assertTrue(RaftUtil.hasValidTopicPartition(data));
+
+        data.topics().get(0).setPartitions(List.of());
+        assertFalse(RaftUtil.hasValidTopicPartition(data));
+
+        data.setTopics(List.of());
+        assertFalse(RaftUtil.hasValidTopicPartition(data));
     }
 
     private Records createRecords() {
