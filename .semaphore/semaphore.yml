@@ -92,6 +92,7 @@ blocks:
       jobs:
         - name: Unit tests and Integration tests
           commands:
+            - python3 .semaphore/ci_mem_sampler.py start
             - |
               ./gradlew \
                 unitTest integrationTest --no-daemon --stacktrace --continue \
@@ -124,6 +125,7 @@ blocks:
       epilogue:
         always:
           commands:
+            - python3 .semaphore/ci_mem_sampler.py report || true
             - |
               echo "Job creation time: $((SEMAPHORE_JOB_CREATION_TIME * 1000))"
               echo "Current time: $(date +%s%3N)"
