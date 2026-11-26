@@ -48,8 +48,10 @@ import org.apache.kafka.server.util.MockTime;
 import org.apache.kafka.server.util.timer.MockTimer;
 import org.apache.kafka.server.util.timer.Timer;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -74,7 +76,9 @@ class DefaultStatePersisterTest {
     private static final String HOST = "localhost";
     private static final int PORT = 9092;
 
-    private static class DefaultStatePersisterBuilder {
+    private final List<DefaultStatePersister> startedPersisters = new ArrayList<>();
+
+    private class DefaultStatePersisterBuilder {
 
         private KafkaClient client = CLIENT;
         private Time time = MOCK_TIME;
@@ -101,13 +105,16 @@ class DefaultStatePersisterTest {
             return this;
         }
 
-        public static DefaultStatePersisterBuilder builder() {
-            return new DefaultStatePersisterBuilder();
-        }
-
         public DefaultStatePersister build() {
-            return DefaultStatePersister.instance(client, cacheHelper, time, timer);
+            DefaultStatePersister persister = DefaultStatePersister.instance(client, cacheHelper, time, timer);
+            startedPersisters.add(persister);
+            return persister;
         }
+    }
+
+    @AfterEach
+    public void stopPersisters() {
+        startedPersisters.forEach(DefaultStatePersister::stop);
     }
 
     private ShareCoordinatorMetadataCacheHelper getDefaultCacheHelper(Node suppliedNode) {
@@ -138,21 +145,21 @@ class DefaultStatePersisterTest {
         int incorrectPartition = -1;
 
         // Request Parameters are null
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder().build();
         CompletableFuture<WriteShareGroupStateResult> result = defaultStatePersister.writeState(null);
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupTopicPartitionData is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.writeState(new WriteShareGroupStateParameters.Builder().setGroupTopicPartitionData(null).build());
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.writeState(new WriteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateBatchData>()
                 .setGroupId(null).build()).build());
@@ -161,7 +168,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicsData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.writeState(new WriteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateBatchData>()
                 .setGroupId(groupId)
@@ -171,7 +178,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.writeState(new WriteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateBatchData>()
                 .setGroupId(groupId)
@@ -183,7 +190,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partitionData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.writeState(new WriteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateBatchData>()
                 .setGroupId(groupId)
@@ -193,7 +200,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partition value is incorrect
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.writeState(new WriteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateBatchData>()
                 .setGroupId(groupId)
@@ -214,21 +221,21 @@ class DefaultStatePersisterTest {
         int incorrectPartition = -1;
 
         // Request Parameters are null
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder().build();
         CompletableFuture<ReadShareGroupStateResult> result = defaultStatePersister.readState(null);
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupTopicPartitionData is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readState(new ReadShareGroupStateParameters.Builder().setGroupTopicPartitionData(null).build());
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readState(new ReadShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(null).build()).build());
@@ -237,7 +244,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicsData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readState(new ReadShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -247,7 +254,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readState(new ReadShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -259,7 +266,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partitionData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readState(new ReadShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -269,7 +276,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partition value is incorrect
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readState(new ReadShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -289,21 +296,21 @@ class DefaultStatePersisterTest {
         int incorrectPartition = -1;
 
         // Request Parameters are null
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder().build();
         CompletableFuture<ReadShareGroupStateSummaryResult> result = defaultStatePersister.readSummary(null);
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupTopicPartitionData is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readSummary(new ReadShareGroupStateSummaryParameters.Builder().setGroupTopicPartitionData(null).build());
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readSummary(new ReadShareGroupStateSummaryParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(null).build()).build());
@@ -312,7 +319,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicsData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readSummary(new ReadShareGroupStateSummaryParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -322,7 +329,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readSummary(new ReadShareGroupStateSummaryParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -334,7 +341,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partitionData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readSummary(new ReadShareGroupStateSummaryParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -344,7 +351,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partition value is incorrect
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.readSummary(new ReadShareGroupStateSummaryParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdLeaderEpochData>()
                 .setGroupId(groupId)
@@ -363,21 +370,21 @@ class DefaultStatePersisterTest {
         int incorrectPartition = -1;
 
         // Request Parameters are null
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder().build();
         CompletableFuture<DeleteShareGroupStateResult> result = defaultStatePersister.deleteState(null);
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupTopicPartitionData is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.deleteState(new DeleteShareGroupStateParameters.Builder().setGroupTopicPartitionData(null).build());
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.deleteState(new DeleteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdData>()
                 .setGroupId(null).build()).build());
@@ -386,7 +393,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicsData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.deleteState(new DeleteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdData>()
                 .setGroupId(groupId)
@@ -396,7 +403,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.deleteState(new DeleteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdData>()
                 .setGroupId(groupId)
@@ -408,7 +415,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partitionData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.deleteState(new DeleteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdData>()
                 .setGroupId(groupId)
@@ -418,7 +425,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partition value is incorrect
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.deleteState(new DeleteShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionIdData>()
                 .setGroupId(groupId)
@@ -438,21 +445,21 @@ class DefaultStatePersisterTest {
         int incorrectPartition = -1;
 
         // Request Parameters are null
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder().build();
         CompletableFuture<InitializeShareGroupStateResult> result = defaultStatePersister.initializeState(null);
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupTopicPartitionData is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.initializeState(new InitializeShareGroupStateParameters.Builder().setGroupTopicPartitionData(null).build());
         assertTrue(result.isDone());
         assertTrue(result.isCompletedExceptionally());
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // groupId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.initializeState(new InitializeShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateData>()
                 .setGroupId(null).build()).build());
@@ -461,7 +468,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicsData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.initializeState(new InitializeShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateData>()
                 .setGroupId(groupId)
@@ -471,7 +478,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // topicId is null
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.initializeState(new InitializeShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateData>()
                 .setGroupId(groupId)
@@ -483,7 +490,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partitionData is empty
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.initializeState(new InitializeShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateData>()
                 .setGroupId(groupId)
@@ -493,7 +500,7 @@ class DefaultStatePersisterTest {
         assertFutureThrows(IllegalArgumentException.class, result);
 
         // partition value is incorrect
-        defaultStatePersister = DefaultStatePersisterBuilder.builder().build();
+        defaultStatePersister = new DefaultStatePersisterBuilder().build();
         result = defaultStatePersister.initializeState(new InitializeShareGroupStateParameters.Builder()
             .setGroupTopicPartitionData(new GroupTopicPartitionData.Builder<PartitionStateData>()
                 .setGroupId(groupId)
@@ -582,7 +589,7 @@ class DefaultStatePersisterTest {
 
         ShareCoordinatorMetadataCacheHelper cacheHelper = getDefaultCacheHelper(suppliedNode);
 
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder()
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder()
             .withKafkaClient(client)
             .withCacheHelper(cacheHelper)
             .build();
@@ -748,7 +755,7 @@ class DefaultStatePersisterTest {
 
         ShareCoordinatorMetadataCacheHelper cacheHelper = getDefaultCacheHelper(suppliedNode);
 
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder()
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder()
             .withKafkaClient(client)
             .withCacheHelper(cacheHelper)
             .build();
@@ -885,7 +892,7 @@ class DefaultStatePersisterTest {
 
         ShareCoordinatorMetadataCacheHelper cacheHelper = getDefaultCacheHelper(suppliedNode);
 
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder()
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder()
             .withKafkaClient(client)
             .withCacheHelper(cacheHelper)
             .build();
@@ -1021,7 +1028,7 @@ class DefaultStatePersisterTest {
 
         ShareCoordinatorMetadataCacheHelper cacheHelper = getDefaultCacheHelper(suppliedNode);
 
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder()
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder()
             .withKafkaClient(client)
             .withCacheHelper(cacheHelper)
             .build();
@@ -1154,7 +1161,7 @@ class DefaultStatePersisterTest {
 
         ShareCoordinatorMetadataCacheHelper cacheHelper = getDefaultCacheHelper(suppliedNode);
 
-        DefaultStatePersister defaultStatePersister = DefaultStatePersisterBuilder.builder()
+        DefaultStatePersister defaultStatePersister = new DefaultStatePersisterBuilder()
             .withKafkaClient(client)
             .withCacheHelper(cacheHelper)
             .build();
