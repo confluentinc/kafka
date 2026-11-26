@@ -688,6 +688,7 @@ public class SslTransportLayer implements TransportLayer {
         if (netWriteBuffer.shouldSendAfterRead()) {
             flushNetWriteBuffer();
         }
+        netWriteBuffer.shrinkIfSent();
         updateBytesBuffered(readFromNetwork || read > 0);
         // If data has been read and unwrapped, return the data even if end-of-stream, channel will be closed
         // on a subsequent poll, see hasBytesBuffered().
@@ -707,7 +708,7 @@ public class SslTransportLayer implements TransportLayer {
         // A wrap may produce nothing if the engine must run a task first, but not twice in a row.
         boolean lastWrapProducedNothing = false;
         while (handshakeStatus == HandshakeStatus.NEED_WRAP) {
-            if (netWriteBuffer.shouldSendBeforePostHandshakeMessage()) {
+            if (netWriteBuffer.shouldSendHeld()) {
                 flushNetWriteBuffer();
             }
             SSLEngineResult result = netWriteBuffer.wrapPostHandshakeMessage(sslEngine, replyToPeer);
@@ -715,8 +716,8 @@ public class SslTransportLayer implements TransportLayer {
                 throw new EOFException();
             }
             if (result.getStatus() == Status.BUFFER_OVERFLOW) {
-                log.info("Closing channel since a TLS post-handshake message does not fit in netWriteBuffer {}", netWriteBuffer);
-                throw new SSLException(UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
+                makeRoomForPostHandshakeMessage();
+                continue;
             }
             if (result.getStatus() != Status.OK) {
                 throw new IllegalStateException("Unexpected status " + result.getStatus() + " wrapping TLS post-handshake message");
@@ -730,6 +731,23 @@ public class SslTransportLayer implements TransportLayer {
             if (handshakeStatus == HandshakeStatus.NEED_TASK) {
                 handshakeStatus = runDelegatedTasks();
             }
+        }
+    }
+
+    /**
+     * Makes room in netWriteBuffer after the engine found less than a packet free behind the unsent bytes to wrap a
+     * post-handshake message. Sends them first if they fill a batch, and grows the buffer only if the socket doesn't
+     * take enough of them. Each call sends some bytes or grows the buffer, so the wrap loop ends.
+     */
+    private void makeRoomForPostHandshakeMessage() throws IOException {
+        int unsentBefore = netWriteBuffer.remaining();
+        if (netWriteBuffer.isBatchFull()) {
+            flushNetWriteBuffer();
+        }
+        boolean sentSome = netWriteBuffer.remaining() < unsentBefore;
+        if (!netWriteBuffer.growIfNoRoom() && !sentSome) {
+            // A packet was free, yet the engine wanted more, so retrying would overflow again.
+            throw new SSLException("SSL engine needs more than its packet buffer size to wrap a TLS post-handshake message");
         }
     }
 

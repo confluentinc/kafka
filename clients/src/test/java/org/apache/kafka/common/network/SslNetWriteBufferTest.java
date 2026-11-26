@@ -95,11 +95,14 @@ public class SslNetWriteBufferTest {
     }
 
     /**
-     * Wraps like the JDK, which needs a free packet to wrap even a small message: data into a record of the same size,
-     * and nothing into a {@link #MESSAGE} byte post-handshake message.
+     * Wraps like the JDK, which needs a free packet to wrap even a small message and otherwise returns BUFFER_OVERFLOW
+     * without touching the buffers: data into a record of the same size, and nothing into a {@link #MESSAGE} byte
+     * post-handshake message.
      */
     private SSLEngineResult wrap(ByteBuffer src, ByteBuffer dst) {
-        assertTrue(dst.remaining() >= packetSize.get(), "No free packet to wrap into");
+        if (dst.remaining() < packetSize.get()) {
+            return new SSLEngineResult(Status.BUFFER_OVERFLOW, HandshakeStatus.NOT_HANDSHAKING, 0, 0);
+        }
         int consumed = src.remaining();
         int produced = consumed > 0 ? consumed : MESSAGE;
         src.position(src.limit());
@@ -108,13 +111,21 @@ public class SslNetWriteBufferTest {
     }
 
     /**
-     * Wraps a message the way SslTransportLayer does, sending first if the buffer says so.
+     * Wraps a message the way SslTransportLayer does: sends first if enough are held, and on BUFFER_OVERFLOW sends a
+     * full batch, grows the buffer if there is still no room, and retries.
      */
     private void wrapMessage(SslNetWriteBuffer buffer, boolean replyToPeer) throws IOException {
-        if (buffer.shouldSendBeforePostHandshakeMessage()) {
+        if (buffer.shouldSendHeld()) {
             buffer.writeTo(socket);
         }
-        buffer.wrapPostHandshakeMessage(engine, replyToPeer);
+        while (buffer.wrapPostHandshakeMessage(engine, replyToPeer).getStatus() == Status.BUFFER_OVERFLOW) {
+            int unsentBefore = buffer.remaining();
+            if (buffer.isBatchFull()) {
+                buffer.writeTo(socket);
+            }
+            boolean sentSome = buffer.remaining() < unsentBefore;
+            assertTrue(buffer.growIfNoRoom() || sentSome, "No room made after BUFFER_OVERFLOW");
+        }
     }
 
     private void wrapRecord(int bytes) throws SSLException {
@@ -157,10 +168,10 @@ public class SslNetWriteBufferTest {
             wrapMessage(buffer, false);
         }
         assertFalse(buffer.shouldSendAfterRead());
-        assertFalse(buffer.shouldSendBeforePostHandshakeMessage());
+        assertFalse(buffer.shouldSendHeld());
         wrapMessage(buffer, false);
         assertTrue(buffer.shouldSendAfterRead());
-        assertTrue(buffer.shouldSendBeforePostHandshakeMessage());
+        assertTrue(buffer.shouldSendHeld());
         assertEquals(0, socket.writes);
         assertTrue(buffer.writeTo(socket));
         assertFalse(buffer.shouldSendAfterRead(), "Sending resets the held messages");
@@ -186,7 +197,7 @@ public class SslNetWriteBufferTest {
         for (int i = 0; i < messages; i++) {
             wrapMessage(buffer, true);
         }
-        assertFalse(buffer.shouldSendBeforePostHandshakeMessage(), "Replies to the peer don't count toward the held KeyUpdates");
+        assertFalse(buffer.shouldSendHeld(), "Replies to the peer don't count toward the held KeyUpdates");
         assertEquals(0, socket.writes);
         assertTrue(buffer.shouldSendAfterRead());
         assertTrue(buffer.writeTo(socket));
@@ -205,6 +216,8 @@ public class SslNetWriteBufferTest {
         assertTrue(buffer.shouldSendAfterRead());
         assertTrue(buffer.writeTo(socket));
         assertEquals(messages * MESSAGE, socket.bytes);
+        assertEquals(2 * PACKET, buffer.capacity(), "Sending alone doesn't shrink the buffer");
+        buffer.shrinkIfSent();
         assertEquals(PACKET, buffer.capacity(), "The buffer shrinks back to a packet once sent");
     }
 
@@ -221,9 +234,28 @@ public class SslNetWriteBufferTest {
         assertEquals(MAX_CAPACITY, buffer.capacity());
         assertEquals(messages * MESSAGE, buffer.remaining(), "The unsent bytes are kept in read mode");
 
+        buffer.shrinkIfSent();
+        assertEquals(MAX_CAPACITY, buffer.capacity(), "Shrunk with bytes unsent");
         socket.accept = Integer.MAX_VALUE;
         assertTrue(buffer.writeTo(socket));
+        buffer.shrinkIfSent();
         assertEquals(PACKET, buffer.capacity(), "A grown buffer shrinks back to a packet once sent");
+    }
+
+    @Test
+    public void testShrinksToTheCapacityARecordNeeds() throws IOException {
+        packetSize.set(2 * PACKET);
+        buffer.growForRecord();
+        socket.accept = 0;
+        // Enough to grow past the record's capacity.
+        for (int i = 0; i < 2; i++) {
+            wrapMessage(buffer, true);
+        }
+        assertEquals(4 * PACKET, buffer.capacity());
+        socket.accept = Integer.MAX_VALUE;
+        assertTrue(buffer.writeTo(socket));
+        buffer.shrinkIfSent();
+        assertEquals(2 * PACKET, buffer.capacity());
     }
 
     @Test

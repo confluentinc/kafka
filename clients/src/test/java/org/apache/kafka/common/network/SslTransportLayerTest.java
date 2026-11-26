@@ -2162,7 +2162,7 @@ public class SslTransportLayerTest {
     /**
      * Tests that a server grows netWriteBuffer to hold the responses to TLSv1.3 KeyUpdates requesting an update while
      * the peer is not reading them, to one batch of two packets or past it, and once it sends them, with its next data
-     * or on read, shrinks it back to one packet.
+     * or on read, shrinks it back to one packet at the end of a read, rather than on every send.
      */
     @ParameterizedTest
     @CsvSource({"false, false", "false, true", "true, false", "true, true"})
@@ -2181,13 +2181,15 @@ public class SslTransportLayerTest {
             assertEquals(growPastBatch ? 4 * packetBufferSize : 2 * packetBufferSize,
                 transportLayer.netWriteBuffer().capacity());
 
+            int grownCapacity = transportLayer.netWriteBuffer().capacity();
             connection.blockServerWrites.set(false);
-            if (onRead) {
-                writeKeyUpdatesAndMessage(connection, 1);
-                assertNull(connection.pollServer(1));
-            } else {
+            if (!onRead) {
                 connection.sendFromServer();
+                assertFalse(transportLayer.hasPendingWrites());
+                assertEquals(grownCapacity, transportLayer.netWriteBuffer().capacity(), "Shrunk before a read ended");
             }
+            writeKeyUpdatesAndMessage(connection, onRead ? 1 : 0);
+            assertNull(connection.pollServer(1));
             assertFalse(transportLayer.hasPendingWrites());
             assertEquals(packetBufferSize, transportLayer.netWriteBuffer().capacity());
         }
@@ -2362,7 +2364,7 @@ public class SslTransportLayerTest {
 
     /**
      * Tests that a server closes the connection when its SSL engine finds no room in netWriteBuffer to wrap a
-     * post-handshake message, rather than relying on the room it leaves.
+     * post-handshake message even with a packet free, rather than retrying the wrap forever.
      */
     @Test
     public void testServerClosesConnectionOnPostHandshakeWrapBufferOverflow() throws Exception {
@@ -2383,7 +2385,8 @@ public class SslTransportLayerTest {
             overflowWraps.set(true);
             writeKeyUpdatesAndMessage(connection, 1);
             Exception closeCause = assertInstanceOf(SSLException.class, connection.pollServer(1));
-            assertEquals(SslTransportLayer.UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE, closeCause.getMessage());
+            assertEquals("SSL engine needs more than its packet buffer size to wrap a TLS post-handshake message",
+                closeCause.getMessage());
         }
     }
 
@@ -2624,12 +2627,12 @@ public class SslTransportLayerTest {
      * Connects a client to a server over TLSv1.3 whose SSL engine starts a KeyUpdate requesting an update for each
      * record with data it unwraps, as the JDK does past {@code jdk.tls.keyLimits} until the peer updates its key, or
      * only for the first if {@code startOnce} is set. Then bypasses the client's transport layer, which is not polled
-     * again, to send {@code records} messages, each in its own record, and polls the server until it receives them. The
-     * server holds post-handshake messages for up to {@code heldPostHandshakeMessagesMaxReadBytes} of data read. If
-     * {@code blockServerWrites} is set, the server cannot write to the socket. Sets {@code serverHandshakeStatus} to the
-     * server engine's status, {@code serverBytesWritten} to the bytes the server wrote to the socket while receiving
-     * them and {@code serverHasPendingWrites} to whether the server has output unsent once it receives them, if it did
-     * not close the connection.
+     * again, to send {@code records} messages, each in its own record, and polls the server until it receives the
+     * messages. The server holds post-handshake messages for up to {@code heldPostHandshakeMessagesMaxReadBytes} of data
+     * read. If {@code blockServerWrites} is set, the server cannot write to the socket. Sets
+     * {@code serverHandshakeStatus} to the server engine's status, {@code serverBytesWritten} to the bytes the server
+     * wrote to the socket while receiving the messages and {@code serverHasPendingWrites} to whether the server has
+     * output unsent once it receives the messages, if it did not close the connection.
      *
      * @return the exception the server closed the connection with, or null if it did not close it
      */

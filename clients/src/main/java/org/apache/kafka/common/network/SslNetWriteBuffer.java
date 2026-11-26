@@ -45,15 +45,14 @@ import javax.net.ssl.SSLException;
  *     using acks=0, gets them too.</li>
  *     <li>Replies to the peer's post-handshake messages, such as its KeyUpdates, which arrive in records without
  *     data. They are not held, and are sent once the read has unwrapped what it read.</li>
- *     <li>The engine needs room for a whole packet to wrap even a small message. The buffer may grow to one batch of
- *     two packets, and a full batch is sent rather than grow past it. It grows further, up to
- *     {@code ssl.max.net.write.buffer.bytes}, only if the socket doesn't take the bytes, and shrinks back to one
- *     packet once they are sent.</li>
+ *     <li>The engine needs room for a whole packet to wrap even a small message, and returns BUFFER_OVERFLOW
+ *     otherwise. The buffer then grows to one batch of two packets, and a full batch is sent rather than grow past
+ *     it. It grows further, up to {@code ssl.max.net.write.buffer.bytes}, only if the socket doesn't take the bytes,
+ *     and shrinks back to one record at the end of the read that sends them.</li>
  * </ul>
  *
- * <p>This class never writes to the socket on its own. {@link SslTransportLayer} asks
- * {@link #shouldSendBeforePostHandshakeMessage()} and {@link #shouldSendAfterRead()}, and calls
- * {@link #writeTo(WritableByteChannel)}.
+ * <p>This class never writes to the socket on its own. {@link SslTransportLayer} asks {@link #shouldSendHeld()},
+ * {@link #isBatchFull()} and {@link #shouldSendAfterRead()}, and calls {@link #writeTo(WritableByteChannel)}.
  */
 final class SslNetWriteBuffer {
     private final IntSupplier packetSize;
@@ -62,8 +61,9 @@ final class SslNetWriteBuffer {
 
     // In read mode between calls: its position to its limit are the unsent bytes.
     private ByteBuffer buffer;
-    // Whether the buffer grew for post-handshake messages since the last full send, so it may have to shrink.
-    private boolean grown;
+    // The capacity one record needs: the packet size when the buffer was created or last grew for a record. The
+    // buffer grows past it only for post-handshake messages.
+    private int recordCapacity;
     // Unsent KeyUpdates the engine started on its own, which are held.
     private int engineStartedMessages;
     // Bytes of data read while engineStartedMessages are held.
@@ -78,7 +78,8 @@ final class SslNetWriteBuffer {
         this.packetSize = packetSize;
         this.limits = limits;
         this.log = log;
-        this.buffer = emptyBuffer(packetSize.getAsInt());
+        this.recordCapacity = packetSize.getAsInt();
+        this.buffer = emptyBuffer(recordCapacity);
     }
 
     private static ByteBuffer emptyBuffer(int capacity) {
@@ -105,8 +106,7 @@ final class SslNetWriteBuffer {
     /**
      * Writes the unsent bytes to {@code channel}, non blocking.
      *
-     * @return true if every byte was sent. A buffer grown past a packet then shrinks back to one, so a connection
-     *         doesn't keep the room it needed for post-handshake messages.
+     * @return true if every byte was sent
      */
     boolean writeTo(WritableByteChannel channel) throws IOException {
         int remaining = buffer.remaining();
@@ -114,15 +114,18 @@ final class SslNetWriteBuffer {
             return false;
         }
         clearPostHandshakeMessages();
-        // Checked only after a growth, since asking the engine for its packet size on every write isn't free.
-        if (grown) {
-            grown = false;
-            int size = packetSize.getAsInt();
-            if (buffer.capacity() > size) {
-                buffer = emptyBuffer(size);
-            }
-        }
         return true;
+    }
+
+    /**
+     * Shrinks a buffer grown for post-handshake messages back to one record once every byte was sent, so a
+     * connection doesn't keep the room it needed for them. Called once a read ends rather than on every send, so a
+     * read that sends several batches reuses the buffer.
+     */
+    void shrinkIfSent() {
+        if (!buffer.hasRemaining() && buffer.capacity() > recordCapacity) {
+            buffer = emptyBuffer(recordCapacity);
+        }
     }
 
     /**
@@ -157,15 +160,14 @@ final class SslNetWriteBuffer {
     }
 
     /**
-     * Wraps a post-handshake message the engine needs to send, such as a KeyUpdate, behind the unsent bytes.
+     * Wraps a post-handshake message the engine needs to send, such as a KeyUpdate, behind the unsent bytes. The
+     * engine returns BUFFER_OVERFLOW, leaving the buffer as it was, if they leave less than a packet free.
      *
      * @param replyToPeer true if the record read produced no data, so the message replies to the peer's post-handshake
      *                    message, such as its KeyUpdate. False if it is a KeyUpdate the engine started on its own.
-     * @throws SSLException if the unsent bytes leave no room for the message, which closes the connection. The buffer
-     *                      is left as it was.
      */
     SSLEngineResult wrapPostHandshakeMessage(SSLEngine engine, boolean replyToPeer) throws SSLException {
-        makeRoomForPostHandshakeMessage();
+        toWriteMode();
         SSLEngineResult result;
         try {
             result = engine.wrap(ByteUtils.EMPTY_BUF, buffer);
@@ -183,27 +185,51 @@ final class SslNetWriteBuffer {
     }
 
     /**
-     * Leaves the buffer in write mode, behind the unsent bytes, with room for a packet. Grows it, doubling up to
-     * {@code ssl.max.net.write.buffer.bytes}, if the unsent bytes leave no room.
+     * Leaves the buffer in write mode behind the unsent bytes. A partial send leaves them further in, so they are moved
+     * to the start, where the flip after the wrap expects them.
      */
-    private void makeRoomForPostHandshakeMessage() throws SSLException {
+    private void toWriteMode() {
+        if (buffer.position() > 0) {
+            buffer.compact();
+        } else {
+            // Same as compact(), without copying the unsent bytes onto themselves on every wrap while a batch builds up.
+            buffer.position(buffer.limit()).limit(buffer.capacity());
+        }
+    }
+
+    /**
+     * Whether more than a packet is unsent, so the buffer holds a full batch of post-handshake messages, which is sent
+     * rather than grow past it. Asked after the engine found less than a packet free to wrap the next one. A batch is
+     * then two packets: a packet of unsent bytes, about 390 KeyUpdates of 43 bytes, and the free packet the engine
+     * needs. Replies to the peer can fill it, since one read may unwrap any number of the peer's KeyUpdates. KeyUpdates
+     * the engine started are sent once 16 are held, {@code 16 * 43 = 688} bytes.
+     */
+    boolean isBatchFull() {
+        return buffer.remaining() > packetSize.getAsInt();
+    }
+
+    /**
+     * Grows the buffer, doubling up to {@code ssl.max.net.write.buffer.bytes}, if the unsent bytes leave less than a
+     * packet free. Copies only the unsent bytes, so it also drops what a partial send already sent.
+     *
+     * @return whether it grew
+     * @throws SSLException if a packet does not fit even at {@code ssl.max.net.write.buffer.bytes}, which closes the
+     *                      connection. The buffer is left as it was.
+     */
+    boolean growIfNoRoom() throws SSLException {
         int unsentBytes = buffer.remaining();
         int required = unsentBytes + packetSize.getAsInt();
+        if (required <= buffer.capacity()) {
+            return false;
+        }
         if (required > limits.maxNetWriteBufferBytes) {
             log.info("Closing channel since {} bytes are unsent along with TLS post-handshake messages", unsentBytes);
             throw new SSLException(SslTransportLayer.UNSENT_POST_HANDSHAKE_MESSAGES_MESSAGE);
         }
-        if (required > buffer.capacity()) {
-            // Doubling keeps the copies few.
-            int newCapacity = Math.min(Math.max(required, 2 * buffer.capacity()), limits.maxNetWriteBufferBytes);
-            buffer = ByteBuffer.allocate(newCapacity).put(buffer);
-            grown = true;
-        } else if (buffer.position() > 0) {
-            buffer.compact();
-        } else {
-            // The unsent bytes are already at the start.
-            buffer.position(unsentBytes).limit(buffer.capacity());
-        }
+        // Doubling keeps the copies few.
+        int newCapacity = Math.min(Math.max(required, 2 * buffer.capacity()), limits.maxNetWriteBufferBytes);
+        buffer = ByteBuffer.allocate(newCapacity).put(buffer).flip();
+        return true;
     }
 
     /**
@@ -216,6 +242,7 @@ final class SslNetWriteBuffer {
         }
         int size = packetSize.getAsInt();
         if (buffer.capacity() < size) {
+            recordCapacity = size;
             buffer = emptyBuffer(size);
         }
     }
@@ -231,39 +258,6 @@ final class SslNetWriteBuffer {
     }
 
     /**
-     * Whether to send before wrapping another post-handshake message: enough KeyUpdates the engine started are held,
-     * or the replies to the peer fill a batch.
-     */
-    boolean shouldSendBeforePostHandshakeMessage() {
-        return shouldSendHeld() || isBatchFull();
-    }
-
-    /**
-     * Whether wrapping the next message would grow the buffer past {@link #desiredCapacity()}, since the engine
-     * needs a free packet to wrap it.
-     */
-    private boolean isBatchFull() {
-        int requiredBytes = buffer.remaining() + packetSize.getAsInt();
-        // The buffer may have grown past the desired capacity while the socket was full.
-        int batchCapacity = Math.max(buffer.capacity(), desiredCapacity());
-        return requiredBytes > batchCapacity;
-    }
-
-    /**
-     * The capacity a batch of post-handshake messages may use:
-     * <pre>
-     * desiredCapacity = packetSize    // free room the engine needs to wrap the next message
-     *                 + packetSize    // unsent bytes: about 390 KeyUpdates of 43 bytes, or a partly sent record
-     * </pre>
-     * The buffer grows past it only while the socket is full. Replies to the peer can fill it, since one read may
-     * unwrap any number of the peer's KeyUpdates. KeyUpdates the engine started are flushed once 16 are held,
-     * {@code 16 * 43 = 688} bytes.
-     */
-    private int desiredCapacity() {
-        return 2 * packetSize.getAsInt();
-    }
-
-    /**
      * Whether to send once the read has unwrapped what it read: there are replies to the peer, or enough KeyUpdates the
      * engine started are held.
      */
@@ -271,7 +265,11 @@ final class SslNetWriteBuffer {
         return peerReplies > 0 || shouldSendHeld();
     }
 
-    private boolean shouldSendHeld() {
+    /**
+     * Whether enough KeyUpdates the engine started are held that they are sent before wrapping another post-handshake
+     * message.
+     */
+    boolean shouldSendHeld() {
         return engineStartedMessages >= SslTransportLayer.Limits.MAX_HELD_MESSAGES ||
             (engineStartedMessages > 0 && bytesReadWhileHeld >= limits.heldMessagesMaxReadBytes);
     }
