@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXConnectorServerFactory;
@@ -48,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class JmxToolTest {
     private final ToolsTestUtils.MockExitProcedure exitProcedure = new ToolsTestUtils.MockExitProcedure();
+    private static final ObjectName MESSAGES_IN = objectName("kafka.server:type=BrokerTopicMetrics,name=MessagesInPerSec");
     private static JMXConnectorServer jmxAgent;
     private static String jmxUrl;
 
@@ -65,15 +67,40 @@ public class JmxToolTest {
         env.put("com.sun.management.jmxremote.ssl", "false");
         JMXServiceURL url = new JMXServiceURL(jmxUrl);
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
-        server.registerMBean(new Metrics(),
-            new ObjectName("kafka.server:type=BrokerTopicMetrics,name=MessagesInPerSec"));
+        registerReplacingLeftover(server, new Metrics(), MESSAGES_IN);
         jmxAgent = JMXConnectorServerFactory.newJMXConnectorServer(url, env, server);
         jmxAgent.start();
     }
 
     @AfterAll
     public static void afterAll() throws Exception {
-        jmxAgent.stop();
+        try {
+            jmxAgent.stop();
+        } finally {
+            MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+            if (server.isRegistered(MESSAGES_IN)) {
+                server.unregisterMBean(MESSAGES_IN);
+            }
+        }
+    }
+
+    // Other test classes in the same JVM can leave a broker metric with this name registered: for example
+    // DumpLogSegmentsTest creates logs with a BrokerTopicStats that is never closed (UnifiedLog.create and
+    // KafkaRaftLog.createLog), which registers kafka.server:type=BrokerTopicMetrics,name=MessagesInPerSec.
+    // Replace it with this test's bean.
+    private static void registerReplacingLeftover(MBeanServer server, Object mbean, ObjectName name) throws Exception {
+        if (server.isRegistered(name)) {
+            server.unregisterMBean(name);
+        }
+        server.registerMBean(mbean, name);
+    }
+
+    private static ObjectName objectName(String name) {
+        try {
+            return new ObjectName(name);
+        } catch (MalformedObjectNameException e) {
+            throw new IllegalArgumentException(e);
+        }
     }
 
     @BeforeEach
