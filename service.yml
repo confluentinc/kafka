@@ -17,33 +17,31 @@ semaphore:
   enable: true
   pipeline_enable: false
   triggers:
-  - branches
-  - pull_requests
+    - branches
+    - pull_requests
   branches:
-  - "2.3"
-  - "2.4"
-  - "2.5"
-  - "2.6"
-  - "2.7"
-  - "2.8"
-  - "3.0"
-  - "3.1"
-  - "3.2"
-  - "3.3"
-  - "3.4"
-  - "3.5"
-  - "3.6"
-  - "3.7"
-  - "3.8"
-  - trunk
-  - master
-  - /^\d+\.\d+$/
+    - '2.3'
+    - '2.4'
+    - '2.5'
+    - '2.6'
+    - '2.7'
+    - '2.8'
+    - '3.0'
+    - '3.1'
+    - '3.2'
+    - '3.3'
+    - '3.4'
+    - '3.5'
+    - '3.6'
+    - '3.7'
+    - '3.8'
+    - trunk
+    - master
+    - /^\d+\.\d+$/
 git:
   enable: true
 lang: java
 lang_version: unknown
-github:
-  enable: true
 code_artifact:
   enable: true
   package_paths:
