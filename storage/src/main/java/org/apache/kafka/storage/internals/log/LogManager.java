@@ -853,8 +853,10 @@ public class LogManager {
         LOG.info("Shutting down.");
 
         metricsGroup.removeMetric("OfflineLogDirectoryCount");
+        metricsGroup.removeMetric("CordonedLogDirectoryCount");
         for (File dir : logDirs) {
             metricsGroup.removeMetric("LogDirectoryOffline", Map.of("logDirectory", dir.getAbsolutePath()));
+            metricsGroup.removeMetric("LogDirectoryCordoned", Map.of("logDirectory", dir.getAbsolutePath()));
         }
 
         List<ExecutorService> threadPools = new ArrayList<>();
