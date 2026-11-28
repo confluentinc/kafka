@@ -843,6 +843,22 @@ class LogManagerTest {
     }
   }
 
+  @Test
+  def testShutdownRemovesLogDirectoryGauges(): Unit = {
+    val logManagerClassName = classOf[LogManager].getSimpleName
+    // the per-directory gauges of this test's (unique) log directory
+    def dirGaugeNames: Set[String] = KafkaYammerMetrics.defaultRegistry.allMetrics.asScala.keys
+      .filter(m => m.getType == logManagerClassName && m.getScope != null && m.getScope.contains(logDir.getAbsolutePath))
+      .map(_.getName).toSet
+
+    assertEquals(Set("LogDirectoryOffline", "LogDirectoryCordoned"), dirGaugeNames)
+
+    // a gauge left behind references the LogManager and keeps the whole broker reachable from the static registry
+    logManager.shutdown()
+    assertEquals(Set.empty[String], dirGaugeNames)
+    logManager = null // already shut down: tearDown must not shut it down again
+  }
+
   private def verifyRemainingLogsToRecoverMetric(spyLogManager: LogManager, expectedParams: Map[String, Int]): Unit = {
     val logManagerClassName = classOf[LogManager].getSimpleName
     // get all `remainingLogsToRecover` metrics
