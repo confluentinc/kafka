@@ -659,9 +659,14 @@ class LogManager(logDirs: Seq[File],
   def shutdown(brokerEpoch: Long = -1): Unit = {
     info("Shutting down.")
 
+    // Every gauge registered in the constructor must be removed here: a gauge references this LogManager, so a leftover
+    // one keeps the whole broker reachable from the static Yammer registry (an embedded test cluster leaks one broker
+    // per start until the test JVM runs out of heap).
     metricsGroup.removeMetric("OfflineLogDirectoryCount")
+    metricsGroup.removeMetric("CordonedLogDirectoryCount")
     for (dir <- logDirs) {
       metricsGroup.removeMetric("LogDirectoryOffline", Map("logDirectory" -> dir.getAbsolutePath).asJava)
+      metricsGroup.removeMetric("LogDirectoryCordoned", Map("logDirectory" -> dir.getAbsolutePath).asJava)
     }
 
     val threadPools = ArrayBuffer.empty[ExecutorService]
